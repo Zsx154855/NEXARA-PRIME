@@ -1,0 +1,27 @@
+{
+  "commit_sha": "1a54a47",
+  "commit_message": "chore: establish NEXARA PRIME trusted repository baseline",
+  "files_staged": 91,
+  "lines_added": 4841,
+  "timestamp": "2026-07-10T23:19:08Z",
+  "excluded_by_gitignore": [
+    ".venv/",
+    "__pycache__/",
+    "*.pyc",
+    ".obsidian/",
+    "runtime/",
+    "docs/.trash/",
+    "reports/acceptance-*/",
+    "reports/production_hardening/",
+    "dist/",
+    "build/",
+    "*.egg-info/",
+    "node_modules/",
+    "*.db",
+    ".env*",
+    "*.log",
+    ".DS_Store"
+  ],
+  "secrets_scan": "CLEAN",
+  "large_files": "NONE"
+}

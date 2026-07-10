@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-07-10T23:19:08Z",
+  "l01_l12_count": 12,
+  "l01_l12_status": "PASS",
+  "canonical_documents": 46,
+  "frontmatter_complete": 46,
+  "unresolved_links": 0,
+  "core_orphans": 0,
+  "legacy_files_remaining": 0,
+  "trash_status": "permanently_deleted",
+  "duplicate_sot": 0,
+  "verdict": "PASS"
+}

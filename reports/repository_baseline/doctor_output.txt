@@ -1,0 +1,23 @@
+
+  NEXARA PRIME Doctor
+  ──────────────────────────────────────────────────
+  Repo: /Users/agentos/NEXARA-PRIME
+
+  [✓] Repo exists  → /Users/agentos/NEXARA-PRIME
+  [✓] Python virtualenv  → /Users/agentos/NEXARA-PRIME/.venv/bin/python3
+  [✓] SQLite accessible  → ok
+  [✓] docs vault exists  → /Users/agentos/NEXARA-PRIME/docs
+  [✓] PROJECT_STATE.json  → /Users/agentos/NEXARA-PRIME/.nexara/PROJECT_STATE.json
+  [✓] src/ exists  → /Users/agentos/NEXARA-PRIME/src
+  [✓] tests/ exists  → /Users/agentos/NEXARA-PRIME/tests
+  [✓] scripts/ exists  → /Users/agentos/NEXARA-PRIME/scripts
+  [✓] No legacy notes  → trash is clean
+  [✓] .nexara/ writable  → /Users/agentos/NEXARA-PRIME/.nexara
+  [✓] reports/ writable  → /Users/agentos/NEXARA-PRIME/reports
+  [✓] workspace/ writable  → /Users/agentos/NEXARA-PRIME/workspace
+  [✓] No secrets staged  → ok
+  [✓] Worktree status  → clean
+
+  ──────────────────────────────────────────────────
+  All 14 checks passed.
+
