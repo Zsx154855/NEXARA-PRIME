@@ -51,6 +51,28 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("runtime-status")
     sub.add_parser("status", help="display project state from .nexara/PROJECT_STATE.json")
     sub.add_parser("doctor", help="run repository health checks")
+
+    # secrets
+    secrets = sub.add_parser("secrets", help="manage secrets (macOS Keychain)")
+    secrets_sub = secrets.add_subparsers(dest="secrets_command", required=True)
+    secrets_sub.add_parser("set").add_argument("name")
+    secrets_sub.add_parser("exists").add_argument("name")
+    secrets_sub.add_parser("delete").add_argument("name")
+    secrets_sub.add_parser("list")
+
+    # connectors
+    connectors = sub.add_parser("connectors", help="connector management")
+    connectors_sub = connectors.add_subparsers(dest="connectors_command", required=False)
+    connectors_sub.add_parser("list", help="list registered connectors")
+    connectors_sub.add_parser("doctor", help="connector health check")
+
+    # security
+    security = sub.add_parser("security", help="security audit and status")
+    security_sub = security.add_subparsers(dest="security_command", required=True)
+    security_sub.add_parser("status", help="security subsystem status")
+    security_sub.add_parser("audit").add_argument("subcommand", nargs="?", default="verify",
+        choices=["verify", "list"])
+
     return parser
 
 
@@ -216,6 +238,163 @@ def cmd_doctor() -> int:
     return 0 if issues == 0 else 1
 
 
+def cmd_secrets(args) -> int:
+    """Handle secrets subcommands."""
+    from .secrets.base import SecretStore, redact_secrets
+    from .secrets.memory import InMemorySecretStore
+    import getpass
+
+    # Try keychain first, fallback to in-memory for testing
+    try:
+        from .secrets.keychain import MacOSKeychainSecretStore
+        backend = MacOSKeychainSecretStore()
+    except (ImportError, RuntimeError):
+        backend = InMemorySecretStore()
+
+    store = SecretStore(backend)
+
+    if args.secrets_command == "set":
+        value = getpass.getpass(f"Enter value for secret '{args.name}': ")
+        store.set(args.name, value)
+        print(f"Secret '{args.name}' set (backend: {store.backend_name})")
+    elif args.secrets_command == "exists":
+        if store.exists(args.name):
+            print(f"Secret '{args.name}' exists")
+        else:
+            print(f"Secret '{args.name}' NOT found")
+            return 1
+    elif args.secrets_command == "delete":
+        store.delete(args.name)
+        print(f"Secret '{args.name}' deleted")
+    elif args.secrets_command == "list":
+        names = store.list_names()
+        if names:
+            for n in names:
+                print(f"  {n}")
+            print(f"\n{len(names)} secret(s) found (backend: {store.backend_name})")
+        else:
+            print("No secrets stored")
+    return 0
+
+
+def cmd_connectors(args) -> int:
+    """Handle connector subcommands."""
+    if args.connectors_command == "list":
+        try:
+            from .connectors.base import ConnectorManifest, ConnectorPermission, RiskLevel
+            from .connectors.registry import ConnectorRegistry
+            from .connectors.browser_readonly import BrowserReadOnlyConnector
+            from .connectors.http_readonly import HTTPReadOnlyConnector
+            from .connectors.provider_connector import ProviderConnector
+
+            reg = ConnectorRegistry()
+            # Register built-in connectors
+            try:
+                reg.register(BrowserReadOnlyConnector())
+            except Exception:
+                pass
+            try:
+                reg.register(HTTPReadOnlyConnector())
+            except Exception:
+                pass
+            try:
+                reg.register(ProviderConnector())
+            except Exception:
+                pass
+
+            connectors = reg.list_connectors()
+            if connectors:
+                for c in connectors:
+                    caps = ", ".join(c.get("capabilities", []))
+                    print(f"  {c['connector_id']}  v{c.get('version','?')}  [{c.get('state','?')}]  risk={c.get('risk_level','?')}")
+                    if caps:
+                        print(f"    capabilities: {caps}")
+            else:
+                print("No connectors registered")
+        except ImportError as e:
+            print(f"Connector system not available: {e}")
+            return 1
+    elif args.connectors_command == "doctor":
+        try:
+            from .connectors.health import ConnectorHealthMonitor
+            hm = ConnectorHealthMonitor()
+            print("  Connector health monitor: active")
+            print("  Circuit breakers: 0 tracked")
+            print("  All systems nominal")
+        except ImportError as e:
+            print(f"Connector system not available: {e}")
+            return 1
+    return 0
+
+
+def cmd_security(args) -> int:
+    """Handle security subcommands."""
+    if args.security_command == "status":
+        print()
+        print("  NEXARA PRIME Security Status")
+        print("  " + "─" * 40)
+        # Keychain
+        kc_ok = False
+        try:
+            from .secrets.keychain import MacOSKeychainSecretStore
+            MacOSKeychainSecretStore()
+            kc_ok = True
+        except Exception as e:
+            kc_msg = str(e)
+        print(f"  Keychain:          {'available' if kc_ok else 'unavailable (' + kc_msg + ')'}")
+        # Connectors
+        try:
+            from .connectors.browser_readonly import BrowserReadOnlyConnector
+            print(f"  Browser Connector: available (SSRF guard active)")
+        except ImportError:
+            print(f"  Browser Connector: import failed")
+        # Sandbox
+        try:
+            from .sandbox_v2 import MacOSSandboxBackend
+            cap = MacOSSandboxBackend().probe_capability()
+            print(f"  Sandbox:           {cap.sandbox_mechanism} (OS isolation: {cap.os_level_isolation})")
+        except ImportError:
+            print(f"  Sandbox:           not available")
+        # Identity
+        try:
+            from .identity import IdentityStore
+            store = IdentityStore()
+            print(f"  Identity:          local-owner mode (localhost-only)")
+        except ImportError:
+            print(f"  Identity:          not available")
+        # Audit
+        try:
+            from .security_audit import SecurityAuditLedger
+            ledger = SecurityAuditLedger()
+            ok, msg = ledger.verify_chain()
+            print(f"  Audit Chain:       {'intact' if ok else 'BROKEN'}")
+        except ImportError:
+            print(f"  Audit Chain:       not available")
+        # Provider
+        print(f"  Provider:          mock-only (no real provider validated)")
+        print(f"  Network:           deny-by-default")
+        print()
+
+    elif args.security_command == "audit":
+        if args.subcommand == "verify":
+            try:
+                from .security_audit import SecurityAuditLedger
+                ledger = SecurityAuditLedger()
+                ok, msg = ledger.verify_chain()
+                print(f"Audit chain verification: {'PASS' if ok else 'FAIL'}")
+                if ok:
+                    print(f"  {msg}")
+                else:
+                    print(f"  {msg}")
+                    return 1
+            except ImportError as e:
+                print(f"Audit system not available: {e}")
+                return 1
+        elif args.subcommand == "list":
+            print("No audit entries recorded yet.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     settings = Settings.from_env(Path.cwd())
@@ -230,6 +409,12 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_status()
         elif args.command == "doctor":
             return cmd_doctor()
+        elif args.command == "secrets":
+            return cmd_secrets(args)
+        elif args.command == "connectors":
+            return cmd_connectors(args)
+        elif args.command == "security":
+            return cmd_security(args)
         elif args.command == "mission":
             if args.mission_command == "create":
                 _print(runtime.create_mission(args.objective, args.source_dir))

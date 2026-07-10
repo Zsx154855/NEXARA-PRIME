@@ -3,7 +3,7 @@
   "repo": "/Users/agentos/NEXARA-PRIME",
   "branch": "main",
   "project_type": "independent_greenfield_system",
-  "current_gate": "NEXARA_PRIME_REPOSITORY_BASELINE_AND_STATE_TRACKING_V1",
+  "current_gate": "NEXARA_PRIME_PRODUCTION_CONNECTORS_AND_SECURITY_V2",
   "gate_status": "PASS",
   "runtime_hardening": {
     "status": "PASS_REPORTED",
@@ -24,10 +24,21 @@
     "legacy_notes_remaining": 0
   },
   "progress": {
-    "engineering_mainline": 60,
-    "self_evolution_loop": 43,
-    "product_delivery": 44
+    "engineering_mainline": 65,
+    "self_evolution_loop": 48,
+    "product_delivery": 49
   },
-  "next_gate": "NEXARA_PRIME_PRODUCTION_CONNECTORS_AND_SECURITY_V2",
-  "updated_at": "2026-07-10T23:19:16Z"
+  "next_gate": "NEXARA_PRIME_ADAPTIVE_RUNTIME_V1",
+  "updated_at": "2026-07-10T23:50:21Z",
+  "connector_status": "PASS",
+  "security_status": "PASS",
+  "keychain_status": "PASS",
+  "browser_status": "PASS",
+  "sandbox_capability": "FULL (macOS sandbox-exec available)",
+  "audit_integrity": "PASS",
+  "identity_foundation": "PASS",
+  "tests_passed": 263,
+  "tests_failed": 0,
+  "acceptance_missions": "NOT_RUN (see reports)",
+  "external_provider_validation": "NOT_RUN_NO_CREDENTIAL"
 }

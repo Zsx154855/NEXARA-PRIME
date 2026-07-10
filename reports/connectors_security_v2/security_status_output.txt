@@ -1,0 +1,11 @@
+
+  NEXARA PRIME Security Status
+  ────────────────────────────────────────
+  Keychain:          available
+  Browser Connector: available (SSRF guard active)
+  Sandbox:           macos_sandbox (OS isolation: FULL)
+  Identity:          local-owner mode (localhost-only)
+  Audit Chain:       intact
+  Provider:          mock-only (no real provider validated)
+  Network:           deny-by-default
+

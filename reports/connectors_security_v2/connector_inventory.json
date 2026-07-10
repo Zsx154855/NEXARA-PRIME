@@ -1,0 +1,32 @@
+{
+  "connectors": [
+    {
+      "id": "browser_readonly",
+      "version": "0.1.0",
+      "risk": "R1",
+      "capabilities": [
+        "navigate",
+        "read_dom",
+        "screenshot"
+      ]
+    },
+    {
+      "id": "http_readonly",
+      "version": "0.1.0",
+      "risk": "R1",
+      "capabilities": [
+        "http_get",
+        "http_head"
+      ]
+    },
+    {
+      "id": "provider",
+      "version": "0.1.0",
+      "risk": "R1",
+      "capabilities": [
+        "chat_completion",
+        "structured_output"
+      ]
+    }
+  ]
+}
