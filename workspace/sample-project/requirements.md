@@ -1,0 +1,3 @@
+- preserve source evidence
+- require approval before local report write
+- attach a memory patch after verification

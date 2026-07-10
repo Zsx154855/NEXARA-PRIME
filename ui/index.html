@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NEXARA PRIME Console</title>
+  <link rel="stylesheet" href="/console/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">HUMAN-CENTERED SOVEREIGN AGENT KERNEL</div>
+        <h1>NEXARA <span>PRIME</span></h1>
+      </div>
+      <div id="system-badge" class="badge">Connecting…</div>
+    </header>
+
+    <section class="control-banner">
+      <div>
+        <div class="eyebrow gold">HUMAN CONTROL</div>
+        <p>Goals, approvals, pause, takeover, rollback, and safe mode remain human-owned.</p>
+      </div>
+      <div class="control-actions">
+        <button data-action="pause">Pause</button>
+        <button data-action="takeover">Take over</button>
+        <button data-action="rollback" class="danger">Rollback</button>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="panel mission-panel">
+        <div class="panel-heading"><h2>Mission stream</h2><span class="muted">Runtime truth</span></div>
+        <div id="missions" class="stack"><div class="empty">No missions yet.</div></div>
+      </article>
+      <article class="panel approval-panel">
+        <div class="panel-heading"><h2>Approval queue</h2><span class="muted">R2–R4</span></div>
+        <div id="approvals" class="stack"><div class="empty">No pending approvals.</div></div>
+      </article>
+      <article class="panel architecture-panel">
+        <div class="panel-heading"><h2>Active roles</h2><span class="muted">Dynamic capabilities</span></div>
+        <div class="role-grid">
+          <div class="role human"><b>Human</b><small>Decision core</small></div>
+          <div class="role hermes"><b>Hermes</b><small>Orchestrator</small></div>
+          <div class="role"><b>Atlas</b><small>Auditor</small></div>
+          <div class="role"><b>Nyx</b><small>Analyst</small></div>
+          <div class="role"><b>Orion</b><small>Researcher</small></div>
+          <div class="role"><b>Vertex</b><small>Executor</small></div>
+        </div>
+        <div class="layers" id="layers"></div>
+      </article>
+      <article class="panel evidence-panel">
+        <div class="panel-heading"><h2>Evidence chain</h2><span id="evidence-count" class="metric">0</span></div>
+        <div id="evidence" class="stack"><div class="empty">No evidence yet.</div></div>
+      </article>
+      <article class="panel tools-panel">
+        <div class="panel-heading"><h2>Tool receipts</h2><span class="muted">Audited</span></div>
+        <div id="tools" class="stack"><div class="empty">No tool calls yet.</div></div>
+      </article>
+    </section>
+  </main>
+  <script type="module" src="/console/app.js"></script>
+</body>
+</html>

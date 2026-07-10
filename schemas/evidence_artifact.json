@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://schemas/evidence_artifact.json",
+  "type": "object",
+  "required": ["evidence_id", "mission_id", "kind", "title", "content", "sha256"],
+  "properties": {
+    "evidence_id": {"type": "string"},
+    "mission_id": {"type": "string"},
+    "kind": {"type": "string"},
+    "title": {"type": "string"},
+    "content": {"type": "string"},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_event_id": {"type": ["string", "null"]}
+  }
+}

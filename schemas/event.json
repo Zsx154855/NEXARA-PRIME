@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://schemas/event.json",
+  "type": "object",
+  "required": ["event_id", "event_type", "aggregate_id", "aggregate_type", "actor", "trace_id", "timestamp"],
+  "properties": {
+    "event_id": {"type": "string"},
+    "event_type": {"type": "string"},
+    "aggregate_id": {"type": "string"},
+    "aggregate_type": {"type": "string"},
+    "actor": {"type": "string"},
+    "trace_id": {"type": "string"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "payload": {"type": "object"}
+  }
+}

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nexara-prime"
+version = "0.1.0"
+description = "Human-Centered Sovereign Agent Kernel"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.110",
+  "pydantic>=2.6",
+  "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+dev = ["httpx2>=0.1"]
+
+[project.scripts]
+nexara = "nexara_prime.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nexara_prime"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://schemas/mission_spec.json",
+  "type": "object",
+  "required": ["mission_id", "title", "objective", "risk_level"],
+  "properties": {
+    "mission_id": {"type": "string"},
+    "title": {"type": "string"},
+    "objective": {"type": "string"},
+    "boundaries": {"type": "array", "items": {"type": "string"}},
+    "constraints": {"type": "array", "items": {"type": "string"}},
+    "deliverables": {"type": "array", "items": {"type": "string"}},
+    "risks": {"type": "array", "items": {"type": "string"}},
+    "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
+    "risk_level": {"enum": ["R0", "R1", "R2", "R3", "R4"]},
+    "source_dir": {"type": ["string", "null"]}
+  }
+}
