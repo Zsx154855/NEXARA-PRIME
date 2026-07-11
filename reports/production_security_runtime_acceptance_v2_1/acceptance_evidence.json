@@ -1,0 +1,220 @@
+{
+  "gate": "NEXARA_PRIME_PRODUCTION_SECURITY_RUNTIME_ACCEPTANCE_V2_1",
+  "overall": "PASS",
+  "identity": {
+    "pwd": "/private/tmp/NEXARA-PRIME-security-v2-1",
+    "git_root": {
+      "command": [
+        "git",
+        "rev-parse",
+        "--show-toplevel"
+      ],
+      "returncode": 0,
+      "stdout_tail": "/private/tmp/NEXARA-PRIME-security-v2-1\n",
+      "stderr_tail": ""
+    },
+    "branch": {
+      "command": [
+        "git",
+        "branch",
+        "--show-current"
+      ],
+      "returncode": 0,
+      "stdout_tail": "work/nexara-security-runtime-acceptance-v2-1\n",
+      "stderr_tail": ""
+    },
+    "head": {
+      "command": [
+        "git",
+        "rev-parse",
+        "--short",
+        "HEAD"
+      ],
+      "returncode": 0,
+      "stdout_tail": "2891cf6\n",
+      "stderr_tail": ""
+    },
+    "remote": {
+      "command": [
+        "git",
+        "remote",
+        "-v"
+      ],
+      "returncode": 0,
+      "stdout_tail": "",
+      "stderr_tail": ""
+    },
+    "status_before": {
+      "command": [
+        "git",
+        "status",
+        "--short"
+      ],
+      "returncode": 0,
+      "stdout_tail": "",
+      "stderr_tail": ""
+    }
+  },
+  "tests": {
+    "command": [
+      "/Users/agentos/NEXARA-PRIME/.venv/bin/python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests",
+      "-q"
+    ],
+    "returncode": 0,
+    "stdout_tail": "  browser_readonly  v0.1.0  [registered]  risk=R1\n    capabilities: navigate, read_dom, read_text, screenshot, get_title\n  http_readonly  v0.1.0  [registered]  risk=R1\n    capabilities: http_get, http_head\n  provider  v0.1.0  [registered]  risk=R1\n    capabilities: chat_completion, structured_output\n\n  NEXARA PRIME Doctor\n  ──────────────────────────────────────────────────\n  Repo: /private/tmp/NEXARA-PRIME-security-v2-1\n\n  [✓] Repo exists  → /private/tmp/NEXARA-PRIME-security-v2-1\n  [✓] Python virtualenv  → /opt/homebrew/Cellar/python@3.12/3.12.13_4/Frameworks/Python.framework/Versions/3.12\n  [✓] SQLite accessible  → ok\n  [✓] docs vault exists  → /private/tmp/NEXARA-PRIME-security-v2-1/docs\n  [✓] PROJECT_STATE.json  → /private/tmp/NEXARA-PRIME-security-v2-1/.nexara/PROJECT_STATE.json\n  [✓] src/ exists  → /private/tmp/NEXARA-PRIME-security-v2-1/src\n  [✓] tests/ exists  → /private/tmp/NEXARA-PRIME-security-v2-1/tests\n  [✓] scripts/ exists  → /private/tmp/NEXARA-PRIME-security-v2-1/scripts\n  [✓] No legacy notes  → trash is clean\n  [✓] .nexara/ writable  → /private/tmp/NEXARA-PRIME-security-v2-1/.nexara\n  [✓] reports/ writable  → /private/tmp/NEXARA-PRIME-security-v2-1/reports\n  [✓] workspace/ writable  → /private/tmp/NEXARA-PRIME-security-v2-1/workspace\n  [✓] No secrets staged  → ok\n  [✓] Worktree status  → clean\n\n  ──────────────────────────────────────────────────\n  All 14 checks passed.\n\nNo secrets stored\nAudit chain verification: PASS\n  chain empty (0 entries)\n\n  NEXARA PRIME Security Status\n  ────────────────────────────────────────\n  Keychain:          available\n  Browser Connector: available (SSRF guard active)\n  Sandbox:           macos_sandbox (flags: OS_SANDBOX_CAPABLE)\n  Identity:          local-owner mode (localhost-only)\n  Audit Chain:       intact (chain empty (0 entries))\n  Provider:          mock-only (no real provider validated)\n  Network:           deny-by-default\n\n\n  NEXARA-PRIME\n  ────────────────────────────────────────\n  Repository        /private/tmp/NEXARA-PRIME-security-v2-1\n  Branch            work/nexara-security-runtime-acceptance-v2-1\n  Recorded Gate     NEXARA_PRIME_PROVIDER_CREDENTIAL_LIVE_ACCEPTANCE_V2_1_1\n  Recorded Status   BLOCKED_NO_API_QUOTA\n\n  Runtime DB       /private/tmp/NEXARA-PRIME-security-v2-1/runtime/nexara.db\n  Missions          0\n  Latest Mission    none\n  Latest Evidence   0\n  Audit Chain       PASS (chain empty (0 entries))\n\n  Knowledge Fabric  PASS\n  Canonical Docs    46\n  Architecture      L01–L12 12/12\n  Broken Links      0\n  Legacy Notes      0\n\n  Engineering       70%\n  Self-Evolution    52%\n  Product Delivery  53%\n\n  Next Gate\n  NEXARA_PRIME_PROVIDER_CREDENTIAL_LIVE_ACCEPTANCE_V2_1_1\n  Updated           2026-07-11T15:23:00Z\n\n",
+    "stderr_tail": "----------------------------------------------------------------------\nRan 298 tests in 3.128s\n\nOK\n",
+    "test_count": 298,
+    "status": "PASS"
+  },
+  "build": {
+    "command": [
+      "uv",
+      "build"
+    ],
+    "returncode": 0,
+    "stdout_tail": "",
+    "stderr_tail": "Building source distribution...\nBuilding wheel from source distribution...\nSuccessfully built dist/nexara_prime-0.1.0.tar.gz\nSuccessfully built dist/nexara_prime-0.1.0-py3-none-any.whl\n",
+    "status": "PASS"
+  },
+  "browser": {
+    "status": "PASS",
+    "checks": {
+      "local_health": true,
+      "public_health": true,
+      "navigate": true,
+      "redirect": true,
+      "script_post_blocked": true,
+      "popup_bounded": true,
+      "screenshot": true,
+      "post_blocked": true,
+      "upload_blocked": true,
+      "download_blocked": true,
+      "private_ip_blocked": true,
+      "public_navigation": true
+    },
+    "public_url": "https://example.com/",
+    "launch_error": ""
+  },
+  "sandbox": {
+    "status": "PASS",
+    "checks": {
+      "all_cases": true,
+      "outside_markers_absent": true,
+      "os_enforced": true,
+      "full_isolation_flag": true,
+      "escape_tests_at_least_10": true
+    },
+    "cases": {
+      "allow_stdout": true,
+      "allow_workspace_write": true,
+      "allow_workspace_read": true,
+      "block_home_read": true,
+      "block_home_write": true,
+      "block_private_tmp_write": true,
+      "block_symlink_escape": true,
+      "block_network": true,
+      "block_child_process": true,
+      "block_keychain_process": true,
+      "block_shell_process": true,
+      "block_home_metadata_content": true
+    },
+    "capability": {
+      "flags": [
+        "OS_SANDBOX_CAPABLE",
+        "OS_SANDBOX_ENFORCED",
+        "FULL_OS_ISOLATION_ACCEPTED"
+      ],
+      "sandbox_mechanism": "macos_sandbox",
+      "network_restricted": true,
+      "filesystem_restricted": true,
+      "process_restricted": true,
+      "resource_limited": true,
+      "memory_limit_mb": 512,
+      "cpu_time_limit": 30,
+      "max_output_bytes": 1000000,
+      "max_processes": 1,
+      "allow_network": false,
+      "allow_file_write_outside_workspace": false,
+      "verified_at": "2026-07-11T15:27:40.554629+00:00",
+      "escape_tests_passed": 12
+    }
+  },
+  "missions": {
+    "status": "PASS",
+    "checks": {
+      "mission_a_completed": true,
+      "mission_a_approval": true,
+      "mission_b_rejected": true,
+      "mission_c_completed": true,
+      "evidence_a_valid": true,
+      "evidence_c_valid": true,
+      "evaluation_a_passed": true,
+      "memory_a_present": true,
+      "approval_binding_blocked": true,
+      "audit_before_close": true,
+      "audit_after_reopen": true,
+      "checkpoint_idempotent": true,
+      "recovery_no_duplicates": true
+    },
+    "mission_ids": {
+      "A": "mission_2572787bd0d0",
+      "B": "mission_eb2238963562",
+      "C": "mission_06ce72a0b8eb"
+    },
+    "audit_entries": 45,
+    "audit_verification": [
+      true,
+      "chain intact: 45 entries"
+    ],
+    "recovery": {
+      "checked": 3,
+      "resumable": 0,
+      "completed": 2,
+      "duplicate_steps": 0,
+      "missions": [
+        {
+          "mission_id": "mission_2572787bd0d0",
+          "state": "Completed",
+          "event_count": 48,
+          "transition_count": 11,
+          "resumable": false,
+          "checkpoint_count": 8,
+          "duplicate_steps": 0
+        },
+        {
+          "mission_id": "mission_eb2238963562",
+          "state": "Blocked",
+          "event_count": 22,
+          "transition_count": 6,
+          "resumable": false,
+          "checkpoint_count": 3,
+          "duplicate_steps": 0
+        },
+        {
+          "mission_id": "mission_06ce72a0b8eb",
+          "state": "Completed",
+          "event_count": 46,
+          "transition_count": 11,
+          "resumable": false,
+          "checkpoint_count": 8,
+          "duplicate_steps": 0
+        }
+      ]
+    }
+  },
+  "provider": {
+    "status": "PASS",
+    "keychain_live_read": true,
+    "provider": "openai_compatible",
+    "model": "deepseek-v4-flash",
+    "input_tokens": 21,
+    "output_tokens": 38,
+    "secret_leakage": 0,
+    "network_target": "api.deepseek.com"
+  }
+}

@@ -40,6 +40,26 @@ class MissionState(str, Enum):
     BLOCKED = "Blocked"
     FAILED = "Failed"
     ROLLED_BACK = "RolledBack"
+    # Adaptive Runtime states (forward-compatible extension)
+    CREATED = "Created"
+    TRIAGED = "Triaged"
+    CONTRACTED = "Contracted"
+    PLANNED = "Planned"
+    SCHEDULED = "Scheduled"
+    AWAITING_APPROVAL = "AwaitingApproval"
+    RUNNING = "Running"
+    VERIFYING = "Verifying"
+    DEGRADED = "Degraded"
+    PAUSED = "Paused"
+    CANCELLED = "Cancelled"
+    ROLLING_BACK = "RollingBack"
+
+
+class AdaptiveMode(str, Enum):
+    S0 = "S0"  # Instant — single-agent, minimal evidence
+    S1 = "S1"  # Assisted — single-agent + optional reviewer
+    S2 = "S2"  # Managed — multi-agent, full DAG
+    S3 = "S3"  # Governed — high-risk, mandatory approval, dual verification
 
 
 class ApprovalStatus(str, Enum):
@@ -310,3 +330,209 @@ class Mission(NModel):
     result: dict[str, Any] = Field(default_factory=dict)
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
+    # Adaptive Runtime fields
+    adaptive_mode: str = AdaptiveMode.S0.value
+    triage_result: dict[str, Any] | None = None
+    scheduling_plan: dict[str, Any] | None = None
+    routing_decisions: list[dict[str, Any]] = Field(default_factory=list)
+    resource_budget: dict[str, Any] | None = None
+    budget_usage: dict[str, Any] | None = None
+    escalation_history: list[dict[str, Any]] = Field(default_factory=list)
+    agent_lifecycle: list[dict[str, Any]] = Field(default_factory=list)
+
+
+# ── Adaptive Runtime Models ──
+
+
+class MissionTriageResult(NModel):
+    triage_id: str = Field(default_factory=lambda: new_id("triage"))
+    mission_id: str
+    intent: str
+    context_summary: str
+    requested_outcome: str
+    tool_requirements: list[str] = Field(default_factory=list)
+    data_sensitivity: str = "low"
+    external_side_effects: bool = False
+    reversibility: bool = True
+    uncertainty: float = 0.0
+    expected_duration_ms: int = 0
+    expected_token_cost: int = 0
+    required_evidence_level: str = "minimal"
+    complexity_score: float = 0.0
+    risk_score: float = 0.0
+    uncertainty_score: float = 0.0
+    expected_cost: float = 0.0
+    recommended_mode: str = AdaptiveMode.S0.value
+    required_roles: list[str] = Field(default_factory=list)
+    required_model_tier: str = "flash"
+    required_governance_level: str = "standard"
+    required_evidence_tier: str = "minimal"
+    escalation_conditions: list[str] = Field(default_factory=list)
+    decision_reasoning: str = ""
+    schema_version: int = 1
+    created_at: str = Field(default_factory=now_iso)
+
+
+class AdaptiveMissionProfile(NModel):
+    profile_id: str = Field(default_factory=lambda: new_id("profile"))
+    mission_id: str
+    adaptive_mode: str = AdaptiveMode.S0.value
+    complexity_score: float = 0.0
+    risk_score: float = 0.0
+    active_agents: list[str] = Field(default_factory=list)
+    selected_provider: str = ""
+    selected_model: str = ""
+    token_budget: int = 0
+    token_used: int = 0
+    cost_estimate: float = 0.0
+    tool_calls: int = 0
+    retries: int = 0
+    approval_state: str = "none"
+    sandbox_state: str = "active"
+    audit_state: str = "intact"
+    evidence_count: int = 0
+    escalation_count: int = 0
+    recovery_count: int = 0
+    schema_version: int = 1
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class SchedulingPlan(NModel):
+    plan_id: str = Field(default_factory=lambda: new_id("schedplan"))
+    mission_id: str
+    adaptive_mode: str = AdaptiveMode.S0.value
+    agents: list[dict[str, Any]] = Field(default_factory=list)
+    task_dag: dict[str, Any] = Field(default_factory=dict)
+    parallelism_degree: int = 1
+    estimated_duration_ms: int = 0
+    roi_decision: dict[str, Any] = Field(default_factory=dict)
+    schema_version: int = 1
+    created_at: str = Field(default_factory=now_iso)
+
+
+class CapabilityScore(NModel):
+    capability_id: str
+    name: str
+    supported_task_types: list[str] = Field(default_factory=list)
+    tool_permissions: list[str] = Field(default_factory=list)
+    risk_ceiling: str = RiskLevel.R1.value
+    model_requirements: list[str] = Field(default_factory=list)
+    historical_success_rate: float = 0.0
+    average_latency_ms: float = 0.0
+    average_token_cost: float = 0.0
+    recent_failure_rate: float = 0.0
+    confidence: float = 0.5
+    evidence_count: int = 0
+    last_updated: str = Field(default_factory=now_iso)
+    source_evidence: list[str] = Field(default_factory=list)
+    schema_version: int = 2
+
+
+class ModelRoutingDecision(NModel):
+    decision_id: str = Field(default_factory=lambda: new_id("route"))
+    mission_id: str
+    selected_provider: str
+    selected_model: str
+    reason: str
+    alternatives: list[dict[str, str]] = Field(default_factory=list)
+    estimated_tokens: int = 0
+    estimated_cost: float = 0.0
+    fallback: str = ""
+    policy_version: str = "1.0"
+    schema_version: int = 1
+    created_at: str = Field(default_factory=now_iso)
+
+
+class ResourceBudget(NModel):
+    budget_id: str = Field(default_factory=lambda: new_id("budget"))
+    mission_id: str
+    token_budget: int = 100000
+    cost_budget: float = 10.0
+    wall_time_budget_ms: int = 300000
+    tool_call_budget: int = 50
+    retry_budget: int = 5
+    agent_count_budget: int = 8
+    browser_budget: int = 10
+    evidence_budget: int = 100
+    over_budget_action: str = "warn"
+    schema_version: int = 1
+    created_at: str = Field(default_factory=now_iso)
+
+
+class BudgetUsage(NModel):
+    usage_id: str = Field(default_factory=lambda: new_id("usage"))
+    mission_id: str
+    budget_id: str
+    tokens_used: int = 0
+    cost_used: float = 0.0
+    wall_time_used_ms: int = 0
+    tool_calls_used: int = 0
+    retries_used: int = 0
+    agents_spawned: int = 0
+    browser_calls_used: int = 0
+    evidence_used: int = 0
+    over_budget_triggers: list[str] = Field(default_factory=list)
+    degraded: bool = False
+    stopped: bool = False
+    schema_version: int = 1
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class EscalationDecision(NModel):
+    decision_id: str = Field(default_factory=lambda: new_id("escalate"))
+    mission_id: str
+    from_mode: str
+    to_mode: str
+    reason: str
+    trigger: str
+    approved: bool = False
+    actor: str = "system"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    schema_version: int = 1
+    created_at: str = Field(default_factory=now_iso)
+
+
+class TokenCompilationRecord(NModel):
+    record_id: str = Field(default_factory=lambda: new_id("tcompile"))
+    mission_id: str
+    raw_context_tokens: int = 0
+    compiled_context_tokens: int = 0
+    token_savings_ratio: float = 0.0
+    context_items_removed: int = 0
+    context_items_referenced: int = 0
+    shared_immutable_context: dict[str, Any] = Field(default_factory=dict)
+    role_slices: list[str] = Field(default_factory=list)
+    schema_version: int = 1
+    created_at: str = Field(default_factory=now_iso)
+
+
+class AdaptiveEvaluation(NModel):
+    evaluation_id: str = Field(default_factory=lambda: new_id("adapteval"))
+    mission_id: str
+    adaptive_mode_effective: str
+    agents_used: int
+    agents_wasted: int
+    token_efficiency: float
+    latency_vs_baseline: float
+    evidence_completeness: float
+    approval_correctness: bool
+    recovery_correctness: bool
+    roi_score: float
+    notes: list[str] = Field(default_factory=list)
+    schema_version: int = 1
+    created_at: str = Field(default_factory=now_iso)
+
+
+class SchedulerPolicyVersion(NModel):
+    policy_id: str = Field(default_factory=lambda: new_id("policy"))
+    version: str = "1.0.0"
+    single_agent_preferred: bool = True
+    roi_threshold: float = 0.3
+    max_agents_default: int = 3
+    max_agents_governed: int = 8
+    escalation_thresholds: dict[str, float] = Field(default_factory=dict)
+    de_escalation_thresholds: dict[str, float] = Field(default_factory=dict)
+    schema_version: int = 1
+    created_at: str = Field(default_factory=now_iso)

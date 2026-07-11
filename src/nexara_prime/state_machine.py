@@ -6,6 +6,7 @@ from .models import Mission, MissionState
 
 
 TRANSITIONS: dict[MissionState, set[MissionState]] = {
+    # Original states (preserved)
     MissionState.INTENT: {MissionState.CONTEXT, MissionState.BLOCKED, MissionState.FAILED},
     MissionState.CONTEXT: {MissionState.CONTRACT, MissionState.BLOCKED, MissionState.FAILED},
     MissionState.CONTRACT: {MissionState.PLAN, MissionState.BLOCKED, MissionState.FAILED},
@@ -21,6 +22,19 @@ TRANSITIONS: dict[MissionState, set[MissionState]] = {
     MissionState.BLOCKED: {MissionState.FAILED, MissionState.ROLLED_BACK},
     MissionState.FAILED: {MissionState.ROLLED_BACK},
     MissionState.ROLLED_BACK: set(),
+    # Adaptive Runtime states
+    MissionState.CREATED: {MissionState.TRIAGED, MissionState.CANCELLED, MissionState.FAILED},
+    MissionState.TRIAGED: {MissionState.CONTRACTED, MissionState.SCHEDULED, MissionState.DEGRADED, MissionState.CANCELLED, MissionState.FAILED},
+    MissionState.CONTRACTED: {MissionState.PLANNED, MissionState.CANCELLED, MissionState.FAILED},
+    MissionState.PLANNED: {MissionState.SCHEDULED, MissionState.CANCELLED, MissionState.FAILED},
+    MissionState.SCHEDULED: {MissionState.AWAITING_APPROVAL, MissionState.RUNNING, MissionState.DEGRADED, MissionState.CANCELLED, MissionState.FAILED},
+    MissionState.AWAITING_APPROVAL: {MissionState.RUNNING, MissionState.DEGRADED, MissionState.BLOCKED, MissionState.CANCELLED, MissionState.FAILED},
+    MissionState.RUNNING: {MissionState.VERIFYING, MissionState.DEGRADED, MissionState.PAUSED, MissionState.FAILED, MissionState.ROLLING_BACK},
+    MissionState.VERIFYING: {MissionState.COMPLETED, MissionState.DEGRADED, MissionState.FAILED, MissionState.ROLLING_BACK},
+    MissionState.DEGRADED: {MissionState.RUNNING, MissionState.VERIFYING, MissionState.COMPLETED, MissionState.FAILED, MissionState.ROLLING_BACK, MissionState.CANCELLED},
+    MissionState.PAUSED: {MissionState.RUNNING, MissionState.CANCELLED, MissionState.FAILED},
+    MissionState.CANCELLED: {MissionState.ROLLED_BACK},
+    MissionState.ROLLING_BACK: {MissionState.ROLLED_BACK, MissionState.FAILED},
 }
 
 
@@ -44,3 +58,13 @@ class MissionStateMachine:
         mission.updated_at = event.timestamp
         self.evidence.state_change(mission.mission_id, current.value, target.value, mission.trace_id, event.event_id)
         return mission, event
+
+    def can_escalate(self, current_mode: str, target_mode: str) -> bool:
+        """Check if escalation from current_mode to target_mode is valid."""
+        order = {"S0": 0, "S1": 1, "S2": 2, "S3": 3}
+        return order.get(target_mode, -1) > order.get(current_mode, -1)
+
+    def can_de_escalate(self, current_mode: str, target_mode: str) -> bool:
+        """Check if de-escalation from current_mode to target_mode is valid."""
+        order = {"S0": 0, "S1": 1, "S2": 2, "S3": 3}
+        return order.get(target_mode, -1) < order.get(current_mode, -1)

@@ -1,0 +1,31 @@
+{
+  "manifest_version": "1.0.0",
+  "gate": "NEXARA_PRIME_ADAPTIVE_RUNTIME_V1",
+  "generated_at": "2026-07-11T16:01:13.479650",
+  "files_created": [
+    "src/nexara_prime/mission_triage.py",
+    "src/nexara_prime/adaptive_scheduler.py",
+    "src/nexara_prime/capability_registry_v2.py",
+    "src/nexara_prime/model_router.py",
+    "src/nexara_prime/resource_budget.py",
+    "src/nexara_prime/escalation.py",
+    "src/nexara_prime/token_compiler_v2.py",
+    "src/nexara_prime/adaptive_runtime.py",
+    "tests/test_adaptive_runtime.py",
+    "ui/runtime-truth/index.html"
+  ],
+  "files_modified": [
+    "src/nexara_prime/models.py",
+    "src/nexara_prime/state_machine.py",
+    "src/nexara_prime/runtime.py",
+    "src/nexara_prime/api.py",
+    "src/nexara_prime/cli.py",
+    ".nexara/PROJECT_STATE.json"
+  ],
+  "test_results": {
+    "existing": 298,
+    "new": 121,
+    "total": 419,
+    "failed": 0
+  }
+}

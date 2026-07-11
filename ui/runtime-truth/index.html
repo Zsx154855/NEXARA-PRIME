@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXARA PRIME — Adaptive Runtime Truth</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --surface: #141920;
+    --accent: #3098b8;
+    --gold: #b8860b;
+    --text: #e0e0e0;
+    --muted: #6b7280;
+    --s0: #22c55e;
+    --s1: #3b82f6;
+    --s2: #f59e0b;
+    --s3: #ef4444;
+    --pass: #22c55e;
+    --fail: #ef4444;
+    --degraded: #f59e0b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', 'PingFang SC', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .header { background: var(--surface); border-bottom: 1px solid rgba(255,255,255,0.06); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 18px; font-weight: 600; color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; padding: 24px; }
+  .card { background: var(--surface); border-radius: 8px; padding: 16px; border: 1px solid rgba(255,255,255,0.06); }
+  .card-title { font-size: 12px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; letter-spacing: 0.5px; }
+  .card-value { font-size: 24px; font-weight: 600; }
+  .card-detail { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-s0 { background: rgba(34,197,94,0.15); color: var(--s0); }
+  .badge-s1 { background: rgba(59,130,246,0.15); color: var(--s1); }
+  .badge-s2 { background: rgba(245,158,11,0.15); color: var(--s2); }
+  .badge-s3 { background: rgba(239,68,68,0.15); color: var(--s3); }
+  .badge-pass { background: rgba(34,197,94,0.15); color: var(--pass); }
+  .badge-degraded { background: rgba(245,158,11,0.15); color: var(--degraded); }
+  .badge-unknown { background: rgba(107,114,128,0.15); color: var(--muted); }
+  .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .history { max-height: 200px; overflow-y: auto; }
+  .history-item { padding: 4px 0; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .error { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>⚡ Adaptive Runtime Truth</h1>
+  <span id="mode-badge" class="badge badge-unknown">LOADING</span>
+</div>
+<div class="grid" id="grid">
+  <div class="card"><div class="card-title">Loading...</div></div>
+</div>
+
+<script>
+const API = '/adaptive/status';
+
+function modeBadge(mode) {
+  const map = {S0:'badge-s0', S1:'badge-s1', S2:'badge-s2', S3:'badge-s3'};
+  return `<span class="badge ${map[mode] || 'badge-unknown'}">${mode || 'UNKNOWN'}</span>`;
+}
+
+function statusBadge(v) {
+  if (v === 'active') return '<span class="badge badge-pass">ACTIVE</span>';
+  if (v === 'degraded') return '<span class="badge badge-degraded">DEGRADED</span>';
+  return '<span class="badge badge-unknown">UNKNOWN</span>';
+}
+
+async function refresh() {
+  try {
+    const res = await fetch(API);
+    const data = await res.json();
+    const rt = data.adaptive_runtime || 'degraded';
+    document.getElementById('mode-badge').outerHTML = statusBadge(rt);
+
+    let html = '';
+    const missions = data.missions || [];
+    if (missions.length === 0) {
+      html = '<div class="card"><div class="card-title">No Missions</div><div class="card-value error">No adaptive missions found</div></div>';
+    }
+    for (const m of missions) {
+      const mBadge = modeBadge(m.adaptive_mode);
+      html += `
+      <div class="card">
+        <div class="card-title">Mission ${m.mission_id?.slice(-8) || 'N/A'} ${mBadge}</div>
+        <div class="card-value" style="font-size:16px;">${m.adaptive_mode || 'UNKNOWN'}</div>
+        <div class="card-detail">Complexity: ${(m.complexity_score||0).toFixed(2)} · Risk: ${(m.risk_score||0).toFixed(2)}</div>
+        <table class="table" style="margin-top:8px;">
+          <tr><th>Active Agents</th><td>${(m.active_agents || []).join(', ') || 'NONE'}</td></tr>
+          <tr><th>Model</th><td>${m.selected_model || 'UNKNOWN'}</td></tr>
+          <tr><th>Token Budget</th><td>${m.token_used || 0} / ${m.token_budget || 0}</td></tr>
+          <tr><th>Cost Est.</th><td>$${(m.cost_estimate || 0).toFixed(4)}</td></tr>
+          <tr><th>Tools</th><td>${m.tool_calls || 0} calls, ${m.retries || 0} retries</td></tr>
+          <tr><th>Approval</th><td>${m.approval_state || 'UNKNOWN'}</td></tr>
+          <tr><th>Evidence</th><td>${m.evidence_count || 0} items</td></tr>
+          <tr><th>Escalations</th><td>${m.escalation_count || 0}</td></tr>
+        </table>
+      </div>`;
+    }
+    document.getElementById('grid').innerHTML = html || '<div class="card"><div class="card-title">No missions</div></div>';
+  } catch(e) {
+    document.getElementById('grid').innerHTML = `<div class="card"><div class="error">Cannot reach API: ${e.message}</div></div>`;
+  }
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

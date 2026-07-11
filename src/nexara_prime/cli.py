@@ -74,6 +74,26 @@ def build_parser() -> argparse.ArgumentParser:
     security_sub.add_parser("audit").add_argument("subcommand", nargs="?", default="verify",
         choices=["verify", "list"])
 
+    # knowledge universe
+    ku = sub.add_parser("ku", help="knowledge universe commands")
+    ku_sub = ku.add_subparsers(dest="ku_command", required=True)
+    ku_sub.add_parser("scan", help="scan knowledge vault")
+
+    # adaptive runtime
+    adaptive = sub.add_parser("adaptive", help="adaptive runtime commands")
+    adaptive_sub = adaptive.add_subparsers(dest="adaptive_command", required=True)
+    adaptive_sub.add_parser("status", help="adaptive runtime status")
+    explain = adaptive_sub.add_parser("explain")
+    explain.add_argument("mission_id")
+    budget = adaptive_sub.add_parser("budget")
+    budget.add_argument("mission_id")
+    agents = adaptive_sub.add_parser("agents")
+    agents.add_argument("mission_id")
+    route = adaptive_sub.add_parser("route")
+    route.add_argument("mission_id")
+    triage = adaptive_sub.add_parser("triage")
+    triage.add_argument("mission_id")
+
     return parser
 
 
@@ -483,6 +503,24 @@ def main(argv: list[str] | None = None) -> int:
             _print(runtime.memory.inspect(args.mission_id))
         elif args.command == "eval":
             _print(runtime.evaluator.list(args.mission_id))
+        elif args.command == "adaptive":
+            if args.adaptive_command == "status":
+                _print(runtime.adaptive_status())
+            elif args.adaptive_command == "explain":
+                _print(runtime.adaptive_explain(args.mission_id))
+            elif args.adaptive_command == "budget":
+                _print(runtime.adaptive_budget(args.mission_id))
+            elif args.adaptive_command == "agents":
+                _print(runtime.adaptive_agents(args.mission_id))
+            elif args.adaptive_command == "route":
+                _print(runtime.adaptive_route(args.mission_id))
+            elif args.adaptive_command == "triage":
+                _print(runtime.adaptive_triage(args.mission_id))
+        elif args.command == "ku":
+            if args.ku_command == "scan":
+                from .knowledge_universe import scan_vault
+                vault = Path(__file__).resolve().parents[2] / "docs"
+                _print(scan_vault(vault))
         return 0
     except Exception as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)

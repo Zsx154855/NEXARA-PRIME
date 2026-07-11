@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .config import Settings
+from .knowledge_universe import scan_vault
 from .runtime import NexaraRuntime
 
 
@@ -32,6 +34,8 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     runtime = runtime or NexaraRuntime(Settings.from_env(Path.cwd()))
     app = FastAPI(title="NEXARA PRIME", version="0.1.0")
     app.state.runtime = runtime
+    default_vault = Path(__file__).resolve().parents[2] / "docs"
+    app.state.knowledge_vault = Path(os.environ.get("NEXARA_VAULT_PATH", default_vault))
 
     def get_mission(mission_id: str):
         try:
@@ -126,9 +130,52 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     def recovery_check() -> dict[str, Any]:
         return runtime.recover().__dict__
 
+    @app.get("/api/knowledge-universe")
+    def knowledge_universe() -> dict[str, Any]:
+        try:
+            return scan_vault(app.state.knowledge_vault)
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    # ── Adaptive Runtime API ──
+
+    @app.get("/adaptive/status")
+    def adaptive_status() -> dict[str, Any]:
+        return runtime.adaptive_status()
+
+    @app.get("/adaptive/missions/{mission_id}")
+    def adaptive_mission(mission_id: str) -> dict[str, Any]:
+        return runtime.adaptive_explain(mission_id)
+
+    @app.get("/adaptive/missions/{mission_id}/explain")
+    def adaptive_explain(mission_id: str) -> dict[str, Any]:
+        return runtime.adaptive_explain(mission_id)
+
+    @app.get("/adaptive/missions/{mission_id}/budget")
+    def adaptive_budget(mission_id: str) -> dict[str, Any]:
+        return runtime.adaptive_budget(mission_id)
+
+    @app.get("/adaptive/missions/{mission_id}/agents")
+    def adaptive_agents(mission_id: str) -> dict[str, Any]:
+        return runtime.adaptive_agents(mission_id)
+
+    @app.get("/adaptive/missions/{mission_id}/routing")
+    def adaptive_routing(mission_id: str) -> dict[str, Any]:
+        return runtime.adaptive_route(mission_id)
+
+    @app.post("/adaptive/missions/{mission_id}/triage")
+    def adaptive_triage(mission_id: str) -> dict[str, Any]:
+        return runtime.adaptive_triage(mission_id)
+
     ui_root = Path(__file__).resolve().parents[2] / "ui"
     if ui_root.exists():
         app.mount("/console", StaticFiles(directory=ui_root, html=True), name="console")
+        universe_root = ui_root / "knowledge-universe"
+        if universe_root.exists():
+            app.mount("/knowledge-universe", StaticFiles(directory=universe_root, html=True), name="knowledge-universe")
+        truth_root = ui_root / "runtime-truth"
+        if truth_root.exists():
+            app.mount("/runtime-truth", StaticFiles(directory=truth_root, html=True), name="runtime-truth")
 
     return app
 

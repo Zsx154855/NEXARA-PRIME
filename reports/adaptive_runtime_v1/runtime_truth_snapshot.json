@@ -1,0 +1,27 @@
+{
+  "gate": "NEXARA_PRIME_ADAPTIVE_RUNTIME_V1",
+  "timestamp": "2026-07-11T16:01:13.479650",
+  "security_runtime": "CLOSED",
+  "live_provider": "VERIFIED",
+  "default_live_provider": "deepseek",
+  "results": {
+    "existing_tests": 298,
+    "existing_passed": 298,
+    "new_tests": 121,
+    "new_passed": 121,
+    "total_passed": 419,
+    "total_failed": 0
+  },
+  "components": {
+    "mission_triage": "IMPLEMENTED",
+    "adaptive_scheduler": "IMPLEMENTED",
+    "capability_registry_v2": "IMPLEMENTED",
+    "model_router": "IMPLEMENTED",
+    "resource_budget": "IMPLEMENTED",
+    "escalation": "IMPLEMENTED",
+    "token_compiler_v2": "IMPLEMENTED",
+    "api_endpoints": "IMPLEMENTED",
+    "cli_commands": "IMPLEMENTED",
+    "ui_panel": "IMPLEMENTED"
+  }
+}

@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 
+from .adaptive_runtime import AdaptiveRuntime as AdaptiveOrchestrator
 from .capabilities import CapabilityRegistry
 from .config import Settings
 from .contract_engine import ContractEngine
@@ -15,13 +16,71 @@ from .governance import ApprovalEngine, PolicyEngine, WriterLeaseManager
 from .memory import MemoryKernel
 from .mission_compiler import MissionCompiler
 from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider
-from .models import Mission, MissionState, RiskLevel, now_iso, new_id
+from .models import (
+    Mission, MissionState, RiskLevel, AdaptiveMode, AdaptiveMissionProfile,
+    MissionTriageResult, SchedulingPlan, ModelRoutingDecision,
+    ResourceBudget, BudgetUsage, EscalationDecision,
+    now_iso, new_id,
+)
 from .recovery import DurableRecovery
 from .scheduler import AdaptiveScheduler
 from .security_audit import SecurityAuditLedger
 from .state_machine import MissionStateMachine
 from .token_compiler import TokenCompiler
 from .tools import ToolRuntime
+
+# Adaptive Runtime imports (lazy — loaded on first use)
+_ADAPTIVE_IMPORTS_DONE = False
+_adaptive_triage = None
+_adaptive_scheduler_v2 = None
+_adaptive_capabilities_v2 = None
+_adaptive_router = None
+_adaptive_budgets = None
+_adaptive_escalation = None
+_adaptive_tokens_v2 = None
+
+def _ensure_adaptive_imports():
+    global _ADAPTIVE_IMPORTS_DONE, _adaptive_triage, _adaptive_scheduler_v2
+    global _adaptive_capabilities_v2, _adaptive_router, _adaptive_budgets
+    global _adaptive_escalation, _adaptive_tokens_v2
+    if _ADAPTIVE_IMPORTS_DONE:
+        return
+    try:
+        from .mission_triage import MissionTriageEngine
+        _adaptive_triage = MissionTriageEngine()
+    except ImportError:
+        _adaptive_triage = None
+    try:
+        from .adaptive_scheduler import AdaptiveMultiAgentScheduler
+        _adaptive_scheduler_v2 = AdaptiveMultiAgentScheduler()
+    except ImportError:
+        _adaptive_scheduler_v2 = None
+    try:
+        from .capability_registry_v2 import CapabilityRegistryV2
+        _adaptive_capabilities_v2 = CapabilityRegistryV2()
+    except ImportError:
+        _adaptive_capabilities_v2 = None
+    try:
+        from .model_router import ModelRouter
+        _adaptive_router = ModelRouter()
+    except ImportError:
+        _adaptive_router = None
+    try:
+        from .resource_budget import ResourceBudgetManager
+        _adaptive_budgets = ResourceBudgetManager()
+    except ImportError:
+        _adaptive_budgets = None
+    try:
+        from .escalation import EscalationEngine
+        _adaptive_escalation = EscalationEngine()
+    except ImportError:
+        _adaptive_escalation = None
+    try:
+        from .token_compiler_v2 import TokenCompilerV2
+        _adaptive_tokens_v2 = TokenCompilerV2()
+    except ImportError:
+        _adaptive_tokens_v2 = None
+    _ADAPTIVE_IMPORTS_DONE = True
 
 
 class NexaraRuntime:
@@ -339,3 +398,123 @@ class NexaraRuntime:
 
     def health(self) -> dict:
         return {"status": "ok", "provider": self.models.provider.name, "db_path": str(self.settings.db_path), "event_count": len(self.store.list_events()), "recovery": self.recover().__dict__}
+
+    # ── Adaptive Runtime Methods ──
+
+    def _get_adaptive(self) -> AdaptiveOrchestrator | None:
+        """Lazy-build the adaptive orchestrator."""
+        _ensure_adaptive_imports()
+        if None in (_adaptive_triage, _adaptive_scheduler_v2, _adaptive_capabilities_v2, _adaptive_router, _adaptive_budgets, _adaptive_escalation, _adaptive_tokens_v2):
+            return None
+        return AdaptiveOrchestrator(
+            triage_engine=_adaptive_triage,
+            scheduler=_adaptive_scheduler_v2,
+            capability_registry=_adaptive_capabilities_v2,
+            model_router=_adaptive_router,
+            budget_manager=_adaptive_budgets,
+            escalation_engine=_adaptive_escalation,
+            token_compiler=_adaptive_tokens_v2,
+            store=self.store,
+            events=self.events,
+            evidence=self.evidence,
+            audit=self.audit,
+            approvals=self.approvals,
+            tools=self.tools,
+            state_machine=self.state_machine,
+            recovery=self.recovery,
+        )
+
+    def adaptive_status(self) -> dict:
+        """Return live adaptive runtime status."""
+        orch = self._get_adaptive()
+        missions_raw = self.list_missions()
+        profiles = []
+        for m in missions_raw[-10:]:
+            mission_id = m.get("mission_id", "")
+            try:
+                mission = self._load_mission(mission_id)
+            except KeyError:
+                continue
+            profile = AdaptiveMissionProfile(
+                mission_id=mission_id,
+                adaptive_mode=mission.adaptive_mode or "UNKNOWN",
+                active_agents=[a.persona.value for a in (mission.assignments or [])],
+                selected_provider="deepseek" if mission.routing_decisions else "UNKNOWN",
+                selected_model=(mission.routing_decisions[-1].get("selected_model", "UNKNOWN") if mission.routing_decisions else "UNKNOWN"),
+                token_budget=int((mission.resource_budget or {}).get("token_budget", 0)),
+                token_used=int((mission.budget_usage or {}).get("tokens_used", 0)),
+                cost_estimate=float((mission.resource_budget or {}).get("cost_budget", 0)),
+                tool_calls=int((mission.budget_usage or {}).get("tool_calls_used", 0)),
+                retries=int((mission.budget_usage or {}).get("retries_used", 0)),
+                approval_state=mission.state or "UNKNOWN",
+                evidence_count=len(self.evidence.list(mission_id)),
+                escalation_count=len(mission.escalation_history),
+            )
+            profiles.append(profile.model_dump(mode="json"))
+        return {"adaptive_runtime": "active" if orch else "degraded", "missions": profiles}
+
+    def adaptive_explain(self, mission_id: str) -> dict:
+        """Explain adaptive decisions for a mission."""
+        orch = self._get_adaptive()
+        if not orch:
+            return {"error": "adaptive_runtime_not_available", "mission_id": mission_id}
+        try:
+            mission = self._load_mission(mission_id)
+            return orch.explain_mission(mission)
+        except KeyError:
+            return {"error": "mission_not_found", "mission_id": mission_id}
+
+    def adaptive_budget(self, mission_id: str) -> dict:
+        """Get budget status for a mission."""
+        try:
+            mission = self._load_mission(mission_id)
+            budget = mission.resource_budget or {}
+            usage = mission.budget_usage or {}
+            return {
+                "mission_id": mission_id,
+                "budget": budget,
+                "usage": usage,
+                "within_budget": not usage.get("stopped", False),
+                "degraded": usage.get("degraded", False),
+            }
+        except KeyError:
+            return {"error": "mission_not_found", "mission_id": mission_id}
+
+    def adaptive_agents(self, mission_id: str) -> dict:
+        """Get agent assignments for a mission."""
+        try:
+            mission = self._load_mission(mission_id)
+            return {
+                "mission_id": mission_id,
+                "adaptive_mode": mission.adaptive_mode or "UNKNOWN",
+                "active_agents": [a.model_dump(mode="json") if hasattr(a, 'model_dump') else a for a in (mission.assignments or [])],
+                "agent_lifecycle": mission.agent_lifecycle,
+                "scheduling_plan": mission.scheduling_plan,
+            }
+        except KeyError:
+            return {"error": "mission_not_found", "mission_id": mission_id}
+
+    def adaptive_route(self, mission_id: str) -> dict:
+        """Get routing decisions for a mission."""
+        try:
+            mission = self._load_mission(mission_id)
+            return {
+                "mission_id": mission_id,
+                "routing_decisions": mission.routing_decisions,
+                "current": mission.routing_decisions[-1] if mission.routing_decisions else None,
+            }
+        except KeyError:
+            return {"error": "mission_not_found", "mission_id": mission_id}
+
+    def adaptive_triage(self, mission_id: str) -> dict:
+        """Run triage on an existing mission."""
+        orch = self._get_adaptive()
+        if not orch:
+            return {"error": "adaptive_runtime_not_available"}
+        try:
+            mission = self._load_mission(mission_id)
+            result = orch.triage_mission(mission)
+            self._save_mission(mission)
+            return result.model_dump(mode="json")
+        except KeyError:
+            return {"error": "mission_not_found", "mission_id": mission_id}
