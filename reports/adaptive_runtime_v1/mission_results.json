@@ -1,0 +1,177 @@
+{
+  "gate": "NEXARA_PRIME_ADAPTIVE_RUNTIME_V1_LIVE_ACCEPTANCE",
+  "timestamp": "2026-07-11T18:42:17.238099+00:00",
+  "missions": [
+    {
+      "mission": "A: S0 Simple",
+      "intent": "read a configuration file and print its contents",
+      "mode": "S0",
+      "expected_mode": "S0",
+      "mode_match": true,
+      "complexity": 0.034,
+      "risk": 0.056,
+      "roles": [
+        "Orchestrator",
+        "Executor"
+      ],
+      "model_tier": "flash",
+      "router_model": "mock",
+      "router_reason": "Tier=flash, complexity=0.03, risk=0.06, context=48, latency_",
+      "budget_tokens": 10000,
+      "budget_cost": 0.5,
+      "agents": 1,
+      "agent_roles": [
+        "Orchestrator"
+      ],
+      "token_savings": -1.813,
+      "raw_tokens": 75,
+      "compiled_tokens": 211,
+      "latency_ms": 0.2,
+      "evidence_level": "minimal",
+      "escalation_conditions": [],
+      "decision_reasoning": "complexity: tools=1 (factor=0.10), uncertainty=0.00, duration=500ms (factor=0.00), token_cost=200 (factor=0.00)\nrisk: ex"
+    },
+    {
+      "mission": "B: S1 Assisted",
+      "intent": "summarize a log file and identify warnings",
+      "mode": "S1",
+      "expected_mode": "S1",
+      "mode_match": true,
+      "complexity": 0.134,
+      "risk": 0.072,
+      "roles": [
+        "Orchestrator",
+        "Planner",
+        "Executor",
+        "Reviewer",
+        "Researcher"
+      ],
+      "model_tier": "flash",
+      "router_model": "mock",
+      "router_reason": "Tier=flash, complexity=0.13, risk=0.07, context=42, latency_",
+      "budget_tokens": 50000,
+      "budget_cost": 2.0,
+      "agents": 1,
+      "agent_roles": [
+        "Orchestrator"
+      ],
+      "token_savings": -3.135,
+      "raw_tokens": 74,
+      "compiled_tokens": 306,
+      "latency_ms": 0.2,
+      "evidence_level": "standard",
+      "escalation_conditions": [],
+      "decision_reasoning": "complexity: tools=2 (factor=0.20), uncertainty=0.20, duration=2000ms (factor=0.00), token_cost=1000 (factor=0.00)\nrisk: "
+    },
+    {
+      "mission": "C: S2 Managed",
+      "intent": "analyze source tree, refactor duplicate code, write results",
+      "mode": "S2",
+      "expected_mode": "S2",
+      "mode_match": true,
+      "complexity": 0.312,
+      "risk": 0.177,
+      "roles": [
+        "Orchestrator",
+        "Planner",
+        "Executor",
+        "Reviewer",
+        "Auditor",
+        "Researcher"
+      ],
+      "model_tier": "flash",
+      "router_model": "mock",
+      "router_reason": "Tier=flash, complexity=0.31, risk=0.18, context=59, latency_",
+      "budget_tokens": 150000,
+      "budget_cost": 8.0,
+      "agents": 4,
+      "agent_roles": [
+        "Orchestrator",
+        "Executor",
+        "Analyst",
+        "Researcher"
+      ],
+      "token_savings": -3.436,
+      "raw_tokens": 78,
+      "compiled_tokens": 346,
+      "latency_ms": 0.2,
+      "evidence_level": "thorough",
+      "escalation_conditions": [
+        "High uncertainty requires monitored execution"
+      ],
+      "decision_reasoning": "complexity: tools=4 (factor=0.40), uncertainty=0.50, duration=30000ms (factor=0.05), token_cost=5000 (factor=0.01)\nrisk:"
+    },
+    {
+      "mission": "D: S3 Governed",
+      "intent": "delete production database records and notify external monitoring",
+      "mode": "S3",
+      "expected_mode": "S3",
+      "mode_match": true,
+      "complexity": 0.427,
+      "risk": 0.854,
+      "roles": [
+        "Orchestrator",
+        "Planner",
+        "Executor",
+        "Reviewer",
+        "Auditor",
+        "Archivist",
+        "Analyst"
+      ],
+      "model_tier": "pro",
+      "router_model": "deepseek-v4-pro",
+      "router_reason": "Tier=pro, complexity=0.43, risk=0.85, context=65, latency_ta",
+      "budget_tokens": 500000,
+      "budget_cost": 25.0,
+      "agents": 6,
+      "agent_roles": [
+        "Orchestrator",
+        "Executor",
+        "Planner",
+        "Reviewer",
+        "Auditor",
+        "Reviewer"
+      ],
+      "token_savings": -3.405,
+      "raw_tokens": 79,
+      "compiled_tokens": 348,
+      "latency_ms": 0.2,
+      "evidence_level": "exhaustive",
+      "escalation_conditions": [
+        "Irreversible external side effects detected"
+      ],
+      "decision_reasoning": "complexity: tools=3 (factor=0.30), uncertainty=0.90, duration=60000ms (factor=0.10), token_cost=20000 (factor=0.04)\nrisk"
+    },
+    {
+      "mission": "E: Provider Fault",
+      "mode": "N/A",
+      "expected_mode": "N/A",
+      "router_model": "mock",
+      "router_reason": "Tier=flash, complexity=0.30, risk=0.20, context=500, latency_target=5000ms \u2192 sel",
+      "circuit_breaker_active": true,
+      "fallback": "deepseek-v4-flash"
+    },
+    {
+      "mission": "F: Recovery",
+      "mode": "N/A",
+      "status": "UNIT_TESTED (recovery module verified at 7bd4c58)",
+      "idempotency": "checkpoint-based, no duplicate side effects"
+    },
+    {
+      "mission": "G: Live DeepSeek",
+      "status": "PASS",
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "latency_ms": 785.0,
+      "input_tokens": 23,
+      "output_tokens": 1,
+      "response_preview": "ACK",
+      "secret_leakage": 0
+    }
+  ],
+  "summary": {
+    "total": 7,
+    "passed": 5,
+    "live_deepseek": true
+  }
+}
