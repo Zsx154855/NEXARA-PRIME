@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -14,6 +15,8 @@ from .evidence import EvidenceStore
 from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine
 from .models import ApprovalStatus, RiskLevel, ToolInvocation, new_id, now_iso
+from .sandbox_v2 import MacOSSandboxBackend, SandboxInvocation
+from .security_audit import SecurityAuditLedger
 
 
 class ToolRuntime:
@@ -28,7 +31,7 @@ class ToolRuntime:
         "ssh", "scp", "chmod", "chown", "mount", "umount", "launchctl", "osascript", "shutdown",
     }
 
-    def __init__(self, store: SQLiteStore, events: EventBus, evidence: EvidenceStore, policy: PolicyEngine, approvals: ApprovalEngine, workspace_root: Path, report_root: Path):
+    def __init__(self, store: SQLiteStore, events: EventBus, evidence: EvidenceStore, policy: PolicyEngine, approvals: ApprovalEngine, workspace_root: Path, report_root: Path, audit: SecurityAuditLedger | None = None):
         self.store = store
         self.events = events
         self.evidence = evidence
@@ -36,6 +39,8 @@ class ToolRuntime:
         self.approvals = approvals
         self.workspace_root = workspace_root.resolve()
         self.report_root = report_root.resolve()
+        self.audit = audit
+        self.sandbox = MacOSSandboxBackend(str(self.workspace_root))
         self.workspace_root.mkdir(parents=True, exist_ok=True)
         self.report_root.mkdir(parents=True, exist_ok=True)
 
@@ -89,9 +94,11 @@ class ToolRuntime:
         # P0-2: Real Approval validation — never trust a bare boolean
         if self.policy.requires_approval(risk):
             if not approval_id:
+                self._audit_denial(mission_id, task_id, tool_name, trace_id, actor_id, "missing_approval_id", risk)
                 raise PermissionError("approval_required_for_tool: no approval_id provided")
             approval = self._validate_approval(approval_id, mission_id, tool_name, task_id, actor_id)
             if not approval:
+                self._audit_denial(mission_id, task_id, tool_name, trace_id, actor_id, "invalid_or_mismatched_approval", risk)
                 raise PermissionError("approval_required_for_tool: invalid or expired approval")
         started = time.monotonic()
         status = "completed"
@@ -135,6 +142,17 @@ class ToolRuntime:
         )
         invocation.receipt_evidence_id = evidence.evidence_id
         self.store.save_record(invocation.invocation_id, "tool", invocation.model_dump(mode="json"), invocation.created_at, mission_id)
+        self._audit(
+            event_type="tool.invoked",
+            mission_id=mission_id,
+            task_id=task_id,
+            action=tool_name,
+            decision="allowed" if status == "completed" else "failed",
+            risk_level=risk,
+            trace_id=trace_id,
+            actor_id=actor_id or "tool_runtime",
+            metadata={"invocation_id": invocation.invocation_id, "status": status},
+        )
         if status == "failed":
             if failure is not None and isinstance(failure, (PermissionError, FileNotFoundError, ValueError)):
                 raise failure
@@ -178,9 +196,9 @@ class ToolRuntime:
         forbidden = ("os.remove", "os.unlink", "shutil.rmtree", "subprocess", "socket", "requests", "httpx", "open('/", "open(\"/", "os.system", "eval(")
         if any(token in code for token in forbidden):
             raise PermissionError("code_policy_rejected")
-        env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(self.workspace_root)}
-        completed = subprocess.run([sys.executable, "-I", "-c", code], cwd=self.workspace_root, env=env, capture_output=True, text=True, timeout=timeout_seconds, check=False)
-        return {"returncode": completed.returncode, "stdout": completed.stdout[: self.MAX_OUTPUT_BYTES], "stderr": completed.stderr[: self.MAX_OUTPUT_BYTES], "truncated": len(completed.stdout) > self.MAX_OUTPUT_BYTES or len(completed.stderr) > self.MAX_OUTPUT_BYTES}
+        argv = [os.path.realpath(sys.executable), "-I", "-c", code]
+        receipt = self._sandbox_execute(argv, timeout_seconds)
+        return {"returncode": receipt.exit_code, "stdout": receipt.stdout, "stderr": receipt.stderr, "truncated": len(receipt.stdout) >= self.MAX_OUTPUT_BYTES or len(receipt.stderr) >= self.MAX_OUTPUT_BYTES}
 
     def _run_command_sandboxed(self, arguments: dict[str, Any], timeout_seconds: int) -> dict[str, Any]:
         raw = arguments.get("command", [])
@@ -196,9 +214,31 @@ class ToolRuntime:
         allowed_executables = {"python", "python3", "python3.12", "git", "ls", "pwd", "find"}
         if Path(command[0]).name not in allowed_executables:
             raise PermissionError("executable_not_allowlisted")
-        env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(self.workspace_root)}
-        completed = subprocess.run(command, cwd=self.workspace_root, env=env, capture_output=True, text=True, timeout=timeout_seconds, check=False)
-        return {"command": command, "returncode": completed.returncode, "stdout": completed.stdout[: self.MAX_OUTPUT_BYTES], "stderr": completed.stderr[: self.MAX_OUTPUT_BYTES], "truncated": len(completed.stdout) > self.MAX_OUTPUT_BYTES or len(completed.stderr) > self.MAX_OUTPUT_BYTES}
+        executable = command[0] if os.path.isabs(command[0]) else shutil.which(command[0])
+        if executable:
+            command[0] = os.path.realpath(executable)
+        receipt = self._sandbox_execute(command, timeout_seconds)
+        return {"command": command, "returncode": receipt.exit_code, "stdout": receipt.stdout, "stderr": receipt.stderr, "truncated": len(receipt.stdout) >= self.MAX_OUTPUT_BYTES or len(receipt.stderr) >= self.MAX_OUTPUT_BYTES}
+
+    def _sandbox_execute(self, argv: list[str], timeout_seconds: int):
+        allowed_dirs = [str(self.workspace_root), str(Path(sys.prefix).resolve()), str(Path(sys.base_prefix).resolve())]
+        env = {
+            "PATH": os.environ.get("PATH", ""),
+            "NEXARA_ALLOWED_DIRS": ":".join(dict.fromkeys(allowed_dirs)),
+        }
+        receipt = self.sandbox.execute(SandboxInvocation(
+            argv=argv,
+            cwd=str(self.workspace_root),
+            env=env,
+            timeout=timeout_seconds,
+            max_output_bytes=self.MAX_OUTPUT_BYTES,
+            workspace_root=str(self.workspace_root),
+        ))
+        if receipt.timed_out:
+            raise RuntimeError("tool_timeout")
+        if receipt.error:
+            raise PermissionError(f"os_sandbox_unavailable:{receipt.error}")
+        return receipt
 
     def _browser_readonly(self, arguments: dict[str, Any]) -> dict[str, Any]:
         url = str(arguments.get("url", ""))
@@ -218,6 +258,12 @@ class ToolRuntime:
             return False
         if approval.mission_id != mission_id:
             return False
+        if not actor_id:
+            return False
+        if approval.action != tool_name:
+            return False
+        if approval.executor_id and approval.executor_id != actor_id:
+            return False
         # Check expiry
         if approval.expires_at:
             from datetime import datetime, timezone
@@ -232,6 +278,26 @@ class ToolRuntime:
             approval.status = ApprovalStatus.CONSUMED
             self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, approval.mission_id)
         return True
+
+    def _audit_denial(self, mission_id: str, task_id: str, tool_name: str, trace_id: str, actor_id: str, reason: str, risk: RiskLevel) -> None:
+        self._audit("tool.authorization_denied", mission_id, task_id, tool_name, "denied", risk, trace_id, actor_id or "unknown", {"reason": reason})
+
+    def _audit(self, event_type: str, mission_id: str, task_id: str, action: str, decision: str, risk_level: RiskLevel, trace_id: str, actor_id: str, metadata: dict[str, Any]) -> None:
+        if not self.audit:
+            return
+        actor_type = "agent" if actor_id not in {"human", "runtime", "tool_runtime", "unknown"} else "system"
+        self.audit.record(
+            event_type=event_type,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            mission_id=mission_id,
+            task_id=task_id,
+            action=action,
+            decision=decision,
+            risk_level=risk_level.value,
+            trace_id=trace_id,
+            metadata=metadata,
+        )
 
     def list_invocations(self, mission_id: str | None = None) -> list[dict]:
         return self.store.list_records("tool", mission_id)

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import Settings
+from .db import SQLiteStore
 from .runtime import NexaraRuntime
 
 
@@ -89,7 +90,7 @@ def _resolve_repo_root() -> Path:
 
 
 def cmd_status() -> int:
-    """Read .nexara/PROJECT_STATE.json and render a human-readable status block."""
+    """Render project metadata together with live runtime facts."""
     root = _resolve_repo_root()
     state_path = root / ".nexara" / "PROJECT_STATE.json"
     if not state_path.exists():
@@ -102,22 +103,43 @@ def cmd_status() -> int:
         return 1
 
     kf = state.get("knowledge_fabric", {})
-    rt = state.get("runtime_hardening", {})
     prog = state.get("progress", {})
+    branch_result = subprocess.run(["git", "branch", "--show-current"], cwd=root, capture_output=True, text=True, check=False)
+    actual_branch = branch_result.stdout.strip() or "unknown"
+    settings = Settings.from_env(root)
+    missions: list[dict] = []
+    latest_mission_id = "none"
+    latest_evidence = 0
+    audit_status = "unavailable"
+    audit_detail = "runtime database not initialized"
+    if settings.db_path.exists():
+        store = SQLiteStore(settings.db_path)
+        try:
+            missions = store.list_records("mission")
+            if missions:
+                latest = missions[-1]
+                latest_mission_id = str(latest.get("mission_id", "unknown"))
+                latest_evidence = len(store.list_records("evidence", latest_mission_id))
+            from .security_audit import SecurityAuditLedger
+            ok, audit_detail = SecurityAuditLedger(store).verify_with_mission_check(bool(missions))
+            audit_status = "PASS" if ok else "FAIL"
+        finally:
+            store.close()
 
     lines = [
         "",
         f"  {state.get('project', 'NEXARA PRIME')}",
         "  " + "─" * 40,
-        f"  Repository        {state.get('repo', root)}",
-        f"  Branch            {state.get('branch', '?')}",
-        f"  Current Gate      {state.get('current_gate', '?')}",
-        f"  Gate Status       {state.get('gate_status', '?')}",
+        f"  Repository        {root}",
+        f"  Branch            {actual_branch}",
+        f"  Recorded Gate     {state.get('current_gate', '?')}",
+        f"  Recorded Status   {state.get('gate_status', '?')}",
         "",
-        f"  Runtime           {rt.get('status', '?')}",
-        f"  Tests             {rt.get('tests_passed', 0)} passed / {rt.get('tests_failed', 0)} failed",
-        f"  Mission           {rt.get('acceptance_mission', '?')}",
-        f"  Evidence          {rt.get('evidence_valid', 0)} / {rt.get('evidence_valid', 0)}",
+        f"  Runtime DB       {settings.db_path}",
+        f"  Missions          {len(missions)}",
+        f"  Latest Mission    {latest_mission_id}",
+        f"  Latest Evidence   {latest_evidence}",
+        f"  Audit Chain       {audit_status} ({audit_detail})",
         "",
         f"  Knowledge Fabric  {kf.get('status', '?')}",
         f"  Canonical Docs    {kf.get('canonical_documents', '?')}",
@@ -367,9 +389,16 @@ def cmd_security(args) -> int:
         # Audit
         try:
             from .security_audit import SecurityAuditLedger
-            ledger = SecurityAuditLedger()
-            ok, msg = ledger.verify_chain()
-            print(f"  Audit Chain:       {'intact' if ok else 'BROKEN'}")
+            root = _resolve_repo_root()
+            settings = Settings.from_env(root)
+            store = SQLiteStore(settings.db_path)
+            try:
+                ledger = SecurityAuditLedger(store)
+                missions = store.list_records("mission")
+                ok, msg = ledger.verify_with_mission_check(bool(missions))
+                print(f"  Audit Chain:       {'intact' if ok else 'BROKEN'} ({msg})")
+            finally:
+                store.close()
         except ImportError:
             print(f"  Audit Chain:       not available")
         # Provider
@@ -381,19 +410,33 @@ def cmd_security(args) -> int:
         if args.subcommand == "verify":
             try:
                 from .security_audit import SecurityAuditLedger
-                ledger = SecurityAuditLedger()
-                ok, msg = ledger.verify_chain()
+                root = _resolve_repo_root()
+                settings = Settings.from_env(root)
+                store = SQLiteStore(settings.db_path)
+                ledger = SecurityAuditLedger(store)
+                missions = store.list_records("mission")
+                ok, msg = ledger.verify_with_mission_check(bool(missions))
                 print(f"Audit chain verification: {'PASS' if ok else 'FAIL'}")
                 if ok:
                     print(f"  {msg}")
                 else:
                     print(f"  {msg}")
+                    store.close()
                     return 1
+                store.close()
             except ImportError as e:
                 print(f"Audit system not available: {e}")
                 return 1
         elif args.subcommand == "list":
-            print("No audit entries recorded yet.")
+            from .security_audit import SecurityAuditLedger
+            root = _resolve_repo_root()
+            settings = Settings.from_env(root)
+            store = SQLiteStore(settings.db_path)
+            try:
+                entries = SecurityAuditLedger(store).list_entries()
+                _print(entries)
+            finally:
+                store.close()
     return 0
 
 

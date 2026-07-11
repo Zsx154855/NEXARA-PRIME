@@ -18,6 +18,7 @@ from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenA
 from .models import Mission, MissionState, RiskLevel, now_iso, new_id
 from .recovery import DurableRecovery
 from .scheduler import AdaptiveScheduler
+from .security_audit import SecurityAuditLedger
 from .state_machine import MissionStateMachine
 from .token_compiler import TokenCompiler
 from .tools import ToolRuntime
@@ -31,6 +32,7 @@ class NexaraRuntime:
         self.settings.ensure_dirs()
         self.store = SQLiteStore(self.settings.db_path)
         self.events = EventBus(self.store)
+        self.audit = SecurityAuditLedger(self.store)
         self.evidence = EvidenceStore(self.store, self.events)
         self.memory = MemoryKernel(self.store, self.events)
         self.policy = PolicyEngine()
@@ -42,7 +44,7 @@ class NexaraRuntime:
         self.contracts = ContractEngine()
         self.tokens = TokenCompiler()
         self.models = self._build_model_gateway()
-        self.tools = ToolRuntime(self.store, self.events, self.evidence, self.policy, self.approvals, self.settings.workspace_root, self.settings.report_root)
+        self.tools = ToolRuntime(self.store, self.events, self.evidence, self.policy, self.approvals, self.settings.workspace_root, self.settings.report_root, self.audit)
         self.evaluator = EvaluationEngine(self.store, self.events)
         self.state_machine = MissionStateMachine(self.events, self.evidence)
         self.recovery = DurableRecovery(self.store, self.events)
@@ -79,6 +81,11 @@ class NexaraRuntime:
         mission = Mission(mission_id=spec.mission_id, spec=spec, trace_id=new_id("trace"))
         self._save_mission(mission)
         self.events.publish("mission.created", mission.mission_id, "mission", "human", mission.trace_id, {"title": spec.title, "risk_level": spec.risk_level.value}, idempotency_key=f"mission-created:{mission.mission_id}")
+        self.audit.record(
+            "mission.created", actor_id="human", actor_type="human", mission_id=mission.mission_id,
+            action="create_mission", decision="allowed", risk_level=spec.risk_level.value,
+            trace_id=mission.trace_id, metadata={"title": spec.title},
+        )
         self.evidence.add(mission.mission_id, "mission_spec", "MissionSpec", spec.model_dump_json(indent=2), mission.trace_id, actor="compiler", source="mission_compiler", verification_status="verified", idempotency_key=f"mission-spec:{mission.mission_id}")
         return mission
 
@@ -89,8 +96,14 @@ class NexaraRuntime:
         return self.store.list_records("mission")
 
     def _advance(self, mission: Mission, target: MissionState, actor: str) -> None:
+        previous = mission.state
         self.state_machine.transition(mission, target, actor)
         self._save_mission(mission)
+        self.audit.record(
+            "mission.state_changed", actor_id=actor, actor_type="system", mission_id=mission.mission_id,
+            action=f"{previous}->{target.value}", decision="allowed", risk_level=mission.spec.risk_level.value,
+            trace_id=mission.trace_id, metadata={"from_state": previous, "to_state": target.value},
+        )
 
     def plan_mission(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)
@@ -123,15 +136,22 @@ class NexaraRuntime:
         mission.plan.simulated = True
         self._save_mission(mission)
         self.recovery.checkpoint(mission.mission_id, "plan_simulated", mission.trace_id, data={"steps": len(mission.plan.steps)})
-        if self.policy.requires_approval(mission.spec.risk_level):
+        # Every mission report write is R2, even when the surrounding objective
+        # is low risk. The write itself therefore always requires human approval.
+        if self.policy.requires_approval(RiskLevel.R2):
             approval = self.approvals.request(
-                mission.mission_id, "write_local_report", mission.spec.risk_level,
+                mission.mission_id, "file_write_report", RiskLevel.R2,
                 "The mission will write one bounded report under the approved report root.",
                 ["Creates or updates a local report file", "No external network or deletion"], mission.trace_id,
                 affected_resources=[str(self.settings.report_root / mission.mission_id)],
                 external_effect=False, reversible=True,
                 rollback_plan={"kind": "restore_previous_report", "implemented": False},
-                estimated_cost=0.0, approval_scope="single_action",
+                estimated_cost=0.0, approval_scope="single_action", executor_id="runtime",
+            )
+            self.audit.record(
+                "approval.requested", actor_id="governance", actor_type="system", mission_id=mission.mission_id,
+                action=approval.action, decision="pending", risk_level=approval.risk_level.value,
+                trace_id=mission.trace_id, metadata={"approval_id": approval.approval_id},
             )
             mission.pending_approval_id = approval.approval_id
             self._advance(mission, MissionState.APPROVAL, "governance")
@@ -153,6 +173,12 @@ class NexaraRuntime:
         if not mission.pending_approval_id:
             raise ValueError("mission_has_no_pending_approval")
         decision_record = self.approvals.decide(mission.pending_approval_id, approved, actor, note, mission.trace_id, decision=decision, scope=scope)
+        self.audit.record(
+            "approval.decided", actor_id=actor, actor_type="human" if actor == "human" else "system",
+            mission_id=mission.mission_id, action=decision_record.action,
+            decision=decision_record.status.value, risk_level=decision_record.risk_level.value,
+            trace_id=mission.trace_id, metadata={"approval_id": decision_record.approval_id, "decided_by": actor},
+        )
         if decision_record.status.value == "approved":
             mission.contract = self.contracts.approve(mission.contract) if mission.contract else None
             self._advance(mission, MissionState.EXECUTION, actor)
@@ -183,6 +209,8 @@ class NexaraRuntime:
         if mission.paused:
             return mission
         if mission.state == MissionState.APPROVAL.value:
+            if mission.safe_mode:
+                raise PermissionError("safe_mode_blocks_unapproved_mission")
             return mission
         if mission.state != MissionState.EXECUTION.value:
             raise ValueError(f"mission_not_ready_to_run:{mission.state}")
@@ -195,16 +223,11 @@ class NexaraRuntime:
             report = self._render_report(mission, compiled.task, model_text, provider)
             lease = self.leases.acquire(f"report:{mission.mission_id}", "vertex", mission.trace_id)
             try:
-                internal_approval = self.approvals.request(
-                    mission.mission_id, "file_write_report", RiskLevel.R2,
-                    "internal mission report write", ["report"], mission.trace_id,
-                    approval_scope="single_action", expires_in_seconds=60)
-                self.approvals.decide(internal_approval.approval_id, True, "runtime",
-                                       "auto-approved for mission execution", mission.trace_id,
-                                       decision="approve_once")
+                if not mission.pending_approval_id:
+                    raise PermissionError("mission_report_write_missing_human_approval")
                 receipt = self.tools.invoke(mission.mission_id, "file_write_report",
                     {"path": f"{mission.mission_id}/mission-report.md", "content": report},
-                    mission.trace_id, approval_id=internal_approval.approval_id,
+                    mission.trace_id, approval_id=mission.pending_approval_id,
                     actor_id="runtime", task_id=mission.mission_id,
                     idempotency_key=f"{mission.mission_id}:report-write")
             finally:
@@ -254,7 +277,7 @@ class NexaraRuntime:
         if self.evidence.verify_all(mission.mission_id)["invalid"]:
             return False
         approvals = self.approvals.list(mission.mission_id)
-        if mission.spec.risk_level.value in {"R2", "R3", "R4"} and not any(item.get("status") == "approved" for item in approvals):
+        if mission.spec.risk_level.value in {"R2", "R3", "R4"} and not any(item.get("status") in {"approved", "consumed"} for item in approvals):
             return False
         return not any(item.get("state") == MissionState.BLOCKED.value for item in self.recovery.recover().missions if item.get("mission_id") == mission.mission_id)
 

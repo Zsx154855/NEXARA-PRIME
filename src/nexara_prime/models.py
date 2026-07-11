@@ -208,6 +208,7 @@ class ApprovalRequest(NModel):
     rollback_plan: dict[str, Any] = Field(default_factory=dict)
     estimated_cost: float = 0.0
     approval_scope: str = "single_action"
+    executor_id: str | None = None
     expires_at: str | None = None
     status: ApprovalStatus = ApprovalStatus.PENDING
     decided_by: str | None = None

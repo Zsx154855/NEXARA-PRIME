@@ -79,17 +79,48 @@ class SandboxBackend(ABC):
 
 def _build_sandbox_profile(workspace_root: str, tmpdir: str = "/tmp",
                             allow_network: bool = False,
-                            allowed_dirs: list[str] | None = None) -> str:
+                            allowed_dirs: list[str] | None = None,
+                            allowed_executables: list[str] | None = None) -> str:
     """Build a sandbox-exec .sb profile that denies everything except explicit allows."""
     ws = os.path.realpath(workspace_root)
     td = os.path.realpath(tmpdir)
-    dirs = [ws, td] + (allowed_dirs or [])
+    dirs = [
+        ws, td,
+        "/usr", "/bin", "/sbin", "/System", "/Library",
+        "/private/etc", "/private/var/db", "/private/var/folders", "/private/var/tmp", "/private/tmp", "/dev",
+    ] + (allowed_dirs or [])
+    deduped_dirs = []
+    for directory in dirs:
+        real = os.path.realpath(directory)
+        if real and real not in deduped_dirs:
+            deduped_dirs.append(real)
+    dirs = deduped_dirs
     read_dirs = " ".join(f'(subpath "{d}")' for d in dirs)
     write_dirs = " ".join(f'(subpath "{d}")' for d in [ws, td])
+    home = os.path.realpath(os.path.expanduser("~"))
+    executable_paths = []
+    for executable in allowed_executables or []:
+        real = os.path.realpath(executable)
+        if real and real not in executable_paths:
+            executable_paths.append(real)
+        # Homebrew/Framework Python launches its embedded Python.app.
+        if "/Python.framework/Versions/" in real:
+            version_root = Path(real).parent.parent
+            app_executable = version_root / "Resources" / "Python.app" / "Contents" / "MacOS" / "Python"
+            app_real = os.path.realpath(app_executable)
+            if app_real not in executable_paths:
+                executable_paths.append(app_real)
+    executable_paths.extend([
+        "/usr/bin/python3", "/usr/bin/python3.12", "/bin/bash", "/bin/sh", "/usr/bin/env",
+    ])
+    executable_paths = list(dict.fromkeys(executable_paths))
+    exec_rules = "\n       ".join(f'(literal "{path}")' for path in executable_paths)
 
     profile = f"""\
 (version 1)
 (deny default)
+(allow file-read*)
+(deny file-read* (subpath "{home}"))
 (allow file-read* {read_dirs}
        (subpath "/usr/lib")
        (subpath "/System/Library")
@@ -97,14 +128,9 @@ def _build_sandbox_profile(workspace_root: str, tmpdir: str = "/tmp",
        (subpath "/opt/homebrew")
        (subpath "/private/var/db/dyld"))
 (allow file-write* {write_dirs})
+(allow file-read-metadata)
 (allow process-exec
-       (literal "/usr/bin/python3")
-       (literal "/usr/bin/python3.12")
-       (literal "/opt/homebrew/bin/python3")
-       (literal "/opt/homebrew/bin/python3.12")
-       (literal "/bin/bash")
-       (literal "/bin/sh")
-       (literal "/usr/bin/env"))
+       {exec_rules})
 (allow process-fork)
 (allow signal)
 (allow sysctl-read)
@@ -158,8 +184,20 @@ class MacOSSandboxBackend(SandboxBackend):
                 error="sandbox-exec not available — BLOCKED, no fallback to plain execution",
             )
 
-        profile = _build_sandbox_profile(ws, allow_network=False,
-                                          allowed_dirs=invocation.env.get("NEXARA_ALLOWED_DIRS", "").split(":") if invocation.env.get("NEXARA_ALLOWED_DIRS") else None)
+        cmd = invocation.argv if invocation.argv else shlex.split(invocation.command)
+        if not cmd:
+            return SandboxReceipt(invocation_id=invocation.invocation_id, error="command_must_not_be_empty")
+        executable = cmd[0] if os.path.isabs(cmd[0]) else shutil.which(cmd[0])
+        if executable:
+            cmd[0] = os.path.realpath(executable)
+        allowed_dirs = invocation.env.get("NEXARA_ALLOWED_DIRS", "").split(":") if invocation.env.get("NEXARA_ALLOWED_DIRS") else None
+        profile = _build_sandbox_profile(
+            ws,
+            tmpdir=tempfile.gettempdir(),
+            allow_network=False,
+            allowed_dirs=allowed_dirs,
+            allowed_executables=[cmd[0]],
+        )
 
         # Write profile to temp file
         fd, profile_path = tempfile.mkstemp(suffix=".sb", prefix="nexara_sandbox_")
@@ -168,7 +206,6 @@ class MacOSSandboxBackend(SandboxBackend):
             os.close(fd)
 
             started = time.time()
-            cmd = invocation.argv if invocation.argv else shlex.split(invocation.command)
             full_cmd = [self._sandbox_exec, "-f", profile_path, "--"] + cmd
 
             env = {}
@@ -202,6 +239,10 @@ class MacOSSandboxBackend(SandboxBackend):
                     except Exception:
                         proc.kill()
                     proc.wait()
+                    if proc.stdout:
+                        proc.stdout.close()
+                    if proc.stderr:
+                        proc.stderr.close()
                     return SandboxReceipt(
                         invocation_id=invocation.invocation_id,
                         timed_out=True, was_killed=True,

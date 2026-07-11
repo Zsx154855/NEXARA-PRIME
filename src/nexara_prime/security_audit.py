@@ -95,11 +95,10 @@ class SecurityAuditLedger:
         self._last_hash = entry.event_hash
 
         if self._store:
-            try:
-                self._store.save_record(entry.audit_event_id, "audit_entry",
-                                         entry.__dict__, entry.timestamp)
-            except Exception:
-                pass
+            # Audit persistence is a security boundary: a failed write must
+            # fail closed instead of silently reporting an unverifiable run.
+            self._store.save_record(entry.audit_event_id, "audit_entry",
+                                    entry.__dict__, entry.timestamp)
         return entry
 
     def verify_chain(self) -> tuple[bool, str]:

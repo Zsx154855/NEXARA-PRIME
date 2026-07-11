@@ -47,13 +47,14 @@ class ApprovalEngine:
         rollback_plan: dict[str, Any] | None = None,
         estimated_cost: float = 0.0,
         approval_scope: str = "single_action",
+        executor_id: str | None = None,
         expires_in_seconds: int = 900,
     ) -> ApprovalRequest:
         approval = ApprovalRequest(
             mission_id=mission_id, action=action, risk_level=risk_level, rationale=rationale,
             reason=rationale, impact=impact, affected_resources=affected_resources or [],
             external_effect=external_effect, reversible=reversible, rollback_plan=rollback_plan or {},
-            estimated_cost=estimated_cost, approval_scope=approval_scope,
+            estimated_cost=estimated_cost, approval_scope=approval_scope, executor_id=executor_id,
             expires_at=(datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)).isoformat(),
         )
         self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, mission_id)
