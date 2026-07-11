@@ -335,6 +335,7 @@ def cmd_security(args) -> int:
         print("  " + "─" * 40)
         # Keychain
         kc_ok = False
+        kc_msg = ""
         try:
             from .secrets.keychain import MacOSKeychainSecretStore
             MacOSKeychainSecretStore()
@@ -352,7 +353,8 @@ def cmd_security(args) -> int:
         try:
             from .sandbox_v2 import MacOSSandboxBackend
             cap = MacOSSandboxBackend().probe_capability()
-            print(f"  Sandbox:           {cap.sandbox_mechanism} (OS isolation: {cap.os_level_isolation})")
+            flags_str = ", ".join(cap.flags) if cap.flags else "none"
+            print(f"  Sandbox:           {cap.sandbox_mechanism} (flags: {flags_str})")
         except ImportError:
             print(f"  Sandbox:           not available")
         # Identity

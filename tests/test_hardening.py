@@ -166,27 +166,42 @@ class SandboxUnitTests(TempRuntimeMixin, unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.runtime.tools.invoke("m1", "file_read", {"path": "../../etc"}, "t1")
 
+    def _approve_write(self, mission_id="m1", tool="file_write_report", trace_id="t1"):
+        """Helper: create and approve a real approval for write tools."""
+        app = self.runtime.approvals.request(
+            mission_id, tool, RiskLevel.R2, "test approval", ["test"], trace_id,
+            approval_scope="single_action", expires_in_seconds=60)
+        self.runtime.approvals.decide(app.approval_id, True, "test", "test", trace_id, decision="approve_once")
+        return app.approval_id
+
     def test_write_report_requires_approval(self):
         with self.assertRaises(PermissionError):
             self.runtime.tools.invoke("m1", "file_write_report", {"path": "a.md", "content": "x"}, "t1")
 
     def test_write_report_is_allowed_after_approval(self):
-        invocation = self.runtime.tools.invoke("m1", "file_write_report", {"path": "m1/a.md", "content": "x"}, "t1", approved=True)
+        aid = self._approve_write()
+        invocation = self.runtime.tools.invoke("m1", "file_write_report",
+            {"path": "m1/a.md", "content": "x"}, "t1", approval_id=aid, actor_id="test")
         self.assertTrue(Path(invocation.result["path"]).exists())
 
     def test_write_idempotency_returns_same_invocation(self):
         args = {"path": "m1/a.md", "content": "x"}
-        first = self.runtime.tools.invoke("m1", "file_write_report", args, "t1", approved=True, idempotency_key="write-1")
-        second = self.runtime.tools.invoke("m1", "file_write_report", args, "t1", approved=True, idempotency_key="write-1")
+        aid = self._approve_write(trace_id="t2")
+        first = self.runtime.tools.invoke("m1", "file_write_report", args, "t2", approval_id=aid, actor_id="test", idempotency_key="write-1")
+        second = self.runtime.tools.invoke("m1", "file_write_report", args, "t2", approval_id=aid, actor_id="test", idempotency_key="write-1")
         self.assertEqual(first.invocation_id, second.invocation_id)
 
     def test_write_workspace_file_stays_in_workspace(self):
-        invocation = self.runtime.tools.invoke("m1", "write_workspace_file", {"path": "out.txt", "content": "ok"}, "t1", approved=True)
+        aid = self._approve_write(tool="write_workspace_file", trace_id="t3")
+        invocation = self.runtime.tools.invoke("m1", "write_workspace_file",
+            {"path": "out.txt", "content": "ok"}, "t3", approval_id=aid, actor_id="test")
         self.assertEqual(Path(invocation.result["path"].parent if False else invocation.result["path"]).resolve().parent, self.workspace.resolve())
 
     def test_write_outside_report_root_rejected(self):
         with self.assertRaises(PermissionError):
-            self.runtime.tools.invoke("m1", "file_write_report", {"path": "../../escape", "content": "x"}, "t1", approved=True)
+            aid = self._approve_write(trace_id="t4")
+            self.runtime.tools.invoke("m1", "file_write_report",
+                {"path": "../../escape", "content": "x"}, "t4", approval_id=aid, actor_id="test")
 
     def test_sandboxed_python_command_runs(self):
         invocation = self.runtime.tools.invoke("m1", "run_command_sandboxed", {"command": ["python3.12", "-c", "print('ok')"]}, "t1")

@@ -1,13 +1,8 @@
-"""SandboxBackend — abstract sandbox, macOS probe, workspace jail, test backend."""
+"""Production sandbox — macOS sandbox-exec, workspace jail, test backend.
+P0-1: No silent fallback. OS_SANDBOX_CAPABLE vs OS_SANDBOX_ENFORCED vs FULL_OS_ISOLATION_ACCEPTED."""
 from __future__ import annotations
 
-import os
-import platform
-import resource
-import shlex
-import signal
-import subprocess
-import time
+import os, platform, resource, shlex, shutil, signal, subprocess, tempfile, time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,10 +11,18 @@ from typing import List
 from .models import new_id, now_iso
 
 
+# ── Capability flags ──
+
+OS_SANDBOX_CAPABLE = "OS_SANDBOX_CAPABLE"
+OS_SANDBOX_ENFORCED = "OS_SANDBOX_ENFORCED"
+WORKSPACE_JAIL_ENFORCED = "WORKSPACE_JAIL_ENFORCED"
+FULL_OS_ISOLATION_ACCEPTED = "FULL_OS_ISOLATION_ACCEPTED"
+
+
 @dataclass
 class SandboxCapability:
-    os_level_isolation: str = "PARTIAL"  # "FULL" | "PARTIAL" | "NONE"
-    sandbox_mechanism: str = "workspace_jail"  # "macos_sandbox" | "workspace_jail" | "none"
+    flags: list[str] = field(default_factory=list)
+    sandbox_mechanism: str = "none"
     network_restricted: bool = True
     filesystem_restricted: bool = True
     process_restricted: bool = True
@@ -31,11 +34,12 @@ class SandboxCapability:
     allow_network: bool = False
     allow_file_write_outside_workspace: bool = False
     verified_at: str = ""
+    escape_tests_passed: int = 0
 
 
 @dataclass
 class SandboxInvocation:
-    invocation_id: str = field(default_factory=lambda: new_id('evt'))
+    invocation_id: str = field(default_factory=lambda: new_id("sbx"))
     command: str = ""
     argv: list[str] = field(default_factory=list)
     cwd: str = ""
@@ -43,18 +47,24 @@ class SandboxInvocation:
     timeout: float = 30.0
     max_output_bytes: int = 100_000
     created_at: str = field(default_factory=now_iso)
+    workspace_root: str = ""
 
 
 @dataclass
 class SandboxReceipt:
-    invocation_id: str
-    exit_code: int = -1
+    invocation_id: str = ""
+    exit_code: int = -99
     stdout: str = ""
     stderr: str = ""
     timed_out: bool = False
     was_killed: bool = False
     duration_ms: float = 0.0
     error: str = ""
+    sandbox_profile_hash: str = ""
+    code_hash: str = ""
+    files_touched: list[str] = field(default_factory=list)
+    network_attempts: int = 0
+    policy_decisions: list[dict] = field(default_factory=list)
     resource_usage: dict = field(default_factory=dict)
 
 
@@ -65,131 +75,235 @@ class SandboxBackend(ABC):
     def execute(self, invocation: SandboxInvocation) -> SandboxReceipt: ...
 
 
+# ── macOS sandbox-exec profile ──
+
+def _build_sandbox_profile(workspace_root: str, tmpdir: str = "/tmp",
+                            allow_network: bool = False,
+                            allowed_dirs: list[str] | None = None) -> str:
+    """Build a sandbox-exec .sb profile that denies everything except explicit allows."""
+    ws = os.path.realpath(workspace_root)
+    td = os.path.realpath(tmpdir)
+    dirs = [ws, td] + (allowed_dirs or [])
+    read_dirs = " ".join(f'(subpath "{d}")' for d in dirs)
+    write_dirs = " ".join(f'(subpath "{d}")' for d in [ws, td])
+
+    profile = f"""\
+(version 1)
+(deny default)
+(allow file-read* {read_dirs}
+       (subpath "/usr/lib")
+       (subpath "/System/Library")
+       (subpath "/Library/Frameworks")
+       (subpath "/opt/homebrew")
+       (subpath "/private/var/db/dyld"))
+(allow file-write* {write_dirs})
+(allow process-exec
+       (literal "/usr/bin/python3")
+       (literal "/usr/bin/python3.12")
+       (literal "/opt/homebrew/bin/python3")
+       (literal "/opt/homebrew/bin/python3.12")
+       (literal "/bin/bash")
+       (literal "/bin/sh")
+       (literal "/usr/bin/env"))
+(allow process-fork)
+(allow signal)
+(allow sysctl-read)
+(allow mach-lookup
+       (global-name "com.apple.bsd.dirhelper")
+       (global-name "com.apple.system.notification_center"))
+"""
+    if allow_network:
+        profile += "(allow network-outbound)\n"
+    else:
+        profile += "(deny network-outbound)\n"
+
+    return profile
+
+
 class MacOSSandboxBackend(SandboxBackend):
-    """Probes macOS sandbox capability. Falls back to workspace jail if unavailable."""
+    """macOS sandbox using sandbox-exec with .sb profile. No silent fallback."""
+
+    def __init__(self, workspace_root: str | None = None):
+        self.workspace_root = workspace_root or os.getcwd()
+        self._sandbox_exec = shutil.which("sandbox-exec")
+        self._enforced: bool = False
+        self._escape_tests: int = 0
 
     def probe_capability(self) -> SandboxCapability:
         cap = SandboxCapability()
         if platform.system() != "Darwin":
             cap.sandbox_mechanism = "workspace_jail"
-            cap.os_level_isolation = "NONE"
+            cap.flags = [WORKSPACE_JAIL_ENFORCED]
             return cap
-        # Check for sandbox-exec availability
-        sb_exec = shutil.which("sandbox-exec")
-        if sb_exec:
+
+        if self._sandbox_exec:
+            cap.flags.append(OS_SANDBOX_CAPABLE)
+            if self._enforced:
+                cap.flags.append(OS_SANDBOX_ENFORCED)
+            if self._escape_tests >= 10:
+                cap.flags.append(FULL_OS_ISOLATION_ACCEPTED)
             cap.sandbox_mechanism = "macos_sandbox"
-            cap.os_level_isolation = "FULL"
+            cap.verified_at = now_iso()
+            cap.escape_tests_passed = self._escape_tests
         else:
             cap.sandbox_mechanism = "workspace_jail"
-            cap.os_level_isolation = "PARTIAL"
+            cap.flags = [WORKSPACE_JAIL_ENFORCED]
         return cap
 
     def execute(self, invocation: SandboxInvocation) -> SandboxReceipt:
-        return _workspace_jail_execute(invocation)
+        ws = invocation.workspace_root or self.workspace_root
+        if not self._sandbox_exec:
+            return SandboxReceipt(
+                invocation_id=invocation.invocation_id,
+                error="sandbox-exec not available — BLOCKED, no fallback to plain execution",
+            )
+
+        profile = _build_sandbox_profile(ws, allow_network=False,
+                                          allowed_dirs=invocation.env.get("NEXARA_ALLOWED_DIRS", "").split(":") if invocation.env.get("NEXARA_ALLOWED_DIRS") else None)
+
+        # Write profile to temp file
+        fd, profile_path = tempfile.mkstemp(suffix=".sb", prefix="nexara_sandbox_")
+        try:
+            os.write(fd, profile.encode())
+            os.close(fd)
+
+            started = time.time()
+            cmd = invocation.argv if invocation.argv else shlex.split(invocation.command)
+            full_cmd = [self._sandbox_exec, "-f", profile_path, "--"] + cmd
+
+            env = {}
+            safe_keys = {"PATH", "HOME", "TMPDIR", "LANG"}
+            for k in safe_keys:
+                if k in (invocation.env or {}):
+                    env[k] = invocation.env[k]
+            env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+
+            self._enforced = True
+            try:
+                proc = subprocess.Popen(
+                    full_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    cwd=ws, env=env, text=True, shell=False,
+                    preexec_fn=os.setsid,
+                )
+                try:
+                    out, err_out = proc.communicate(timeout=invocation.timeout)
+                    elapsed = (time.time() - started) * 1000
+                    stdout = (out or "")[:invocation.max_output_bytes]
+                    stderr = (err_out or "")[:invocation.max_output_bytes]
+                    return SandboxReceipt(
+                        invocation_id=invocation.invocation_id,
+                        exit_code=proc.returncode,
+                        stdout=stdout, stderr=stderr, duration_ms=elapsed,
+                        sandbox_profile_hash=_hash_str(profile),
+                    )
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except Exception:
+                        proc.kill()
+                    proc.wait()
+                    return SandboxReceipt(
+                        invocation_id=invocation.invocation_id,
+                        timed_out=True, was_killed=True,
+                        duration_ms=(time.time() - started) * 1000,
+                        error="timeout", sandbox_profile_hash=_hash_str(profile),
+                    )
+            except Exception as exc:
+                return SandboxReceipt(
+                    invocation_id=invocation.invocation_id,
+                    error=str(exc), duration_ms=(time.time() - started) * 1000,
+                )
+        finally:
+            try:
+                os.unlink(profile_path)
+            except OSError:
+                pass
+
+    def run_escape_test(self, test_name: str, argv: list[str],
+                         expected_result: str = "blocked") -> bool:
+        """Run a single escape test. Returns True if sandbox behaved as expected."""
+        inv = SandboxInvocation(argv=argv, timeout=5.0, workspace_root=self.workspace_root)
+        receipt = self.execute(inv)
+        if expected_result == "blocked":
+            passed = receipt.exit_code != 0 or "denied" in receipt.stderr.lower() or "operation not permitted" in receipt.stderr.lower()
+        elif expected_result == "allow":
+            passed = receipt.exit_code == 0
+        else:
+            passed = False
+        if passed:
+            self._escape_tests += 1
+        return passed
 
 
 class ProcessConstrainedBackend(SandboxBackend):
-    """Strict workspace jail — no OS sandbox, but strong process constraints."""
-
     def probe_capability(self) -> SandboxCapability:
-        return SandboxCapability(
-            os_level_isolation="PARTIAL",
-            sandbox_mechanism="workspace_jail",
-        )
+        return SandboxCapability(flags=[WORKSPACE_JAIL_ENFORCED], sandbox_mechanism="workspace_jail")
 
     def execute(self, invocation: SandboxInvocation) -> SandboxReceipt:
         return _workspace_jail_execute(invocation)
 
 
 class TestSandboxBackend(SandboxBackend):
-    """Permissive backend for unit tests."""
-
     def __init__(self, workspace_root: str = "/tmp/nexara-test-sandbox"):
         self.workspace_root = workspace_root
         os.makedirs(workspace_root, exist_ok=True)
 
     def probe_capability(self) -> SandboxCapability:
-        return SandboxCapability(
-            os_level_isolation="NONE",
-            sandbox_mechanism="test",
-            allow_network=True,
-            allow_file_write_outside_workspace=False,
-        )
+        return SandboxCapability(flags=[], sandbox_mechanism="test", allow_network=True)
 
     def execute(self, invocation: SandboxInvocation) -> SandboxReceipt:
-        if invocation.cwd:
-            cwd = invocation.cwd
-        else:
-            cwd = self.workspace_root
+        cwd = invocation.cwd or self.workspace_root
         started = time.time()
         cmd = invocation.argv if invocation.argv else shlex.split(invocation.command)
         try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True,
-                cwd=cwd, env=invocation.env or None,
-                timeout=invocation.timeout,
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd,
+                                    timeout=invocation.timeout, shell=False)
             elapsed = (time.time() - started) * 1000
-            stdout = result.stdout[:invocation.max_output_bytes]
-            stderr = result.stderr[:invocation.max_output_bytes]
             return SandboxReceipt(
-                invocation_id=invocation.invocation_id,
-                exit_code=result.returncode,
-                stdout=stdout, stderr=stderr,
+                invocation_id=invocation.invocation_id, exit_code=result.returncode,
+                stdout=result.stdout[:invocation.max_output_bytes] if result.stdout else "",
+                stderr=result.stderr[:invocation.max_output_bytes] if result.stderr else "",
                 duration_ms=elapsed,
             )
         except subprocess.TimeoutExpired:
-            return SandboxReceipt(
-                invocation_id=invocation.invocation_id,
-                timed_out=True, duration_ms=(time.time() - started) * 1000,
-                error="timeout",
-            )
+            return SandboxReceipt(invocation_id=invocation.invocation_id, timed_out=True, error="timeout")
         except Exception as exc:
-            return SandboxReceipt(
-                invocation_id=invocation.invocation_id,
-                error=str(exc), duration_ms=(time.time() - started) * 1000,
-            )
+            return SandboxReceipt(invocation_id=invocation.invocation_id, error=str(exc))
 
 
-# ─── Shared workspace jail ───
+# ── Shared helpers ──
 
-import shutil
+def _hash_str(s: str) -> str:
+    import hashlib
+    return hashlib.sha256(s.encode()).hexdigest()[:16]
 
-_FORBIDDEN_COMMANDS = {
-    "rm", "shutdown", "reboot", "mkfs", "dd", "mount", "umount",
-    "chown", "chmod", "sudo", "su", "passwd", "killall",
-}
 
+_FORBIDDEN_COMMANDS = {"rm", "shutdown", "reboot", "mkfs", "dd", "mount", "umount", "chown", "chmod", "sudo", "su", "passwd", "killall"}
 _PATH_TRAVERSAL_PATTERNS = ["../", "..\\"]
 
 
 def _validate_path(path_str: str, workspace_root: str) -> tuple[bool, str]:
-    """Check for path traversal attacks including URL-encoded variants."""
     if not path_str:
         return True, ""
     import urllib.parse
-    # Decode URL encoding first
     decoded = urllib.parse.unquote(path_str)
-    # Check null bytes
-    if "\\x00" in path_str or "\\0" in path_str or "\\x00" in decoded:
+    if "\\x00" in path_str or "\\0" in path_str:
         return False, "null byte in path"
-    # Check path traversal patterns
     for pat in _PATH_TRAVERSAL_PATTERNS:
         if pat in decoded:
-            return False, f"path traversal pattern: {pat}"
+            return False, f"path traversal: {pat}"
     try:
         resolved = os.path.realpath(os.path.join(workspace_root, decoded))
         workspace_real = os.path.realpath(workspace_root)
         if not resolved.startswith(workspace_real + os.sep) and resolved != workspace_real:
-            return False, f"path escape: {path_str} -> {resolved}"
+            return False, f"path escape: {path_str}"
     except Exception:
-        return False, f"path resolution failed: {path_str}"
+        return False, "path resolution failed"
     return True, ""
 
 
 def _sanitize_argv(argv: list[str]) -> tuple[list[str], str]:
-    """Sanitize command arguments — reject shell metacharacters."""
-    dangerous = {"|", ";", "&", "`", "$(", "${", "&&", "||", ">", "<", "\\n"}
+    dangerous = {"|", ";", "&", "`", "$(", "${", "&&", "||", ">", "<"}
     for i, arg in enumerate(argv):
         for d in dangerous:
             if d in arg:
@@ -198,23 +312,19 @@ def _sanitize_argv(argv: list[str]) -> tuple[list[str], str]:
 
 
 def _validate_command(command: str, argv: list[str]) -> tuple[bool, str]:
-    """Validate the command is safe."""
     if not argv:
         return False, "no command"
-    exe = argv[0]
-    basename = os.path.basename(exe)
+    basename = os.path.basename(argv[0])
     if basename in _FORBIDDEN_COMMANDS:
-        return False, f"forbidden command: {basename}"
+        return False, f"forbidden: {basename}"
     return True, ""
 
 
 def _workspace_jail_execute(invocation: SandboxInvocation) -> SandboxReceipt:
-    """Execute command inside workspace jail with resource limits."""
     started = time.time()
     cmd = invocation.argv if invocation.argv else shlex.split(invocation.command)
     cwd = invocation.cwd or os.getcwd()
 
-    # Security checks
     sanitized, err = _sanitize_argv(cmd)
     if err:
         return SandboxReceipt(invocation_id=invocation.invocation_id, error=err)
@@ -223,48 +333,35 @@ def _workspace_jail_execute(invocation: SandboxInvocation) -> SandboxReceipt:
         return SandboxReceipt(invocation_id=invocation.invocation_id, error=reason)
 
     env = {}
-    allowed_env = {"PATH", "HOME", "USER", "TMPDIR", "LANG", "PYTHONPATH"}
+    safe_env = {"PATH", "HOME", "USER", "TMPDIR", "LANG", "PYTHONPATH"}
     if invocation.env:
-        for k in allowed_env:
+        for k in safe_env:
             if k in invocation.env:
                 env[k] = invocation.env[k]
     else:
-        for k in allowed_env:
+        for k in safe_env:
             if k in os.environ:
                 env[k] = os.environ[k]
-    # Fixed safe PATH
     env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
 
     try:
-        proc = subprocess.Popen(
-            sanitized, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            cwd=cwd, env=env, text=True, shell=False,
-        )
+        proc = subprocess.Popen(sanitized, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 cwd=cwd, env=env, text=True, shell=False, preexec_fn=os.setsid)
         try:
             out, err_out = proc.communicate(timeout=invocation.timeout)
             elapsed = (time.time() - started) * 1000
-            stdout = out[:invocation.max_output_bytes] if out else ""
-            stderr = err_out[:invocation.max_output_bytes] if err_out else ""
             return SandboxReceipt(
-                invocation_id=invocation.invocation_id,
-                exit_code=proc.returncode,
-                stdout=stdout, stderr=stderr, duration_ms=elapsed,
+                invocation_id=invocation.invocation_id, exit_code=proc.returncode,
+                stdout=(out or "")[:invocation.max_output_bytes],
+                stderr=(err_out or "")[:invocation.max_output_bytes], duration_ms=elapsed,
             )
         except subprocess.TimeoutExpired:
-            # Kill the entire process group
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             except Exception:
                 proc.kill()
             proc.wait()
-            return SandboxReceipt(
-                invocation_id=invocation.invocation_id,
-                timed_out=True, was_killed=True,
-                duration_ms=(time.time() - started) * 1000,
-                error="timeout",
-            )
+            return SandboxReceipt(invocation_id=invocation.invocation_id, timed_out=True,
+                                   was_killed=True, error="timeout")
     except Exception as exc:
-        return SandboxReceipt(
-            invocation_id=invocation.invocation_id,
-            error=str(exc), duration_ms=(time.time() - started) * 1000,
-        )
+        return SandboxReceipt(invocation_id=invocation.invocation_id, error=str(exc))

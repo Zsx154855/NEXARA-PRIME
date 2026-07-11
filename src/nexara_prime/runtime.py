@@ -15,7 +15,7 @@ from .governance import ApprovalEngine, PolicyEngine, WriterLeaseManager
 from .memory import MemoryKernel
 from .mission_compiler import MissionCompiler
 from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider
-from .models import Mission, MissionState, now_iso, new_id
+from .models import Mission, MissionState, RiskLevel, now_iso, new_id
 from .recovery import DurableRecovery
 from .scheduler import AdaptiveScheduler
 from .state_machine import MissionStateMachine
@@ -42,7 +42,7 @@ class NexaraRuntime:
         self.contracts = ContractEngine()
         self.tokens = TokenCompiler()
         self.models = self._build_model_gateway()
-        self.tools = ToolRuntime(self.store, self.events, self.evidence, self.policy, self.settings.workspace_root, self.settings.report_root)
+        self.tools = ToolRuntime(self.store, self.events, self.evidence, self.policy, self.approvals, self.settings.workspace_root, self.settings.report_root)
         self.evaluator = EvaluationEngine(self.store, self.events)
         self.state_machine = MissionStateMachine(self.events, self.evidence)
         self.recovery = DurableRecovery(self.store, self.events)
@@ -190,12 +190,23 @@ class NexaraRuntime:
             context = {"source_dir": mission.spec.source_dir or "workspace", "roles": [a.persona.value for a in mission.assignments]}
             compiled = self.tokens.compile(mission.spec, [cap for a in mission.assignments for cap in a.loaded_capabilities], ["MissionSpec", "WorkContract", "MissionPlan"], [e["evidence_id"] for e in self.evidence.list(mission.mission_id)], json.dumps(context))
             model_text, provider, input_tokens, output_tokens, cost_usd = self._checkpointed_model(mission, compiled, context)
-            code_invocation = self.tools.invoke(mission.mission_id, "code_exec", {"code": "print('nexara-prime local execution check')"}, mission.trace_id, safe_mode=mission.safe_mode, idempotency_key=f"{mission.mission_id}:code-check")
+            code_invocation = self.tools.invoke(mission.mission_id, "code_exec", {"code": "print('nexara-prime local execution check')"}, mission.trace_id, safe_mode=mission.safe_mode, actor_id="runtime", task_id=mission.mission_id, idempotency_key=f"{mission.mission_id}:code-check")
             self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"invocation_id": code_invocation.invocation_id})
             report = self._render_report(mission, compiled.task, model_text, provider)
             lease = self.leases.acquire(f"report:{mission.mission_id}", "vertex", mission.trace_id)
             try:
-                receipt = self.tools.invoke(mission.mission_id, "file_write_report", {"path": f"{mission.mission_id}/mission-report.md", "content": report}, mission.trace_id, approved=True, idempotency_key=f"{mission.mission_id}:report-write")
+                internal_approval = self.approvals.request(
+                    mission.mission_id, "file_write_report", RiskLevel.R2,
+                    "internal mission report write", ["report"], mission.trace_id,
+                    approval_scope="single_action", expires_in_seconds=60)
+                self.approvals.decide(internal_approval.approval_id, True, "runtime",
+                                       "auto-approved for mission execution", mission.trace_id,
+                                       decision="approve_once")
+                receipt = self.tools.invoke(mission.mission_id, "file_write_report",
+                    {"path": f"{mission.mission_id}/mission-report.md", "content": report},
+                    mission.trace_id, approval_id=internal_approval.approval_id,
+                    actor_id="runtime", task_id=mission.mission_id,
+                    idempotency_key=f"{mission.mission_id}:report-write")
             finally:
                 self.leases.release(lease.lease_id, "vertex", mission.trace_id)
             mission.result = {"report_path": receipt.result["path"], "model_provider": provider, "model": "runtime-selected", "input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost_usd, "tool_invocation_ids": [code_invocation.invocation_id, receipt.invocation_id]}

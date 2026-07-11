@@ -49,6 +49,7 @@ class ApprovalStatus(str, Enum):
     CHANGES_REQUESTED = "changes_requested"
     PAUSED = "paused"
     EXPIRED = "expired"
+    CONSUMED = "consumed"
 
 
 class MemoryKind(str, Enum):

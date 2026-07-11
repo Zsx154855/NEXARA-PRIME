@@ -558,17 +558,17 @@ class NetworkPolicyTests(unittest.TestCase):
 
 class SandboxCapabilityTests(unittest.TestCase):
     def test_macos_probe(self):
-        from nexara_prime.sandbox_v2 import MacOSSandboxBackend
+        from nexara_prime.sandbox_v2 import MacOSSandboxBackend, OS_SANDBOX_CAPABLE
         sb = MacOSSandboxBackend()
         cap = sb.probe_capability()
         self.assertIsNotNone(cap.sandbox_mechanism)
-        self.assertIn(cap.os_level_isolation, ("FULL", "PARTIAL", "NONE"))
+        self.assertIn(cap.sandbox_mechanism, ("macos_sandbox", "workspace_jail", "test", "none"))
 
     def test_process_constrained_backend(self):
-        from nexara_prime.sandbox_v2 import ProcessConstrainedBackend
+        from nexara_prime.sandbox_v2 import ProcessConstrainedBackend, WORKSPACE_JAIL_ENFORCED
         sb = ProcessConstrainedBackend()
         cap = sb.probe_capability()
-        self.assertEqual(cap.os_level_isolation, "PARTIAL")
+        self.assertIn(WORKSPACE_JAIL_ENFORCED, cap.flags)
 
     def test_test_backend_execute(self):
         from nexara_prime.sandbox_v2 import TestSandboxBackend, SandboxInvocation

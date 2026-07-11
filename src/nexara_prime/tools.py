@@ -12,8 +12,8 @@ from typing import Any
 from .db import SQLiteStore
 from .evidence import EvidenceStore
 from .events import EventBus
-from .governance import PolicyEngine
-from .models import RiskLevel, ToolInvocation, new_id
+from .governance import ApprovalEngine, PolicyEngine
+from .models import ApprovalStatus, RiskLevel, ToolInvocation, new_id, now_iso
 
 
 class ToolRuntime:
@@ -28,11 +28,12 @@ class ToolRuntime:
         "ssh", "scp", "chmod", "chown", "mount", "umount", "launchctl", "osascript", "shutdown",
     }
 
-    def __init__(self, store: SQLiteStore, events: EventBus, evidence: EvidenceStore, policy: PolicyEngine, workspace_root: Path, report_root: Path):
+    def __init__(self, store: SQLiteStore, events: EventBus, evidence: EvidenceStore, policy: PolicyEngine, approvals: ApprovalEngine, workspace_root: Path, report_root: Path):
         self.store = store
         self.events = events
         self.evidence = evidence
         self.policy = policy
+        self.approvals = approvals
         self.workspace_root = workspace_root.resolve()
         self.report_root = report_root.resolve()
         self.workspace_root.mkdir(parents=True, exist_ok=True)
@@ -60,11 +61,12 @@ class ToolRuntime:
         arguments: dict[str, Any],
         trace_id: str,
         safe_mode: bool = False,
-        approved: bool = False,
         *,
+        approval_id: str = "",
+        actor_id: str = "",
+        task_id: str = "",
         idempotency_key: str | None = None,
         timeout_seconds: int | None = None,
-        task_id: str | None = None,
     ) -> ToolInvocation:
         existing = self._existing(idempotency_key)
         if existing:
@@ -83,8 +85,14 @@ class ToolRuntime:
         allowed, reason = self.policy.allows_tool(tool_name, risk, safe_mode)
         if not allowed:
             raise PermissionError(reason)
-        if self.policy.requires_approval(risk) and not approved:
-            raise PermissionError("approval_required_for_tool")
+
+        # P0-2: Real Approval validation — never trust a bare boolean
+        if self.policy.requires_approval(risk):
+            if not approval_id:
+                raise PermissionError("approval_required_for_tool: no approval_id provided")
+            approval = self._validate_approval(approval_id, mission_id, tool_name, task_id, actor_id)
+            if not approval:
+                raise PermissionError("approval_required_for_tool: invalid or expired approval")
         started = time.monotonic()
         status = "completed"
         result: dict[str, Any]
@@ -200,6 +208,30 @@ class ToolRuntime:
         if url.startswith(("http://", "https://")):
             return {"url": url, "mode": "read_only", "status": "blocked_by_default", "reason": "external_network_disabled_in_local_runtime"}
         raise ValueError("browser_url_must_be_http_or_file")
+
+    def _validate_approval(self, approval_id: str, mission_id: str, tool_name: str, task_id: str, actor_id: str) -> bool:
+        """P0-2: Validate real Approval from persistent store. Never trust parameters alone."""
+        approval = self.approvals.get(approval_id)
+        if not approval:
+            return False
+        if approval.status != ApprovalStatus.APPROVED:
+            return False
+        if approval.mission_id != mission_id:
+            return False
+        # Check expiry
+        if approval.expires_at:
+            from datetime import datetime, timezone
+            try:
+                if datetime.fromisoformat(approval.expires_at) <= datetime.now(timezone.utc):
+                    return False
+            except (ValueError, TypeError):
+                pass
+        # Scope check
+        if approval.approval_scope == "single_action":
+            # Mark as consumed — one-time use
+            approval.status = ApprovalStatus.CONSUMED
+            self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, approval.mission_id)
+        return True
 
     def list_invocations(self, mission_id: str | None = None) -> list[dict]:
         return self.store.list_records("tool", mission_id)

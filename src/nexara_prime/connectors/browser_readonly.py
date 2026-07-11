@@ -164,8 +164,29 @@ class BrowserReadOnlyConnector(BaseConnector):
             title = await page.title()
             text = (await page.inner_text("body"))[:_MAX_RESPONSE_BYTES]
             content_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
-            redirect_chain = [r.url for r in resp.request.redirect_chain] if resp else []
+            # Safely get redirect chain
+            redirect_chain: list[str] = []
+            try:
+                if resp and hasattr(resp, 'request') and resp.request:
+                    if hasattr(resp.request, 'redirect_chain'):
+                        redirect_chain = [r.url for r in resp.request.redirect_chain]
+            except Exception:
+                pass
             actual_url = page.url
+            # Post-redirect SSRF check
+            if not self._allow_test_localhost and actual_url != url:
+                ok2, reason2 = _ssrf_check(actual_url)
+                if not ok2:
+                    await page.close()
+                    decisions.append(ConnectorPolicyDecision(
+                        invocation_id=inv.invocation_id, action="redirect",
+                        allowed=False, reason=f"post-redirect SSRF: {reason2}",
+                        policy_id="ssrf_redirect_check").__dict__)
+                    return ConnectorReceipt(
+                        invocation_id=inv.invocation_id, connector_id=self.manifest.connector_id,
+                        status="blocked", error=f"redirect to blocked target: {reason2}",
+                        started_at=now_iso(), finished_at=now_iso(),
+                        trace_id=inv.trace_id, policy_decisions=decisions)
             await page.close()
             return ConnectorReceipt(
                 invocation_id=inv.invocation_id, connector_id=self.manifest.connector_id,
