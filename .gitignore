@@ -61,3 +61,14 @@ docs/.trash/
 
 # ── NEXARA state (tracked separately via .nexara/ in git) ──
 # .nexara/ is intentionally tracked — it holds project state
+
+# ── Python generated ──
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+
+# ── Node / Frontend generated ──
+node_modules/
+.next/
+dist/
