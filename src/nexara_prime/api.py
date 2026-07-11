@@ -9,7 +9,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .config import Settings
-from .knowledge_universe import scan_vault
+try:
+    from .knowledge_universe import scan_vault
+except ImportError:
+    scan_vault = None
 from .runtime import NexaraRuntime
 
 
@@ -132,6 +135,8 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     @app.get("/api/knowledge-universe")
     def knowledge_universe() -> dict[str, Any]:
+        if scan_vault is None:
+            raise HTTPException(status_code=503, detail="knowledge_universe module not available")
         try:
             return scan_vault(app.state.knowledge_vault)
         except ValueError as exc:

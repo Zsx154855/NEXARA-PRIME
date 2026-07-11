@@ -1,0 +1,391 @@
+{
+  "timestamp": "20260711T183247Z",
+  "total_entries": 43,
+  "total_files": 43,
+  "secret_scan": "CLEAN",
+  "entries": [
+    {
+      "relative_path": "\"\\346\\234\\252\\345\\221\\275\\345\\220\\215.canvas\"",
+      "type": "missing",
+      "error": "file not found"
+    },
+    {
+      "relative_path": "2026-07-11.md",
+      "type": "file",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/2026-07-11.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/2026-07-11.md"
+    },
+    {
+      "relative_path": "202607111949.md",
+      "type": "file",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/202607111949.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/202607111949.md"
+    },
+    {
+      "relative_path": "Chats/chat-2026-07-11T13-04-08-830Z.md",
+      "type": "file",
+      "size": 95,
+      "sha256": "790288f88de67674ef5f92cf51cdf01779c99127b63b79fb853b3f4459e75ffb",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/Chats/chat-2026-07-11T13-04-08-830Z.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/chat-2026-07-11T13-04-08-830Z.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Clip Web Page.md",
+      "type": "file",
+      "size": 1393,
+      "sha256": "88f2680666cd838740bbd93c29d3cd7f8990f4214c707c62a0a3b3c8a59573f2",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Clip Web Page.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Clip Web Page.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Clip YouTube Transcript.md",
+      "type": "file",
+      "size": 1911,
+      "sha256": "73ae7fd34976d3fa196beea7a1671e0af540f7ef9f29e212c104c7ec5db0fce7",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Clip YouTube Transcript.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Clip YouTube Transcript.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Emojify.md",
+      "type": "file",
+      "size": 470,
+      "sha256": "aedae09ffd91ad65a3f2e543a244513699426b7c03aef037375d5cb71e48228f",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Emojify.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Emojify.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Explain like I am 5.md",
+      "type": "file",
+      "size": 388,
+      "sha256": "12b6e53c3209d7632b4d3adf6c231a748d4e41025391845173ba86a173f0ed7e",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Explain like I am 5.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Explain like I am 5.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Fix grammar and spelling.md",
+      "type": "file",
+      "size": 350,
+      "sha256": "0842f6ad25fd08980230797903dfd02b3722ff5f50180e3a54eaa1ee16765479",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Fix grammar and spelling.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Fix grammar and spelling.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Generate glossary.md",
+      "type": "file",
+      "size": 353,
+      "sha256": "2175ca5d8b287c86f5949866abc145e8768ae0af5b4c73ab0eae5db9bed01589",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Generate glossary.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Generate glossary.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Generate table of contents.md",
+      "type": "file",
+      "size": 357,
+      "sha256": "349d61dc0aca2cdf09440233cfcd14eb8e5dc0272417ff4d623184e3322dc022",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Generate table of contents.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Generate table of contents.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Make longer.md",
+      "type": "file",
+      "size": 379,
+      "sha256": "a450a479c32a8eb957eb89aedcbf0b728cd872f1188bcefe58af8aff6f2db927",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Make longer.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Make longer.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Make shorter.md",
+      "type": "file",
+      "size": 373,
+      "sha256": "f933d946ef99ad88da7ea0e6a303ad828faf26eca61423396549ed45d7ce3223",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Make shorter.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Make shorter.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Remove URLs.md",
+      "type": "file",
+      "size": 347,
+      "sha256": "a0f4c4c4c6bbe2d7462f2d5e353317969c1f144551e272314be84b1b1704554c",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Remove URLs.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Remove URLs.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Rewrite as tweet thread.md",
+      "type": "file",
+      "size": 500,
+      "sha256": "2c6dbb0edc08f0034ce69a4eee86acb91295549fc76be25abd450930dbbcfaf1",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Rewrite as tweet thread.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Rewrite as tweet thread.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Rewrite as tweet.md",
+      "type": "file",
+      "size": 376,
+      "sha256": "7b6544aa9cb80986d81177a84d9833162068a453434f71a0c1127e01f262451f",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Rewrite as tweet.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Rewrite as tweet.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Simplify.md",
+      "type": "file",
+      "size": 370,
+      "sha256": "dd330efff8b95e69af946aef3cf799472767c7587028ed2d38b00572d35b5444",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Simplify.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Simplify.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Summarize.md",
+      "type": "file",
+      "size": 307,
+      "sha256": "5bbbb517d08098c0da4b4ea081b2e5f5bfcc4e953a242de3e24fc6e796e645ae",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Summarize.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Summarize.md"
+    },
+    {
+      "relative_path": "copilot/copilot-custom-prompts/Translate to Chinese.md",
+      "type": "file",
+      "size": 369,
+      "sha256": "66747e9eae733241e4ed2ecbc0297201f35ca8e8cfcded2764aaf484282dd5e7",
+      "category": "personal-session-artifacts",
+      "source_path": "/Users/agentos/NEXARA-PRIME/copilot/copilot-custom-prompts/Translate to Chinese.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/personal-session-artifacts/Translate to Chinese.md"
+    },
+    {
+      "relative_path": "reports/knowledge_universe_v1/final_acceptance_report.md",
+      "type": "file",
+      "size": 2315,
+      "sha256": "7be638647d26ead0c3e69486b52a8f349d655a5a47ac0213a73792334f5d24a7",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/knowledge_universe_v1/final_acceptance_report.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/final_acceptance_report.md"
+    },
+    {
+      "relative_path": "reports/knowledge_universe_v1/vault_scan_snapshot.json",
+      "type": "file",
+      "size": 1208,
+      "sha256": "597f9fd11b711beb8cc8139f0c4dd49f8bda98a5533a7991ab5cbee924f18939",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/knowledge_universe_v1/vault_scan_snapshot.json",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/vault_scan_snapshot.json"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/approval.md",
+      "type": "file",
+      "size": 1005,
+      "sha256": "30b980773ddad6c470eb8869a8534b44c6a4ed1448154e1b83c8d9851ea8c04c",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/approval.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/approval.md"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/audit.md",
+      "type": "file",
+      "size": 1238,
+      "sha256": "248c3e251dfcade150003b9507dce388abd5b909f239f9c1d43e7ff0d68c377d",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/audit.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/audit.md"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/browser.md",
+      "type": "file",
+      "size": 847,
+      "sha256": "0c82a5f504f89d71096701c3546ff6ca3d0525675bee48ad16ed99fa577bc67c",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/browser.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/browser.md"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/evidence_manifest.json",
+      "type": "file",
+      "size": 1416,
+      "sha256": "1a47f742fb6d63459b3f700e608574dca3a0cdafab067266208dcd49672cf656",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/evidence_manifest.json",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/evidence_manifest.json"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/final_acceptance_report.md",
+      "type": "file",
+      "size": 2112,
+      "sha256": "9944dcc22fa41b9b0fedc3c336b961351c9b89a2fe77a5c05b96ba0ab44f7f34",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/final_acceptance_report.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/final_acceptance_report.md"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/mission.md",
+      "type": "file",
+      "size": 923,
+      "sha256": "e4a865845555b285af9709c75f77d7cfdc47e4e14d23ff8fe107ebd81f3f1a64",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/mission.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/mission.md"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/preflight.md",
+      "type": "file",
+      "size": 1534,
+      "sha256": "9b9db047637bcdc1fd69e11a513a950f9a39bab3c05fc6e25ac6119bc8cde169",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/preflight.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/preflight.md"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/recovery.md",
+      "type": "file",
+      "size": 763,
+      "sha256": "7866e1c5c239780ad3ab3379155b9f6cfc7fc2792bf87407b9da5e56bc1d808b",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/recovery.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/recovery.md"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/runtime_snapshot.json",
+      "type": "file",
+      "size": 807,
+      "sha256": "1158e58cc795296e68cecf77d1365865e1ac9fa57e926f42f50888c3286e28df",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/runtime_snapshot.json",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/runtime_snapshot.json"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/runtime_truth.md",
+      "type": "file",
+      "size": 1997,
+      "sha256": "8431baa3aaae001afa1d39a05834c7ff1eb43b21c969fb0cd26d90ed7ee2c6e8",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/runtime_truth.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/runtime_truth.md"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/sandbox.md",
+      "type": "file",
+      "size": 1197,
+      "sha256": "fb1149ea9f7f186d8813e9b111c220b2c7c85b09ea5bb2fff52ba1020330a348",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/sandbox.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/sandbox.md"
+    },
+    {
+      "relative_path": "reports/security_v2_2_final/test.md",
+      "type": "file",
+      "size": 1009,
+      "sha256": "64f951b3451c630df403862609c72bde3db2aacae51af76eb2f0cc1b77336f9e",
+      "category": "security-evidence",
+      "source_path": "/Users/agentos/NEXARA-PRIME/reports/security_v2_2_final/test.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/security-evidence/test.md"
+    },
+    {
+      "relative_path": "scripts/install_knowledge_universe.sh",
+      "type": "file",
+      "size": 550,
+      "sha256": "cee50977e191a2d5793fe08780c1241a92e2e2e09362238732dfc50db3b99222",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/scripts/install_knowledge_universe.sh",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/install_knowledge_universe.sh"
+    },
+    {
+      "relative_path": "src/nexara_prime/knowledge_universe.py",
+      "type": "file",
+      "size": 4232,
+      "sha256": "07206e19a66220064bcb44c02934254f88962e6a4febe0eb5eb9214f896d6ca0",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/src/nexara_prime/knowledge_universe.py",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/knowledge_universe.py"
+    },
+    {
+      "relative_path": "tests/test_knowledge_universe.py",
+      "type": "file",
+      "size": 2983,
+      "sha256": "13713e810f581ad1acb51c79c7877be003722b382947b1a96d0c8130320aeafa",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/tests/test_knowledge_universe.py",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/test_knowledge_universe.py"
+    },
+    {
+      "relative_path": "ui/knowledge-universe/app.js",
+      "type": "file",
+      "size": 5914,
+      "sha256": "0751b01dffaf60af9754babfc86fb757a323a414c41a61acdca2bc82a5668783",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/ui/knowledge-universe/app.js",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/app.js"
+    },
+    {
+      "relative_path": "ui/knowledge-universe/index.html",
+      "type": "file",
+      "size": 2009,
+      "sha256": "5b34b0d66a0c8eb0b887e16b5d090a6b3f9148501a40e1b9cfbc119c24eb2157",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/ui/knowledge-universe/index.html",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/index.html"
+    },
+    {
+      "relative_path": "ui/knowledge-universe/styles.css",
+      "type": "file",
+      "size": 10570,
+      "sha256": "8ecadf7153b3424034bf04c2eb05c68bea556126709eb6a082469aa7969a84e5",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/ui/knowledge-universe/styles.css",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/styles.css"
+    },
+    {
+      "relative_path": "ui/obsidian-knowledge-universe/README.md",
+      "type": "file",
+      "size": 902,
+      "sha256": "b39ba3b1b53568b9c8f63b154e63c801068c6ce9e4e3327d1ca8255780ae442b",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/ui/obsidian-knowledge-universe/README.md",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/README.md"
+    },
+    {
+      "relative_path": "ui/obsidian-knowledge-universe/main.js",
+      "type": "file",
+      "size": 13134,
+      "sha256": "b7a2a7ab36f5b63959ab014f5a6e484834973fea07802a0d852d36626b4c5e46",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/ui/obsidian-knowledge-universe/main.js",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/main.js"
+    },
+    {
+      "relative_path": "ui/obsidian-knowledge-universe/manifest.json",
+      "type": "file",
+      "size": 301,
+      "sha256": "e380d547d19572beb85966289b68bf77f422b88fbd2eae8ebab70035f216641a",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/ui/obsidian-knowledge-universe/manifest.json",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/manifest.json"
+    },
+    {
+      "relative_path": "ui/obsidian-knowledge-universe/styles.css",
+      "type": "file",
+      "size": 9933,
+      "sha256": "94ba1f6354db05d6fe715c7f9188ee96d48269337180179da4e0ffb4a5fbe316",
+      "category": "knowledge-universe",
+      "source_path": "/Users/agentos/NEXARA-PRIME/ui/obsidian-knowledge-universe/styles.css",
+      "destination_path": "/Users/agentos/NEXARA-PRIME-ARTIFACT-QUARANTINE/20260711T183247Z/knowledge-universe/styles.css"
+    }
+  ]
+}

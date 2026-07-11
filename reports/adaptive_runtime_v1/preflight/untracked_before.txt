@@ -1,0 +1,44 @@
+2026-07-11.md
+202607111949.md
+Chats/chat-2026-07-11T13-04-08-830Z.md
+copilot/copilot-custom-prompts/Clip Web Page.md
+copilot/copilot-custom-prompts/Clip YouTube Transcript.md
+copilot/copilot-custom-prompts/Emojify.md
+copilot/copilot-custom-prompts/Explain like I am 5.md
+copilot/copilot-custom-prompts/Fix grammar and spelling.md
+copilot/copilot-custom-prompts/Generate glossary.md
+copilot/copilot-custom-prompts/Generate table of contents.md
+copilot/copilot-custom-prompts/Make longer.md
+copilot/copilot-custom-prompts/Make shorter.md
+copilot/copilot-custom-prompts/Remove URLs.md
+copilot/copilot-custom-prompts/Rewrite as tweet thread.md
+copilot/copilot-custom-prompts/Rewrite as tweet.md
+copilot/copilot-custom-prompts/Simplify.md
+copilot/copilot-custom-prompts/Summarize.md
+copilot/copilot-custom-prompts/Translate to Chinese.md
+reports/adaptive_runtime_v1/preflight/untracked_before.txt
+reports/knowledge_universe_v1/final_acceptance_report.md
+reports/knowledge_universe_v1/vault_scan_snapshot.json
+reports/security_v2_2_final/approval.md
+reports/security_v2_2_final/audit.md
+reports/security_v2_2_final/browser.md
+reports/security_v2_2_final/evidence_manifest.json
+reports/security_v2_2_final/final_acceptance_report.md
+reports/security_v2_2_final/mission.md
+reports/security_v2_2_final/preflight.md
+reports/security_v2_2_final/recovery.md
+reports/security_v2_2_final/runtime_snapshot.json
+reports/security_v2_2_final/runtime_truth.md
+reports/security_v2_2_final/sandbox.md
+reports/security_v2_2_final/test.md
+scripts/install_knowledge_universe.sh
+src/nexara_prime/knowledge_universe.py
+tests/test_knowledge_universe.py
+ui/knowledge-universe/app.js
+ui/knowledge-universe/index.html
+ui/knowledge-universe/styles.css
+ui/obsidian-knowledge-universe/README.md
+ui/obsidian-knowledge-universe/main.js
+ui/obsidian-knowledge-universe/manifest.json
+ui/obsidian-knowledge-universe/styles.css
+"\346\234\252\345\221\275\345\220\215.canvas"
