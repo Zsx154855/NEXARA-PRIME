@@ -1,0 +1,65 @@
+version: 1
+system: NEXARA_SOVEREIGN_PRODUCT_REALITY_ENGINE
+positioning: governed_product_reality_plane
+runtime_kernel: NEXARA_PRIME
+design_subsystem: NEXARA_DESIGN_OS
+
+invariants:
+  mission_first: true
+  human_sovereignty_visible: true
+  runtime_truth_required: true
+  evidence_required_for_verified_completion: true
+  provider_independent_identity: true
+  private_chain_of_thought_exposed: false
+  reversible_by_default: true
+  fixed_layers:
+    - L01_INTENT
+    - L02_CONTEXT
+    - L03_CONTRACT
+    - L04_PLANNING
+    - L05_REASONING
+    - L06_TOOLS
+    - L07_EXECUTION
+    - L08_VERIFICATION
+    - L09_EVIDENCE
+    - L10_MEMORY
+    - L11_GOVERNANCE
+    - L12_EVOLUTION
+
+human_controls:
+  - approve
+  - modify
+  - pause
+  - take_over
+  - revoke
+  - rollback
+  - safe_mode
+
+evolution_policy:
+  R0:
+    simulation_required: false
+    verification_required: true
+    human_approval_required: false
+  R1:
+    simulation_required: true
+    verification_required: true
+    human_approval_required: false
+  R2:
+    simulation_required: true
+    verification_required: true
+    accessibility_required: true
+    governance_required: true
+    human_approval_required: false
+  R3:
+    simulation_required: true
+    verification_required: true
+    accessibility_required: true
+    governance_required: true
+    human_approval_required: true
+  R4:
+    simulation_required: true
+    verification_required: true
+    accessibility_required: true
+    governance_required: true
+    human_approval_required: true
+    manual_release_authorization_required: true
