@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 import threading
 from typing import Any
 
 from .db import SQLiteStore
 from .events import EventBus
-from .models import ApprovalRequest, ApprovalStatus, RiskLevel, WriterLease, new_id, now_iso
+from .models import (
+    ApprovalRequest,
+    ApprovalStatus,
+    Event,
+    RiskLevel,
+    WriterLease,
+    new_id,
+    now_iso,
+)
 
 
 class PolicyEngine:
@@ -31,6 +40,45 @@ class ApprovalEngine:
     def __init__(self, store: SQLiteStore, events: EventBus):
         self.store = store
         self.events = events
+
+    @staticmethod
+    def _transition_event_id(idempotency_key: str) -> str:
+        digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:24]
+        return f"evt_{digest}"
+
+    def _commit_transition(
+        self,
+        approval: ApprovalRequest,
+        *,
+        expected_integrity_sha256: str,
+        event_type: str,
+        actor: str,
+        trace_id: str,
+        event_payload: dict[str, Any],
+    ) -> None:
+        idempotency_key = f"{event_type}:{approval.approval_id}"
+        event = Event(
+            event_id=self._transition_event_id(idempotency_key),
+            event_type=event_type,
+            aggregate_id=approval.mission_id,
+            aggregate_type="mission",
+            actor=actor,
+            trace_id=trace_id,
+            idempotency_key=idempotency_key,
+            payload=event_payload,
+        )
+        result = self.store.repair_record_event(
+            approval.approval_id,
+            record_type="approval",
+            expected_integrity_sha256=expected_integrity_sha256,
+            new_payload=approval.model_dump(mode="json"),
+            event=event.model_dump(mode="json"),
+        )
+        if result is None:
+            raise RuntimeError("approval_decision_conflict")
+        event_inserted, persisted = result
+        if event_inserted:
+            self.events.notify_persisted(Event.model_validate(persisted))
 
     def request_origin_is_valid(
         self,
@@ -66,6 +114,21 @@ class ApprovalEngine:
                 return True
         return False
 
+    def consumption_transition_exists(self, approval: ApprovalRequest) -> bool:
+        for event in self.store.list_events(approval.mission_id):
+            payload = event.get("payload", {})
+            if (
+                event.get("event_type") == "approval.consumed"
+                and event.get("aggregate_type") == "mission"
+                and payload.get("approval_id") == approval.approval_id
+                and payload.get("action") == approval.action
+                and payload.get("risk_level") == approval.risk_level.value
+                and payload.get("executor_id") == approval.executor_id
+                and payload.get("proposal_sha256") == approval.proposal_sha256
+            ):
+                return True
+        return False
+
     def request(
         self,
         mission_id: str,
@@ -93,8 +156,35 @@ class ApprovalEngine:
             proposal_sha256=proposal_sha256,
             expires_at=(datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)).isoformat(),
         )
-        self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, mission_id)
-        self.events.publish("approval.requested", mission_id, "mission", "governance", trace_id, {"approval_id": approval.approval_id, "risk_level": risk_level.value, "action": action, "scope": approval_scope})
+        request_payload = approval.model_dump(mode="json")
+        event = Event(
+            event_type="approval.requested",
+            aggregate_id=mission_id,
+            aggregate_type="mission",
+            actor="governance",
+            trace_id=trace_id,
+            payload={
+                "approval_id": approval.approval_id,
+                "risk_level": risk_level.value,
+                "action": action,
+                "scope": approval_scope,
+                "request": request_payload,
+            },
+        )
+        record_inserted, event_inserted, persisted = (
+            self.store.save_record_and_event_if_absent(
+                approval.approval_id,
+                "approval",
+                request_payload,
+                approval.created_at,
+                event.model_dump(mode="json"),
+                mission_id,
+            )
+        )
+        if not record_inserted or persisted is None:
+            raise RuntimeError("approval_request_conflict")
+        if event_inserted:
+            self.events.notify_persisted(Event.model_validate(persisted))
         return approval
 
     def decide(self, approval_id: str, approved: bool | None, actor: str, note: str, trace_id: str, decision: str | None = None, scope: str | None = None) -> ApprovalRequest:
@@ -120,14 +210,18 @@ class ApprovalEngine:
             expiry = expiry.replace(tzinfo=timezone.utc)
         if expiry and expiry <= datetime.now(timezone.utc):
             approval.status = ApprovalStatus.EXPIRED
-            updated = self.store.replace_record_payload_if_integrity_matches(
-                approval.approval_id,
-                record_type="approval",
+            self._commit_transition(
+                approval,
                 expected_integrity_sha256=envelope["integrity_sha256"],
-                new_payload=approval.model_dump(mode="json"),
+                event_type="approval.expired",
+                actor="governance",
+                trace_id=trace_id,
+                event_payload={
+                    "approval_id": approval.approval_id,
+                    "status": ApprovalStatus.EXPIRED.value,
+                    "expires_at": approval.expires_at,
+                },
             )
-            if not updated:
-                raise RuntimeError("approval_decision_conflict")
             raise PermissionError("approval_expired")
         decision = decision or ("approved" if approved else "rejected")
         if decision in {"approve_once", "approve_mission", "approved"}:
@@ -144,15 +238,24 @@ class ApprovalEngine:
         approval.decision_note = note
         approval.decision_action = decision
         approval.decided_at = now_iso()
-        updated = self.store.replace_record_payload_if_integrity_matches(
-            approval.approval_id,
-            record_type="approval",
+        self._commit_transition(
+            approval,
             expected_integrity_sha256=envelope["integrity_sha256"],
-            new_payload=approval.model_dump(mode="json"),
+            event_type="approval.decided",
+            actor=actor,
+            trace_id=trace_id,
+            event_payload={
+                "approval_id": approval_id,
+                "status": approval.status.value,
+                "decision": decision,
+                "scope": approval.approval_scope,
+                "action": approval.action,
+                "risk_level": approval.risk_level.value,
+                "executor_id": approval.executor_id,
+                "proposal_sha256": approval.proposal_sha256,
+                "decided_at": approval.decided_at,
+            },
         )
-        if not updated:
-            raise RuntimeError("approval_decision_conflict")
-        self.events.publish("approval.decided", approval.mission_id, "mission", actor, trace_id, {"approval_id": approval_id, "status": approval.status.value, "decision": decision, "scope": approval.approval_scope})
         return approval
 
     def get(self, approval_id: str) -> ApprovalRequest | None:

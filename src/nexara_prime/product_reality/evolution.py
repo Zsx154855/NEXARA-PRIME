@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from nexara_prime.evidence import EvidenceStore
 from nexara_prime.governance import ApprovalEngine
-from nexara_prime.models import ApprovalRequest, ApprovalStatus, RiskLevel
+from nexara_prime.models import ApprovalRequest, ApprovalStatus, Event, RiskLevel
 
 from .models import (
     EvolutionProposal,
@@ -115,7 +115,7 @@ class EvolutionPromotionGate:
                 verified_evidence_refs=sorted(set(verified_evidence_refs)),
             )
 
-        if not self._consume_approvals_atomically(approvals_to_consume):
+        if not self._consume_approvals_atomically(approvals_to_consume, proposal):
             return PromotionDecision(
                 proposal_id=proposal.proposal_id,
                 allowed=False,
@@ -299,6 +299,8 @@ class EvolutionPromotionGate:
             return None, [f"stored {purpose} original request mismatch"]
         if not self.approvals.decision_transition_is_valid(approval):
             return None, [f"stored {purpose} has no durable decision transition"]
+        if self.approvals.consumption_transition_exists(approval):
+            return None, [f"stored {purpose} was already consumed"]
         return _ValidatedApproval(
             request=approval,
             integrity_sha256=str(envelope["integrity_sha256"]),
@@ -343,18 +345,54 @@ class EvolutionPromotionGate:
         return created_at <= decided_at <= now
 
     def _consume_approvals_atomically(
-        self, approvals: list[_ValidatedApproval]
+        self,
+        approvals: list[_ValidatedApproval],
+        proposal: EvolutionProposal,
     ) -> bool:
-        return self.approvals.store.compare_and_set_record_fields_atomically(
-            [
-                {
-                    "record_id": approval.request.approval_id,
-                    "record_type": "approval",
-                    "field": "status",
-                    "expected_value": ApprovalStatus.APPROVED.value,
-                    "new_value": ApprovalStatus.CONSUMED.value,
-                    "expected_integrity_sha256": approval.integrity_sha256,
-                }
-                for approval in approvals
-            ]
+        if not approvals:
+            return True
+        updates = [
+            {
+                "record_id": approval.request.approval_id,
+                "record_type": "approval",
+                "field": "status",
+                "expected_value": ApprovalStatus.APPROVED.value,
+                "new_value": ApprovalStatus.CONSUMED.value,
+                "expected_integrity_sha256": approval.integrity_sha256,
+            }
+            for approval in approvals
+        ]
+        events: list[Event] = []
+        for approval in approvals:
+            request = approval.request
+            idempotency_key = f"approval.consumed:{request.approval_id}"
+            events.append(
+                Event(
+                    event_id=self.approvals._transition_event_id(idempotency_key),
+                    event_type="approval.consumed",
+                    aggregate_id=request.mission_id,
+                    aggregate_type="mission",
+                    actor=str(request.executor_id),
+                    trace_id=f"promotion:{proposal.proposal_id}",
+                    idempotency_key=idempotency_key,
+                    payload={
+                        "approval_id": request.approval_id,
+                        "proposal_id": proposal.proposal_id,
+                        "proposal_sha256": request.proposal_sha256,
+                        "action": request.action,
+                        "risk_level": request.risk_level.value,
+                        "executor_id": request.executor_id,
+                    },
+                )
+            )
+        persisted = (
+            self.approvals.store.compare_and_set_record_fields_and_events_atomically(
+                updates,
+                [event.model_dump(mode="json") for event in events],
+            )
         )
+        if persisted is None:
+            return False
+        for event in persisted:
+            self.approvals.events.notify_persisted(Event.model_validate(event))
+        return True

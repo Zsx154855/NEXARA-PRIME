@@ -1662,3 +1662,343 @@ def test_migration_reconstructs_decided_approval_origin(tmp_path: Path) -> None:
     assert migrated is not None
     assert migrated.status == ApprovalStatus.APPROVED
     assert migrated.approval_scope == "single_action"
+
+
+def test_migration_does_not_bless_repurposed_approval_request_fields(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "approval-repurposed-migration.sqlite3"
+    store = SQLiteStore(path)
+    approvals = ApprovalEngine(store, EventBus(store))
+    approval = approvals.request(
+        "mission-1",
+        "original-action",
+        RiskLevel.R2,
+        "approve",
+        [],
+        "trace",
+        approval_scope="single_action",
+    )
+    approvals.decide(
+        approval.approval_id,
+        True,
+        "human-1",
+        "approved",
+        "decision-trace",
+    )
+    envelope = store.get_record_envelope(approval.approval_id)
+    assert envelope is not None
+    payload = dict(envelope["payload"])
+    payload.update(
+        {
+            "action": "repurposed-action",
+            "risk_level": RiskLevel.R4.value,
+            "approval_scope": "mission",
+        }
+    )
+    repurposed_integrity = SQLiteStore._record_integrity(
+        approval.approval_id,
+        "approval",
+        approval.mission_id,
+        envelope["created_at"],
+        payload,
+    )
+    with store._lock, store._conn:
+        store._conn.execute(
+            "UPDATE records SET payload=?, integrity_sha256=? WHERE record_id=?",
+            (
+                SQLiteStore._canonical_payload(payload),
+                repurposed_integrity,
+                approval.approval_id,
+            ),
+        )
+    store.close()
+    connection = sqlite3.connect(path)
+    connection.execute("ALTER TABLE records DROP COLUMN origin_sha256")
+    connection.commit()
+    connection.close()
+
+    migrated_store = SQLiteStore(path)
+    with pytest.raises(ValueError, match="approval_integrity_invalid"):
+        ApprovalEngine(migrated_store, EventBus(migrated_store)).get(
+            approval.approval_id
+        )
+
+
+def test_partial_upgrade_backfills_every_missing_origin_idempotently(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "partial-origin-upgrade.sqlite3"
+    store, events, evidence = evidence_runtime(path)
+    approvals = ApprovalEngine(store, events)
+    approval = approvals.request(
+        "mission-1", "action", RiskLevel.R2, "approve", [], "trace"
+    )
+    artifact = evidence.add(
+        "mission-1", "verification", "proof", "content", "trace"
+    )
+    checkpoint = ProductTwinEngine(store).capture(
+        mission_id="mission-1",
+        expected_state={"version": 1},
+        observed_state={"version": 1},
+    )
+    record_ids = [
+        approval.approval_id,
+        artifact.evidence_id,
+        checkpoint.checkpoint_id,
+    ]
+    with store._lock, store._conn:
+        store._conn.executemany(
+            "UPDATE records SET origin_sha256=NULL WHERE record_id=?",
+            [(record_id,) for record_id in record_ids],
+        )
+    store.close()
+
+    migrated = SQLiteStore(path)
+    assert all(migrated.get_record_envelope(record_id) for record_id in record_ids)
+    migrated.close()
+    reopened = SQLiteStore(path)
+    assert all(reopened.get_record_envelope(record_id) for record_id in record_ids)
+
+
+def test_approval_decision_event_conflict_rolls_back_record_transition(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteStore(tmp_path / "approval-decision-atomic.sqlite3")
+    events = EventBus(store)
+    approvals = ApprovalEngine(store, events)
+    approval = approvals.request(
+        "mission-1", "action", RiskLevel.R3, "approve", [], "trace"
+    )
+    events.publish(
+        "attacker.conflict",
+        approval.mission_id,
+        "mission",
+        "attacker",
+        "conflict",
+        {"approval_id": approval.approval_id},
+        idempotency_key=f"approval.decided:{approval.approval_id}",
+    )
+
+    with pytest.raises(ValueError, match="event_idempotency_identity_conflict"):
+        approvals.decide(
+            approval.approval_id,
+            True,
+            "human-1",
+            "approved",
+            "decision-trace",
+        )
+
+    persisted = approvals.get(approval.approval_id)
+    assert persisted is not None
+    assert persisted.status == ApprovalStatus.PENDING
+    assert not approvals.decision_transition_is_valid(persisted)
+
+
+def test_approval_request_and_event_are_created_atomically(tmp_path: Path) -> None:
+    store = SQLiteStore(tmp_path / "approval-request-atomic.sqlite3")
+    with store._lock, store._conn:
+        store._conn.execute(
+            "CREATE TRIGGER reject_approval_request BEFORE INSERT ON events "
+            "WHEN NEW.event_type='approval.requested' "
+            "BEGIN SELECT RAISE(ABORT, 'forced event failure'); END"
+        )
+    approvals = ApprovalEngine(store, EventBus(store))
+
+    with pytest.raises(sqlite3.IntegrityError, match="forced event failure"):
+        approvals.request(
+            "mission-1", "action", RiskLevel.R3, "approve", [], "trace"
+        )
+
+    assert store.count("records") == 0
+    assert store.count("events") == 0
+
+
+def test_evidence_verification_event_conflict_rolls_back_record_transition(
+    tmp_path: Path,
+) -> None:
+    store, events, evidence = evidence_runtime(
+        tmp_path / "evidence-verification-atomic.sqlite3"
+    )
+    artifact = evidence.add(
+        "mission-1", "verification", "proof", "content", "trace"
+    )
+    events.publish(
+        "attacker.conflict",
+        artifact.evidence_id,
+        "evidence",
+        "attacker",
+        "conflict",
+        {"evidence_id": artifact.evidence_id},
+        idempotency_key=(
+            f"evidence.verify:{artifact.evidence_id}:{artifact.sha256}"
+        ),
+    )
+
+    with pytest.raises(ValueError, match="event_idempotency_identity_conflict"):
+        evidence.verify(artifact.evidence_id)
+
+    payload = store.get_record_envelope(artifact.evidence_id)["payload"]
+    assert payload["verification_status"] == "unverified"
+    assert not evidence.is_preverified_and_integrity_bound(artifact.evidence_id)
+
+
+def test_consumed_approval_event_blocks_resealed_reuse(tmp_path: Path) -> None:
+    store, events, evidence = evidence_runtime(tmp_path / "approval-consumed.sqlite3")
+    approvals = ApprovalEngine(store, events)
+    twin = ProductTwinEngine(store)
+    proof = evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        "proof",
+        "trace",
+        verification_status="verified",
+    )
+    rollback = evidence.add(
+        "mission-1",
+        "verification",
+        "rollback",
+        "rollback",
+        "trace",
+        verification_status="verified",
+    )
+    checkpoint = twin.capture(
+        mission_id="mission-1",
+        expected_state={"version": 1},
+        observed_state={"version": 1},
+    )
+    proposal = EvolutionProposal(
+        proposal_id="proposal-consumption-binding",
+        mission_id="mission-1",
+        title="change",
+        observed_problem={},
+        proposed_changes=["change"],
+        risk_level=RiskLevel.R3,
+        evidence_refs=[proof.evidence_id],
+        rollback_plan=["restore"],
+        rollback_checkpoint_id=checkpoint.checkpoint_id,
+        rollback_evidence_refs=[rollback.evidence_id],
+    )
+    approval = approvals.request(
+        proposal.mission_id,
+        proposal.promotion_action,
+        proposal.risk_level,
+        "approve",
+        [],
+        "trace",
+        executor_id="executor-1",
+        proposal_sha256=proposal.content_sha256,
+    )
+    approvals.decide(
+        approval.approval_id,
+        True,
+        "human-1",
+        "approved",
+        "decision-trace",
+    )
+    gate = EvolutionPromotionGate(
+        approvals, evidence, authorized_human_principals={"human-1"}
+    )
+    validation = EvolutionValidation(
+        simulation_passed=True,
+        verification_passed=True,
+        accessibility_passed=True,
+        governance_passed=True,
+        approval_id=approval.approval_id,
+        actor_id="executor-1",
+    )
+
+    first = gate.assess(proposal, validation)
+    assert first.allowed
+    consumption = store.get_event_by_idempotency(
+        f"approval.consumed:{approval.approval_id}"
+    )
+    assert consumption is not None
+    assert consumption["payload"]["proposal_sha256"] == proposal.content_sha256
+    payload = store.get_record(approval.approval_id)
+    assert payload is not None
+    payload["status"] = ApprovalStatus.APPROVED.value
+    store.save_record(
+        approval.approval_id,
+        "approval",
+        payload,
+        payload["created_at"],
+        approval.mission_id,
+    )
+
+    replay = gate.assess(proposal, validation)
+    assert not replay.allowed
+    assert (
+        "stored promotion approval was already consumed"
+        in replay.required_actions
+    )
+
+
+def test_consumption_event_conflict_rolls_back_approval_status(tmp_path: Path) -> None:
+    store = SQLiteStore(tmp_path / "approval-consumption-atomic.sqlite3")
+    events = EventBus(store)
+    approvals = ApprovalEngine(store, events)
+    approval = approvals.request(
+        "mission-1",
+        "product_reality.promote:proposal-1",
+        RiskLevel.R3,
+        "approve",
+        [],
+        "trace",
+        executor_id="executor-1",
+        proposal_sha256="proposal-digest",
+    )
+    approvals.decide(
+        approval.approval_id,
+        True,
+        "human-1",
+        "approved",
+        "decision-trace",
+    )
+    envelope = store.get_record_envelope(approval.approval_id)
+    assert envelope is not None
+    idempotency_key = f"approval.consumed:{approval.approval_id}"
+    events.publish(
+        "attacker.conflict",
+        approval.mission_id,
+        "mission",
+        "attacker",
+        "conflict",
+        {"approval_id": approval.approval_id},
+        idempotency_key=idempotency_key,
+    )
+    transition_event = {
+        "event_id": approvals._transition_event_id(idempotency_key),
+        "event_type": "approval.consumed",
+        "aggregate_id": approval.mission_id,
+        "aggregate_type": "mission",
+        "actor": "executor-1",
+        "trace_id": "promotion:proposal-1",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "idempotency_key": idempotency_key,
+        "payload": {
+            "approval_id": approval.approval_id,
+            "action": approval.action,
+            "risk_level": approval.risk_level.value,
+            "executor_id": approval.executor_id,
+            "proposal_sha256": approval.proposal_sha256,
+        },
+    }
+
+    persisted = store.compare_and_set_record_fields_and_events_atomically(
+        [
+            {
+                "record_id": approval.approval_id,
+                "record_type": "approval",
+                "field": "status",
+                "expected_value": ApprovalStatus.APPROVED.value,
+                "new_value": ApprovalStatus.CONSUMED.value,
+                "expected_integrity_sha256": envelope["integrity_sha256"],
+            }
+        ],
+        [transition_event],
+    )
+
+    assert persisted is None
+    assert approvals.get(approval.approval_id).status == ApprovalStatus.APPROVED

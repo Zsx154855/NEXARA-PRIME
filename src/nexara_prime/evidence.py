@@ -440,28 +440,38 @@ class EvidenceStore:
         verified = digest == raw.get("sha256")
         raw["verification_status"] = "verified" if verified else "corrupt"
         raw["envelope_sha256"] = self._envelope_sha256(raw)
-        updated = self.store.replace_record_payload_if_integrity_matches(
+        event_type = "evidence.verified" if verified else "evidence.verification_failed"
+        idempotency_key = (
+            f"evidence.verify:{evidence_id}:{digest}"
+            if verified
+            else f"evidence.verify:{evidence_id}:{digest}:corrupt"
+        )
+        event = Event(
+            event_id=self._idempotent_event_id(idempotency_key),
+            event_type=event_type,
+            aggregate_id=evidence_id,
+            aggregate_type="evidence",
+            actor="evidence_store",
+            trace_id=f"verify:{evidence_id}",
+            idempotency_key=idempotency_key,
+            payload={
+                "evidence_id": evidence_id,
+                "sha256": digest,
+                "verification_status": raw["verification_status"],
+            },
+        )
+        result = self.store.repair_record_event(
             evidence_id,
             record_type="evidence",
             expected_integrity_sha256=envelope["integrity_sha256"],
             new_payload=raw,
+            event=event.model_dump(mode="json"),
         )
-        if not updated:
+        if result is None:
             raise RuntimeError("evidence_verification_conflict")
-        if verified:
-            self.events.publish(
-                "evidence.verified",
-                evidence_id,
-                "evidence",
-                "evidence_store",
-                f"verify:{evidence_id}",
-                {
-                    "evidence_id": evidence_id,
-                    "sha256": digest,
-                    "verification_status": "verified",
-                },
-                idempotency_key=f"evidence.verify:{evidence_id}:{digest}",
-            )
+        event_inserted, persisted = result
+        if event_inserted:
+            self.events.notify_persisted(Event.model_validate(persisted))
         return verified
 
     def is_preverified_and_integrity_bound(self, evidence_id: str) -> bool:

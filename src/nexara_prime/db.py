@@ -160,70 +160,117 @@ class SQLiteStore:
                     "UPDATE records SET payload=?, integrity_sha256=? WHERE record_id=?",
                     (self._canonical_payload(payload), integrity, row["record_id"]),
                 )
-            if not origin_column_preexisted:
-                requested_approval_scopes: dict[str, str] = {}
-                for event_row in self._conn.execute(
-                    "SELECT payload FROM events WHERE event_type='approval.requested'"
-                ).fetchall():
-                    try:
-                        event_payload = json.loads(event_row["payload"])
-                    except (TypeError, ValueError):
+            # Origin backfill is deliberately idempotent. A previous process may
+            # have added the column and crashed before every row was populated.
+            # Approval origins are rebuilt from their durable request event so a
+            # decided payload cannot bless a repurposed action, risk, or scope.
+            requested_approvals: dict[str, dict[str, Any] | None] = {}
+            for event_row in self._conn.execute(
+                "SELECT aggregate_id, aggregate_type, actor, payload FROM events "
+                "WHERE event_type='approval.requested'"
+            ).fetchall():
+                try:
+                    event_payload = json.loads(event_row["payload"])
+                except (TypeError, ValueError):
+                    continue
+                if (
+                    not isinstance(event_payload, dict)
+                    or event_row["aggregate_type"] != "mission"
+                    or event_row["actor"] != "governance"
+                ):
+                    continue
+                approval_id = event_payload.get("approval_id")
+                if not approval_id:
+                    continue
+                key = str(approval_id)
+                request_payload = event_payload.get("request")
+                if isinstance(request_payload, dict):
+                    projection = dict(request_payload)
+                else:
+                    projection = {
+                        "action": event_payload.get("action"),
+                        "risk_level": event_payload.get("risk_level"),
+                        "approval_scope": event_payload.get("scope"),
+                    }
+                projection["_mission_id"] = str(event_row["aggregate_id"])
+                existing = requested_approvals.get(key)
+                if key in requested_approvals and existing != projection:
+                    # Conflicting request events make the record untrustworthy;
+                    # leave its origin null so normal reads quarantine it.
+                    requested_approvals[key] = None
+                else:
+                    requested_approvals[key] = projection
+
+            origin_rows = self._conn.execute(
+                "SELECT record_id, record_type, mission_id, payload, created_at, "
+                "integrity_sha256 FROM records WHERE origin_sha256 IS NULL "
+                "AND integrity_sha256 IS NOT NULL"
+            ).fetchall()
+            for row in origin_rows:
+                try:
+                    current_payload = json.loads(row["payload"])
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(current_payload, dict):
+                    continue
+                current_integrity = self._record_integrity(
+                    row["record_id"],
+                    row["record_type"],
+                    row["mission_id"],
+                    row["created_at"],
+                    current_payload,
+                )
+                if current_integrity != row["integrity_sha256"]:
+                    continue
+                origin_payload = dict(current_payload)
+                if row["record_type"] == "approval":
+                    request_projection = requested_approvals.get(str(row["record_id"]))
+                    if (
+                        not isinstance(request_projection, dict)
+                        or request_projection.get("_mission_id") != row["mission_id"]
+                    ):
                         continue
-                    if not isinstance(event_payload, dict):
-                        continue
-                    approval_id = event_payload.get("approval_id")
-                    scope = event_payload.get("scope")
-                    if approval_id and scope:
-                        requested_approval_scopes[str(approval_id)] = str(scope)
-                origin_rows = self._conn.execute(
-                    "SELECT record_id, record_type, mission_id, payload, created_at, "
-                    "integrity_sha256 FROM records WHERE origin_sha256 IS NULL "
-                    "AND integrity_sha256 IS NOT NULL"
-                ).fetchall()
-                for row in origin_rows:
-                    try:
-                        current_payload = json.loads(row["payload"])
-                    except (TypeError, ValueError):
-                        continue
-                    if not isinstance(current_payload, dict):
-                        continue
-                    current_integrity = self._record_integrity(
-                        row["record_id"],
-                        row["record_type"],
-                        row["mission_id"],
-                        row["created_at"],
-                        current_payload,
+                    full_request = {
+                        key: value
+                        for key, value in request_projection.items()
+                        if key != "_mission_id"
+                    }
+                    if full_request.get("approval_id") is not None:
+                        if (
+                            full_request.get("approval_id") != row["record_id"]
+                            or full_request.get("mission_id") != row["mission_id"]
+                        ):
+                            continue
+                        origin_payload = full_request
+                    else:
+                        if any(
+                            full_request.get(field) is None
+                            for field in ("action", "risk_level", "approval_scope")
+                        ):
+                            continue
+                        for field in ("action", "risk_level", "approval_scope"):
+                            origin_payload[field] = full_request[field]
+                    origin_payload.update(
+                        {
+                            "status": "pending",
+                            "decided_by": None,
+                            "decision_note": None,
+                            "decision_action": None,
+                            "decided_at": None,
+                        }
                     )
-                    if current_integrity != row["integrity_sha256"]:
-                        continue
-                    origin_payload = dict(current_payload)
-                    if row["record_type"] == "approval":
-                        origin_payload.update(
-                            {
-                                "status": "pending",
-                                "decided_by": None,
-                                "decision_note": None,
-                                "decision_action": None,
-                                "decided_at": None,
-                            }
-                        )
-                        requested_scope = requested_approval_scopes.get(
-                            str(row["record_id"])
-                        )
-                        if requested_scope:
-                            origin_payload["approval_scope"] = requested_scope
-                    origin = self._record_integrity(
-                        row["record_id"],
-                        row["record_type"],
-                        row["mission_id"],
-                        row["created_at"],
-                        origin_payload,
-                    )
-                    self._conn.execute(
-                        "UPDATE records SET origin_sha256=? WHERE record_id=? "
-                        "AND origin_sha256 IS NULL",
-                        (origin, row["record_id"]),
-                    )
+                origin = self._record_integrity(
+                    row["record_id"],
+                    row["record_type"],
+                    row["mission_id"],
+                    row["created_at"],
+                    origin_payload,
+                )
+                self._conn.execute(
+                    "UPDATE records SET origin_sha256=? WHERE record_id=? "
+                    "AND origin_sha256 IS NULL",
+                    (origin, row["record_id"]),
+                )
             event_columns = {
                 row[1] for row in self._conn.execute("PRAGMA table_info(events)").fetchall()
             }
@@ -554,6 +601,133 @@ class SQLiteStore:
             except Exception:
                 self._conn.rollback()
                 raise
+
+    def compare_and_set_record_fields_and_events_atomically(
+        self,
+        updates: list[dict[str, Any]],
+        events: list[dict[str, Any]],
+    ) -> list[dict[str, Any]] | None:
+        """Commit governed field transitions and their audit events together.
+
+        Existing transition events are a hard conflict: a durable event proves
+        that the transition has already occurred even if a caller later reseals
+        a record back to its previous status.
+        """
+        if not updates or len(updates) != len(events):
+            return None
+        record_ids = [str(item["record_id"]) for item in updates]
+        event_ids = [str(item["event_id"]) for item in events]
+        event_keys = [str(item.get("idempotency_key") or "") for item in events]
+        if (
+            len(record_ids) != len(set(record_ids))
+            or len(event_ids) != len(set(event_ids))
+            or any(not key for key in event_keys)
+            or len(event_keys) != len(set(event_keys))
+        ):
+            return None
+
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                prepared: list[tuple[str, str, str, str, str]] = []
+                for item in updates:
+                    record_id = str(item["record_id"])
+                    record_type = str(item["record_type"])
+                    field = str(item["field"])
+                    row = self._conn.execute(
+                        "SELECT record_id, record_type, mission_id, payload, "
+                        "created_at, integrity_sha256 FROM records "
+                        "WHERE record_id=? AND record_type=?",
+                        (record_id, record_type),
+                    ).fetchone()
+                    if not row:
+                        self._conn.rollback()
+                        return None
+                    try:
+                        payload = json.loads(row["payload"])
+                    except (TypeError, ValueError):
+                        self._conn.rollback()
+                        return None
+                    if not isinstance(payload, dict):
+                        self._conn.rollback()
+                        return None
+                    current_integrity = self._record_integrity(
+                        row["record_id"],
+                        row["record_type"],
+                        row["mission_id"],
+                        row["created_at"],
+                        payload,
+                    )
+                    if (
+                        not row["integrity_sha256"]
+                        or row["integrity_sha256"] != current_integrity
+                        or (
+                            item.get("expected_integrity_sha256") is not None
+                            and row["integrity_sha256"]
+                            != item["expected_integrity_sha256"]
+                        )
+                        or payload.get(field) != item["expected_value"]
+                    ):
+                        self._conn.rollback()
+                        return None
+                    payload[field] = item["new_value"]
+                    prepared.append(
+                        (
+                            self._canonical_payload(payload),
+                            self._record_integrity(
+                                row["record_id"],
+                                row["record_type"],
+                                row["mission_id"],
+                                row["created_at"],
+                                payload,
+                            ),
+                            record_id,
+                            record_type,
+                            row["integrity_sha256"],
+                        )
+                    )
+
+                for event in events:
+                    existing = self._conn.execute(
+                        "SELECT event_id FROM events WHERE event_id=? "
+                        "OR idempotency_key=?",
+                        (event["event_id"], event["idempotency_key"]),
+                    ).fetchone()
+                    if existing is not None:
+                        self._conn.rollback()
+                        return None
+                    self._conn.execute(
+                        "INSERT INTO events(event_id, event_type, aggregate_id, "
+                        "aggregate_type, actor, trace_id, timestamp, "
+                        "idempotency_key, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            event["event_id"],
+                            event["event_type"],
+                            event["aggregate_id"],
+                            event["aggregate_type"],
+                            event["actor"],
+                            event["trace_id"],
+                            event["timestamp"],
+                            event["idempotency_key"],
+                            self._canonical_payload(event.get("payload", {})),
+                        ),
+                    )
+
+                for canonical, integrity, record_id, record_type, previous in prepared:
+                    cursor = self._conn.execute(
+                        "UPDATE records SET payload=?, integrity_sha256=? "
+                        "WHERE record_id=? AND record_type=? AND integrity_sha256=?",
+                        (canonical, integrity, record_id, record_type, previous),
+                    )
+                    if cursor.rowcount != 1:
+                        self._conn.rollback()
+                        return None
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+
+        return [dict(event) for event in events]
 
     def list_records(
         self, record_type: str, mission_id: str | None = None
