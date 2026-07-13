@@ -72,13 +72,36 @@ class ProductTwinEngine:
             envelope.get("record_id") != checkpoint_id
             or checkpoint.checkpoint_id != checkpoint_id
             or envelope.get("mission_id") != checkpoint.mission_id
+            or envelope.get("integrity_sha256") != envelope.get("origin_sha256")
             or checkpoint.expected.state_sha256
             != self._state_sha256(checkpoint.expected.state)
             or checkpoint.observed.state_sha256
             != self._state_sha256(checkpoint.observed.state)
         ):
             raise ValueError("product_twin_checkpoint_integrity_invalid")
+        recomputed_findings = self.detect_drift(
+            mission_id=checkpoint.mission_id,
+            expected=checkpoint.expected.state,
+            observed=checkpoint.observed.state,
+            evidence_refs=checkpoint.expected.evidence_refs,
+        )
+        if [self._finding_signature(item) for item in checkpoint.drift_findings] != [
+            self._finding_signature(item) for item in recomputed_findings
+        ]:
+            raise ValueError("product_twin_checkpoint_integrity_invalid")
         return checkpoint
+
+    @staticmethod
+    def _finding_signature(finding: DriftFinding) -> dict[str, Any]:
+        return {
+            "mission_id": finding.mission_id,
+            "drift_type": finding.drift_type.value,
+            "path": finding.path,
+            "expected": finding.expected.model_dump(mode="json"),
+            "observed": finding.observed.model_dump(mode="json"),
+            "severity": finding.severity.value,
+            "evidence_refs": finding.evidence_refs,
+        }
 
     def detect_drift(
         self,

@@ -70,6 +70,71 @@ class EvidenceStore:
             if key in EvidenceArtifact.model_fields
         }
 
+    @staticmethod
+    def _request_from_payload(
+        payload: dict[str, Any],
+        *,
+        verification_status: str,
+        source_event_id: str | None,
+    ) -> dict[str, Any]:
+        return {
+            "mission_id": payload.get("mission_id"),
+            "kind": payload.get("kind"),
+            "title": payload.get("title"),
+            "content": payload.get("content"),
+            "task_id": payload.get("task_id"),
+            "tool_invocation_id": payload.get("tool_invocation_id"),
+            "actor": payload.get("actor"),
+            "mime_type": payload.get("mime_type"),
+            "source": payload.get("source"),
+            "parent_evidence": payload.get("parent_evidence", []),
+            "idempotency_key": payload.get("idempotency_key"),
+            "source_event_id": source_event_id,
+            "verification_status": verification_status,
+        }
+
+    def _origin_is_valid(
+        self,
+        envelope: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> bool:
+        statuses = {
+            str(payload.get("verification_status", "unverified")),
+            "unverified",
+            "verified",
+        }
+        sources: set[str | None] = {payload.get("source_event_id")}
+        if not payload.get("request_sha256"):
+            sources.add(None)
+        for status in statuses:
+            for source_event_id in sources:
+                candidate = dict(payload)
+                candidate["verification_status"] = status
+                candidate["source_event_id"] = source_event_id
+                candidate["envelope_sha256"] = self._envelope_sha256(candidate)
+                request_sha256 = candidate.get("request_sha256")
+                if request_sha256:
+                    request = self._request_from_payload(
+                        candidate,
+                        verification_status=status,
+                        source_event_id=source_event_id,
+                    )
+                    request_matches = hmac.compare_digest(
+                        str(request_sha256), self._request_sha256(request)
+                    )
+                    if not request_matches and source_event_id is not None:
+                        legacy_request = dict(request)
+                        legacy_request["source_event_id"] = None
+                        request_matches = hmac.compare_digest(
+                            str(request_sha256),
+                            self._request_sha256(legacy_request),
+                        )
+                    if not request_matches:
+                        continue
+                if self.store.record_origin_matches(envelope, candidate):
+                    return True
+        return False
+
     def _replay_artifact(
         self,
         evidence_id: str,
@@ -94,6 +159,8 @@ class EvidenceStore:
             or stored.get("envelope_sha256") != self._envelope_sha256(stored)
         ):
             raise ValueError("evidence_idempotency_record_invalid")
+        if not self._origin_is_valid(envelope, stored):
+            raise ValueError("evidence_idempotency_conflict")
         immutable_request_matches = all(
             stored.get(key) == expected_request.get(key)
             for key in {
@@ -116,8 +183,16 @@ class EvidenceStore:
         )
         request_sha256 = stored.get("request_sha256")
         if request_sha256:
-            request_matches = hmac.compare_digest(
-                str(request_sha256), self._request_sha256(expected_request)
+            request_candidates = [expected_request]
+            if expected_request.get("source_event_id") is None:
+                bound_request = dict(expected_request)
+                bound_request["source_event_id"] = stored.get("source_event_id")
+                request_candidates.append(bound_request)
+            request_matches = any(
+                hmac.compare_digest(
+                    str(request_sha256), self._request_sha256(candidate)
+                )
+                for candidate in request_candidates
             ) and immutable_request_matches
         else:
             request_matches = immutable_request_matches
@@ -292,7 +367,9 @@ class EvidenceStore:
         )
         artifact.source_event_id = artifact.source_event_id or event.event_id
         payload = artifact.model_dump(mode="json")
-        payload["request_sha256"] = self._request_sha256(expected_request)
+        fingerprint_request = dict(expected_request)
+        fingerprint_request["source_event_id"] = artifact.source_event_id
+        payload["request_sha256"] = self._request_sha256(fingerprint_request)
         payload["envelope_sha256"] = self._envelope_sha256(payload)
         record_inserted, event_inserted, persisted_event = (
             self.store.save_record_and_event_if_absent(
@@ -354,6 +431,8 @@ class EvidenceStore:
             str(raw.get("content", "")).encode("utf-8")
         ).hexdigest()
         if content_digest != raw.get("sha256"):
+            return False
+        if not self._origin_is_valid(envelope, raw):
             return False
         envelope_digest = raw.get("envelope_sha256")
         return bool(envelope_digest) and envelope_digest == self._envelope_sha256(raw)

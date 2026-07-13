@@ -85,7 +85,8 @@ class SQLiteStore:
                     mission_id TEXT,
                     payload TEXT NOT NULL,
                     created_at TEXT NOT NULL,
-                    integrity_sha256 TEXT
+                    integrity_sha256 TEXT,
+                    origin_sha256 TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_records_type ON records(record_type);
                 CREATE INDEX IF NOT EXISTS idx_records_mission ON records(mission_id);
@@ -107,8 +108,11 @@ class SQLiteStore:
                 row[1] for row in self._conn.execute("PRAGMA table_info(records)").fetchall()
             }
             integrity_column_preexisted = "integrity_sha256" in record_columns
+            origin_column_preexisted = "origin_sha256" in record_columns
             if not integrity_column_preexisted:
                 self._conn.execute("ALTER TABLE records ADD COLUMN integrity_sha256 TEXT")
+            if not origin_column_preexisted:
+                self._conn.execute("ALTER TABLE records ADD COLUMN origin_sha256 TEXT")
             legacy_rows = self._conn.execute(
                 "SELECT record_id, record_type, mission_id, payload, created_at, "
                 "integrity_sha256 FROM records"
@@ -156,6 +160,11 @@ class SQLiteStore:
                     "UPDATE records SET payload=?, integrity_sha256=? WHERE record_id=?",
                     (self._canonical_payload(payload), integrity, row["record_id"]),
                 )
+            if not origin_column_preexisted:
+                self._conn.execute(
+                    "UPDATE records SET origin_sha256=integrity_sha256 "
+                    "WHERE origin_sha256 IS NULL AND integrity_sha256 IS NOT NULL"
+                )
             event_columns = {
                 row[1] for row in self._conn.execute("PRAGMA table_info(events)").fetchall()
             }
@@ -181,15 +190,24 @@ class SQLiteStore:
         with self._lock, self._conn:
             self._conn.execute(
                 """INSERT INTO records(
-                       record_id, record_type, mission_id, payload, created_at, integrity_sha256
-                   ) VALUES (?, ?, ?, ?, ?, ?)
+                       record_id, record_type, mission_id, payload, created_at,
+                       integrity_sha256, origin_sha256
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(record_id) DO UPDATE SET
                        payload=excluded.payload,
                        mission_id=excluded.mission_id,
                        record_type=excluded.record_type,
                        created_at=excluded.created_at,
                        integrity_sha256=excluded.integrity_sha256""",
-                (record_id, record_type, mission_id, canonical, created_at, integrity),
+                (
+                    record_id,
+                    record_type,
+                    mission_id,
+                    canonical,
+                    created_at,
+                    integrity,
+                    integrity,
+                ),
             )
 
     def get_record(self, record_id: str) -> dict[str, Any] | None:
@@ -215,9 +233,18 @@ class SQLiteStore:
         with self._lock, self._conn:
             cursor = self._conn.execute(
                 "INSERT OR IGNORE INTO records("
-                "record_id, record_type, mission_id, payload, created_at, integrity_sha256"
-                ") VALUES (?, ?, ?, ?, ?, ?)",
-                (record_id, record_type, mission_id, canonical, created_at, integrity),
+                "record_id, record_type, mission_id, payload, created_at, "
+                "integrity_sha256, origin_sha256"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record_id,
+                    record_type,
+                    mission_id,
+                    canonical,
+                    created_at,
+                    integrity,
+                    integrity,
+                ),
             )
             return cursor.rowcount == 1
 
@@ -226,7 +253,7 @@ class SQLiteStore:
         with self._lock:
             row = self._conn.execute(
                 "SELECT record_id, record_type, mission_id, payload, created_at, "
-                "integrity_sha256 FROM records WHERE record_id=?",
+                "integrity_sha256, origin_sha256 FROM records WHERE record_id=?",
                 (record_id,),
             ).fetchone()
         if not row:
@@ -246,14 +273,36 @@ class SQLiteStore:
         )
         if not row["integrity_sha256"] or row["integrity_sha256"] != expected:
             return None
+        if not row["origin_sha256"]:
+            return None
         return {
             "record_id": row["record_id"],
             "record_type": row["record_type"],
             "mission_id": row["mission_id"],
             "created_at": row["created_at"],
             "integrity_sha256": row["integrity_sha256"],
+            "origin_sha256": row["origin_sha256"],
             "payload": payload,
         }
+
+    @classmethod
+    def record_origin_matches(
+        cls,
+        envelope: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> bool:
+        """Verify candidate original content against the first-write anchor."""
+        origin = envelope.get("origin_sha256")
+        if not origin:
+            return False
+        candidate = cls._record_integrity(
+            str(envelope["record_id"]),
+            str(envelope["record_type"]),
+            envelope.get("mission_id"),
+            str(envelope["created_at"]),
+            payload,
+        )
+        return origin == candidate
 
     def compare_and_set_record_field(
         self,
@@ -610,13 +659,15 @@ class SQLiteStore:
 
                 self._conn.execute(
                     "INSERT INTO records(record_id, record_type, mission_id, "
-                    "payload, created_at, integrity_sha256) VALUES (?, ?, ?, ?, ?, ?)",
+                    "payload, created_at, integrity_sha256, origin_sha256) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         record_id,
                         record_type,
                         mission_id,
                         canonical_record,
                         created_at,
+                        record_integrity,
                         record_integrity,
                     ),
                 )

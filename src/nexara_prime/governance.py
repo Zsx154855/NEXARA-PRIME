@@ -32,6 +32,23 @@ class ApprovalEngine:
         self.store = store
         self.events = events
 
+    def request_origin_is_valid(
+        self,
+        envelope: dict[str, Any],
+        approval: ApprovalRequest,
+    ) -> bool:
+        original = approval.model_dump(mode="json")
+        original.update(
+            {
+                "status": ApprovalStatus.PENDING.value,
+                "decided_by": None,
+                "decision_note": None,
+                "decision_action": None,
+                "decided_at": None,
+            }
+        )
+        return self.store.record_origin_matches(envelope, original)
+
     def request(
         self,
         mission_id: str,
@@ -74,6 +91,7 @@ class ApprovalEngine:
             envelope.get("record_id") != approval_id
             or approval.approval_id != approval_id
             or envelope.get("mission_id") != approval.mission_id
+            or not self.request_origin_is_valid(envelope, approval)
         ):
             raise ValueError("approval_integrity_invalid")
         if approval.status != ApprovalStatus.PENDING:
@@ -130,6 +148,7 @@ class ApprovalEngine:
             envelope.get("record_id") != approval_id
             or approval.approval_id != approval_id
             or envelope.get("mission_id") != approval.mission_id
+            or not self.request_origin_is_valid(envelope, approval)
         ):
             raise ValueError("approval_integrity_invalid")
         return approval
@@ -141,6 +160,7 @@ class ApprovalEngine:
             if (
                 envelope.get("record_id") != approval.approval_id
                 or envelope.get("mission_id") != approval.mission_id
+                or not self.request_origin_is_valid(envelope, approval)
             ):
                 raise ValueError("approval_integrity_invalid")
             approvals.append(approval.model_dump(mode="json"))

@@ -194,6 +194,8 @@ class EvolutionPromotionGate:
             or checkpoint.checkpoint_id != proposal.rollback_checkpoint_id
         ):
             errors.append("stored rollback checkpoint identity mismatch")
+        if envelope.get("integrity_sha256") != envelope.get("origin_sha256"):
+            errors.append("stored rollback checkpoint original binding mismatch")
         if envelope.get("mission_id") != proposal.mission_id:
             errors.append("stored rollback checkpoint mission mismatch")
         if checkpoint.mission_id != proposal.mission_id:
@@ -276,6 +278,8 @@ class EvolutionPromotionGate:
             return None, [f"stored {purpose} has invalid decision time"]
         if not self._approval_is_unexpired(approval):
             return None, [f"stored {purpose} is expired or has invalid expiry"]
+        if not self.approvals.request_origin_is_valid(envelope, approval):
+            return None, [f"stored {purpose} original request mismatch"]
         return _ValidatedApproval(
             request=approval,
             integrity_sha256=str(envelope["integrity_sha256"]),
