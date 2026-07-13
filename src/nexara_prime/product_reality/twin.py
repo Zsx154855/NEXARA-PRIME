@@ -62,8 +62,19 @@ class ProductTwinEngine:
     def get_checkpoint(self, checkpoint_id: str) -> ProductTwinCheckpoint | None:
         if not self.store:
             return None
-        raw = self.store.get_record(checkpoint_id)
-        return ProductTwinCheckpoint.model_validate(raw) if raw else None
+        envelope = self.store.get_record_envelope(checkpoint_id)
+        if not envelope:
+            return None
+        if envelope.get("record_type") != "product_twin_checkpoint":
+            raise ValueError("product_twin_checkpoint_record_type_invalid")
+        checkpoint = ProductTwinCheckpoint.model_validate(envelope["payload"])
+        if (
+            envelope.get("record_id") != checkpoint_id
+            or checkpoint.checkpoint_id != checkpoint_id
+            or envelope.get("mission_id") != checkpoint.mission_id
+        ):
+            raise ValueError("product_twin_checkpoint_integrity_invalid")
+        return checkpoint
 
     def detect_drift(
         self,

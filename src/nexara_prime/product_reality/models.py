@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from nexara_prime.models import NModel, RiskLevel, new_id, now_iso
 
@@ -94,6 +94,18 @@ class ProductTwinCheckpoint(NModel):
     rollback_ref: str | None = None
     created_at: str = Field(default_factory=now_iso)
 
+    @model_validator(mode="after")
+    def bind_nested_state_to_checkpoint(self) -> "ProductTwinCheckpoint":
+        if self.expected.mission_id != self.mission_id:
+            raise ValueError("expected snapshot mission must match checkpoint mission")
+        if self.observed.mission_id != self.mission_id:
+            raise ValueError("observed snapshot mission must match checkpoint mission")
+        if self.expected.kind != "expected" or self.observed.kind != "observed":
+            raise ValueError("checkpoint snapshot kinds must be expected/observed")
+        if any(item.mission_id != self.mission_id for item in self.drift_findings):
+            raise ValueError("drift finding mission must match checkpoint mission")
+        return self
+
 
 class EvolutionValidation(NModel):
     simulation_passed: bool = False
@@ -118,6 +130,40 @@ class EvolutionProposal(NModel):
     rollback_checkpoint_id: str | None = None
     rollback_evidence_refs: list[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
+
+    @field_validator("proposal_id", "mission_id", "title")
+    @classmethod
+    def require_non_blank_identity(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("identity fields must not be blank")
+        return normalized
+
+    @field_validator("evidence_refs", "rollback_evidence_refs")
+    @classmethod
+    def require_unique_non_blank_refs(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("evidence references must not be blank")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("evidence references must be unique")
+        return normalized
+
+    @field_validator("proposed_changes", "rollback_plan")
+    @classmethod
+    def require_non_blank_steps(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("proposal and rollback steps must not be blank")
+        return normalized
+
+    @field_validator("rollback_checkpoint_id")
+    @classmethod
+    def normalize_checkpoint_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
     @property
     def promotion_action(self) -> str:

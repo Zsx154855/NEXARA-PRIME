@@ -1,7 +1,9 @@
 """NEXARA Sovereign Product Reality Engine V2 foundation.
 
-This package is additive. It does not modify mission execution, ApprovalEngine,
-EvidenceStore, audit, sandbox, provider, secret, or Adaptive Runtime behavior.
+The product-reality package is additive. Its governance guarantees rely on
+shared ApprovalEngine, EvidenceStore, event-persistence, and SQLite integrity
+hardening; mission execution, sandbox, provider, secret, and Adaptive Runtime
+behavior remain unchanged.
 """
 
 from .evolution import EvolutionPromotionGate

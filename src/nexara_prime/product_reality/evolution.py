@@ -193,6 +193,19 @@ class EvolutionPromotionGate:
             errors.append("stored rollback checkpoint mission mismatch")
         if checkpoint.mission_id != proposal.mission_id:
             errors.append("stored rollback checkpoint payload mission mismatch")
+        if checkpoint.expected.mission_id != proposal.mission_id:
+            errors.append("stored rollback expected snapshot mission mismatch")
+        if checkpoint.observed.mission_id != proposal.mission_id:
+            errors.append("stored rollback observed snapshot mission mismatch")
+        if checkpoint.expected.kind != "expected":
+            errors.append("stored rollback expected snapshot kind mismatch")
+        if checkpoint.observed.kind != "observed":
+            errors.append("stored rollback observed snapshot kind mismatch")
+        if any(
+            finding.mission_id != proposal.mission_id
+            for finding in checkpoint.drift_findings
+        ):
+            errors.append("stored rollback drift finding mission mismatch")
         if not checkpoint.reversible:
             errors.append("stored rollback checkpoint is not reversible")
         if not self._snapshot_hash_valid(checkpoint.expected):
@@ -252,6 +265,8 @@ class EvolutionPromotionGate:
             return None, [f"stored {purpose} has no human decision record"]
         if normalized_decider not in self.authorized_human_principals:
             return None, [f"stored {purpose} was not decided by an authorized human"]
+        if not self._approval_decision_time_is_valid(approval):
+            return None, [f"stored {purpose} has invalid decision time"]
         if not self._approval_is_unexpired(approval):
             return None, [f"stored {purpose} is expired or has invalid expiry"]
         return _ValidatedApproval(
@@ -282,6 +297,20 @@ class EvolutionPromotionGate:
         if expiry.tzinfo is None:
             expiry = expiry.replace(tzinfo=timezone.utc)
         return expiry > datetime.now(timezone.utc)
+
+    @staticmethod
+    def _approval_decision_time_is_valid(approval: ApprovalRequest) -> bool:
+        try:
+            decided_at = datetime.fromisoformat(str(approval.decided_at))
+            created_at = datetime.fromisoformat(approval.created_at)
+        except (TypeError, ValueError):
+            return False
+        if decided_at.tzinfo is None:
+            decided_at = decided_at.replace(tzinfo=timezone.utc)
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        return created_at <= decided_at <= now
 
     def _consume_approvals_atomically(
         self, approvals: list[_ValidatedApproval]

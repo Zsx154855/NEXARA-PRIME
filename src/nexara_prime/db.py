@@ -85,6 +85,23 @@ class SQLiteStore:
             }
             if "integrity_sha256" not in record_columns:
                 self._conn.execute("ALTER TABLE records ADD COLUMN integrity_sha256 TEXT")
+            legacy_rows = self._conn.execute(
+                "SELECT record_id, record_type, mission_id, payload, created_at "
+                "FROM records WHERE integrity_sha256 IS NULL OR integrity_sha256=''"
+            ).fetchall()
+            for row in legacy_rows:
+                payload = json.loads(row["payload"])
+                integrity = self._record_integrity(
+                    row["record_id"],
+                    row["record_type"],
+                    row["mission_id"],
+                    row["created_at"],
+                    payload,
+                )
+                self._conn.execute(
+                    "UPDATE records SET integrity_sha256=? WHERE record_id=?",
+                    (integrity, row["record_id"]),
+                )
             event_columns = {
                 row[1] for row in self._conn.execute("PRAGMA table_info(events)").fetchall()
             }
@@ -127,6 +144,28 @@ class SQLiteStore:
                 "SELECT payload FROM records WHERE record_id=?", (record_id,)
             ).fetchone()
         return json.loads(row["payload"]) if row else None
+
+    def save_record_if_absent(
+        self,
+        record_id: str,
+        record_type: str,
+        payload: dict[str, Any],
+        created_at: str,
+        mission_id: str | None = None,
+    ) -> bool:
+        """Insert an immutable first-write record without overwriting a winner."""
+        canonical = self._canonical_payload(payload)
+        integrity = self._record_integrity(
+            record_id, record_type, mission_id, created_at, payload
+        )
+        with self._lock, self._conn:
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO records("
+                "record_id, record_type, mission_id, payload, created_at, integrity_sha256"
+                ") VALUES (?, ?, ?, ?, ?, ?)",
+                (record_id, record_type, mission_id, canonical, created_at, integrity),
+            )
+            return cursor.rowcount == 1
 
     def get_record_envelope(self, record_id: str) -> dict[str, Any] | None:
         """Return a record only when its persisted identity envelope is intact."""
@@ -210,6 +249,54 @@ class SQLiteStore:
             if cursor.rowcount != 1:
                 return None
             return payload
+
+    def replace_record_payload_if_integrity_matches(
+        self,
+        record_id: str,
+        *,
+        record_type: str,
+        expected_integrity_sha256: str,
+        new_payload: dict[str, Any],
+    ) -> bool:
+        """Replace a complete payload only if the exact validated record remains."""
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT record_id, record_type, mission_id, payload, created_at, "
+                "integrity_sha256 FROM records WHERE record_id=? AND record_type=?",
+                (record_id, record_type),
+            ).fetchone()
+            if not row or row["integrity_sha256"] != expected_integrity_sha256:
+                return False
+            current_payload = json.loads(row["payload"])
+            current_integrity = self._record_integrity(
+                row["record_id"],
+                row["record_type"],
+                row["mission_id"],
+                row["created_at"],
+                current_payload,
+            )
+            if current_integrity != expected_integrity_sha256:
+                return False
+            canonical = self._canonical_payload(new_payload)
+            new_integrity = self._record_integrity(
+                row["record_id"],
+                row["record_type"],
+                row["mission_id"],
+                row["created_at"],
+                new_payload,
+            )
+            cursor = self._conn.execute(
+                "UPDATE records SET payload=?, integrity_sha256=? "
+                "WHERE record_id=? AND record_type=? AND integrity_sha256=?",
+                (
+                    canonical,
+                    new_integrity,
+                    record_id,
+                    record_type,
+                    expected_integrity_sha256,
+                ),
+            )
+            return cursor.rowcount == 1
 
     def compare_and_set_record_fields_atomically(
         self,
@@ -314,10 +401,31 @@ class SQLiteStore:
             rows = self._conn.execute(query, params).fetchall()
         return [json.loads(row["payload"]) for row in rows]
 
-    def save_event(self, event: dict[str, Any]) -> None:
+    def list_record_envelopes(
+        self, record_type: str, mission_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = (
+            "SELECT record_id FROM records WHERE record_type=?"
+            + (" AND mission_id=?" if mission_id else "")
+            + " ORDER BY created_at ASC"
+        )
+        params: list[Any] = [record_type]
+        if mission_id:
+            params.append(mission_id)
+        with self._lock:
+            ids = [row["record_id"] for row in self._conn.execute(query, params)]
+        envelopes: list[dict[str, Any]] = []
+        for record_id in ids:
+            envelope = self.get_record_envelope(record_id)
+            if not envelope:
+                raise ValueError(f"record_integrity_invalid:{record_id}")
+            envelopes.append(envelope)
+        return envelopes
+
+    def save_event(self, event: dict[str, Any]) -> dict[str, Any]:
         with self._lock, self._conn:
             self._conn.execute(
-                """INSERT OR REPLACE INTO events(event_id, event_type, aggregate_id, aggregate_type,
+                """INSERT OR IGNORE INTO events(event_id, event_type, aggregate_id, aggregate_type,
                    actor, trace_id, timestamp, idempotency_key, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     event["event_id"], event["event_type"], event["aggregate_id"],
@@ -326,6 +434,20 @@ class SQLiteStore:
                     json.dumps(event.get("payload", {}), ensure_ascii=False),
                 ),
             )
+            if event.get("idempotency_key"):
+                row = self._conn.execute(
+                    "SELECT * FROM events WHERE idempotency_key=?",
+                    (event["idempotency_key"],),
+                ).fetchone()
+            else:
+                row = self._conn.execute(
+                    "SELECT * FROM events WHERE event_id=?", (event["event_id"],)
+                ).fetchone()
+        if not row:
+            raise RuntimeError("event_persistence_failed")
+        persisted = dict(row)
+        persisted["payload"] = json.loads(persisted["payload"])
+        return persisted
 
     def get_event(self, event_id: str) -> dict[str, Any] | None:
         with self._lock:

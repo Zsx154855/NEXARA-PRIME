@@ -62,15 +62,35 @@ class ApprovalEngine:
         return approval
 
     def decide(self, approval_id: str, approved: bool | None, actor: str, note: str, trace_id: str, decision: str | None = None, scope: str | None = None) -> ApprovalRequest:
-        raw = self.store.get_record(approval_id)
-        if not raw:
+        envelope = self.store.get_record_envelope(approval_id)
+        if not envelope:
             raise KeyError(f"approval_not_found:{approval_id}")
-        approval = ApprovalRequest.model_validate(raw)
+        if envelope.get("record_type") != "approval":
+            raise ValueError("approval_record_type_invalid")
+        approval = ApprovalRequest.model_validate(envelope["payload"])
+        if (
+            envelope.get("record_id") != approval_id
+            or approval.approval_id != approval_id
+            or envelope.get("mission_id") != approval.mission_id
+        ):
+            raise ValueError("approval_integrity_invalid")
         if approval.status != ApprovalStatus.PENDING:
             raise ValueError(f"approval_already_decided:{approval.status}")
-        if approval.expires_at and datetime.fromisoformat(approval.expires_at) <= datetime.now(timezone.utc):
+        if not actor.strip():
+            raise ValueError("approval_decision_actor_required")
+        expiry = datetime.fromisoformat(approval.expires_at) if approval.expires_at else None
+        if expiry and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        if expiry and expiry <= datetime.now(timezone.utc):
             approval.status = ApprovalStatus.EXPIRED
-            self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, approval.mission_id)
+            updated = self.store.replace_record_payload_if_integrity_matches(
+                approval.approval_id,
+                record_type="approval",
+                expected_integrity_sha256=envelope["integrity_sha256"],
+                new_payload=approval.model_dump(mode="json"),
+            )
+            if not updated:
+                raise RuntimeError("approval_decision_conflict")
             raise PermissionError("approval_expired")
         decision = decision or ("approved" if approved else "rejected")
         if decision in {"approve_once", "approve_mission", "approved"}:
@@ -86,16 +106,37 @@ class ApprovalEngine:
         approval.decision_note = note
         approval.decision_action = decision
         approval.decided_at = now_iso()
-        self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, approval.mission_id)
+        updated = self.store.replace_record_payload_if_integrity_matches(
+            approval.approval_id,
+            record_type="approval",
+            expected_integrity_sha256=envelope["integrity_sha256"],
+            new_payload=approval.model_dump(mode="json"),
+        )
+        if not updated:
+            raise RuntimeError("approval_decision_conflict")
         self.events.publish("approval.decided", approval.mission_id, "mission", actor, trace_id, {"approval_id": approval_id, "status": approval.status.value, "decision": decision, "scope": approval.approval_scope})
         return approval
 
     def get(self, approval_id: str) -> ApprovalRequest | None:
-        raw = self.store.get_record(approval_id)
-        return ApprovalRequest.model_validate(raw) if raw else None
+        envelope = self.store.get_record_envelope(approval_id)
+        if not envelope:
+            return None
+        if envelope.get("record_type") != "approval":
+            raise ValueError("approval_record_type_invalid")
+        approval = ApprovalRequest.model_validate(envelope["payload"])
+        if (
+            envelope.get("record_id") != approval_id
+            or approval.approval_id != approval_id
+            or envelope.get("mission_id") != approval.mission_id
+        ):
+            raise ValueError("approval_integrity_invalid")
+        return approval
 
     def list(self, mission_id: str | None = None) -> list[dict]:
-        return self.store.list_records("approval", mission_id)
+        return [
+            envelope["payload"]
+            for envelope in self.store.list_record_envelopes("approval", mission_id)
+        ]
 
 
 class WriterLeaseManager:

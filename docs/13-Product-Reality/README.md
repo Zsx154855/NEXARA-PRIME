@@ -53,7 +53,7 @@ Causal Evaluation + Controlled Evolution
 
 ## V2 implementation boundary
 
-V2 adds isolated contracts, registries, validation engines, and tests. It does not modify existing mission execution, ApprovalEngine, sandbox, EvidenceStore, audit chain, provider routing, secrets, or Adaptive Runtime behavior.
+V2 adds isolated product-reality contracts, registries, validation engines, and tests. It also hardens the shared ApprovalEngine, EvidenceStore, event persistence, and SQLite integrity envelope needed to enforce those contracts. Mission execution, sandbox policy, provider routing, secrets, and Adaptive Runtime behavior remain unchanged.
 
 ## Promotion action binding
 

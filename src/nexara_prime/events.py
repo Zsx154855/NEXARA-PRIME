@@ -25,10 +25,6 @@ class EventBus:
         payload: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
     ) -> Event:
-        if idempotency_key:
-            existing = self.store.get_event_by_idempotency(idempotency_key)
-            if existing:
-                return Event.model_validate(existing)
         event = Event(
             event_id=new_id("evt"),
             event_type=event_type,
@@ -39,14 +35,17 @@ class EventBus:
             idempotency_key=idempotency_key,
             payload=payload or {},
         )
-        self.store.save_event(event.model_dump(mode="json"))
-        for subscriber in list(self._subscribers):
-            try:
-                subscriber(event)
-            except Exception:
-                # A telemetry subscriber must never break the mission path.
-                continue
-        return event
+        persisted = Event.model_validate(
+            self.store.save_event(event.model_dump(mode="json"))
+        )
+        if persisted.event_id == event.event_id:
+            for subscriber in list(self._subscribers):
+                try:
+                    subscriber(persisted)
+                except Exception:
+                    # A telemetry subscriber must never break the mission path.
+                    continue
+        return persisted
 
     def replay(self, aggregate_id: str) -> list[dict[str, Any]]:
         return self.store.list_events(aggregate_id)

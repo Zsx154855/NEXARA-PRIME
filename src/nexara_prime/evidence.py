@@ -36,6 +36,43 @@ class EvidenceStore:
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
+    @staticmethod
+    def _idempotent_evidence_id(idempotency_key: str) -> str:
+        digest = hashlib.sha256(
+            f"evidence:{idempotency_key}".encode("utf-8")
+        ).hexdigest()
+        return f"evidence_{digest[:12]}"
+
+    @staticmethod
+    def _artifact_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in payload.items()
+            if key in EvidenceArtifact.model_fields
+        }
+
+    def _replay_artifact(
+        self,
+        evidence_id: str,
+        expected_request: dict[str, Any],
+    ) -> EvidenceArtifact:
+        envelope = self.store.get_record_envelope(evidence_id)
+        if (
+            not envelope
+            or envelope.get("record_type") != "evidence"
+            or envelope.get("record_id") != evidence_id
+        ):
+            raise ValueError("evidence_idempotency_record_invalid")
+        stored = envelope["payload"]
+        if (
+            stored.get("evidence_id") != evidence_id
+            or stored.get("envelope_sha256") != self._envelope_sha256(stored)
+        ):
+            raise ValueError("evidence_idempotency_record_invalid")
+        if any(stored.get(key) != value for key, value in expected_request.items()):
+            raise ValueError("evidence_idempotency_conflict")
+        return EvidenceArtifact.model_validate(self._artifact_payload(stored))
+
     def add(
         self,
         mission_id: str,
@@ -54,46 +91,33 @@ class EvidenceStore:
         parent_evidence: list[str] | None = None,
         idempotency_key: str | None = None,
     ) -> EvidenceArtifact:
+        expected_request = {
+            "mission_id": mission_id,
+            "kind": kind,
+            "title": title,
+            "content": content,
+            "task_id": task_id,
+            "tool_invocation_id": tool_invocation_id,
+            "actor": actor,
+            "mime_type": mime_type,
+            "source": source,
+            "parent_evidence": parent_evidence or [],
+            "idempotency_key": idempotency_key,
+        }
         if idempotency_key:
             existing = self.store.find_record("evidence", "idempotency_key", idempotency_key)
             if existing:
                 evidence_id = existing.get("evidence_id")
-                envelope = (
-                    self.store.get_record_envelope(str(evidence_id))
-                    if evidence_id
-                    else None
-                )
-                if (
-                    not envelope
-                    or envelope.get("record_type") != "evidence"
-                    or envelope.get("record_id") != evidence_id
-                ):
+                if not evidence_id:
                     raise ValueError("evidence_idempotency_record_invalid")
-                stored = envelope["payload"]
-                expected_request = {
-                    "mission_id": mission_id,
-                    "kind": kind,
-                    "title": title,
-                    "content": content,
-                    "task_id": task_id,
-                    "tool_invocation_id": tool_invocation_id,
-                    "actor": actor,
-                    "mime_type": mime_type,
-                    "source": source,
-                    "parent_evidence": parent_evidence or [],
-                    "idempotency_key": idempotency_key,
-                }
-                if any(stored.get(key) != value for key, value in expected_request.items()):
-                    raise ValueError("evidence_idempotency_conflict")
-                artifact_payload = {
-                    key: value
-                    for key, value in stored.items()
-                    if key in EvidenceArtifact.model_fields
-                }
-                return EvidenceArtifact.model_validate(artifact_payload)
+                return self._replay_artifact(str(evidence_id), expected_request)
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
         artifact = EvidenceArtifact(
-            evidence_id=new_id("evidence"),
+            evidence_id=(
+                self._idempotent_evidence_id(idempotency_key)
+                if idempotency_key
+                else new_id("evidence")
+            ),
             mission_id=mission_id,
             kind=kind,
             title=title,
@@ -121,35 +145,57 @@ class EvidenceStore:
         artifact.source_event_id = artifact.source_event_id or event.event_id
         payload = artifact.model_dump(mode="json")
         payload["envelope_sha256"] = self._envelope_sha256(payload)
+        if idempotency_key:
+            self.store.save_record_if_absent(
+                artifact.evidence_id,
+                "evidence",
+                payload,
+                artifact.created_at,
+                mission_id,
+            )
+            return self._replay_artifact(artifact.evidence_id, expected_request)
         self.store.save_record(
-            artifact.evidence_id,
-            "evidence",
-            payload,
-            artifact.created_at,
-            mission_id,
+            artifact.evidence_id, "evidence", payload, artifact.created_at, mission_id
         )
         return artifact
 
     def verify(self, evidence_id: str) -> bool:
-        raw = self.store.get_record(evidence_id)
-        if not raw:
+        envelope = self.store.get_record_envelope(evidence_id)
+        if not envelope:
             raise KeyError(f"evidence_not_found:{evidence_id}")
+        if envelope.get("record_type") != "evidence":
+            raise ValueError("evidence_record_type_invalid")
+        raw = envelope["payload"]
+        if (
+            raw.get("evidence_id") != evidence_id
+            or raw.get("mission_id") != envelope.get("mission_id")
+            or raw.get("envelope_sha256") != self._envelope_sha256(raw)
+        ):
+            raise ValueError("evidence_integrity_invalid")
         digest = hashlib.sha256(str(raw.get("content", "")).encode("utf-8")).hexdigest()
         verified = digest == raw.get("sha256")
         raw["verification_status"] = "verified" if verified else "corrupt"
         raw["envelope_sha256"] = self._envelope_sha256(raw)
-        self.store.save_record(
+        updated = self.store.replace_record_payload_if_integrity_matches(
             evidence_id,
-            "evidence",
-            raw,
-            raw.get("created_at", ""),
-            raw.get("mission_id"),
+            record_type="evidence",
+            expected_integrity_sha256=envelope["integrity_sha256"],
+            new_payload=raw,
         )
+        if not updated:
+            raise RuntimeError("evidence_verification_conflict")
         return verified
 
     def is_preverified_and_integrity_bound(self, evidence_id: str) -> bool:
-        raw = self.store.get_record(evidence_id)
-        if not raw or raw.get("verification_status") != "verified":
+        envelope = self.store.get_record_envelope(evidence_id)
+        if not envelope or envelope.get("record_type") != "evidence":
+            return False
+        raw = envelope["payload"]
+        if (
+            raw.get("evidence_id") != evidence_id
+            or raw.get("mission_id") != envelope.get("mission_id")
+            or raw.get("verification_status") != "verified"
+        ):
             return False
         content_digest = hashlib.sha256(
             str(raw.get("content", "")).encode("utf-8")
@@ -161,12 +207,11 @@ class EvidenceStore:
 
     def verify_all(self, mission_id: str | None = None) -> dict[str, Any]:
         artifacts = self.list(mission_id)
-        valid = sum(
-            1
-            for item in artifacts
-            if hashlib.sha256(str(item.get("content", "")).encode("utf-8")).hexdigest()
-            == item.get("sha256")
-        )
+        valid = 0
+        for item in artifacts:
+            evidence_id = item.get("evidence_id")
+            if evidence_id and self.is_preverified_and_integrity_bound(evidence_id):
+                valid += 1
         return {
             "total": len(artifacts),
             "valid": valid,
