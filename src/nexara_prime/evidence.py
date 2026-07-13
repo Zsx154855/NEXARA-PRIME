@@ -14,6 +14,28 @@ class EvidenceStore:
         self.store = store
         self.events = events
 
+    @staticmethod
+    def _envelope_sha256(payload: dict[str, Any]) -> str:
+        envelope = {
+            "evidence_id": payload.get("evidence_id"),
+            "mission_id": payload.get("mission_id"),
+            "kind": payload.get("kind"),
+            "sha256": payload.get("sha256"),
+            "task_id": payload.get("task_id"),
+            "tool_invocation_id": payload.get("tool_invocation_id"),
+            "actor": payload.get("actor"),
+            "source": payload.get("source"),
+            "source_event_id": payload.get("source_event_id"),
+            "verification_status": payload.get("verification_status"),
+        }
+        encoded = json.dumps(
+            envelope,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
     def add(
         self,
         mission_id: str,
@@ -54,12 +76,25 @@ class EvidenceStore:
             idempotency_key=idempotency_key,
             source_event_id=source_event_id,
         )
-        payload = artifact.model_dump(mode="json")
-        if idempotency_key:
-            payload["idempotency_key"] = idempotency_key
-        self.store.save_record(artifact.evidence_id, "evidence", payload, artifact.created_at, mission_id)
-        event = self.events.publish("evidence.created", mission_id, "mission", "evidence_store", trace_id, {"evidence_id": artifact.evidence_id, "kind": kind}, idempotency_key=idempotency_key)
+        event = self.events.publish(
+            "evidence.created",
+            mission_id,
+            "mission",
+            "evidence_store",
+            trace_id,
+            {"evidence_id": artifact.evidence_id, "kind": kind},
+            idempotency_key=idempotency_key,
+        )
         artifact.source_event_id = artifact.source_event_id or event.event_id
+        payload = artifact.model_dump(mode="json")
+        payload["envelope_sha256"] = self._envelope_sha256(payload)
+        self.store.save_record(
+            artifact.evidence_id,
+            "evidence",
+            payload,
+            artifact.created_at,
+            mission_id,
+        )
         return artifact
 
     def verify(self, evidence_id: str) -> bool:
@@ -69,15 +104,51 @@ class EvidenceStore:
         digest = hashlib.sha256(str(raw.get("content", "")).encode("utf-8")).hexdigest()
         verified = digest == raw.get("sha256")
         raw["verification_status"] = "verified" if verified else "corrupt"
-        self.store.save_record(evidence_id, "evidence", raw, raw.get("created_at", ""), raw.get("mission_id"))
+        raw["envelope_sha256"] = self._envelope_sha256(raw)
+        self.store.save_record(
+            evidence_id,
+            "evidence",
+            raw,
+            raw.get("created_at", ""),
+            raw.get("mission_id"),
+        )
         return verified
+
+    def is_preverified_and_integrity_bound(self, evidence_id: str) -> bool:
+        raw = self.store.get_record(evidence_id)
+        if not raw or raw.get("verification_status") != "verified":
+            return False
+        content_digest = hashlib.sha256(
+            str(raw.get("content", "")).encode("utf-8")
+        ).hexdigest()
+        if content_digest != raw.get("sha256"):
+            return False
+        envelope_digest = raw.get("envelope_sha256")
+        return bool(envelope_digest) and envelope_digest == self._envelope_sha256(raw)
 
     def verify_all(self, mission_id: str | None = None) -> dict[str, Any]:
         artifacts = self.list(mission_id)
-        valid = sum(1 for item in artifacts if hashlib.sha256(str(item.get("content", "")).encode("utf-8")).hexdigest() == item.get("sha256"))
-        return {"total": len(artifacts), "valid": valid, "invalid": len(artifacts) - valid, "coverage": (valid / len(artifacts)) if artifacts else 0.0}
+        valid = sum(
+            1
+            for item in artifacts
+            if hashlib.sha256(str(item.get("content", "")).encode("utf-8")).hexdigest()
+            == item.get("sha256")
+        )
+        return {
+            "total": len(artifacts),
+            "valid": valid,
+            "invalid": len(artifacts) - valid,
+            "coverage": (valid / len(artifacts)) if artifacts else 0.0,
+        }
 
-    def state_change(self, mission_id: str, from_state: str, to_state: str, trace_id: str, event_id: str | None = None) -> EvidenceArtifact:
+    def state_change(
+        self,
+        mission_id: str,
+        from_state: str,
+        to_state: str,
+        trace_id: str,
+        event_id: str | None = None,
+    ) -> EvidenceArtifact:
         return self.add(
             mission_id,
             "state_transition",
