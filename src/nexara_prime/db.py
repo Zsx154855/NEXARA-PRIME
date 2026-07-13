@@ -106,7 +106,8 @@ class SQLiteStore:
             record_columns = {
                 row[1] for row in self._conn.execute("PRAGMA table_info(records)").fetchall()
             }
-            if "integrity_sha256" not in record_columns:
+            integrity_column_preexisted = "integrity_sha256" in record_columns
+            if not integrity_column_preexisted:
                 self._conn.execute("ALTER TABLE records ADD COLUMN integrity_sha256 TEXT")
             legacy_rows = self._conn.execute(
                 "SELECT record_id, record_type, mission_id, payload, created_at, "
@@ -114,6 +115,8 @@ class SQLiteStore:
             ).fetchall()
             for row in legacy_rows:
                 payload = json.loads(row["payload"])
+                if integrity_column_preexisted and not row["integrity_sha256"]:
+                    continue
                 payload_changed = False
                 if row["record_type"] == "evidence" and not payload.get("envelope_sha256"):
                     if row["integrity_sha256"]:
@@ -460,6 +463,40 @@ class SQLiteStore:
                 raise ValueError(f"record_integrity_invalid:{record_id}")
             envelopes.append(envelope)
         return envelopes
+
+    def audit_record_envelopes(
+        self, record_type: str, mission_id: str | None = None
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        """Enumerate valid and corrupt records without trusting mission metadata.
+
+        Mission-scoped audits include rows selected by either the stored mission
+        column or the payload mission, so moving only one side cannot hide a
+        damaged record from completion checks.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT record_id, mission_id, payload FROM records "
+                "WHERE record_type=? ORDER BY created_at ASC",
+                (record_type,),
+            ).fetchall()
+        valid: list[dict[str, Any]] = []
+        invalid: list[str] = []
+        for row in rows:
+            try:
+                payload = json.loads(row["payload"])
+            except (TypeError, ValueError):
+                payload = {}
+            if mission_id is not None and (
+                row["mission_id"] != mission_id
+                and payload.get("mission_id") != mission_id
+            ):
+                continue
+            envelope = self.get_record_envelope(row["record_id"])
+            if envelope is None:
+                invalid.append(str(row["record_id"]))
+            else:
+                valid.append(envelope)
+        return valid, invalid
 
     def save_event(self, event: dict[str, Any]) -> dict[str, Any]:
         with self._lock, self._conn:

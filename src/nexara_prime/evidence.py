@@ -235,17 +235,20 @@ class EvidenceStore:
         return bool(envelope_digest) and envelope_digest == self._envelope_sha256(raw)
 
     def verify_all(self, mission_id: str | None = None) -> dict[str, Any]:
-        artifacts = self.list(mission_id)
+        envelopes, corrupt_ids = self.store.audit_record_envelopes(
+            "evidence", mission_id
+        )
         valid = 0
-        for item in artifacts:
-            evidence_id = item.get("evidence_id")
+        for envelope in envelopes:
+            evidence_id = envelope.get("record_id")
             if evidence_id and self.is_preverified_and_integrity_bound(evidence_id):
                 valid += 1
+        total = len(envelopes) + len(corrupt_ids)
         return {
-            "total": len(artifacts),
+            "total": total,
             "valid": valid,
-            "invalid": len(artifacts) - valid,
-            "coverage": (valid / len(artifacts)) if artifacts else 0.0,
+            "invalid": total - valid,
+            "coverage": (valid / total) if total else 0.0,
         }
 
     def state_change(

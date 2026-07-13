@@ -38,6 +38,13 @@ class EventBus:
         persisted = Event.model_validate(
             self.store.save_event(event.model_dump(mode="json"))
         )
+        if (
+            persisted.event_type != event.event_type
+            or persisted.aggregate_id != event.aggregate_id
+            or persisted.aggregate_type != event.aggregate_type
+            or persisted.actor != event.actor
+        ):
+            raise ValueError("event_idempotency_identity_conflict")
         if persisted.event_id == event.event_id:
             for subscriber in list(self._subscribers):
                 try:

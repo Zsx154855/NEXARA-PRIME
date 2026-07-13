@@ -144,6 +144,45 @@ def test_schema_upgrade_does_not_reseal_corrupt_legacy_evidence(tmp_path: Path) 
     assert "envelope_sha256" not in store.get_record("evidence-corrupt")
 
 
+@pytest.mark.parametrize("integrity", [None, ""])
+def test_schema_upgrade_treats_present_null_hash_as_corrupt(
+    tmp_path: Path, integrity: str | None
+) -> None:
+    path = tmp_path / "null-hash.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE records(record_id TEXT PRIMARY KEY, record_type TEXT NOT NULL, "
+        "mission_id TEXT, payload TEXT NOT NULL, created_at TEXT NOT NULL, "
+        "integrity_sha256 TEXT)"
+    )
+    payload = {
+        "evidence_id": "evidence-null-hash",
+        "mission_id": "mission-1",
+        "kind": "verification",
+        "content": "content",
+        "sha256": hashlib.sha256(b"content").hexdigest(),
+        "verification_status": "verified",
+    }
+    connection.execute(
+        "INSERT INTO records VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            "evidence-null-hash",
+            "evidence",
+            "mission-1",
+            json.dumps(payload),
+            "2026-01-01T00:00:00+00:00",
+            integrity,
+        ),
+    )
+    connection.commit()
+    connection.close()
+
+    store = SQLiteStore(path)
+
+    assert store.get_record_envelope("evidence-null-hash") is None
+    assert "envelope_sha256" not in store.get_record("evidence-null-hash")
+
+
 def test_verify_refuses_to_reseal_out_of_band_evidence_tampering(tmp_path: Path) -> None:
     store, _, evidence = evidence_runtime(tmp_path / "evidence.sqlite3")
     artifact = evidence.add(
@@ -267,6 +306,62 @@ def test_event_idempotency_keeps_first_persisted_event(tmp_path: Path) -> None:
     assert replay.event_id == original.event_id
     assert replay.payload == original.payload
     assert store.count("events") == 1
+
+
+def test_event_idempotency_rejects_cross_producer_collision(tmp_path: Path) -> None:
+    store = SQLiteStore(tmp_path / "event-collision.sqlite3")
+    events = EventBus(store)
+    events.publish(
+        "approval.requested",
+        "mission-1",
+        "mission",
+        "governance",
+        "trace-1",
+        {},
+        idempotency_key="shared-key",
+    )
+
+    with pytest.raises(ValueError, match="event_idempotency_identity_conflict"):
+        events.publish(
+            "evidence.created",
+            "mission-1",
+            "mission",
+            "evidence_store",
+            "trace-2",
+            {},
+            idempotency_key="shared-key",
+        )
+
+
+def test_verify_all_reports_corrupt_and_moved_evidence_rows(tmp_path: Path) -> None:
+    store, _, evidence = evidence_runtime(tmp_path / "verify-all.sqlite3")
+    valid = evidence.add(
+        "mission-1",
+        "verification",
+        "valid",
+        "valid",
+        "trace",
+        verification_status="verified",
+    )
+    corrupt = evidence.add(
+        "mission-1",
+        "verification",
+        "corrupt",
+        "corrupt",
+        "trace",
+        verification_status="verified",
+    )
+    with store._lock, store._conn:
+        payload = store.get_record(corrupt.evidence_id)
+        payload["evidence_id"] = valid.evidence_id
+        store._conn.execute(
+            "UPDATE records SET mission_id=?, payload=? WHERE record_id=?",
+            ("mission-moved", json.dumps(payload), corrupt.evidence_id),
+        )
+
+    result = evidence.verify_all("mission-1")
+
+    assert result == {"total": 2, "valid": 1, "invalid": 1, "coverage": 0.5}
 
 
 def test_concurrent_approval_decisions_have_one_winner(tmp_path: Path) -> None:
