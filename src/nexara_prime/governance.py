@@ -48,6 +48,7 @@ class ApprovalEngine:
         estimated_cost: float = 0.0,
         approval_scope: str = "single_action",
         executor_id: str | None = None,
+        proposal_sha256: str | None = None,
         expires_in_seconds: int = 900,
     ) -> ApprovalRequest:
         approval = ApprovalRequest(
@@ -55,6 +56,7 @@ class ApprovalEngine:
             reason=rationale, impact=impact, affected_resources=affected_resources or [],
             external_effect=external_effect, reversible=reversible, rollback_plan=rollback_plan or {},
             estimated_cost=estimated_cost, approval_scope=approval_scope, executor_id=executor_id,
+            proposal_sha256=proposal_sha256,
             expires_at=(datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)).isoformat(),
         )
         self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, mission_id)

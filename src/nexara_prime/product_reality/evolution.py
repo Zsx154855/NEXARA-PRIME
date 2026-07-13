@@ -189,6 +189,11 @@ class EvolutionPromotionGate:
         except (TypeError, ValueError):
             return ["stored rollback checkpoint is invalid"]
         errors: list[str] = []
+        if (
+            envelope.get("record_id") != proposal.rollback_checkpoint_id
+            or checkpoint.checkpoint_id != proposal.rollback_checkpoint_id
+        ):
+            errors.append("stored rollback checkpoint identity mismatch")
         if envelope.get("mission_id") != proposal.mission_id:
             errors.append("stored rollback checkpoint mission mismatch")
         if checkpoint.mission_id != proposal.mission_id:
@@ -251,6 +256,8 @@ class EvolutionPromotionGate:
             return None, [f"stored {purpose} payload mission mismatch"]
         if approval.action != expected_action:
             return None, [f"stored {purpose} proposal scope mismatch"]
+        if approval.proposal_sha256 != proposal.content_sha256:
+            return None, [f"stored {purpose} proposal content mismatch"]
         if approval.risk_level != expected_risk:
             return None, [f"stored {purpose} risk mismatch"]
         if approval.approval_scope != "single_action":

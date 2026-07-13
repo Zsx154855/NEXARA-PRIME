@@ -46,6 +46,10 @@ Causal Evaluation + Controlled Evolution
 - Every verified promotion has auditable evidence.
 - Consequential evolution is bound to real stored approvals.
 - R2–R4 evolution has an evidenced recovery path.
+- Rollback checkpoint record IDs and payload IDs must match exactly.
+- Consequential approvals bind the immutable SHA-256 of the complete proposal content.
+- Evidence replay binds its original source event and verification status.
+- Schema upgrades rebuild both outer record integrity and legacy Evidence envelopes.
 - Missing and null remain semantically distinct.
 - Provider identity is not product identity.
 - No private chain-of-thought is exposed.

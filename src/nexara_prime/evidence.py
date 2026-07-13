@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from typing import Any
 
@@ -27,9 +28,20 @@ class EvidenceStore:
             "source": payload.get("source"),
             "source_event_id": payload.get("source_event_id"),
             "verification_status": payload.get("verification_status"),
+            "request_sha256": payload.get("request_sha256"),
         }
         encoded = json.dumps(
             envelope,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _request_sha256(request: dict[str, Any]) -> str:
+        encoded = json.dumps(
+            request,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -69,7 +81,21 @@ class EvidenceStore:
             or stored.get("envelope_sha256") != self._envelope_sha256(stored)
         ):
             raise ValueError("evidence_idempotency_record_invalid")
-        if any(stored.get(key) != value for key, value in expected_request.items()):
+        request_sha256 = stored.get("request_sha256")
+        if request_sha256:
+            request_matches = hmac.compare_digest(
+                str(request_sha256), self._request_sha256(expected_request)
+            )
+        else:
+            request_matches = all(
+                stored.get(key) == value
+                for key, value in expected_request.items()
+                if key not in {"source_event_id"}
+            ) and (
+                expected_request.get("source_event_id") is None
+                or stored.get("source_event_id") == expected_request.get("source_event_id")
+            )
+        if not request_matches:
             raise ValueError("evidence_idempotency_conflict")
         return EvidenceArtifact.model_validate(self._artifact_payload(stored))
 
@@ -103,6 +129,8 @@ class EvidenceStore:
             "source": source,
             "parent_evidence": parent_evidence or [],
             "idempotency_key": idempotency_key,
+            "source_event_id": source_event_id,
+            "verification_status": verification_status,
         }
         if idempotency_key:
             existing = self.store.find_record("evidence", "idempotency_key", idempotency_key)
@@ -144,6 +172,7 @@ class EvidenceStore:
         )
         artifact.source_event_id = artifact.source_event_id or event.event_id
         payload = artifact.model_dump(mode="json")
+        payload["request_sha256"] = self._request_sha256(expected_request)
         payload["envelope_sha256"] = self._envelope_sha256(payload)
         if idempotency_key:
             self.store.save_record_if_absent(

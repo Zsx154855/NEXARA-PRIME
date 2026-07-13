@@ -130,6 +130,7 @@ def create_approved_record(
         trace_id="trace_approval_v2",
         approval_scope="single_action",
         executor_id=actor_id,
+        proposal_sha256=proposal.content_sha256,
         reversible=True,
         rollback_plan={"checkpoint": proposal.rollback_checkpoint_id},
     )

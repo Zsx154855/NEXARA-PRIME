@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
@@ -48,6 +49,56 @@ def test_legacy_records_receive_integrity_during_schema_upgrade(tmp_path: Path) 
     envelope = store.get_record_envelope("legacy-1")
     assert envelope is not None
     assert envelope["payload"] == payload
+
+
+def test_legacy_evidence_receives_inner_envelope_during_schema_upgrade(tmp_path: Path) -> None:
+    path = tmp_path / "legacy-evidence.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE records(record_id TEXT PRIMARY KEY, record_type TEXT NOT NULL, "
+        "mission_id TEXT, payload TEXT NOT NULL, created_at TEXT NOT NULL, "
+        "integrity_sha256 TEXT)"
+    )
+    content = "legacy proof"
+    payload = {
+        "evidence_id": "evidence-legacy",
+        "mission_id": "mission-1",
+        "kind": "verification",
+        "title": "legacy",
+        "content": content,
+        "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        "task_id": None,
+        "tool_invocation_id": None,
+        "actor": "system",
+        "timestamp": "2026-01-01T00:00:00+00:00",
+        "mime_type": "text/plain",
+        "source": "runtime",
+        "verification_status": "verified",
+        "parent_evidence": [],
+        "idempotency_key": None,
+        "source_event_id": None,
+        "created_at": "2026-01-01T00:00:00+00:00",
+    }
+    connection.execute(
+        "INSERT INTO records VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            "evidence-legacy",
+            "evidence",
+            "mission-1",
+            json.dumps(payload),
+            payload["created_at"],
+            "old-outer-hash",
+        ),
+    )
+    connection.commit()
+    connection.close()
+
+    store, events, evidence = evidence_runtime(path)
+
+    envelope = store.get_record_envelope("evidence-legacy")
+    assert envelope is not None
+    assert envelope["payload"]["envelope_sha256"]
+    assert evidence.is_preverified_and_integrity_bound("evidence-legacy")
 
 
 def test_verify_refuses_to_reseal_out_of_band_evidence_tampering(tmp_path: Path) -> None:
@@ -116,6 +167,37 @@ def test_concurrent_idempotent_evidence_creates_one_record_and_event(tmp_path: P
     assert results[0] == results[1]
     assert runtimes[0][0].count("records") == 1
     assert runtimes[0][0].count("events") == 1
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"source_event_id": "different-source"},
+        {"verification_status": "verified"},
+    ],
+)
+def test_evidence_replay_binds_source_event_and_status(
+    tmp_path: Path, override: dict[str, str]
+) -> None:
+    _, _, evidence = evidence_runtime(tmp_path / "replay.sqlite3")
+    evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        "content",
+        "trace",
+        idempotency_key="request-1",
+    )
+    with pytest.raises(ValueError, match="evidence_idempotency_conflict"):
+        evidence.add(
+            "mission-1",
+            "verification",
+            "proof",
+            "content",
+            "trace",
+            idempotency_key="request-1",
+            **override,
+        )
 
 
 def test_event_idempotency_keeps_first_persisted_event(tmp_path: Path) -> None:
@@ -273,6 +355,7 @@ def test_gate_rejects_future_approval_decision_time(tmp_path: Path) -> None:
         [],
         "trace",
         executor_id="executor-1",
+        proposal_sha256=proposal.content_sha256,
     )
     approvals.decide(
         approval.approval_id, True, "human-1", "approve", "trace-decision"
@@ -301,3 +384,118 @@ def test_gate_rejects_future_approval_decision_time(tmp_path: Path) -> None:
     )
     assert not decision.allowed
     assert "stored promotion approval has invalid decision time" in decision.required_actions
+
+
+def test_gate_rejects_checkpoint_payload_copied_under_alias(tmp_path: Path) -> None:
+    store, events, evidence = evidence_runtime(tmp_path / "checkpoint-alias.sqlite3")
+    approvals = ApprovalEngine(store, events)
+    twin = ProductTwinEngine(store)
+    proof = evidence.add(
+        "mission-1", "verification", "proof", "proof", "trace", verification_status="verified"
+    )
+    rollback = evidence.add(
+        "mission-1", "verification", "rollback", "rollback", "trace", verification_status="verified"
+    )
+    checkpoint = twin.capture(
+        mission_id="mission-1",
+        expected_state={"version": 1},
+        observed_state={"version": 1},
+    )
+    alias_id = "checkpoint-alias"
+    store.save_record(
+        alias_id,
+        "product_twin_checkpoint",
+        checkpoint.model_dump(mode="json"),
+        checkpoint.created_at,
+        checkpoint.mission_id,
+    )
+    proposal = EvolutionProposal(
+        mission_id="mission-1",
+        title="change",
+        observed_problem={},
+        proposed_changes=["change"],
+        risk_level=RiskLevel.R2,
+        evidence_refs=[proof.evidence_id],
+        rollback_plan=["restore"],
+        rollback_checkpoint_id=alias_id,
+        rollback_evidence_refs=[rollback.evidence_id],
+    )
+    gate = EvolutionPromotionGate(
+        approvals, evidence, authorized_human_principals={"human-1"}
+    )
+
+    decision = gate.assess(
+        proposal,
+        EvolutionValidation(
+            simulation_passed=True,
+            verification_passed=True,
+            accessibility_passed=True,
+            governance_passed=True,
+        ),
+    )
+
+    assert not decision.allowed
+    assert "stored rollback checkpoint identity mismatch" in decision.required_actions
+
+
+def test_gate_binds_approval_to_immutable_proposal_content(tmp_path: Path) -> None:
+    store, events, evidence = evidence_runtime(tmp_path / "proposal-binding.sqlite3")
+    approvals = ApprovalEngine(store, events)
+    twin = ProductTwinEngine(store)
+    proof = evidence.add(
+        "mission-1", "verification", "proof", "proof", "trace", verification_status="verified"
+    )
+    rollback = evidence.add(
+        "mission-1", "verification", "rollback", "rollback", "trace", verification_status="verified"
+    )
+    checkpoint = twin.capture(
+        mission_id="mission-1",
+        expected_state={"version": 1},
+        observed_state={"version": 1},
+    )
+    original = EvolutionProposal(
+        proposal_id="proposal-stable-id",
+        mission_id="mission-1",
+        title="benign change",
+        observed_problem={},
+        proposed_changes=["change label"],
+        risk_level=RiskLevel.R3,
+        evidence_refs=[proof.evidence_id],
+        rollback_plan=["restore"],
+        rollback_checkpoint_id=checkpoint.checkpoint_id,
+        rollback_evidence_refs=[rollback.evidence_id],
+    )
+    approval = approvals.request(
+        original.mission_id,
+        original.promotion_action,
+        original.risk_level,
+        "approve exact proposal",
+        [],
+        "trace",
+        executor_id="executor-1",
+        proposal_sha256=original.content_sha256,
+    )
+    approvals.decide(
+        approval.approval_id, True, "human-1", "approve", "trace-decision"
+    )
+    substituted = original.model_copy(
+        update={"title": "destructive replacement", "proposed_changes": ["replace system"]}
+    )
+    gate = EvolutionPromotionGate(
+        approvals, evidence, authorized_human_principals={"human-1"}
+    )
+
+    decision = gate.assess(
+        substituted,
+        EvolutionValidation(
+            simulation_passed=True,
+            verification_passed=True,
+            accessibility_passed=True,
+            governance_passed=True,
+            approval_id=approval.approval_id,
+            actor_id="executor-1",
+        ),
+    )
+
+    assert not decision.allowed
+    assert "stored promotion approval proposal content mismatch" in decision.required_actions

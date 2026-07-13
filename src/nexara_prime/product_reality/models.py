@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from enum import Enum
 from typing import Any
 
@@ -172,6 +174,20 @@ class EvolutionProposal(NModel):
     @property
     def release_action(self) -> str:
         return f"product_reality.release:{self.proposal_id}"
+
+    @property
+    def content_sha256(self) -> str:
+        payload = self.model_dump(
+            mode="json",
+            exclude={"created_at"},
+        )
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
     @model_validator(mode="after")
     def require_recovery_path_for_managed_risk(self) -> "EvolutionProposal":

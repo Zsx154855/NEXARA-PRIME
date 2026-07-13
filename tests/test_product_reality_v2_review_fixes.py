@@ -90,6 +90,7 @@ def validation_for(
         "trace-approval",
         executor_id=executor_id,
         approval_scope="single_action",
+        proposal_sha256=item.content_sha256,
     )
     approvals.decide(
         approval.approval_id,

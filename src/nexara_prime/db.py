@@ -52,6 +52,29 @@ class SQLiteStore:
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
+    @staticmethod
+    def _evidence_envelope_integrity(payload: dict[str, Any]) -> str:
+        envelope = {
+            "evidence_id": payload.get("evidence_id"),
+            "mission_id": payload.get("mission_id"),
+            "kind": payload.get("kind"),
+            "sha256": payload.get("sha256"),
+            "task_id": payload.get("task_id"),
+            "tool_invocation_id": payload.get("tool_invocation_id"),
+            "actor": payload.get("actor"),
+            "source": payload.get("source"),
+            "source_event_id": payload.get("source_event_id"),
+            "verification_status": payload.get("verification_status"),
+            "request_sha256": payload.get("request_sha256"),
+        }
+        encoded = json.dumps(
+            envelope,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
     def _init_schema(self) -> None:
         with self._lock, self._conn:
             self._conn.executescript(
@@ -86,11 +109,17 @@ class SQLiteStore:
             if "integrity_sha256" not in record_columns:
                 self._conn.execute("ALTER TABLE records ADD COLUMN integrity_sha256 TEXT")
             legacy_rows = self._conn.execute(
-                "SELECT record_id, record_type, mission_id, payload, created_at "
-                "FROM records WHERE integrity_sha256 IS NULL OR integrity_sha256=''"
+                "SELECT record_id, record_type, mission_id, payload, created_at, "
+                "integrity_sha256 FROM records"
             ).fetchall()
             for row in legacy_rows:
                 payload = json.loads(row["payload"])
+                payload_changed = False
+                if row["record_type"] == "evidence" and not payload.get("envelope_sha256"):
+                    payload["envelope_sha256"] = self._evidence_envelope_integrity(payload)
+                    payload_changed = True
+                if not payload_changed and row["integrity_sha256"]:
+                    continue
                 integrity = self._record_integrity(
                     row["record_id"],
                     row["record_type"],
@@ -99,8 +128,8 @@ class SQLiteStore:
                     payload,
                 )
                 self._conn.execute(
-                    "UPDATE records SET integrity_sha256=? WHERE record_id=?",
-                    (integrity, row["record_id"]),
+                    "UPDATE records SET payload=?, integrity_sha256=? WHERE record_id=?",
+                    (self._canonical_payload(payload), integrity, row["record_id"]),
                 )
             event_columns = {
                 row[1] for row in self._conn.execute("PRAGMA table_info(events)").fetchall()
