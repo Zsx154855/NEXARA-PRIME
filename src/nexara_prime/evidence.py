@@ -139,6 +139,14 @@ class EvidenceStore:
             "source_event_id": source_event_id,
             "verification_status": verification_status,
         }
+        if idempotency_key:
+            legacy = self.store.find_record_envelope(
+                "evidence", "idempotency_key", idempotency_key
+            )
+            if legacy is not None:
+                return self._replay_artifact(
+                    str(legacy["record_id"]), expected_request
+                )
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
         artifact = EvidenceArtifact(
             evidence_id=(
@@ -161,32 +169,26 @@ class EvidenceStore:
             idempotency_key=idempotency_key,
             source_event_id=source_event_id,
         )
-        if idempotency_key:
-            event = Event(
-                event_id=self._idempotent_event_id(idempotency_key),
-                event_type="evidence.created",
-                aggregate_id=mission_id,
-                aggregate_type="mission",
-                actor="evidence_store",
-                trace_id=trace_id,
-                payload={"evidence_id": artifact.evidence_id, "kind": kind},
-                idempotency_key=idempotency_key,
-            )
-        else:
-            event = self.events.publish(
-                "evidence.created",
-                mission_id,
-                "mission",
-                "evidence_store",
-                trace_id,
-                {"evidence_id": artifact.evidence_id, "kind": kind},
-            )
+        event = Event(
+            event_id=(
+                self._idempotent_event_id(idempotency_key)
+                if idempotency_key
+                else new_id("evt")
+            ),
+            event_type="evidence.created",
+            aggregate_id=mission_id,
+            aggregate_type="mission",
+            actor="evidence_store",
+            trace_id=trace_id,
+            payload={"evidence_id": artifact.evidence_id, "kind": kind},
+            idempotency_key=idempotency_key,
+        )
         artifact.source_event_id = artifact.source_event_id or event.event_id
         payload = artifact.model_dump(mode="json")
         payload["request_sha256"] = self._request_sha256(expected_request)
         payload["envelope_sha256"] = self._envelope_sha256(payload)
-        if idempotency_key:
-            _, event_inserted, persisted_event = self.store.save_record_and_event_if_absent(
+        record_inserted, event_inserted, persisted_event = (
+            self.store.save_record_and_event_if_absent(
                 artifact.evidence_id,
                 "evidence",
                 payload,
@@ -194,12 +196,13 @@ class EvidenceStore:
                 event.model_dump(mode="json"),
                 mission_id,
             )
-            if event_inserted and persisted_event is not None:
-                self.events.notify_persisted(Event.model_validate(persisted_event))
-            return self._replay_artifact(artifact.evidence_id, expected_request)
-        self.store.save_record(
-            artifact.evidence_id, "evidence", payload, artifact.created_at, mission_id
         )
+        if event_inserted and persisted_event is not None:
+            self.events.notify_persisted(Event.model_validate(persisted_event))
+        if idempotency_key:
+            return self._replay_artifact(artifact.evidence_id, expected_request)
+        if not record_inserted:
+            raise RuntimeError("evidence_record_conflict")
         return artifact
 
     def verify(self, evidence_id: str) -> bool:

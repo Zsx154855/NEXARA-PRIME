@@ -122,6 +122,11 @@ class SQLiteStore:
                     # the original bytes and missing/invalid integrity marker
                     # so the audit path can report the row for remediation.
                     continue
+                if not isinstance(payload, dict):
+                    # Syntactically valid JSON can still violate the record
+                    # contract (for example null, a scalar, or an array).
+                    # Preserve it unchanged as corrupt for the audit path.
+                    continue
                 if integrity_column_preexisted and not row["integrity_sha256"]:
                     continue
                 payload_changed = False
@@ -229,6 +234,8 @@ class SQLiteStore:
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict):
             return None
         expected = self._record_integrity(
             row["record_id"],
@@ -501,6 +508,10 @@ class SQLiteStore:
                 if mission_id is None or row["mission_id"] == mission_id:
                     invalid.append(str(row["record_id"]))
                 continue
+            if not isinstance(payload, dict):
+                if mission_id is None or row["mission_id"] == mission_id:
+                    invalid.append(str(row["record_id"]))
+                continue
             if mission_id is not None and (
                 row["mission_id"] != mission_id
                 and payload.get("mission_id") != mission_id
@@ -522,17 +533,15 @@ class SQLiteStore:
         event: dict[str, Any],
         mission_id: str | None = None,
     ) -> tuple[bool, bool, dict[str, Any] | None]:
-        """Atomically claim an immutable record and its idempotent event.
+        """Atomically claim an immutable record and its creation event.
 
-        The record is the idempotency winner. A losing caller cannot publish
-        an event for content that did not win the record claim. If a matching
-        event from an interrupted legacy attempt already exists, it may be
-        reused; a conflicting event aborts the transaction without creating a
-        record.
+        For idempotent calls, the record is the winner and a losing caller
+        cannot publish an event for content that did not win the claim. A
+        matching event from an interrupted legacy attempt may be reused. For
+        non-idempotent calls, the fresh record and event still become visible
+        together. Any conflict aborts without leaving an orphan row.
         """
         idempotency_key = event.get("idempotency_key")
-        if not idempotency_key:
-            raise ValueError("atomic_event_idempotency_key_required")
 
         canonical_record = self._canonical_payload(payload)
         record_integrity = self._record_integrity(
@@ -556,10 +565,16 @@ class SQLiteStore:
                     self._conn.rollback()
                     return False, False, None
 
-                existing_event = self._conn.execute(
-                    "SELECT * FROM events WHERE idempotency_key=?",
-                    (idempotency_key,),
-                ).fetchone()
+                if idempotency_key:
+                    existing_event = self._conn.execute(
+                        "SELECT * FROM events WHERE idempotency_key=?",
+                        (idempotency_key,),
+                    ).fetchone()
+                else:
+                    existing_event = self._conn.execute(
+                        "SELECT * FROM events WHERE event_id=?",
+                        (event["event_id"],),
+                    ).fetchone()
                 event_inserted = existing_event is None
                 if existing_event is not None:
                     existing_payload = json.loads(existing_event["payload"])
@@ -569,6 +584,7 @@ class SQLiteStore:
                         and existing_event["aggregate_id"] == event["aggregate_id"]
                         and existing_event["aggregate_type"] == event["aggregate_type"]
                         and existing_event["actor"] == event["actor"]
+                        and existing_event["idempotency_key"] == idempotency_key
                         and existing_payload == event.get("payload", {})
                     )
                     if not identity_matches:
@@ -604,10 +620,16 @@ class SQLiteStore:
                         record_integrity,
                     ),
                 )
-                persisted_event = self._conn.execute(
-                    "SELECT * FROM events WHERE idempotency_key=?",
-                    (idempotency_key,),
-                ).fetchone()
+                if idempotency_key:
+                    persisted_event = self._conn.execute(
+                        "SELECT * FROM events WHERE idempotency_key=?",
+                        (idempotency_key,),
+                    ).fetchone()
+                else:
+                    persisted_event = self._conn.execute(
+                        "SELECT * FROM events WHERE event_id=?",
+                        (event["event_id"],),
+                    ).fetchone()
                 self._conn.commit()
             except Exception:
                 self._conn.rollback()
@@ -618,6 +640,25 @@ class SQLiteStore:
         persisted = dict(persisted_event)
         persisted["payload"] = json.loads(persisted["payload"])
         return True, event_inserted, persisted
+
+    def find_record_envelope(
+        self, record_type: str, field: str, value: Any
+    ) -> dict[str, Any] | None:
+        """Find the first integrity-valid record matching a payload field."""
+        with self._lock:
+            record_ids = [
+                str(row["record_id"])
+                for row in self._conn.execute(
+                    "SELECT record_id FROM records WHERE record_type=? "
+                    "ORDER BY created_at ASC",
+                    (record_type,),
+                ).fetchall()
+            ]
+        for record_id in record_ids:
+            envelope = self.get_record_envelope(record_id)
+            if envelope and envelope["payload"].get(field) == value:
+                return envelope
+        return None
 
     def save_event(self, event: dict[str, Any]) -> dict[str, Any]:
         with self._lock, self._conn:

@@ -14,7 +14,7 @@ from nexara_prime.db import SQLiteStore
 from nexara_prime.evidence import EvidenceStore
 from nexara_prime.events import EventBus
 from nexara_prime.governance import ApprovalEngine
-from nexara_prime.models import ApprovalStatus, RiskLevel
+from nexara_prime.models import ApprovalStatus, EvidenceArtifact, RiskLevel
 from nexara_prime.product_reality import (
     EvolutionPromotionGate,
     EvolutionProposal,
@@ -227,6 +227,40 @@ def test_schema_upgrade_preserves_malformed_row_and_audit_counts_it(
     }
 
 
+@pytest.mark.parametrize("non_object", ["null", "[]", '"text"', "1", "true"])
+def test_schema_upgrade_preserves_non_object_json_as_corrupt(
+    tmp_path: Path, non_object: str
+) -> None:
+    path = tmp_path / "non-object-legacy.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE records(record_id TEXT PRIMARY KEY, record_type TEXT NOT NULL, "
+        "mission_id TEXT, payload TEXT NOT NULL, created_at TEXT NOT NULL)"
+    )
+    connection.execute(
+        "INSERT INTO records VALUES (?, ?, ?, ?, ?)",
+        (
+            "evidence-non-object",
+            "evidence",
+            "mission-1",
+            non_object,
+            "2026-01-01T00:00:00+00:00",
+        ),
+    )
+    connection.commit()
+    connection.close()
+
+    store, _, evidence = evidence_runtime(path)
+
+    assert store.get_record_envelope("evidence-non-object") is None
+    assert evidence.verify_all("mission-1") == {
+        "total": 1,
+        "valid": 0,
+        "invalid": 1,
+        "coverage": 0.0,
+    }
+
+
 def test_verify_refuses_to_reseal_out_of_band_evidence_tampering(tmp_path: Path) -> None:
     store, _, evidence = evidence_runtime(tmp_path / "evidence.sqlite3")
     artifact = evidence.add(
@@ -293,6 +327,88 @@ def test_concurrent_idempotent_evidence_creates_one_record_and_event(tmp_path: P
     assert results[0] == results[1]
     assert runtimes[0][0].count("records") == 1
     assert runtimes[0][0].count("events") == 1
+
+
+def test_non_idempotent_evidence_notifies_only_after_atomic_commit(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "atomic-evidence.sqlite3"
+    store, events, evidence = evidence_runtime(path)
+    durable_reader = SQLiteStore(path)
+    observed: list[bool] = []
+
+    def subscriber(event) -> None:
+        observed.append(
+            durable_reader.get_record_envelope(
+                str(event.payload["evidence_id"])
+            ) is not None
+        )
+
+    events.subscribe(subscriber)
+    artifact = evidence.add(
+        "mission-1", "verification", "proof", "content", "trace-1"
+    )
+
+    assert observed == [True]
+    assert store.get_record_envelope(artifact.evidence_id) is not None
+    assert store.count("records") == 1
+    assert store.count("events") == 1
+
+
+def test_legacy_random_idempotent_evidence_replays_without_duplication(
+    tmp_path: Path,
+) -> None:
+    store, _, evidence = evidence_runtime(tmp_path / "legacy-replay.sqlite3")
+    content = "legacy content"
+    legacy = EvidenceArtifact(
+        evidence_id="evidence_legacy_random",
+        mission_id="mission-1",
+        kind="verification",
+        title="proof",
+        content=content,
+        sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        idempotency_key="legacy-request",
+        source_event_id="evt_legacy_random",
+    )
+    payload = legacy.model_dump(mode="json")
+    payload["envelope_sha256"] = EvidenceStore._envelope_sha256(payload)
+    store.save_record(
+        legacy.evidence_id,
+        "evidence",
+        payload,
+        legacy.created_at,
+        legacy.mission_id,
+    )
+    store.save_event(
+        {
+            "event_id": "evt_legacy_random",
+            "event_type": "evidence.created",
+            "aggregate_id": "mission-1",
+            "aggregate_type": "mission",
+            "actor": "evidence_store",
+            "trace_id": "legacy-trace",
+            "timestamp": legacy.created_at,
+            "idempotency_key": "legacy-request",
+            "payload": {
+                "evidence_id": legacy.evidence_id,
+                "kind": legacy.kind,
+            },
+        }
+    )
+
+    replay = evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        content,
+        "retry-trace",
+        idempotency_key="legacy-request",
+    )
+
+    assert replay.evidence_id == legacy.evidence_id
+    assert replay.source_event_id == legacy.source_event_id
+    assert store.count("records") == 1
+    assert store.count("events") == 1
 
 
 def test_concurrent_conflicting_evidence_atomically_binds_winning_event(
