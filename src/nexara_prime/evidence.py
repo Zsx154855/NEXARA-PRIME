@@ -142,6 +142,21 @@ class EvidenceStore:
     ) -> bool:
         return self._origin_projection(envelope, payload) is not None
 
+    def _origin_record(
+        self,
+        envelope: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        projection = self._origin_projection(envelope, payload)
+        if projection is None:
+            return None
+        status, source_event_id = projection
+        origin = dict(payload)
+        origin["verification_status"] = status
+        origin["source_event_id"] = source_event_id
+        origin["envelope_sha256"] = self._envelope_sha256(origin)
+        return origin
+
     def _verification_transition_is_valid(
         self,
         evidence_id: str,
@@ -150,15 +165,26 @@ class EvidenceStore:
     ) -> bool:
         if origin_status == "verified":
             return True
+        digest = str(payload.get("sha256"))
+        idempotency_key = f"evidence.verify:{evidence_id}:{digest}"
+        expected_event_id = self._idempotent_event_id(idempotency_key)
         for event in self.store.list_events(evidence_id):
             event_payload = event.get("payload", {})
             if (
-                event.get("event_type") == "evidence.verified"
+                event.get("event_id") == expected_event_id
+                and event.get("event_type") == "evidence.verified"
+                and event.get("aggregate_id") == evidence_id
                 and event.get("aggregate_type") == "evidence"
                 and event.get("actor") == "evidence_store"
+                and event.get("idempotency_key") == idempotency_key
                 and event_payload.get("evidence_id") == evidence_id
-                and event_payload.get("sha256") == payload.get("sha256")
+                and event_payload.get("sha256") == digest
                 and event_payload.get("verification_status") == "verified"
+                and set(event_payload) == {
+                    "evidence_id",
+                    "sha256",
+                    "verification_status",
+                }
             ):
                 return True
         return False
@@ -248,6 +274,9 @@ class EvidenceStore:
             envelope = self.store.get_record_envelope(evidence_id)
             if not envelope:
                 raise ValueError("evidence_idempotency_record_invalid")
+            origin_record = self._origin_record(envelope, envelope["payload"])
+            if origin_record is None:
+                raise ValueError("evidence_idempotency_record_invalid")
             existing_event = self.store.get_event_by_idempotency(
                 artifact.idempotency_key
             )
@@ -269,7 +298,11 @@ class EvidenceStore:
                     and candidate.get("aggregate_id") == artifact.mission_id
                     and candidate.get("aggregate_type") == "mission"
                     and candidate.get("actor") == "evidence_store"
-                    and candidate.get("payload") == expected_payload
+                    and (
+                        candidate.get("payload") == expected_payload
+                        or candidate.get("payload")
+                        == {**expected_payload, "record": origin_record}
+                    )
                     and candidate.get("idempotency_key") in {
                         None,
                         artifact.idempotency_key,
@@ -292,7 +325,11 @@ class EvidenceStore:
                 actor="evidence_store",
                 trace_id=trace_id,
                 timestamp=artifact.created_at,
-                payload={"evidence_id": artifact.evidence_id, "kind": artifact.kind},
+                payload=(
+                    dict(existing_event["payload"])
+                    if existing_event is not None
+                    else {**expected_payload, "record": origin_record}
+                ),
                 idempotency_key=artifact.idempotency_key,
             )
             repaired_payload = dict(envelope["payload"])
@@ -385,19 +422,16 @@ class EvidenceStore:
             idempotency_key=idempotency_key,
             source_event_id=source_event_id,
         )
+        event_key = idempotency_key or f"evidence.create:{artifact.evidence_id}"
         event = Event(
-            event_id=(
-                self._idempotent_event_id(idempotency_key)
-                if idempotency_key
-                else new_id("evt")
-            ),
+            event_id=self._idempotent_event_id(event_key),
             event_type="evidence.created",
             aggregate_id=mission_id,
             aggregate_type="mission",
             actor="evidence_store",
             trace_id=trace_id,
             payload={"evidence_id": artifact.evidence_id, "kind": kind},
-            idempotency_key=idempotency_key,
+            idempotency_key=event_key,
         )
         artifact.source_event_id = artifact.source_event_id or event.event_id
         payload = artifact.model_dump(mode="json")
@@ -405,6 +439,7 @@ class EvidenceStore:
         fingerprint_request["source_event_id"] = artifact.source_event_id
         payload["request_sha256"] = self._request_sha256(fingerprint_request)
         payload["envelope_sha256"] = self._envelope_sha256(payload)
+        event.payload["record"] = dict(payload)
         record_inserted, event_inserted, persisted_event = (
             self.store.save_record_and_event_if_absent(
                 artifact.evidence_id,

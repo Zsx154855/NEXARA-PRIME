@@ -377,7 +377,8 @@ class EvolutionPromotionGate:
                     idempotency_key=idempotency_key,
                     payload={
                         "approval_id": request.approval_id,
-                        "proposal_id": proposal.proposal_id,
+                        "use_id": proposal.proposal_id,
+                        "actor_id": request.executor_id,
                         "proposal_sha256": request.proposal_sha256,
                         "action": request.action,
                         "risk_level": request.risk_level.value,

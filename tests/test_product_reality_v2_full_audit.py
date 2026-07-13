@@ -14,7 +14,12 @@ from nexara_prime.db import SQLiteStore
 from nexara_prime.evidence import EvidenceStore
 from nexara_prime.events import EventBus
 from nexara_prime.governance import ApprovalEngine
-from nexara_prime.models import ApprovalStatus, EvidenceArtifact, RiskLevel
+from nexara_prime.models import (
+    ApprovalRequest,
+    ApprovalStatus,
+    EvidenceArtifact,
+    RiskLevel,
+)
 from nexara_prime.product_reality import (
     EvolutionPromotionGate,
     EvolutionProposal,
@@ -51,7 +56,9 @@ def test_legacy_records_receive_integrity_during_schema_upgrade(tmp_path: Path) 
     assert envelope["payload"] == payload
 
 
-def test_legacy_evidence_receives_inner_envelope_during_schema_upgrade(tmp_path: Path) -> None:
+def test_legacy_evidence_without_creation_snapshot_is_quarantined(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "legacy-evidence.sqlite3"
     connection = sqlite3.connect(path)
     connection.execute(
@@ -100,12 +107,17 @@ def test_legacy_evidence_receives_inner_envelope_during_schema_upgrade(tmp_path:
     connection.commit()
     connection.close()
 
-    store, events, evidence = evidence_runtime(path)
+    store, _, evidence = evidence_runtime(path)
 
     envelope = store.get_record_envelope("evidence-legacy")
-    assert envelope is not None
-    assert envelope["payload"]["envelope_sha256"]
-    assert evidence.is_preverified_and_integrity_bound("evidence-legacy")
+    assert envelope is None
+    assert not evidence.is_preverified_and_integrity_bound("evidence-legacy")
+    assert evidence.verify_all("mission-1") == {
+        "total": 1,
+        "valid": 0,
+        "invalid": 1,
+        "coverage": 0.0,
+    }
 
 
 def test_schema_upgrade_does_not_reseal_corrupt_legacy_evidence(tmp_path: Path) -> None:
@@ -454,10 +466,10 @@ def test_verified_legacy_evidence_replay_repairs_missing_creation_event(
     event = store.get_event_by_idempotency("legacy-missing-event")
     assert event is not None
     assert event["event_id"] == replay.source_event_id
-    assert event["payload"] == {
-        "evidence_id": legacy.evidence_id,
-        "kind": legacy.kind,
-    }
+    assert event["payload"]["evidence_id"] == legacy.evidence_id
+    assert event["payload"]["kind"] == legacy.kind
+    assert event["payload"]["record"]["evidence_id"] == legacy.evidence_id
+    assert event["payload"]["record"]["verification_status"] == "unverified"
     assert notified[-1] == event["event_id"]
     assert len(notified) == 2
     assert store.get_event(notified[0])["event_type"] == "evidence.verified"
@@ -639,8 +651,75 @@ def test_direct_verified_reseal_requires_verification_transition(
         payload["created_at"],
         artifact.mission_id,
     )
+    fake_key = f"evidence.verify:{artifact.evidence_id}:{artifact.sha256}"
+    EventBus(store).publish(
+        "evidence.verified",
+        artifact.evidence_id,
+        "evidence",
+        "evidence_store",
+        "forged-verification",
+        {
+            "evidence_id": artifact.evidence_id,
+            "sha256": artifact.sha256,
+            "verification_status": "verified",
+        },
+        idempotency_key=fake_key,
+    )
 
     assert not evidence.is_preverified_and_integrity_bound(artifact.evidence_id)
+
+
+def test_missing_origin_does_not_bless_current_verified_evidence(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "missing-evidence-origin.sqlite3"
+    store, _, evidence = evidence_runtime(path)
+    artifact = evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        "content",
+        "trace",
+        idempotency_key="legacy-summary-event",
+    )
+    envelope = store.get_record_envelope(artifact.evidence_id)
+    assert envelope is not None
+    payload = dict(envelope["payload"])
+    payload["verification_status"] = "verified"
+    payload["envelope_sha256"] = EvidenceStore._envelope_sha256(payload)
+    resealed_integrity = SQLiteStore._record_integrity(
+        artifact.evidence_id,
+        "evidence",
+        artifact.mission_id,
+        envelope["created_at"],
+        payload,
+    )
+    with store._lock, store._conn:
+        store._conn.execute(
+            "UPDATE records SET payload=?, integrity_sha256=?, origin_sha256=NULL "
+            "WHERE record_id=?",
+            (
+                SQLiteStore._canonical_payload(payload),
+                resealed_integrity,
+                artifact.evidence_id,
+            ),
+        )
+        store._conn.execute(
+            "UPDATE events SET payload=? WHERE idempotency_key=?",
+            (
+                json.dumps(
+                    {"evidence_id": artifact.evidence_id, "kind": artifact.kind}
+                ),
+                artifact.idempotency_key,
+            ),
+        )
+    store.close()
+
+    migrated = SQLiteStore(path)
+    assert migrated.get_record_envelope(artifact.evidence_id) is None
+    assert not EvidenceStore(
+        migrated, EventBus(migrated)
+    ).is_preverified_and_integrity_bound(artifact.evidence_id)
 
 
 def test_preverified_evidence_rejects_resealed_provenance(tmp_path: Path) -> None:
@@ -771,10 +850,9 @@ def test_concurrent_conflicting_evidence_atomically_binds_winning_event(
     assert len(records) == 1
     assert len(events) == 1
     assert events[0]["event_id"] == records[0]["payload"]["source_event_id"]
-    assert events[0]["payload"] == {
-        "evidence_id": records[0]["record_id"],
-        "kind": records[0]["payload"]["kind"],
-    }
+    assert events[0]["payload"]["evidence_id"] == records[0]["record_id"]
+    assert events[0]["payload"]["kind"] == records[0]["payload"]["kind"]
+    assert events[0]["payload"]["record"] == records[0]["payload"]
 
 
 def test_event_collision_cannot_leave_an_unpaired_evidence_record(tmp_path: Path) -> None:
@@ -1579,6 +1657,30 @@ def test_gate_requires_durable_approval_decision_transition(tmp_path: Path) -> N
         payload["created_at"],
         approval.mission_id,
     )
+    forged = ApprovalRequest.model_validate(payload)
+    events.publish(
+        "approval.decided",
+        approval.mission_id,
+        "mission",
+        "human-1",
+        "forged-decision",
+        {
+            "approval_id": approval.approval_id,
+            "status": ApprovalStatus.APPROVED.value,
+            "decision": "approved",
+            "scope": approval.approval_scope,
+            "action": approval.action,
+            "risk_level": approval.risk_level.value,
+            "executor_id": approval.executor_id,
+            "proposal_sha256": approval.proposal_sha256,
+            "decided_at": forged.decided_at,
+        },
+        idempotency_key=f"approval.decided:{approval.approval_id}",
+    )
+    with pytest.raises(ValueError, match="approval_integrity_invalid"):
+        approvals.get(approval.approval_id)
+    with pytest.raises(ValueError, match="approval_integrity_invalid"):
+        approvals.list(approval.mission_id)
     gate = EvolutionPromotionGate(
         approvals, evidence, authorized_human_principals={"human-1"}
     )
@@ -1723,6 +1825,51 @@ def test_migration_does_not_bless_repurposed_approval_request_fields(
         ApprovalEngine(migrated_store, EventBus(migrated_store)).get(
             approval.approval_id
         )
+
+
+def test_migration_quarantines_summary_only_approval_request_events(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "approval-summary-migration.sqlite3"
+    store = SQLiteStore(path)
+    approvals = ApprovalEngine(store, EventBus(store))
+    approval = approvals.request(
+        "mission-1",
+        "action",
+        RiskLevel.R3,
+        "approve",
+        [],
+        "trace",
+        executor_id="executor-1",
+        proposal_sha256="proposal-digest",
+    )
+    with store._lock, store._conn:
+        store._conn.execute(
+            "UPDATE events SET payload=? WHERE event_type='approval.requested' "
+            "AND aggregate_id=?",
+            (
+                json.dumps(
+                    {
+                        "approval_id": approval.approval_id,
+                        "risk_level": approval.risk_level.value,
+                        "action": approval.action,
+                        "scope": approval.approval_scope,
+                    }
+                ),
+                approval.mission_id,
+            ),
+        )
+        store._conn.execute(
+            "UPDATE records SET origin_sha256=NULL WHERE record_id=?",
+            (approval.approval_id,),
+        )
+    store.close()
+
+    migrated = SQLiteStore(path)
+    assert migrated.get_record_envelope(approval.approval_id) is None
+    assert ApprovalEngine(migrated, EventBus(migrated)).get(
+        approval.approval_id
+    ) is None
 
 
 def test_partial_upgrade_backfills_every_missing_origin_idempotently(
@@ -1979,6 +2126,8 @@ def test_consumption_event_conflict_rolls_back_approval_status(tmp_path: Path) -
         "idempotency_key": idempotency_key,
         "payload": {
             "approval_id": approval.approval_id,
+            "use_id": "proposal-1",
+            "actor_id": "executor-1",
             "action": approval.action,
             "risk_level": approval.risk_level.value,
             "executor_id": approval.executor_id,

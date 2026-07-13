@@ -166,7 +166,8 @@ class SQLiteStore:
             # decided payload cannot bless a repurposed action, risk, or scope.
             requested_approvals: dict[str, dict[str, Any] | None] = {}
             for event_row in self._conn.execute(
-                "SELECT aggregate_id, aggregate_type, actor, payload FROM events "
+                "SELECT event_id, aggregate_id, aggregate_type, actor, "
+                "idempotency_key, payload FROM events "
                 "WHERE event_type='approval.requested'"
             ).fetchall():
                 try:
@@ -183,15 +184,25 @@ class SQLiteStore:
                 if not approval_id:
                     continue
                 key = str(approval_id)
+                request_key = f"approval.requested:{key}"
+                expected_event_id = (
+                    "evt_"
+                    + hashlib.sha256(request_key.encode("utf-8")).hexdigest()[:24]
+                )
+                if (
+                    event_row["event_id"] != expected_event_id
+                    or event_row["idempotency_key"] != request_key
+                ):
+                    requested_approvals[key] = None
+                    continue
                 request_payload = event_payload.get("request")
-                if isinstance(request_payload, dict):
-                    projection = dict(request_payload)
-                else:
-                    projection = {
-                        "action": event_payload.get("action"),
-                        "risk_level": event_payload.get("risk_level"),
-                        "approval_scope": event_payload.get("scope"),
-                    }
+                if not isinstance(request_payload, dict):
+                    # Old summary-only events cannot safely reconstruct
+                    # executor, proposal, rationale, rollback, or cost fields.
+                    # Quarantine instead of blessing the current row.
+                    requested_approvals[key] = None
+                    continue
+                projection = dict(request_payload)
                 projection["_mission_id"] = str(event_row["aggregate_id"])
                 existing = requested_approvals.get(key)
                 if key in requested_approvals and existing != projection:
@@ -200,6 +211,47 @@ class SQLiteStore:
                     requested_approvals[key] = None
                 else:
                     requested_approvals[key] = projection
+
+            created_evidence: dict[str, dict[str, Any] | None] = {}
+            for event_row in self._conn.execute(
+                "SELECT event_id, aggregate_id, aggregate_type, actor, "
+                "idempotency_key, payload FROM events "
+                "WHERE event_type='evidence.created'"
+            ).fetchall():
+                try:
+                    event_payload = json.loads(event_row["payload"])
+                except (TypeError, ValueError):
+                    continue
+                if (
+                    not isinstance(event_payload, dict)
+                    or event_row["aggregate_type"] != "mission"
+                    or event_row["actor"] != "evidence_store"
+                ):
+                    continue
+                evidence_id = event_payload.get("evidence_id")
+                creation_record = event_payload.get("record")
+                if not evidence_id or not isinstance(creation_record, dict):
+                    continue
+                key = str(evidence_id)
+                event_key = creation_record.get("idempotency_key") or (
+                    f"evidence.create:{key}"
+                )
+                expected_event_id = "evt_" + hashlib.sha256(
+                    f"evidence-event:{event_key}".encode("utf-8")
+                ).hexdigest()[:12]
+                if (
+                    event_row["event_id"] != expected_event_id
+                    or event_row["idempotency_key"] != event_key
+                ):
+                    created_evidence[key] = None
+                    continue
+                projection = dict(creation_record)
+                projection["_mission_id"] = str(event_row["aggregate_id"])
+                existing = created_evidence.get(key)
+                if key in created_evidence and existing != projection:
+                    created_evidence[key] = None
+                else:
+                    created_evidence[key] = projection
 
             origin_rows = self._conn.execute(
                 "SELECT record_id, record_type, mission_id, payload, created_at, "
@@ -235,21 +287,12 @@ class SQLiteStore:
                         for key, value in request_projection.items()
                         if key != "_mission_id"
                     }
-                    if full_request.get("approval_id") is not None:
-                        if (
-                            full_request.get("approval_id") != row["record_id"]
-                            or full_request.get("mission_id") != row["mission_id"]
-                        ):
-                            continue
-                        origin_payload = full_request
-                    else:
-                        if any(
-                            full_request.get(field) is None
-                            for field in ("action", "risk_level", "approval_scope")
-                        ):
-                            continue
-                        for field in ("action", "risk_level", "approval_scope"):
-                            origin_payload[field] = full_request[field]
+                    if (
+                        full_request.get("approval_id") != row["record_id"]
+                        or full_request.get("mission_id") != row["mission_id"]
+                    ):
+                        continue
+                    origin_payload = full_request
                     origin_payload.update(
                         {
                             "status": "pending",
@@ -259,6 +302,23 @@ class SQLiteStore:
                             "decided_at": None,
                         }
                     )
+                elif row["record_type"] == "evidence":
+                    creation_projection = created_evidence.get(str(row["record_id"]))
+                    if (
+                        not isinstance(creation_projection, dict)
+                        or creation_projection.get("_mission_id") != row["mission_id"]
+                    ):
+                        continue
+                    origin_payload = {
+                        key: value
+                        for key, value in creation_projection.items()
+                        if key != "_mission_id"
+                    }
+                    if (
+                        origin_payload.get("evidence_id") != row["record_id"]
+                        or origin_payload.get("mission_id") != row["mission_id"]
+                    ):
+                        continue
                 origin = self._record_integrity(
                     row["record_id"],
                     row["record_type"],
