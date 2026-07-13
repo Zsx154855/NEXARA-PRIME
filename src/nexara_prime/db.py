@@ -64,6 +64,32 @@ class SQLiteStore:
             row = self._conn.execute("SELECT payload FROM records WHERE record_id=?", (record_id,)).fetchone()
         return json.loads(row["payload"]) if row else None
 
+    def compare_and_set_record_field(
+        self,
+        record_id: str,
+        *,
+        field: str,
+        expected: Any,
+        new_value: Any,
+    ) -> bool:
+        """Atomically update one JSON field when its current value matches expected."""
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT payload FROM records WHERE record_id=?",
+                (record_id,),
+            ).fetchone()
+            if not row:
+                return False
+            payload = json.loads(row["payload"])
+            if payload.get(field) != expected:
+                return False
+            payload[field] = new_value
+            cursor = self._conn.execute(
+                "UPDATE records SET payload=? WHERE record_id=? AND payload=?",
+                (json.dumps(payload, ensure_ascii=False), record_id, row["payload"]),
+            )
+            return cursor.rowcount == 1
+
     def list_records(self, record_type: str, mission_id: str | None = None) -> list[dict[str, Any]]:
         query = "SELECT payload FROM records WHERE record_type=?"
         params: list[Any] = [record_type]
