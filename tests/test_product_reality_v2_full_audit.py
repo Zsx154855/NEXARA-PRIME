@@ -463,6 +463,111 @@ def test_verified_legacy_evidence_replay_repairs_missing_creation_event(
     assert store.count("events") == 1
 
 
+def test_evidence_replay_rejects_integrity_valid_row_mission_alias(
+    tmp_path: Path,
+) -> None:
+    store, _, evidence = evidence_runtime(tmp_path / "mission-alias.sqlite3")
+    artifact = evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        "content",
+        "trace-1",
+        idempotency_key="mission-bound-request",
+    )
+    envelope = store.get_record_envelope(artifact.evidence_id)
+    assert envelope is not None
+    aliased_integrity = SQLiteStore._record_integrity(
+        artifact.evidence_id,
+        "evidence",
+        "mission-2",
+        envelope["created_at"],
+        envelope["payload"],
+    )
+    with store._lock, store._conn:
+        store._conn.execute(
+            "UPDATE records SET mission_id=?, integrity_sha256=? WHERE record_id=?",
+            ("mission-2", aliased_integrity, artifact.evidence_id),
+        )
+
+    with pytest.raises(
+        ValueError, match="evidence_idempotency_record_invalid"
+    ):
+        evidence.add(
+            "mission-1",
+            "verification",
+            "proof",
+            "content",
+            "trace-2",
+            idempotency_key="mission-bound-request",
+        )
+
+    assert store.count("records") == 1
+    assert store.count("events") == 1
+
+
+def test_legacy_creation_event_without_idempotency_is_claimed_not_duplicated(
+    tmp_path: Path,
+) -> None:
+    store, events, evidence = evidence_runtime(tmp_path / "legacy-event.sqlite3")
+    notified: list[str] = []
+    events.subscribe(lambda event: notified.append(event.event_id))
+    content = "legacy content"
+    legacy = EvidenceArtifact(
+        evidence_id="evidence_legacy_pre_idempotency_event",
+        mission_id="mission-1",
+        kind="verification",
+        title="proof",
+        content=content,
+        sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        idempotency_key="legacy-pre-idempotency-event",
+        source_event_id=None,
+    )
+    payload = legacy.model_dump(mode="json")
+    payload["envelope_sha256"] = EvidenceStore._envelope_sha256(payload)
+    store.save_record(
+        legacy.evidence_id,
+        "evidence",
+        payload,
+        legacy.created_at,
+        legacy.mission_id,
+    )
+    store.save_event(
+        {
+            "event_id": "evt_legacy_pre_idempotency",
+            "event_type": "evidence.created",
+            "aggregate_id": legacy.mission_id,
+            "aggregate_type": "mission",
+            "actor": "evidence_store",
+            "trace_id": "legacy-trace",
+            "timestamp": legacy.created_at,
+            "idempotency_key": None,
+            "payload": {
+                "evidence_id": legacy.evidence_id,
+                "kind": legacy.kind,
+            },
+        }
+    )
+
+    replay = evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        content,
+        "retry-trace",
+        idempotency_key="legacy-pre-idempotency-event",
+    )
+
+    assert replay.evidence_id == legacy.evidence_id
+    assert replay.source_event_id == "evt_legacy_pre_idempotency"
+    assert store.get_event_by_idempotency(
+        "legacy-pre-idempotency-event"
+    )["event_id"] == "evt_legacy_pre_idempotency"
+    assert notified == []
+    assert store.count("records") == 1
+    assert store.count("events") == 1
+
+
 def test_concurrent_conflicting_evidence_atomically_binds_winning_event(
     tmp_path: Path,
 ) -> None:

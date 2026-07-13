@@ -80,11 +80,13 @@ class EvidenceStore:
             not envelope
             or envelope.get("record_type") != "evidence"
             or envelope.get("record_id") != evidence_id
+            or envelope.get("mission_id") != expected_request.get("mission_id")
         ):
             raise ValueError("evidence_idempotency_record_invalid")
         stored = envelope["payload"]
         if (
             stored.get("evidence_id") != evidence_id
+            or stored.get("mission_id") != envelope.get("mission_id")
             or stored.get("envelope_sha256") != self._envelope_sha256(stored)
         ):
             raise ValueError("evidence_idempotency_record_invalid")
@@ -123,6 +125,34 @@ class EvidenceStore:
             existing_event = self.store.get_event_by_idempotency(
                 artifact.idempotency_key
             )
+            if existing_event is None:
+                expected_payload = {
+                    "evidence_id": artifact.evidence_id,
+                    "kind": artifact.kind,
+                }
+                candidates: list[dict[str, Any]] = []
+                if artifact.source_event_id:
+                    source_event = self.store.get_event(artifact.source_event_id)
+                    if source_event is not None:
+                        candidates.append(source_event)
+                candidates.extend(self.store.list_events(artifact.mission_id))
+                matching_events = {
+                    str(candidate["event_id"]): candidate
+                    for candidate in candidates
+                    if candidate.get("event_type") == "evidence.created"
+                    and candidate.get("aggregate_id") == artifact.mission_id
+                    and candidate.get("aggregate_type") == "mission"
+                    and candidate.get("actor") == "evidence_store"
+                    and candidate.get("payload") == expected_payload
+                    and candidate.get("idempotency_key") in {
+                        None,
+                        artifact.idempotency_key,
+                    }
+                }
+                if len(matching_events) > 1:
+                    raise ValueError("evidence_creation_event_ambiguous")
+                if matching_events:
+                    existing_event = next(iter(matching_events.values()))
             event_id = (
                 str(existing_event["event_id"])
                 if existing_event is not None

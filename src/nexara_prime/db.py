@@ -709,6 +709,20 @@ class SQLiteStore:
                     "SELECT * FROM events WHERE idempotency_key=?",
                     (idempotency_key,),
                 ).fetchone()
+                if existing_event is None:
+                    legacy_event = self._conn.execute(
+                        "SELECT * FROM events WHERE event_id=?",
+                        (event["event_id"],),
+                    ).fetchone()
+                    if legacy_event is not None:
+                        if legacy_event["idempotency_key"] not in {
+                            None,
+                            idempotency_key,
+                        }:
+                            self._conn.rollback()
+                            raise ValueError("event_idempotency_identity_conflict")
+                        existing_event = legacy_event
+
                 event_inserted = existing_event is None
                 if existing_event is not None:
                     try:
@@ -727,6 +741,15 @@ class SQLiteStore:
                     if not identity_matches:
                         self._conn.rollback()
                         raise ValueError("event_idempotency_identity_conflict")
+                    if existing_event["idempotency_key"] is None:
+                        cursor = self._conn.execute(
+                            "UPDATE events SET idempotency_key=? "
+                            "WHERE event_id=? AND idempotency_key IS NULL",
+                            (idempotency_key, event["event_id"]),
+                        )
+                        if cursor.rowcount != 1:
+                            self._conn.rollback()
+                            return None
                 else:
                     self._conn.execute(
                         "INSERT INTO events(event_id, event_type, aggregate_id, "
