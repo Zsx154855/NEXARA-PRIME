@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0.0",
+  "system": {
+    "id": "product_reality",
+    "name": "NEXARA Product Reality",
+    "version": "2.0.0",
+    "owner": "NEXARA"
+  },
+  "constitution": {
+    "mission_first": true,
+    "evidence_required": true,
+    "reversible_by_default": true,
+    "human_authority_preserved": true,
+    "deterministic_builds": true
+  },
+  "domain": {
+    "entities": [
+      {
+        "id": "evolution_proposal",
+        "description": "A governed product evolution candidate.",
+        "fields": [
+          {
+            "name": "proposal_id",
+            "type": "string",
+            "required": true,
+            "description": "Stable proposal identity."
+          },
+          {
+            "name": "evidence_refs",
+            "type": "list[string]",
+            "required": true,
+            "description": "Verified mission-bound evidence references."
+          }
+        ]
+      }
+    ],
+    "dependencies": [
+      "approval",
+      "evidence"
+    ]
+  },
+  "policies": [
+    {
+      "id": "promotion_evidence",
+      "description": "Every promotion requires verified mission-bound evidence.",
+      "assertion": "evidence.exists and evidence.verified and evidence.same_mission",
+      "failure_code": "promotion_evidence_required",
+      "enforcement_phase": "runtime",
+      "risk_tiers": [
+        "R0",
+        "R1",
+        "R2",
+        "R3",
+        "R4"
+      ],
+      "test_ids": [
+        "promotion_evidence_missing",
+        "promotion_evidence_ok",
+        "promotion_rollback_ok"
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "id": "promotion_evidence_missing",
+      "rule_id": "promotion_evidence",
+      "kind": "negative",
+      "description": "Reject absent or unverified evidence."
+    },
+    {
+      "id": "promotion_evidence_ok",
+      "rule_id": "promotion_evidence",
+      "kind": "happy",
+      "description": "Accept verified mission-bound evidence."
+    },
+    {
+      "id": "promotion_rollback_ok",
+      "rule_id": "promotion_evidence",
+      "kind": "rollback",
+      "description": "Preserve an evidenced rollback path."
+    }
+  ],
+  "outputs": [
+    "python",
+    "tests",
+    "docs",
+    "architecture",
+    "evidence"
+  ]
+}
