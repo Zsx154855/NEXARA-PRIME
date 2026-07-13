@@ -16,6 +16,7 @@ from .models import (
     ProductTwinCheckpoint,
     PromotionDecision,
 )
+from .twin import ProductTwinEngine
 
 
 @dataclass(frozen=True)
@@ -219,6 +220,22 @@ class EvolutionPromotionGate:
             errors.append("stored rollback checkpoint expected snapshot hash mismatch")
         if not self._snapshot_hash_valid(checkpoint.observed):
             errors.append("stored rollback checkpoint observed snapshot hash mismatch")
+        recomputed_findings = ProductTwinEngine().detect_drift(
+            mission_id=checkpoint.mission_id,
+            expected=checkpoint.expected.state,
+            observed=checkpoint.observed.state,
+            evidence_refs=checkpoint.expected.evidence_refs,
+        )
+        stored_signatures = [
+            ProductTwinEngine._finding_signature(item)
+            for item in checkpoint.drift_findings
+        ]
+        recomputed_signatures = [
+            ProductTwinEngine._finding_signature(item)
+            for item in recomputed_findings
+        ]
+        if stored_signatures != recomputed_signatures:
+            errors.append("stored rollback checkpoint drift findings mismatch")
         return errors
 
     def _validate_stored_approval(
@@ -280,6 +297,8 @@ class EvolutionPromotionGate:
             return None, [f"stored {purpose} is expired or has invalid expiry"]
         if not self.approvals.request_origin_is_valid(envelope, approval):
             return None, [f"stored {purpose} original request mismatch"]
+        if not self.approvals.decision_transition_is_valid(approval):
+            return None, [f"stored {purpose} has no durable decision transition"]
         return _ValidatedApproval(
             request=approval,
             integrity_sha256=str(envelope["integrity_sha256"]),

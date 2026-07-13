@@ -93,11 +93,11 @@ class EvidenceStore:
             "verification_status": verification_status,
         }
 
-    def _origin_is_valid(
+    def _origin_projection(
         self,
         envelope: dict[str, Any],
         payload: dict[str, Any],
-    ) -> bool:
+    ) -> tuple[str, str | None] | None:
         statuses = {
             str(payload.get("verification_status", "unverified")),
             "unverified",
@@ -132,7 +132,35 @@ class EvidenceStore:
                     if not request_matches:
                         continue
                 if self.store.record_origin_matches(envelope, candidate):
-                    return True
+                    return status, source_event_id
+        return None
+
+    def _origin_is_valid(
+        self,
+        envelope: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> bool:
+        return self._origin_projection(envelope, payload) is not None
+
+    def _verification_transition_is_valid(
+        self,
+        evidence_id: str,
+        payload: dict[str, Any],
+        origin_status: str,
+    ) -> bool:
+        if origin_status == "verified":
+            return True
+        for event in self.store.list_events(evidence_id):
+            event_payload = event.get("payload", {})
+            if (
+                event.get("event_type") == "evidence.verified"
+                and event.get("aggregate_type") == "evidence"
+                and event.get("actor") == "evidence_store"
+                and event_payload.get("evidence_id") == evidence_id
+                and event_payload.get("sha256") == payload.get("sha256")
+                and event_payload.get("verification_status") == "verified"
+            ):
+                return True
         return False
 
     def _replay_artifact(
@@ -184,7 +212,13 @@ class EvidenceStore:
         request_sha256 = stored.get("request_sha256")
         if request_sha256:
             request_candidates = [expected_request]
-            if expected_request.get("source_event_id") is None:
+            generated_source_event = self._idempotent_event_id(
+                str(stored.get("idempotency_key"))
+            )
+            if (
+                expected_request.get("source_event_id") is None
+                and stored.get("source_event_id") == generated_source_event
+            ):
                 bound_request = dict(expected_request)
                 bound_request["source_event_id"] = stored.get("source_event_id")
                 request_candidates.append(bound_request)
@@ -414,6 +448,20 @@ class EvidenceStore:
         )
         if not updated:
             raise RuntimeError("evidence_verification_conflict")
+        if verified:
+            self.events.publish(
+                "evidence.verified",
+                evidence_id,
+                "evidence",
+                "evidence_store",
+                f"verify:{evidence_id}",
+                {
+                    "evidence_id": evidence_id,
+                    "sha256": digest,
+                    "verification_status": "verified",
+                },
+                idempotency_key=f"evidence.verify:{evidence_id}:{digest}",
+            )
         return verified
 
     def is_preverified_and_integrity_bound(self, evidence_id: str) -> bool:
@@ -432,7 +480,13 @@ class EvidenceStore:
         ).hexdigest()
         if content_digest != raw.get("sha256"):
             return False
-        if not self._origin_is_valid(envelope, raw):
+        origin = self._origin_projection(envelope, raw)
+        if origin is None:
+            return False
+        origin_status, _ = origin
+        if not self._verification_transition_is_valid(
+            evidence_id, raw, origin_status
+        ):
             return False
         envelope_digest = raw.get("envelope_sha256")
         return bool(envelope_digest) and envelope_digest == self._envelope_sha256(raw)

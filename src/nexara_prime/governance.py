@@ -49,6 +49,23 @@ class ApprovalEngine:
         )
         return self.store.record_origin_matches(envelope, original)
 
+    def decision_transition_is_valid(self, approval: ApprovalRequest) -> bool:
+        if not approval.decided_by or not approval.decided_at:
+            return False
+        expected_status = approval.status.value
+        for event in self.store.list_events(approval.mission_id):
+            payload = event.get("payload", {})
+            if (
+                event.get("event_type") == "approval.decided"
+                and event.get("actor") == approval.decided_by
+                and payload.get("approval_id") == approval.approval_id
+                and payload.get("status") == expected_status
+                and payload.get("decision") == approval.decision_action
+                and payload.get("scope") == approval.approval_scope
+            ):
+                return True
+        return False
+
     def request(
         self,
         mission_id: str,
@@ -115,7 +132,8 @@ class ApprovalEngine:
         decision = decision or ("approved" if approved else "rejected")
         if decision in {"approve_once", "approve_mission", "approved"}:
             approval.status = ApprovalStatus.APPROVED
-            approval.approval_scope = scope or ("single_action" if decision == "approve_once" else approval.approval_scope)
+            if scope is not None and scope != approval.approval_scope:
+                raise ValueError("approval_decision_scope_mismatch")
         elif decision in {"request_changes", "changes_requested"}:
             approval.status = ApprovalStatus.CHANGES_REQUESTED
         elif decision == "pause_mission":

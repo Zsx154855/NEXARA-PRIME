@@ -458,9 +458,11 @@ def test_verified_legacy_evidence_replay_repairs_missing_creation_event(
         "evidence_id": legacy.evidence_id,
         "kind": legacy.kind,
     }
-    assert notified == [event["event_id"]]
+    assert notified[-1] == event["event_id"]
+    assert len(notified) == 2
+    assert store.get_event(notified[0])["event_type"] == "evidence.verified"
     assert store.count("records") == 1
-    assert store.count("events") == 1
+    assert store.count("events") == 2
 
 
 def test_evidence_replay_rejects_integrity_valid_row_mission_alias(
@@ -588,6 +590,57 @@ def test_evidence_replay_rejects_resealed_provenance_and_chronology(
             "trace-2",
             idempotency_key=f"bound-{field}",
         )
+
+
+def test_evidence_replay_rejects_omitted_explicit_source_event(
+    tmp_path: Path,
+) -> None:
+    _, _, evidence = evidence_runtime(tmp_path / "explicit-source.sqlite3")
+    evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        "content",
+        "trace-1",
+        source_event_id="upstream-explicit-event",
+        idempotency_key="explicit-source-request",
+    )
+
+    with pytest.raises(ValueError, match="evidence_idempotency_conflict"):
+        evidence.add(
+            "mission-1",
+            "verification",
+            "proof",
+            "content",
+            "trace-2",
+            idempotency_key="explicit-source-request",
+        )
+
+
+def test_direct_verified_reseal_requires_verification_transition(
+    tmp_path: Path,
+) -> None:
+    store, _, evidence = evidence_runtime(tmp_path / "verification-transition.sqlite3")
+    artifact = evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        "content",
+        "trace",
+    )
+    payload = store.get_record(artifact.evidence_id)
+    assert payload is not None
+    payload["verification_status"] = "verified"
+    payload["envelope_sha256"] = EvidenceStore._envelope_sha256(payload)
+    store.save_record(
+        artifact.evidence_id,
+        "evidence",
+        payload,
+        payload["created_at"],
+        artifact.mission_id,
+    )
+
+    assert not evidence.is_preverified_and_integrity_bound(artifact.evidence_id)
 
 
 def test_preverified_evidence_rejects_resealed_provenance(tmp_path: Path) -> None:
@@ -1330,6 +1383,63 @@ def test_gate_rejects_resealed_checkpoint_reversible_flag(tmp_path: Path) -> Non
     )
 
 
+def test_gate_recomputes_first_write_checkpoint_drift(tmp_path: Path) -> None:
+    store, events, evidence = evidence_runtime(tmp_path / "stale-first-write.sqlite3")
+    approvals = ApprovalEngine(store, events)
+    proof = evidence.add(
+        "mission-1", "verification", "proof", "proof", "trace",
+        verification_status="verified",
+    )
+    rollback = evidence.add(
+        "mission-1", "verification", "rollback", "rollback", "trace",
+        verification_status="verified",
+    )
+    checkpoint = ProductTwinEngine().capture(
+        mission_id="mission-1",
+        expected_state={"version": 1},
+        observed_state={"version": 2},
+    )
+    assert checkpoint.drift_findings
+    stale = checkpoint.model_copy(update={"drift_findings": []})
+    store.save_record(
+        stale.checkpoint_id,
+        "product_twin_checkpoint",
+        stale.model_dump(mode="json"),
+        stale.created_at,
+        stale.mission_id,
+    )
+    proposal = EvolutionProposal(
+        mission_id="mission-1",
+        title="change",
+        observed_problem={},
+        proposed_changes=["change"],
+        risk_level=RiskLevel.R2,
+        evidence_refs=[proof.evidence_id],
+        rollback_plan=["restore"],
+        rollback_checkpoint_id=stale.checkpoint_id,
+        rollback_evidence_refs=[rollback.evidence_id],
+    )
+    gate = EvolutionPromotionGate(
+        approvals, evidence, authorized_human_principals={"human-1"}
+    )
+
+    decision = gate.assess(
+        proposal,
+        EvolutionValidation(
+            simulation_passed=True,
+            verification_passed=True,
+            accessibility_passed=True,
+            governance_passed=True,
+        ),
+    )
+
+    assert not decision.allowed
+    assert (
+        "stored rollback checkpoint drift findings mismatch"
+        in decision.required_actions
+    )
+
+
 def test_gate_rejects_resealed_approval_request_repurposing(tmp_path: Path) -> None:
     store, events, evidence = evidence_runtime(tmp_path / "approval-origin.sqlite3")
     approvals = ApprovalEngine(store, events)
@@ -1411,3 +1521,144 @@ def test_gate_rejects_resealed_approval_request_repurposing(tmp_path: Path) -> N
         "stored promotion approval original request mismatch"
         in decision.required_actions
     )
+
+
+def test_gate_requires_durable_approval_decision_transition(tmp_path: Path) -> None:
+    store, events, evidence = evidence_runtime(tmp_path / "decision-transition.sqlite3")
+    approvals = ApprovalEngine(store, events)
+    twin = ProductTwinEngine(store)
+    proof = evidence.add(
+        "mission-1", "verification", "proof", "proof", "trace",
+        verification_status="verified",
+    )
+    rollback = evidence.add(
+        "mission-1", "verification", "rollback", "rollback", "trace",
+        verification_status="verified",
+    )
+    checkpoint = twin.capture(
+        mission_id="mission-1",
+        expected_state={"version": 1},
+        observed_state={"version": 1},
+    )
+    proposal = EvolutionProposal(
+        mission_id="mission-1",
+        title="change",
+        observed_problem={},
+        proposed_changes=["change"],
+        risk_level=RiskLevel.R3,
+        evidence_refs=[proof.evidence_id],
+        rollback_plan=["restore"],
+        rollback_checkpoint_id=checkpoint.checkpoint_id,
+        rollback_evidence_refs=[rollback.evidence_id],
+    )
+    approval = approvals.request(
+        proposal.mission_id,
+        proposal.promotion_action,
+        proposal.risk_level,
+        "approve",
+        [],
+        "trace",
+        executor_id="executor-1",
+        proposal_sha256=proposal.content_sha256,
+    )
+    payload = store.get_record(approval.approval_id)
+    assert payload is not None
+    payload.update(
+        {
+            "status": "approved",
+            "decided_by": "human-1",
+            "decision_note": "forged",
+            "decision_action": "approved",
+            "decided_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    store.save_record(
+        approval.approval_id,
+        "approval",
+        payload,
+        payload["created_at"],
+        approval.mission_id,
+    )
+    gate = EvolutionPromotionGate(
+        approvals, evidence, authorized_human_principals={"human-1"}
+    )
+
+    decision = gate.assess(
+        proposal,
+        EvolutionValidation(
+            simulation_passed=True,
+            verification_passed=True,
+            accessibility_passed=True,
+            governance_passed=True,
+            approval_id=approval.approval_id,
+            actor_id="executor-1",
+        ),
+    )
+
+    assert not decision.allowed
+    assert (
+        "stored promotion approval has no durable decision transition"
+        in decision.required_actions
+    )
+
+
+def test_approval_scope_remains_anchored_on_approve_once(tmp_path: Path) -> None:
+    store = SQLiteStore(tmp_path / "approval-scope.sqlite3")
+    approvals = ApprovalEngine(store, EventBus(store))
+    approval = approvals.request(
+        "mission-1",
+        "mission-wide-action",
+        RiskLevel.R2,
+        "approve",
+        [],
+        "trace",
+        approval_scope="mission",
+    )
+
+    decided = approvals.decide(
+        approval.approval_id,
+        True,
+        "human-1",
+        "approve once",
+        "decision-trace",
+        decision="approve_once",
+    )
+
+    assert decided.approval_scope == "mission"
+    assert approvals.get(approval.approval_id).approval_scope == "mission"
+
+
+def test_migration_reconstructs_decided_approval_origin(tmp_path: Path) -> None:
+    path = tmp_path / "approval-migration.sqlite3"
+    store = SQLiteStore(path)
+    approvals = ApprovalEngine(store, EventBus(store))
+    approval = approvals.request(
+        "mission-1",
+        "action",
+        RiskLevel.R2,
+        "approve",
+        [],
+        "trace",
+        approval_scope="single_action",
+    )
+    approvals.decide(
+        approval.approval_id,
+        True,
+        "human-1",
+        "approved",
+        "decision-trace",
+    )
+    store.close()
+    connection = sqlite3.connect(path)
+    connection.execute("ALTER TABLE records DROP COLUMN origin_sha256")
+    connection.commit()
+    connection.close()
+
+    migrated_store = SQLiteStore(path)
+    migrated = ApprovalEngine(
+        migrated_store, EventBus(migrated_store)
+    ).get(approval.approval_id)
+
+    assert migrated is not None
+    assert migrated.status == ApprovalStatus.APPROVED
+    assert migrated.approval_scope == "single_action"
