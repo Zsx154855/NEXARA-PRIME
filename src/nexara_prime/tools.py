@@ -96,7 +96,14 @@ class ToolRuntime:
             if not approval_id:
                 self._audit_denial(mission_id, task_id, tool_name, trace_id, actor_id, "missing_approval_id", risk)
                 raise PermissionError("approval_required_for_tool: no approval_id provided")
-            approval = self._validate_approval(approval_id, mission_id, tool_name, task_id, actor_id)
+            approval = self._validate_approval(
+                approval_id,
+                mission_id,
+                tool_name,
+                task_id,
+                actor_id,
+                trace_id,
+            )
             if not approval:
                 self._audit_denial(mission_id, task_id, tool_name, trace_id, actor_id, "invalid_or_mismatched_approval", risk)
                 raise PermissionError("approval_required_for_tool: invalid or expired approval")
@@ -249,9 +256,20 @@ class ToolRuntime:
             return {"url": url, "mode": "read_only", "status": "blocked_by_default", "reason": "external_network_disabled_in_local_runtime"}
         raise ValueError("browser_url_must_be_http_or_file")
 
-    def _validate_approval(self, approval_id: str, mission_id: str, tool_name: str, task_id: str, actor_id: str) -> bool:
+    def _validate_approval(
+        self,
+        approval_id: str,
+        mission_id: str,
+        tool_name: str,
+        task_id: str,
+        actor_id: str,
+        trace_id: str,
+    ) -> bool:
         """P0-2: Validate real Approval from persistent store. Never trust parameters alone."""
-        approval = self.approvals.get(approval_id)
+        try:
+            approval = self.approvals.get(approval_id)
+        except ValueError:
+            return False
         if not approval:
             return False
         if approval.status != ApprovalStatus.APPROVED:
@@ -274,9 +292,14 @@ class ToolRuntime:
                 pass
         # Scope check
         if approval.approval_scope == "single_action":
-            # Mark as consumed — one-time use
-            approval.status = ApprovalStatus.CONSUMED
-            self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, approval.mission_id)
+            use_id = task_id.strip() or f"tool:{tool_name}:{trace_id}"
+            if not self.approvals.consume_single_action(
+                approval.approval_id,
+                actor_id=actor_id,
+                trace_id=trace_id,
+                use_id=use_id,
+            ):
+                return False
         return True
 
     def _audit_denial(self, mission_id: str, task_id: str, tool_name: str, trace_id: str, actor_id: str, reason: str, risk: RiskLevel) -> None:

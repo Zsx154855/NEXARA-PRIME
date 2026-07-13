@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 import threading
 from typing import Any
 
 from .db import SQLiteStore
 from .events import EventBus
-from .models import ApprovalRequest, ApprovalStatus, RiskLevel, WriterLease, new_id, now_iso
+from .models import (
+    ApprovalRequest,
+    ApprovalStatus,
+    Event,
+    RiskLevel,
+    WriterLease,
+    new_id,
+    now_iso,
+)
 
 
 class PolicyEngine:
@@ -32,6 +41,235 @@ class ApprovalEngine:
         self.store = store
         self.events = events
 
+    @staticmethod
+    def _transition_event_id(idempotency_key: str) -> str:
+        digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:24]
+        return f"evt_{digest}"
+
+    def _commit_transition(
+        self,
+        approval: ApprovalRequest,
+        *,
+        expected_integrity_sha256: str,
+        event_type: str,
+        actor: str,
+        trace_id: str,
+        event_payload: dict[str, Any],
+    ) -> None:
+        idempotency_key = f"{event_type}:{approval.approval_id}"
+        event = Event(
+            event_id=self._transition_event_id(idempotency_key),
+            event_type=event_type,
+            aggregate_id=approval.mission_id,
+            aggregate_type="mission",
+            actor=actor,
+            trace_id=trace_id,
+            idempotency_key=idempotency_key,
+            payload=event_payload,
+        )
+        result = self.store.repair_record_event(
+            approval.approval_id,
+            record_type="approval",
+            expected_integrity_sha256=expected_integrity_sha256,
+            new_payload=approval.model_dump(mode="json"),
+            event=event.model_dump(mode="json"),
+        )
+        if result is None:
+            raise RuntimeError("approval_decision_conflict")
+        event_inserted, persisted = result
+        if event_inserted:
+            self.events.notify_persisted(Event.model_validate(persisted))
+
+    def request_origin_is_valid(
+        self,
+        envelope: dict[str, Any],
+        approval: ApprovalRequest,
+    ) -> bool:
+        original = approval.model_dump(mode="json")
+        original.update(
+            {
+                "status": ApprovalStatus.PENDING.value,
+                "decided_by": None,
+                "decision_note": None,
+                "decision_action": None,
+                "decided_at": None,
+            }
+        )
+        return self.store.record_origin_matches(envelope, original)
+
+    def decision_transition_is_valid(self, approval: ApprovalRequest) -> bool:
+        if not approval.decided_by or not approval.decided_at:
+            return False
+        if approval.decision_action in {"approve_once", "approve_mission", "approved"}:
+            expected_status = ApprovalStatus.APPROVED.value
+        elif approval.decision_action in {"request_changes", "changes_requested"}:
+            expected_status = ApprovalStatus.CHANGES_REQUESTED.value
+        elif approval.decision_action == "pause_mission":
+            expected_status = ApprovalStatus.PAUSED.value
+        else:
+            expected_status = ApprovalStatus.REJECTED.value
+        idempotency_key = f"approval.decided:{approval.approval_id}"
+        expected_event_id = self._transition_event_id(idempotency_key)
+        expected_payload = {
+            "approval_id": approval.approval_id,
+            "status": expected_status,
+            "decision": approval.decision_action,
+            "scope": approval.approval_scope,
+            "action": approval.action,
+            "risk_level": approval.risk_level.value,
+            "executor_id": approval.executor_id,
+            "proposal_sha256": approval.proposal_sha256,
+            "decided_at": approval.decided_at,
+        }
+        for event in self.store.list_events(approval.mission_id):
+            if (
+                event.get("event_id") == expected_event_id
+                and event.get("event_type") == "approval.decided"
+                and event.get("aggregate_id") == approval.mission_id
+                and event.get("aggregate_type") == "mission"
+                and event.get("actor") == approval.decided_by
+                and event.get("idempotency_key") == idempotency_key
+                and event.get("payload") == expected_payload
+            ):
+                return True
+        return False
+
+    def consumption_transition_exists(self, approval: ApprovalRequest) -> bool:
+        idempotency_key = f"approval.consumed:{approval.approval_id}"
+        expected_event_id = self._transition_event_id(idempotency_key)
+        for event in self.store.list_events(approval.mission_id):
+            payload = event.get("payload", {})
+            if (
+                event.get("event_id") == expected_event_id
+                and event.get("event_type") == "approval.consumed"
+                and event.get("aggregate_id") == approval.mission_id
+                and event.get("aggregate_type") == "mission"
+                and event.get("idempotency_key") == idempotency_key
+                and payload.get("approval_id") == approval.approval_id
+                and payload.get("action") == approval.action
+                and payload.get("risk_level") == approval.risk_level.value
+                and payload.get("executor_id") == approval.executor_id
+                and payload.get("proposal_sha256") == approval.proposal_sha256
+                and isinstance(payload.get("use_id"), str)
+                and bool(payload["use_id"].strip())
+                and isinstance(payload.get("actor_id"), str)
+                and bool(payload["actor_id"].strip())
+                and event.get("actor") == payload.get("actor_id")
+                and (
+                    approval.executor_id is None
+                    or payload.get("actor_id") == approval.executor_id
+                )
+                and set(payload) == {
+                    "approval_id",
+                    "use_id",
+                    "actor_id",
+                    "proposal_sha256",
+                    "action",
+                    "risk_level",
+                    "executor_id",
+                }
+            ):
+                return True
+        return False
+
+    def expiry_transition_is_valid(self, approval: ApprovalRequest) -> bool:
+        idempotency_key = f"approval.expired:{approval.approval_id}"
+        expected_event_id = self._transition_event_id(idempotency_key)
+        expected_payload = {
+            "approval_id": approval.approval_id,
+            "status": ApprovalStatus.EXPIRED.value,
+            "expires_at": approval.expires_at,
+        }
+        return any(
+            event.get("event_id") == expected_event_id
+            and event.get("event_type") == "approval.expired"
+            and event.get("aggregate_id") == approval.mission_id
+            and event.get("aggregate_type") == "mission"
+            and event.get("actor") == "governance"
+            and event.get("idempotency_key") == idempotency_key
+            and event.get("payload") == expected_payload
+            for event in self.store.list_events(approval.mission_id)
+        )
+
+    def terminal_transition_is_valid(self, approval: ApprovalRequest) -> bool:
+        if approval.status == ApprovalStatus.PENDING:
+            return True
+        if approval.status == ApprovalStatus.EXPIRED:
+            return self.expiry_transition_is_valid(approval)
+        if approval.status == ApprovalStatus.CONSUMED:
+            return self.decision_transition_is_valid(
+                approval
+            ) and self.consumption_transition_exists(approval)
+        return self.decision_transition_is_valid(approval)
+
+    def consume_single_action(
+        self,
+        approval_id: str,
+        *,
+        actor_id: str,
+        trace_id: str,
+        use_id: str,
+    ) -> bool:
+        envelope = self.store.get_record_envelope(approval_id)
+        if not envelope or envelope.get("record_type") != "approval":
+            return False
+        try:
+            approval = ApprovalRequest.model_validate(envelope["payload"])
+        except (TypeError, ValueError):
+            return False
+        if (
+            envelope.get("record_id") != approval_id
+            or envelope.get("mission_id") != approval.mission_id
+            or approval.status != ApprovalStatus.APPROVED
+            or approval.approval_scope != "single_action"
+            or not actor_id.strip()
+            or not use_id.strip()
+            or (
+                approval.executor_id is not None
+                and approval.executor_id != actor_id
+            )
+            or not self.request_origin_is_valid(envelope, approval)
+            or not self.decision_transition_is_valid(approval)
+            or self.consumption_transition_exists(approval)
+        ):
+            return False
+        idempotency_key = f"approval.consumed:{approval_id}"
+        event = Event(
+            event_id=self._transition_event_id(idempotency_key),
+            event_type="approval.consumed",
+            aggregate_id=approval.mission_id,
+            aggregate_type="mission",
+            actor=actor_id,
+            trace_id=trace_id,
+            idempotency_key=idempotency_key,
+            payload={
+                "approval_id": approval_id,
+                "use_id": use_id,
+                "actor_id": actor_id,
+                "proposal_sha256": approval.proposal_sha256,
+                "action": approval.action,
+                "risk_level": approval.risk_level.value,
+                "executor_id": approval.executor_id,
+            },
+        )
+        persisted = self.store.compare_and_set_record_fields_and_events_atomically(
+            [
+                {
+                    "record_id": approval_id,
+                    "record_type": "approval",
+                    "field": "status",
+                    "expected_value": ApprovalStatus.APPROVED.value,
+                    "new_value": ApprovalStatus.CONSUMED.value,
+                    "expected_integrity_sha256": envelope["integrity_sha256"],
+                }
+            ],
+            [event.model_dump(mode="json")],
+        )
+        if persisted is None:
+            return False
+        self.events.notify_persisted(Event.model_validate(persisted[0]))
+        return True
+
     def request(
         self,
         mission_id: str,
@@ -48,6 +286,7 @@ class ApprovalEngine:
         estimated_cost: float = 0.0,
         approval_scope: str = "single_action",
         executor_id: str | None = None,
+        proposal_sha256: str | None = None,
         expires_in_seconds: int = 900,
     ) -> ApprovalRequest:
         approval = ApprovalRequest(
@@ -55,27 +294,85 @@ class ApprovalEngine:
             reason=rationale, impact=impact, affected_resources=affected_resources or [],
             external_effect=external_effect, reversible=reversible, rollback_plan=rollback_plan or {},
             estimated_cost=estimated_cost, approval_scope=approval_scope, executor_id=executor_id,
+            proposal_sha256=proposal_sha256,
             expires_at=(datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)).isoformat(),
         )
-        self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, mission_id)
-        self.events.publish("approval.requested", mission_id, "mission", "governance", trace_id, {"approval_id": approval.approval_id, "risk_level": risk_level.value, "action": action, "scope": approval_scope})
+        request_payload = approval.model_dump(mode="json")
+        request_key = f"approval.requested:{approval.approval_id}"
+        event = Event(
+            event_id=self._transition_event_id(request_key),
+            event_type="approval.requested",
+            aggregate_id=mission_id,
+            aggregate_type="mission",
+            actor="governance",
+            trace_id=trace_id,
+            idempotency_key=request_key,
+            payload={
+                "approval_id": approval.approval_id,
+                "risk_level": risk_level.value,
+                "action": action,
+                "scope": approval_scope,
+                "request": request_payload,
+            },
+        )
+        record_inserted, event_inserted, persisted = (
+            self.store.save_record_and_event_if_absent(
+                approval.approval_id,
+                "approval",
+                request_payload,
+                approval.created_at,
+                event.model_dump(mode="json"),
+                mission_id,
+            )
+        )
+        if not record_inserted or persisted is None:
+            raise RuntimeError("approval_request_conflict")
+        if event_inserted:
+            self.events.notify_persisted(Event.model_validate(persisted))
         return approval
 
     def decide(self, approval_id: str, approved: bool | None, actor: str, note: str, trace_id: str, decision: str | None = None, scope: str | None = None) -> ApprovalRequest:
-        raw = self.store.get_record(approval_id)
-        if not raw:
+        envelope = self.store.get_record_envelope(approval_id)
+        if not envelope:
             raise KeyError(f"approval_not_found:{approval_id}")
-        approval = ApprovalRequest.model_validate(raw)
+        if envelope.get("record_type") != "approval":
+            raise ValueError("approval_record_type_invalid")
+        approval = ApprovalRequest.model_validate(envelope["payload"])
+        if (
+            envelope.get("record_id") != approval_id
+            or approval.approval_id != approval_id
+            or envelope.get("mission_id") != approval.mission_id
+            or not self.request_origin_is_valid(envelope, approval)
+            or not self.terminal_transition_is_valid(approval)
+        ):
+            raise ValueError("approval_integrity_invalid")
         if approval.status != ApprovalStatus.PENDING:
             raise ValueError(f"approval_already_decided:{approval.status}")
-        if approval.expires_at and datetime.fromisoformat(approval.expires_at) <= datetime.now(timezone.utc):
+        if not actor.strip():
+            raise ValueError("approval_decision_actor_required")
+        expiry = datetime.fromisoformat(approval.expires_at) if approval.expires_at else None
+        if expiry and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        if expiry and expiry <= datetime.now(timezone.utc):
             approval.status = ApprovalStatus.EXPIRED
-            self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, approval.mission_id)
+            self._commit_transition(
+                approval,
+                expected_integrity_sha256=envelope["integrity_sha256"],
+                event_type="approval.expired",
+                actor="governance",
+                trace_id=trace_id,
+                event_payload={
+                    "approval_id": approval.approval_id,
+                    "status": ApprovalStatus.EXPIRED.value,
+                    "expires_at": approval.expires_at,
+                },
+            )
             raise PermissionError("approval_expired")
         decision = decision or ("approved" if approved else "rejected")
         if decision in {"approve_once", "approve_mission", "approved"}:
             approval.status = ApprovalStatus.APPROVED
-            approval.approval_scope = scope or ("single_action" if decision == "approve_once" else approval.approval_scope)
+            if scope is not None and scope != approval.approval_scope:
+                raise ValueError("approval_decision_scope_mismatch")
         elif decision in {"request_changes", "changes_requested"}:
             approval.status = ApprovalStatus.CHANGES_REQUESTED
         elif decision == "pause_mission":
@@ -86,16 +383,56 @@ class ApprovalEngine:
         approval.decision_note = note
         approval.decision_action = decision
         approval.decided_at = now_iso()
-        self.store.save_record(approval.approval_id, "approval", approval.model_dump(mode="json"), approval.created_at, approval.mission_id)
-        self.events.publish("approval.decided", approval.mission_id, "mission", actor, trace_id, {"approval_id": approval_id, "status": approval.status.value, "decision": decision, "scope": approval.approval_scope})
+        self._commit_transition(
+            approval,
+            expected_integrity_sha256=envelope["integrity_sha256"],
+            event_type="approval.decided",
+            actor=actor,
+            trace_id=trace_id,
+            event_payload={
+                "approval_id": approval_id,
+                "status": approval.status.value,
+                "decision": decision,
+                "scope": approval.approval_scope,
+                "action": approval.action,
+                "risk_level": approval.risk_level.value,
+                "executor_id": approval.executor_id,
+                "proposal_sha256": approval.proposal_sha256,
+                "decided_at": approval.decided_at,
+            },
+        )
         return approval
 
     def get(self, approval_id: str) -> ApprovalRequest | None:
-        raw = self.store.get_record(approval_id)
-        return ApprovalRequest.model_validate(raw) if raw else None
+        envelope = self.store.get_record_envelope(approval_id)
+        if not envelope:
+            return None
+        if envelope.get("record_type") != "approval":
+            raise ValueError("approval_record_type_invalid")
+        approval = ApprovalRequest.model_validate(envelope["payload"])
+        if (
+            envelope.get("record_id") != approval_id
+            or approval.approval_id != approval_id
+            or envelope.get("mission_id") != approval.mission_id
+            or not self.request_origin_is_valid(envelope, approval)
+            or not self.terminal_transition_is_valid(approval)
+        ):
+            raise ValueError("approval_integrity_invalid")
+        return approval
 
     def list(self, mission_id: str | None = None) -> list[dict]:
-        return self.store.list_records("approval", mission_id)
+        approvals: list[dict] = []
+        for envelope in self.store.list_record_envelopes("approval", mission_id):
+            approval = ApprovalRequest.model_validate(envelope["payload"])
+            if (
+                envelope.get("record_id") != approval.approval_id
+                or envelope.get("mission_id") != approval.mission_id
+                or not self.request_origin_is_valid(envelope, approval)
+                or not self.terminal_transition_is_valid(approval)
+            ):
+                raise ValueError("approval_integrity_invalid")
+            approvals.append(approval.model_dump(mode="json"))
+        return approvals
 
 
 class WriterLeaseManager:

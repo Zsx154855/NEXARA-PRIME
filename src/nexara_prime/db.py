@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import threading
@@ -8,7 +9,12 @@ from typing import Any
 
 
 class SQLiteStore:
-    """Small durable store for the modular-monolith MVP."""
+    """Small durable store for the modular-monolith MVP.
+
+    Records carry an integrity envelope over identity, type, mission binding,
+    creation time, and canonical payload. The store also exposes an atomic
+    compare-and-set helper used for single-action approval consumption.
+    """
 
     def __init__(self, path: Path):
         self.path = Path(path)
@@ -17,6 +23,57 @@ class SQLiteStore:
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
+
+    @staticmethod
+    def _canonical_payload(payload: dict[str, Any]) -> str:
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    @classmethod
+    def _record_integrity(
+        cls,
+        record_id: str,
+        record_type: str,
+        mission_id: str | None,
+        created_at: str,
+        payload: dict[str, Any],
+    ) -> str:
+        envelope = {
+            "record_id": record_id,
+            "record_type": record_type,
+            "mission_id": mission_id,
+            "created_at": created_at,
+            "payload": payload,
+        }
+        encoded = json.dumps(
+            envelope,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _evidence_envelope_integrity(payload: dict[str, Any]) -> str:
+        envelope = {
+            "evidence_id": payload.get("evidence_id"),
+            "mission_id": payload.get("mission_id"),
+            "kind": payload.get("kind"),
+            "sha256": payload.get("sha256"),
+            "task_id": payload.get("task_id"),
+            "tool_invocation_id": payload.get("tool_invocation_id"),
+            "actor": payload.get("actor"),
+            "source": payload.get("source"),
+            "source_event_id": payload.get("source_event_id"),
+            "verification_status": payload.get("verification_status"),
+            "request_sha256": payload.get("request_sha256"),
+        }
+        encoded = json.dumps(
+            envelope,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
     def _init_schema(self) -> None:
         with self._lock, self._conn:
@@ -27,7 +84,9 @@ class SQLiteStore:
                     record_type TEXT NOT NULL,
                     mission_id TEXT,
                     payload TEXT NOT NULL,
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    integrity_sha256 TEXT,
+                    origin_sha256 TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_records_type ON records(record_type);
                 CREATE INDEX IF NOT EXISTS idx_records_mission ON records(mission_id);
@@ -45,26 +104,694 @@ class SQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_events_aggregate ON events(aggregate_id);
                 """
             )
-            columns = {row[1] for row in self._conn.execute("PRAGMA table_info(events)").fetchall()}
-            if "idempotency_key" not in columns:
-                self._conn.execute("ALTER TABLE events ADD COLUMN idempotency_key TEXT")
-            self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_events_idempotency ON events(idempotency_key) WHERE idempotency_key IS NOT NULL")
+            record_columns = {
+                row[1] for row in self._conn.execute("PRAGMA table_info(records)").fetchall()
+            }
+            integrity_column_preexisted = "integrity_sha256" in record_columns
+            origin_column_preexisted = "origin_sha256" in record_columns
+            if not integrity_column_preexisted:
+                self._conn.execute("ALTER TABLE records ADD COLUMN integrity_sha256 TEXT")
+            if not origin_column_preexisted:
+                self._conn.execute("ALTER TABLE records ADD COLUMN origin_sha256 TEXT")
+            legacy_rows = self._conn.execute(
+                "SELECT record_id, record_type, mission_id, payload, created_at, "
+                "integrity_sha256 FROM records"
+            ).fetchall()
+            for row in legacy_rows:
+                try:
+                    payload = json.loads(row["payload"])
+                except (TypeError, ValueError):
+                    # A schema upgrade must never make the whole store
+                    # unavailable because one legacy row is corrupt. Preserve
+                    # the original bytes and missing/invalid integrity marker
+                    # so the audit path can report the row for remediation.
+                    continue
+                if not isinstance(payload, dict):
+                    # Syntactically valid JSON can still violate the record
+                    # contract (for example null, a scalar, or an array).
+                    # Preserve it unchanged as corrupt for the audit path.
+                    continue
+                if integrity_column_preexisted and not row["integrity_sha256"]:
+                    continue
+                payload_changed = False
+                if row["record_type"] == "evidence" and not payload.get("envelope_sha256"):
+                    if row["integrity_sha256"]:
+                        legacy_integrity = self._record_integrity(
+                            row["record_id"],
+                            row["record_type"],
+                            row["mission_id"],
+                            row["created_at"],
+                            payload,
+                        )
+                        if row["integrity_sha256"] != legacy_integrity:
+                            continue
+                    payload["envelope_sha256"] = self._evidence_envelope_integrity(payload)
+                    payload_changed = True
+                if not payload_changed and row["integrity_sha256"]:
+                    continue
+                integrity = self._record_integrity(
+                    row["record_id"],
+                    row["record_type"],
+                    row["mission_id"],
+                    row["created_at"],
+                    payload,
+                )
+                self._conn.execute(
+                    "UPDATE records SET payload=?, integrity_sha256=? WHERE record_id=?",
+                    (self._canonical_payload(payload), integrity, row["record_id"]),
+                )
+            # Origin backfill is deliberately idempotent. A previous process may
+            # have added the column and crashed before every row was populated.
+            # Approval origins are rebuilt from their durable request event so a
+            # decided payload cannot bless a repurposed action, risk, or scope.
+            requested_approvals: dict[str, dict[str, Any] | None] = {}
+            for event_row in self._conn.execute(
+                "SELECT event_id, aggregate_id, aggregate_type, actor, "
+                "idempotency_key, payload FROM events "
+                "WHERE event_type='approval.requested'"
+            ).fetchall():
+                try:
+                    event_payload = json.loads(event_row["payload"])
+                except (TypeError, ValueError):
+                    continue
+                if (
+                    not isinstance(event_payload, dict)
+                    or event_row["aggregate_type"] != "mission"
+                    or event_row["actor"] != "governance"
+                ):
+                    continue
+                approval_id = event_payload.get("approval_id")
+                if not approval_id:
+                    continue
+                key = str(approval_id)
+                request_key = f"approval.requested:{key}"
+                expected_event_id = (
+                    "evt_"
+                    + hashlib.sha256(request_key.encode("utf-8")).hexdigest()[:24]
+                )
+                if (
+                    event_row["event_id"] != expected_event_id
+                    or event_row["idempotency_key"] != request_key
+                ):
+                    requested_approvals[key] = None
+                    continue
+                request_payload = event_payload.get("request")
+                if not isinstance(request_payload, dict):
+                    # Old summary-only events cannot safely reconstruct
+                    # executor, proposal, rationale, rollback, or cost fields.
+                    # Quarantine instead of blessing the current row.
+                    requested_approvals[key] = None
+                    continue
+                projection = dict(request_payload)
+                projection["_mission_id"] = str(event_row["aggregate_id"])
+                existing = requested_approvals.get(key)
+                if key in requested_approvals and existing != projection:
+                    # Conflicting request events make the record untrustworthy;
+                    # leave its origin null so normal reads quarantine it.
+                    requested_approvals[key] = None
+                else:
+                    requested_approvals[key] = projection
 
-    def save_record(self, record_id: str, record_type: str, payload: dict[str, Any], created_at: str, mission_id: str | None = None) -> None:
+            created_evidence: dict[str, dict[str, Any] | None] = {}
+            for event_row in self._conn.execute(
+                "SELECT event_id, aggregate_id, aggregate_type, actor, "
+                "idempotency_key, payload FROM events "
+                "WHERE event_type='evidence.created'"
+            ).fetchall():
+                try:
+                    event_payload = json.loads(event_row["payload"])
+                except (TypeError, ValueError):
+                    continue
+                if (
+                    not isinstance(event_payload, dict)
+                    or event_row["aggregate_type"] != "mission"
+                    or event_row["actor"] != "evidence_store"
+                ):
+                    continue
+                evidence_id = event_payload.get("evidence_id")
+                creation_record = event_payload.get("record")
+                if not evidence_id or not isinstance(creation_record, dict):
+                    continue
+                key = str(evidence_id)
+                event_key = creation_record.get("idempotency_key") or (
+                    f"evidence.create:{key}"
+                )
+                expected_event_id = "evt_" + hashlib.sha256(
+                    f"evidence-event:{event_key}".encode("utf-8")
+                ).hexdigest()[:12]
+                if (
+                    event_row["event_id"] != expected_event_id
+                    or event_row["idempotency_key"] != event_key
+                ):
+                    created_evidence[key] = None
+                    continue
+                projection = dict(creation_record)
+                projection["_mission_id"] = str(event_row["aggregate_id"])
+                existing = created_evidence.get(key)
+                if key in created_evidence and existing != projection:
+                    created_evidence[key] = None
+                else:
+                    created_evidence[key] = projection
+
+            origin_rows = self._conn.execute(
+                "SELECT record_id, record_type, mission_id, payload, created_at, "
+                "integrity_sha256 FROM records WHERE origin_sha256 IS NULL "
+                "AND integrity_sha256 IS NOT NULL"
+            ).fetchall()
+            for row in origin_rows:
+                try:
+                    current_payload = json.loads(row["payload"])
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(current_payload, dict):
+                    continue
+                current_integrity = self._record_integrity(
+                    row["record_id"],
+                    row["record_type"],
+                    row["mission_id"],
+                    row["created_at"],
+                    current_payload,
+                )
+                if current_integrity != row["integrity_sha256"]:
+                    continue
+                origin_payload = dict(current_payload)
+                if row["record_type"] == "approval":
+                    request_projection = requested_approvals.get(str(row["record_id"]))
+                    if (
+                        not isinstance(request_projection, dict)
+                        or request_projection.get("_mission_id") != row["mission_id"]
+                    ):
+                        continue
+                    full_request = {
+                        key: value
+                        for key, value in request_projection.items()
+                        if key != "_mission_id"
+                    }
+                    if (
+                        full_request.get("approval_id") != row["record_id"]
+                        or full_request.get("mission_id") != row["mission_id"]
+                    ):
+                        continue
+                    origin_payload = full_request
+                    origin_payload.update(
+                        {
+                            "status": "pending",
+                            "decided_by": None,
+                            "decision_note": None,
+                            "decision_action": None,
+                            "decided_at": None,
+                        }
+                    )
+                elif row["record_type"] == "evidence":
+                    creation_projection = created_evidence.get(str(row["record_id"]))
+                    if (
+                        not isinstance(creation_projection, dict)
+                        or creation_projection.get("_mission_id") != row["mission_id"]
+                    ):
+                        continue
+                    origin_payload = {
+                        key: value
+                        for key, value in creation_projection.items()
+                        if key != "_mission_id"
+                    }
+                    if (
+                        origin_payload.get("evidence_id") != row["record_id"]
+                        or origin_payload.get("mission_id") != row["mission_id"]
+                    ):
+                        continue
+                origin = self._record_integrity(
+                    row["record_id"],
+                    row["record_type"],
+                    row["mission_id"],
+                    row["created_at"],
+                    origin_payload,
+                )
+                self._conn.execute(
+                    "UPDATE records SET origin_sha256=? WHERE record_id=? "
+                    "AND origin_sha256 IS NULL",
+                    (origin, row["record_id"]),
+                )
+            event_columns = {
+                row[1] for row in self._conn.execute("PRAGMA table_info(events)").fetchall()
+            }
+            if "idempotency_key" not in event_columns:
+                self._conn.execute("ALTER TABLE events ADD COLUMN idempotency_key TEXT")
+            self._conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_idempotency "
+                "ON events(idempotency_key) WHERE idempotency_key IS NOT NULL"
+            )
+
+    def save_record(
+        self,
+        record_id: str,
+        record_type: str,
+        payload: dict[str, Any],
+        created_at: str,
+        mission_id: str | None = None,
+    ) -> None:
+        canonical = self._canonical_payload(payload)
+        integrity = self._record_integrity(
+            record_id, record_type, mission_id, created_at, payload
+        )
         with self._lock, self._conn:
             self._conn.execute(
-                """INSERT INTO records(record_id, record_type, mission_id, payload, created_at)
-                   VALUES (?, ?, ?, ?, ?)
-                   ON CONFLICT(record_id) DO UPDATE SET payload=excluded.payload, mission_id=excluded.mission_id""",
-                (record_id, record_type, mission_id, json.dumps(payload, ensure_ascii=False), created_at),
+                """INSERT INTO records(
+                       record_id, record_type, mission_id, payload, created_at,
+                       integrity_sha256, origin_sha256
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(record_id) DO UPDATE SET
+                       payload=excluded.payload,
+                       mission_id=excluded.mission_id,
+                       record_type=excluded.record_type,
+                       created_at=excluded.created_at,
+                       integrity_sha256=excluded.integrity_sha256""",
+                (
+                    record_id,
+                    record_type,
+                    mission_id,
+                    canonical,
+                    created_at,
+                    integrity,
+                    integrity,
+                ),
             )
 
     def get_record(self, record_id: str) -> dict[str, Any] | None:
         with self._lock:
-            row = self._conn.execute("SELECT payload FROM records WHERE record_id=?", (record_id,)).fetchone()
+            row = self._conn.execute(
+                "SELECT payload FROM records WHERE record_id=?", (record_id,)
+            ).fetchone()
         return json.loads(row["payload"]) if row else None
 
-    def list_records(self, record_type: str, mission_id: str | None = None) -> list[dict[str, Any]]:
+    def save_record_if_absent(
+        self,
+        record_id: str,
+        record_type: str,
+        payload: dict[str, Any],
+        created_at: str,
+        mission_id: str | None = None,
+    ) -> bool:
+        """Insert an immutable first-write record without overwriting a winner."""
+        canonical = self._canonical_payload(payload)
+        integrity = self._record_integrity(
+            record_id, record_type, mission_id, created_at, payload
+        )
+        with self._lock, self._conn:
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO records("
+                "record_id, record_type, mission_id, payload, created_at, "
+                "integrity_sha256, origin_sha256"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record_id,
+                    record_type,
+                    mission_id,
+                    canonical,
+                    created_at,
+                    integrity,
+                    integrity,
+                ),
+            )
+            return cursor.rowcount == 1
+
+    def get_record_envelope(self, record_id: str) -> dict[str, Any] | None:
+        """Return a record only when its persisted identity envelope is intact."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT record_id, record_type, mission_id, payload, created_at, "
+                "integrity_sha256, origin_sha256 FROM records WHERE record_id=?",
+                (record_id,),
+            ).fetchone()
+        if not row:
+            return None
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        expected = self._record_integrity(
+            row["record_id"],
+            row["record_type"],
+            row["mission_id"],
+            row["created_at"],
+            payload,
+        )
+        if not row["integrity_sha256"] or row["integrity_sha256"] != expected:
+            return None
+        if not row["origin_sha256"]:
+            return None
+        return {
+            "record_id": row["record_id"],
+            "record_type": row["record_type"],
+            "mission_id": row["mission_id"],
+            "created_at": row["created_at"],
+            "integrity_sha256": row["integrity_sha256"],
+            "origin_sha256": row["origin_sha256"],
+            "payload": payload,
+        }
+
+    @classmethod
+    def record_origin_matches(
+        cls,
+        envelope: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> bool:
+        """Verify candidate original content against the first-write anchor."""
+        origin = envelope.get("origin_sha256")
+        if not origin:
+            return False
+        candidate = cls._record_integrity(
+            str(envelope["record_id"]),
+            str(envelope["record_type"]),
+            envelope.get("mission_id"),
+            str(envelope["created_at"]),
+            payload,
+        )
+        return origin == candidate
+
+    def compare_and_set_record_field(
+        self,
+        record_id: str,
+        *,
+        record_type: str,
+        field: str,
+        expected_value: Any,
+        new_value: Any,
+    ) -> dict[str, Any] | None:
+        """Atomically update one payload field when the persisted value matches."""
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT record_id, record_type, mission_id, payload, created_at, "
+                "integrity_sha256 FROM records WHERE record_id=? AND record_type=?",
+                (record_id, record_type),
+            ).fetchone()
+            if not row:
+                return None
+            payload = json.loads(row["payload"])
+            integrity = self._record_integrity(
+                row["record_id"],
+                row["record_type"],
+                row["mission_id"],
+                row["created_at"],
+                payload,
+            )
+            if not row["integrity_sha256"] or row["integrity_sha256"] != integrity:
+                return None
+            if payload.get(field) != expected_value:
+                return None
+            payload[field] = new_value
+            canonical = self._canonical_payload(payload)
+            new_integrity = self._record_integrity(
+                row["record_id"],
+                row["record_type"],
+                row["mission_id"],
+                row["created_at"],
+                payload,
+            )
+            cursor = self._conn.execute(
+                "UPDATE records SET payload=?, integrity_sha256=? "
+                "WHERE record_id=? AND record_type=? AND integrity_sha256=?",
+                (
+                    canonical,
+                    new_integrity,
+                    record_id,
+                    record_type,
+                    row["integrity_sha256"],
+                ),
+            )
+            if cursor.rowcount != 1:
+                return None
+            return payload
+
+    def replace_record_payload_if_integrity_matches(
+        self,
+        record_id: str,
+        *,
+        record_type: str,
+        expected_integrity_sha256: str,
+        new_payload: dict[str, Any],
+    ) -> bool:
+        """Replace a complete payload only if the exact validated record remains."""
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT record_id, record_type, mission_id, payload, created_at, "
+                "integrity_sha256 FROM records WHERE record_id=? AND record_type=?",
+                (record_id, record_type),
+            ).fetchone()
+            if not row or row["integrity_sha256"] != expected_integrity_sha256:
+                return False
+            current_payload = json.loads(row["payload"])
+            current_integrity = self._record_integrity(
+                row["record_id"],
+                row["record_type"],
+                row["mission_id"],
+                row["created_at"],
+                current_payload,
+            )
+            if current_integrity != expected_integrity_sha256:
+                return False
+            canonical = self._canonical_payload(new_payload)
+            new_integrity = self._record_integrity(
+                row["record_id"],
+                row["record_type"],
+                row["mission_id"],
+                row["created_at"],
+                new_payload,
+            )
+            cursor = self._conn.execute(
+                "UPDATE records SET payload=?, integrity_sha256=? "
+                "WHERE record_id=? AND record_type=? AND integrity_sha256=?",
+                (
+                    canonical,
+                    new_integrity,
+                    record_id,
+                    record_type,
+                    expected_integrity_sha256,
+                ),
+            )
+            return cursor.rowcount == 1
+
+    def compare_and_set_record_fields_atomically(
+        self,
+        updates: list[dict[str, Any]],
+    ) -> bool:
+        """Apply multiple record field transitions in one SQLite transaction.
+
+        Every record must have a valid integrity envelope and every expected
+        value must still match. If any precondition fails, no record is
+        changed. This is used when one governed action consumes more than one
+        approval (for example an R4 promotion plus its release approval).
+        """
+        if not updates:
+            return True
+        record_ids = [str(item["record_id"]) for item in updates]
+        if len(record_ids) != len(set(record_ids)):
+            return False
+
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                prepared: list[tuple[str, str, str, str, str]] = []
+                for item in updates:
+                    record_id = str(item["record_id"])
+                    record_type = str(item["record_type"])
+                    field = str(item["field"])
+                    row = self._conn.execute(
+                        "SELECT record_id, record_type, mission_id, payload, "
+                        "created_at, integrity_sha256 FROM records "
+                        "WHERE record_id=? AND record_type=?",
+                        (record_id, record_type),
+                    ).fetchone()
+                    if not row:
+                        self._conn.rollback()
+                        return False
+
+                    payload = json.loads(row["payload"])
+                    current_integrity = self._record_integrity(
+                        row["record_id"],
+                        row["record_type"],
+                        row["mission_id"],
+                        row["created_at"],
+                        payload,
+                    )
+                    if (
+                        not row["integrity_sha256"]
+                        or row["integrity_sha256"] != current_integrity
+                        or (
+                            item.get("expected_integrity_sha256") is not None
+                            and row["integrity_sha256"]
+                            != item["expected_integrity_sha256"]
+                        )
+                        or payload.get(field) != item["expected_value"]
+                    ):
+                        self._conn.rollback()
+                        return False
+
+                    payload[field] = item["new_value"]
+                    canonical = self._canonical_payload(payload)
+                    new_integrity = self._record_integrity(
+                        row["record_id"],
+                        row["record_type"],
+                        row["mission_id"],
+                        row["created_at"],
+                        payload,
+                    )
+                    prepared.append(
+                        (
+                            canonical,
+                            new_integrity,
+                            record_id,
+                            record_type,
+                            row["integrity_sha256"],
+                        )
+                    )
+
+                for canonical, integrity, record_id, record_type, previous in prepared:
+                    cursor = self._conn.execute(
+                        "UPDATE records SET payload=?, integrity_sha256=? "
+                        "WHERE record_id=? AND record_type=? AND integrity_sha256=?",
+                        (canonical, integrity, record_id, record_type, previous),
+                    )
+                    if cursor.rowcount != 1:
+                        self._conn.rollback()
+                        return False
+                self._conn.commit()
+                return True
+            except Exception:
+                self._conn.rollback()
+                raise
+
+    def compare_and_set_record_fields_and_events_atomically(
+        self,
+        updates: list[dict[str, Any]],
+        events: list[dict[str, Any]],
+    ) -> list[dict[str, Any]] | None:
+        """Commit governed field transitions and their audit events together.
+
+        Existing transition events are a hard conflict: a durable event proves
+        that the transition has already occurred even if a caller later reseals
+        a record back to its previous status.
+        """
+        if not updates or len(updates) != len(events):
+            return None
+        record_ids = [str(item["record_id"]) for item in updates]
+        event_ids = [str(item["event_id"]) for item in events]
+        event_keys = [str(item.get("idempotency_key") or "") for item in events]
+        if (
+            len(record_ids) != len(set(record_ids))
+            or len(event_ids) != len(set(event_ids))
+            or any(not key for key in event_keys)
+            or len(event_keys) != len(set(event_keys))
+        ):
+            return None
+
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                prepared: list[tuple[str, str, str, str, str]] = []
+                for item in updates:
+                    record_id = str(item["record_id"])
+                    record_type = str(item["record_type"])
+                    field = str(item["field"])
+                    row = self._conn.execute(
+                        "SELECT record_id, record_type, mission_id, payload, "
+                        "created_at, integrity_sha256 FROM records "
+                        "WHERE record_id=? AND record_type=?",
+                        (record_id, record_type),
+                    ).fetchone()
+                    if not row:
+                        self._conn.rollback()
+                        return None
+                    try:
+                        payload = json.loads(row["payload"])
+                    except (TypeError, ValueError):
+                        self._conn.rollback()
+                        return None
+                    if not isinstance(payload, dict):
+                        self._conn.rollback()
+                        return None
+                    current_integrity = self._record_integrity(
+                        row["record_id"],
+                        row["record_type"],
+                        row["mission_id"],
+                        row["created_at"],
+                        payload,
+                    )
+                    if (
+                        not row["integrity_sha256"]
+                        or row["integrity_sha256"] != current_integrity
+                        or (
+                            item.get("expected_integrity_sha256") is not None
+                            and row["integrity_sha256"]
+                            != item["expected_integrity_sha256"]
+                        )
+                        or payload.get(field) != item["expected_value"]
+                    ):
+                        self._conn.rollback()
+                        return None
+                    payload[field] = item["new_value"]
+                    prepared.append(
+                        (
+                            self._canonical_payload(payload),
+                            self._record_integrity(
+                                row["record_id"],
+                                row["record_type"],
+                                row["mission_id"],
+                                row["created_at"],
+                                payload,
+                            ),
+                            record_id,
+                            record_type,
+                            row["integrity_sha256"],
+                        )
+                    )
+
+                for event in events:
+                    existing = self._conn.execute(
+                        "SELECT event_id FROM events WHERE event_id=? "
+                        "OR idempotency_key=?",
+                        (event["event_id"], event["idempotency_key"]),
+                    ).fetchone()
+                    if existing is not None:
+                        self._conn.rollback()
+                        return None
+                    self._conn.execute(
+                        "INSERT INTO events(event_id, event_type, aggregate_id, "
+                        "aggregate_type, actor, trace_id, timestamp, "
+                        "idempotency_key, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            event["event_id"],
+                            event["event_type"],
+                            event["aggregate_id"],
+                            event["aggregate_type"],
+                            event["actor"],
+                            event["trace_id"],
+                            event["timestamp"],
+                            event["idempotency_key"],
+                            self._canonical_payload(event.get("payload", {})),
+                        ),
+                    )
+
+                for canonical, integrity, record_id, record_type, previous in prepared:
+                    cursor = self._conn.execute(
+                        "UPDATE records SET payload=?, integrity_sha256=? "
+                        "WHERE record_id=? AND record_type=? AND integrity_sha256=?",
+                        (canonical, integrity, record_id, record_type, previous),
+                    )
+                    if cursor.rowcount != 1:
+                        self._conn.rollback()
+                        return None
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+
+        return [dict(event) for event in events]
+
+    def list_records(
+        self, record_type: str, mission_id: str | None = None
+    ) -> list[dict[str, Any]]:
         query = "SELECT payload FROM records WHERE record_type=?"
         params: list[Any] = [record_type]
         if mission_id:
@@ -75,21 +802,385 @@ class SQLiteStore:
             rows = self._conn.execute(query, params).fetchall()
         return [json.loads(row["payload"]) for row in rows]
 
-    def save_event(self, event: dict[str, Any]) -> None:
+    def list_record_envelopes(
+        self, record_type: str, mission_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = (
+            "SELECT record_id FROM records WHERE record_type=?"
+            + (" AND mission_id=?" if mission_id else "")
+            + " ORDER BY created_at ASC"
+        )
+        params: list[Any] = [record_type]
+        if mission_id:
+            params.append(mission_id)
+        with self._lock:
+            ids = [row["record_id"] for row in self._conn.execute(query, params)]
+        envelopes: list[dict[str, Any]] = []
+        for record_id in ids:
+            envelope = self.get_record_envelope(record_id)
+            if not envelope:
+                raise ValueError(f"record_integrity_invalid:{record_id}")
+            envelopes.append(envelope)
+        return envelopes
+
+    def audit_record_envelopes(
+        self, record_type: str, mission_id: str | None = None
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        """Enumerate valid and corrupt records without trusting mission metadata.
+
+        Mission-scoped audits include rows selected by either the stored mission
+        column or the payload mission, so moving only one side cannot hide a
+        damaged record from completion checks.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT record_id, mission_id, payload FROM records "
+                "WHERE record_type=? ORDER BY created_at ASC",
+                (record_type,),
+            ).fetchall()
+        valid: list[dict[str, Any]] = []
+        invalid: list[str] = []
+        for row in rows:
+            try:
+                payload = json.loads(row["payload"])
+            except (TypeError, ValueError):
+                # The stored mission column is the only trustworthy scope
+                # signal left when the payload cannot be decoded. Count an
+                # in-scope malformed row as invalid without reparsing it.
+                if mission_id is None or row["mission_id"] == mission_id:
+                    invalid.append(str(row["record_id"]))
+                continue
+            if not isinstance(payload, dict):
+                if mission_id is None or row["mission_id"] == mission_id:
+                    invalid.append(str(row["record_id"]))
+                continue
+            if mission_id is not None and (
+                row["mission_id"] != mission_id
+                and payload.get("mission_id") != mission_id
+            ):
+                continue
+            envelope = self.get_record_envelope(row["record_id"])
+            if envelope is None:
+                invalid.append(str(row["record_id"]))
+            else:
+                valid.append(envelope)
+        return valid, invalid
+
+    def save_record_and_event_if_absent(
+        self,
+        record_id: str,
+        record_type: str,
+        payload: dict[str, Any],
+        created_at: str,
+        event: dict[str, Any],
+        mission_id: str | None = None,
+    ) -> tuple[bool, bool, dict[str, Any] | None]:
+        """Atomically claim an immutable record and its creation event.
+
+        For idempotent calls, the record is the winner and a losing caller
+        cannot publish an event for content that did not win the claim. A
+        matching event from an interrupted legacy attempt may be reused. For
+        non-idempotent calls, the fresh record and event still become visible
+        together. Any conflict aborts without leaving an orphan row.
+        """
+        idempotency_key = event.get("idempotency_key")
+
+        canonical_record = self._canonical_payload(payload)
+        record_integrity = self._record_integrity(
+            record_id, record_type, mission_id, created_at, payload
+        )
+        canonical_event_payload = json.dumps(
+            event.get("payload", {}),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                existing_record = self._conn.execute(
+                    "SELECT record_id FROM records WHERE record_id=?",
+                    (record_id,),
+                ).fetchone()
+                if existing_record:
+                    self._conn.rollback()
+                    return False, False, None
+
+                if idempotency_key:
+                    existing_event = self._conn.execute(
+                        "SELECT * FROM events WHERE idempotency_key=?",
+                        (idempotency_key,),
+                    ).fetchone()
+                else:
+                    existing_event = self._conn.execute(
+                        "SELECT * FROM events WHERE event_id=?",
+                        (event["event_id"],),
+                    ).fetchone()
+                event_inserted = existing_event is None
+                if existing_event is not None:
+                    existing_payload = json.loads(existing_event["payload"])
+                    identity_matches = (
+                        existing_event["event_id"] == event["event_id"]
+                        and existing_event["event_type"] == event["event_type"]
+                        and existing_event["aggregate_id"] == event["aggregate_id"]
+                        and existing_event["aggregate_type"] == event["aggregate_type"]
+                        and existing_event["actor"] == event["actor"]
+                        and existing_event["idempotency_key"] == idempotency_key
+                        and existing_payload == event.get("payload", {})
+                    )
+                    if not identity_matches:
+                        self._conn.rollback()
+                        raise ValueError("event_idempotency_identity_conflict")
+                else:
+                    self._conn.execute(
+                        "INSERT INTO events(event_id, event_type, aggregate_id, "
+                        "aggregate_type, actor, trace_id, timestamp, "
+                        "idempotency_key, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            event["event_id"],
+                            event["event_type"],
+                            event["aggregate_id"],
+                            event["aggregate_type"],
+                            event["actor"],
+                            event["trace_id"],
+                            event["timestamp"],
+                            idempotency_key,
+                            canonical_event_payload,
+                        ),
+                    )
+
+                self._conn.execute(
+                    "INSERT INTO records(record_id, record_type, mission_id, "
+                    "payload, created_at, integrity_sha256, origin_sha256) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        record_id,
+                        record_type,
+                        mission_id,
+                        canonical_record,
+                        created_at,
+                        record_integrity,
+                        record_integrity,
+                    ),
+                )
+                if idempotency_key:
+                    persisted_event = self._conn.execute(
+                        "SELECT * FROM events WHERE idempotency_key=?",
+                        (idempotency_key,),
+                    ).fetchone()
+                else:
+                    persisted_event = self._conn.execute(
+                        "SELECT * FROM events WHERE event_id=?",
+                        (event["event_id"],),
+                    ).fetchone()
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+
+        if persisted_event is None:
+            raise RuntimeError("event_persistence_failed")
+        persisted = dict(persisted_event)
+        persisted["payload"] = json.loads(persisted["payload"])
+        return True, event_inserted, persisted
+
+    def find_record_envelope(
+        self, record_type: str, field: str, value: Any
+    ) -> dict[str, Any] | None:
+        """Find the first integrity-valid record matching a payload field."""
+        with self._lock:
+            record_ids = [
+                str(row["record_id"])
+                for row in self._conn.execute(
+                    "SELECT record_id FROM records WHERE record_type=? "
+                    "ORDER BY created_at ASC",
+                    (record_type,),
+                ).fetchall()
+            ]
+        for record_id in record_ids:
+            envelope = self.get_record_envelope(record_id)
+            if envelope and envelope["payload"].get(field) == value:
+                return envelope
+        return None
+
+    def repair_record_event(
+        self,
+        record_id: str,
+        *,
+        record_type: str,
+        expected_integrity_sha256: str,
+        new_payload: dict[str, Any],
+        event: dict[str, Any],
+    ) -> tuple[bool, dict[str, Any]] | None:
+        """Atomically restore an event and update its existing record binding."""
+        idempotency_key = event.get("idempotency_key")
+        if not idempotency_key:
+            raise ValueError("repair_event_idempotency_key_required")
+
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                row = self._conn.execute(
+                    "SELECT record_id, record_type, mission_id, payload, "
+                    "created_at, integrity_sha256 FROM records "
+                    "WHERE record_id=? AND record_type=?",
+                    (record_id, record_type),
+                ).fetchone()
+                if not row or row["integrity_sha256"] != expected_integrity_sha256:
+                    self._conn.rollback()
+                    return None
+                try:
+                    current_payload = json.loads(row["payload"])
+                except (TypeError, ValueError):
+                    self._conn.rollback()
+                    return None
+                if not isinstance(current_payload, dict):
+                    self._conn.rollback()
+                    return None
+                current_integrity = self._record_integrity(
+                    row["record_id"],
+                    row["record_type"],
+                    row["mission_id"],
+                    row["created_at"],
+                    current_payload,
+                )
+                if current_integrity != expected_integrity_sha256:
+                    self._conn.rollback()
+                    return None
+
+                existing_event = self._conn.execute(
+                    "SELECT * FROM events WHERE idempotency_key=?",
+                    (idempotency_key,),
+                ).fetchone()
+                if existing_event is None:
+                    legacy_event = self._conn.execute(
+                        "SELECT * FROM events WHERE event_id=?",
+                        (event["event_id"],),
+                    ).fetchone()
+                    if legacy_event is not None:
+                        if legacy_event["idempotency_key"] not in {
+                            None,
+                            idempotency_key,
+                        }:
+                            self._conn.rollback()
+                            raise ValueError("event_idempotency_identity_conflict")
+                        existing_event = legacy_event
+
+                event_inserted = existing_event is None
+                if existing_event is not None:
+                    try:
+                        existing_payload = json.loads(existing_event["payload"])
+                    except (TypeError, ValueError):
+                        self._conn.rollback()
+                        raise ValueError("event_idempotency_identity_conflict")
+                    identity_matches = (
+                        existing_event["event_id"] == event["event_id"]
+                        and existing_event["event_type"] == event["event_type"]
+                        and existing_event["aggregate_id"] == event["aggregate_id"]
+                        and existing_event["aggregate_type"] == event["aggregate_type"]
+                        and existing_event["actor"] == event["actor"]
+                        and existing_payload == event.get("payload", {})
+                    )
+                    if not identity_matches:
+                        self._conn.rollback()
+                        raise ValueError("event_idempotency_identity_conflict")
+                    if existing_event["idempotency_key"] is None:
+                        cursor = self._conn.execute(
+                            "UPDATE events SET idempotency_key=? "
+                            "WHERE event_id=? AND idempotency_key IS NULL",
+                            (idempotency_key, event["event_id"]),
+                        )
+                        if cursor.rowcount != 1:
+                            self._conn.rollback()
+                            return None
+                else:
+                    self._conn.execute(
+                        "INSERT INTO events(event_id, event_type, aggregate_id, "
+                        "aggregate_type, actor, trace_id, timestamp, "
+                        "idempotency_key, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            event["event_id"],
+                            event["event_type"],
+                            event["aggregate_id"],
+                            event["aggregate_type"],
+                            event["actor"],
+                            event["trace_id"],
+                            event["timestamp"],
+                            idempotency_key,
+                            self._canonical_payload(event.get("payload", {})),
+                        ),
+                    )
+
+                canonical = self._canonical_payload(new_payload)
+                new_integrity = self._record_integrity(
+                    row["record_id"],
+                    row["record_type"],
+                    row["mission_id"],
+                    row["created_at"],
+                    new_payload,
+                )
+                cursor = self._conn.execute(
+                    "UPDATE records SET payload=?, integrity_sha256=? "
+                    "WHERE record_id=? AND record_type=? AND integrity_sha256=?",
+                    (
+                        canonical,
+                        new_integrity,
+                        record_id,
+                        record_type,
+                        expected_integrity_sha256,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    self._conn.rollback()
+                    return None
+                persisted_event = self._conn.execute(
+                    "SELECT * FROM events WHERE idempotency_key=?",
+                    (idempotency_key,),
+                ).fetchone()
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+
+        if persisted_event is None:
+            raise RuntimeError("event_persistence_failed")
+        persisted = dict(persisted_event)
+        persisted["payload"] = json.loads(persisted["payload"])
+        return event_inserted, persisted
+
+    def save_event(self, event: dict[str, Any]) -> dict[str, Any]:
         with self._lock, self._conn:
             self._conn.execute(
-                """INSERT OR REPLACE INTO events(event_id, event_type, aggregate_id, aggregate_type,
+                """INSERT OR IGNORE INTO events(event_id, event_type, aggregate_id, aggregate_type,
                    actor, trace_id, timestamp, idempotency_key, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    event["event_id"], event["event_type"], event["aggregate_id"], event["aggregate_type"],
-                    event["actor"], event["trace_id"], event["timestamp"], event.get("idempotency_key"),
+                    event["event_id"], event["event_type"], event["aggregate_id"],
+                    event["aggregate_type"], event["actor"], event["trace_id"],
+                    event["timestamp"], event.get("idempotency_key"),
                     json.dumps(event.get("payload", {}), ensure_ascii=False),
                 ),
             )
+            if event.get("idempotency_key"):
+                row = self._conn.execute(
+                    "SELECT * FROM events WHERE idempotency_key=?",
+                    (event["idempotency_key"],),
+                ).fetchone()
+            else:
+                row = self._conn.execute(
+                    "SELECT * FROM events WHERE event_id=?", (event["event_id"],)
+                ).fetchone()
+        if not row:
+            raise RuntimeError("event_persistence_failed")
+        persisted = dict(row)
+        persisted["payload"] = json.loads(persisted["payload"])
+        return persisted
 
     def get_event(self, event_id: str) -> dict[str, Any] | None:
         with self._lock:
-            row = self._conn.execute("SELECT * FROM events WHERE event_id=?", (event_id,)).fetchone()
+            row = self._conn.execute(
+                "SELECT * FROM events WHERE event_id=?", (event_id,)
+            ).fetchone()
         if not row:
             return None
         item = dict(row)
@@ -98,7 +1189,9 @@ class SQLiteStore:
 
     def get_event_by_idempotency(self, key: str) -> dict[str, Any] | None:
         with self._lock:
-            row = self._conn.execute("SELECT * FROM events WHERE idempotency_key=?", (key,)).fetchone()
+            row = self._conn.execute(
+                "SELECT * FROM events WHERE idempotency_key=?", (key,)
+            ).fetchone()
         if not row:
             return None
         item = dict(row)
@@ -122,7 +1215,6 @@ class SQLiteStore:
         return result
 
     def find_record(self, record_type: str, field: str, value: Any) -> dict[str, Any] | None:
-        """Small indexed-by-application helper used for idempotency in the MVP."""
         for item in self.list_records(record_type):
             if item.get(field) == value:
                 return item

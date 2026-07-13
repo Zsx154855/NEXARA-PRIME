@@ -1,0 +1,499 @@
+from __future__ import annotations
+
+import threading
+from pathlib import Path
+
+from nexara_prime.db import SQLiteStore
+from nexara_prime.evidence import EvidenceStore
+from nexara_prime.events import EventBus
+from nexara_prime.governance import ApprovalEngine
+from nexara_prime.models import ApprovalStatus, RiskLevel
+from nexara_prime.product_reality import (
+    EvolutionPromotionGate,
+    EvolutionProposal,
+    EvolutionValidation,
+    ProductTwinEngine,
+    ValuePresence,
+)
+
+
+def runtime(tmp_path: Path):
+    store = SQLiteStore(tmp_path / "nexara.sqlite3")
+    events = EventBus(store)
+    evidence = EvidenceStore(store, events)
+    approvals = ApprovalEngine(store, events)
+    twin = ProductTwinEngine(store)
+    gate = EvolutionPromotionGate(
+        approvals,
+        evidence,
+        authorized_human_principals={"human:owner"},
+    )
+    return store, evidence, approvals, twin, gate
+
+
+def verified_evidence(evidence: EvidenceStore, mission_id: str, title: str = "proof"):
+    return evidence.add(
+        mission_id,
+        "verification",
+        title,
+        "digest-bound proof",
+        "trace-1",
+        source="test",
+        verification_status="verified",
+    )
+
+
+def proposal(
+    evidence: EvidenceStore,
+    twin: ProductTwinEngine,
+    *,
+    mission_id: str = "mission-1",
+    risk: RiskLevel = RiskLevel.R3,
+):
+    proof = verified_evidence(evidence, mission_id)
+    rollback = verified_evidence(evidence, mission_id, "rollback")
+    checkpoint = twin.capture(
+        mission_id=mission_id,
+        expected_state={"version": 1},
+        observed_state={"version": 1},
+        evidence_refs=[rollback.evidence_id],
+        reversible=True,
+    )
+    return EvolutionProposal(
+        mission_id=mission_id,
+        title="Harden promotion",
+        observed_problem={"kind": "review"},
+        proposed_changes=["bind authorization"],
+        risk_level=risk,
+        evidence_refs=[proof.evidence_id],
+        rollback_plan=["restore checkpoint"],
+        rollback_checkpoint_id=checkpoint.checkpoint_id,
+        rollback_evidence_refs=[rollback.evidence_id],
+    )
+
+
+def validation_for(
+    approvals: ApprovalEngine,
+    item: EvolutionProposal,
+    *,
+    actor_id: str = "executor-1",
+    executor_id: str | None = "executor-1",
+    decided_by: str = "human:owner",
+    risk: RiskLevel | None = None,
+):
+    approval = approvals.request(
+        item.mission_id,
+        item.promotion_action,
+        risk or item.risk_level,
+        "approve promotion",
+        ["product reality"],
+        "trace-approval",
+        executor_id=executor_id,
+        approval_scope="single_action",
+        proposal_sha256=item.content_sha256,
+    )
+    approvals.decide(
+        approval.approval_id,
+        True,
+        decided_by,
+        "approved",
+        "trace-decision",
+    )
+    return EvolutionValidation(
+        simulation_passed=True,
+        verification_passed=True,
+        accessibility_passed=True,
+        governance_passed=True,
+        approval_id=approval.approval_id,
+        actor_id=actor_id,
+    ), approval.approval_id
+
+
+def test_unverified_evidence_is_rejected_without_mutation(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin, risk=RiskLevel.R0)
+    raw = store.get_record(item.evidence_refs[0])
+    raw["verification_status"] = "unverified"
+    raw["envelope_sha256"] = evidence._envelope_sha256(raw)
+    store.save_record(raw["evidence_id"], "evidence", raw, raw["created_at"], raw["mission_id"])
+
+    decision = gate.assess(
+        item,
+        EvolutionValidation(verification_passed=True),
+    )
+
+    assert decision.allowed is False
+    assert any("not pre-verified" in action for action in decision.required_actions)
+    assert store.get_record(item.evidence_refs[0])["verification_status"] == "unverified"
+
+
+def test_evidence_mission_metadata_tamper_breaks_envelope(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin, mission_id="mission-1", risk=RiskLevel.R0)
+    raw = store.get_record(item.evidence_refs[0])
+    raw["mission_id"] = "mission-2"
+    store.save_record(raw["evidence_id"], "evidence", raw, raw["created_at"], "mission-2")
+    item.mission_id = "mission-2"
+
+    decision = gate.assess(item, EvolutionValidation(verification_passed=True))
+
+    assert decision.allowed is False
+    assert any("envelope verification" in action for action in decision.required_actions)
+
+
+def test_executor_must_be_non_empty_and_exact(tmp_path: Path) -> None:
+    _, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    validation, _ = validation_for(approvals, item, executor_id=None)
+
+    decision = gate.assess(item, validation)
+
+    assert decision.allowed is False
+    assert "stored promotion approval has no executor binding" in decision.required_actions
+
+
+def test_approval_risk_must_match_proposal(tmp_path: Path) -> None:
+    _, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin, risk=RiskLevel.R3)
+    validation, _ = validation_for(approvals, item, risk=RiskLevel.R1)
+
+    decision = gate.assess(item, validation)
+
+    assert decision.allowed is False
+    assert "stored promotion approval risk mismatch" in decision.required_actions
+
+
+def test_decision_actor_must_be_authorized_human(tmp_path: Path) -> None:
+    _, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    validation, _ = validation_for(approvals, item, decided_by="runtime")
+
+    decision = gate.assess(item, validation)
+
+    assert decision.allowed is False
+    assert any("authorized human" in action for action in decision.required_actions)
+
+
+def test_checkpoint_must_exist_and_match_mission(tmp_path: Path) -> None:
+    _, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin, risk=RiskLevel.R2)
+    item.rollback_checkpoint_id = "twin_missing"
+
+    decision = gate.assess(
+        item,
+        EvolutionValidation(
+            simulation_passed=True,
+            verification_passed=True,
+            accessibility_passed=True,
+            governance_passed=True,
+        ),
+    )
+
+    assert decision.allowed is False
+    assert (
+        "stored rollback checkpoint not found or integrity invalid"
+        in decision.required_actions
+    )
+
+
+def test_nested_list_preserves_missing_vs_null(tmp_path: Path) -> None:
+    _, _, _, twin, _ = runtime(tmp_path)
+
+    findings = twin.detect_drift(
+        mission_id="mission-1",
+        expected={"components": [{}]},
+        observed={"components": [{"subtitle": None}]},
+    )
+
+    assert len(findings) == 1
+    assert findings[0].path == "$.components[0].subtitle"
+    assert findings[0].expected.presence == ValuePresence.MISSING
+    assert findings[0].observed.presence == ValuePresence.PRESENT
+    assert findings[0].observed.value is None
+
+
+def test_single_action_approval_is_consumed_once_under_concurrency(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    validation, approval_id = validation_for(approvals, item)
+    barrier = threading.Barrier(2)
+    results: list[bool] = []
+
+    def assess() -> None:
+        barrier.wait()
+        results.append(gate.assess(item, validation).allowed)
+
+    threads = [threading.Thread(target=assess) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(results) == [False, True]
+    assert store.get_record(approval_id)["status"] == ApprovalStatus.CONSUMED.value
+    assert store.get_record_envelope(approval_id) is not None
+
+
+def test_checkpoint_must_be_a_real_checkpoint_record(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin, risk=RiskLevel.R2)
+    checkpoint = store.get_record(item.rollback_checkpoint_id)
+    assert checkpoint is not None
+    store.save_record(
+        item.rollback_checkpoint_id,
+        "unrelated_record",
+        checkpoint,
+        checkpoint["created_at"],
+        item.mission_id,
+    )
+
+    decision = gate.assess(
+        item,
+        EvolutionValidation(
+            simulation_passed=True,
+            verification_passed=True,
+            accessibility_passed=True,
+            governance_passed=True,
+        ),
+    )
+
+    assert decision.allowed is False
+    assert (
+        "stored rollback checkpoint not found or integrity invalid"
+        in decision.required_actions
+    )
+
+
+def test_multi_approval_consumption_is_all_or_nothing(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, _ = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    _, first_id = validation_for(approvals, item)
+    _, second_id = validation_for(approvals, item)
+    consumed = store.compare_and_set_record_field(
+        second_id,
+        record_type="approval",
+        field="status",
+        expected_value=ApprovalStatus.APPROVED.value,
+        new_value=ApprovalStatus.CONSUMED.value,
+    )
+    assert consumed is not None
+
+    result = store.compare_and_set_record_fields_atomically(
+        [
+            {
+                "record_id": first_id,
+                "record_type": "approval",
+                "field": "status",
+                "expected_value": ApprovalStatus.APPROVED.value,
+                "new_value": ApprovalStatus.CONSUMED.value,
+            },
+            {
+                "record_id": second_id,
+                "record_type": "approval",
+                "field": "status",
+                "expected_value": ApprovalStatus.APPROVED.value,
+                "new_value": ApprovalStatus.CONSUMED.value,
+            },
+        ]
+    )
+
+    assert result is False
+    assert store.get_record(first_id)["status"] == ApprovalStatus.APPROVED.value
+    assert store.get_record(second_id)["status"] == ApprovalStatus.CONSUMED.value
+    assert store.get_record_envelope(first_id) is not None
+    assert store.get_record_envelope(second_id) is not None
+
+
+def test_gate_requires_explicit_authorized_human_principals(tmp_path: Path) -> None:
+    store = SQLiteStore(tmp_path / "nexara.sqlite3")
+    events = EventBus(store)
+    evidence = EvidenceStore(store, events)
+    approvals = ApprovalEngine(store, events)
+
+    try:
+        EvolutionPromotionGate(
+            approvals,
+            evidence,
+            authorized_human_principals=set(),
+        )
+    except ValueError as error:
+        assert str(error) == "authorized_human_principals_must_not_be_empty"
+    else:
+        raise AssertionError("empty authorized principal configuration was accepted")
+
+
+def test_evidence_payload_id_must_match_referenced_record(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin, risk=RiskLevel.R0)
+    original_id = item.evidence_refs[0]
+    copied = store.get_record(original_id)
+    assert copied is not None
+    alias_id = "evidence_alias"
+    store.save_record(
+        alias_id,
+        "evidence",
+        copied,
+        copied["created_at"],
+        item.mission_id,
+    )
+    item.evidence_refs = [alias_id]
+
+    decision = gate.assess(item, EvolutionValidation(verification_passed=True))
+
+    assert decision.allowed is False
+    assert f"promotion evidence identity mismatch: {alias_id}" in decision.required_actions
+
+
+def test_approval_payload_id_must_match_requested_record(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    validation, approval_id = validation_for(approvals, item)
+    copied = store.get_record(approval_id)
+    assert copied is not None
+    alias_id = "approval_alias"
+    store.save_record(
+        alias_id,
+        "approval",
+        copied,
+        copied["created_at"],
+        item.mission_id,
+    )
+    validation.approval_id = alias_id
+
+    decision = gate.assess(item, validation)
+
+    assert decision.allowed is False
+    assert "stored promotion approval identity mismatch" in decision.required_actions
+
+
+def test_whitespace_executor_principals_are_rejected(tmp_path: Path) -> None:
+    _, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    validation, _ = validation_for(
+        approvals,
+        item,
+        actor_id="   ",
+        executor_id="   ",
+    )
+
+    decision = gate.assess(item, validation)
+
+    assert decision.allowed is False
+    assert "identify executor for promotion approval" in decision.required_actions
+
+
+def test_checkpoint_snapshot_hashes_are_recomputed(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin, risk=RiskLevel.R2)
+    raw = store.get_record(item.rollback_checkpoint_id)
+    assert raw is not None
+    raw["expected"]["state"] = {"version": 999}
+    store.save_record(
+        item.rollback_checkpoint_id,
+        "product_twin_checkpoint",
+        raw,
+        raw["created_at"],
+        item.mission_id,
+    )
+
+    decision = gate.assess(
+        item,
+        EvolutionValidation(
+            simulation_passed=True,
+            verification_passed=True,
+            accessibility_passed=True,
+            governance_passed=True,
+        ),
+    )
+
+    assert decision.allowed is False
+    assert (
+        "stored rollback checkpoint expected snapshot hash mismatch"
+        in decision.required_actions
+    )
+
+
+def test_atomic_consume_rejects_rebound_approval_payload(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, _ = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    _, approval_id = validation_for(approvals, item)
+    envelope = store.get_record_envelope(approval_id)
+    assert envelope is not None
+    rebound = store.get_record(approval_id)
+    assert rebound is not None
+    rebound["action"] = "product_reality.promote:rebound"
+    store.save_record(
+        approval_id,
+        "approval",
+        rebound,
+        rebound["created_at"],
+        item.mission_id,
+    )
+
+    consumed = store.compare_and_set_record_fields_atomically(
+        [
+            {
+                "record_id": approval_id,
+                "record_type": "approval",
+                "field": "status",
+                "expected_value": ApprovalStatus.APPROVED.value,
+                "new_value": ApprovalStatus.CONSUMED.value,
+                "expected_integrity_sha256": envelope["integrity_sha256"],
+            }
+        ]
+    )
+
+    assert consumed is False
+    assert store.get_record(approval_id)["status"] == ApprovalStatus.APPROVED.value
+
+
+def test_idempotent_evidence_replay_returns_original_artifact(tmp_path: Path) -> None:
+    store, evidence, _, _, _ = runtime(tmp_path)
+    values = {
+        "mission_id": "mission-idempotent",
+        "kind": "verification",
+        "title": "replay-safe evidence",
+        "content": "same immutable evidence",
+        "trace_id": "trace-idempotent",
+        "source": "test",
+        "idempotency_key": "evidence-replay-1",
+    }
+
+    first = evidence.add(**values)
+    second = evidence.add(**values)
+
+    assert second == first
+    assert store.count("records") == 1
+    assert store.count("events") == 1
+    assert store.get_record_envelope(first.evidence_id) is not None
+
+
+def test_idempotency_key_reuse_with_different_request_is_rejected(tmp_path: Path) -> None:
+    store, evidence, _, _, _ = runtime(tmp_path)
+    evidence.add(
+        mission_id="mission-idempotent",
+        kind="verification",
+        title="original",
+        content="original evidence",
+        trace_id="trace-idempotent",
+        source="test",
+        idempotency_key="evidence-replay-2",
+    )
+
+    try:
+        evidence.add(
+            mission_id="mission-idempotent",
+            kind="verification",
+            title="changed",
+            content="different evidence",
+            trace_id="trace-idempotent",
+            source="test",
+            idempotency_key="evidence-replay-2",
+        )
+    except ValueError as error:
+        assert str(error) == "evidence_idempotency_conflict"
+    else:
+        raise AssertionError("conflicting idempotency replay was accepted")
+
+    assert store.count("records") == 1
+    assert store.count("events") == 1
