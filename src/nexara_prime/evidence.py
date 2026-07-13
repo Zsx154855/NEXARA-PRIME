@@ -57,7 +57,40 @@ class EvidenceStore:
         if idempotency_key:
             existing = self.store.find_record("evidence", "idempotency_key", idempotency_key)
             if existing:
-                return EvidenceArtifact.model_validate(existing)
+                evidence_id = existing.get("evidence_id")
+                envelope = (
+                    self.store.get_record_envelope(str(evidence_id))
+                    if evidence_id
+                    else None
+                )
+                if (
+                    not envelope
+                    or envelope.get("record_type") != "evidence"
+                    or envelope.get("record_id") != evidence_id
+                ):
+                    raise ValueError("evidence_idempotency_record_invalid")
+                stored = envelope["payload"]
+                expected_request = {
+                    "mission_id": mission_id,
+                    "kind": kind,
+                    "title": title,
+                    "content": content,
+                    "task_id": task_id,
+                    "tool_invocation_id": tool_invocation_id,
+                    "actor": actor,
+                    "mime_type": mime_type,
+                    "source": source,
+                    "parent_evidence": parent_evidence or [],
+                    "idempotency_key": idempotency_key,
+                }
+                if any(stored.get(key) != value for key, value in expected_request.items()):
+                    raise ValueError("evidence_idempotency_conflict")
+                artifact_payload = {
+                    key: value
+                    for key, value in stored.items()
+                    if key in EvidenceArtifact.model_fields
+                }
+                return EvidenceArtifact.model_validate(artifact_payload)
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
         artifact = EvidenceArtifact(
             evidence_id=new_id("evidence"),

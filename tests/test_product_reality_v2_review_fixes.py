@@ -444,3 +444,55 @@ def test_atomic_consume_rejects_rebound_approval_payload(tmp_path: Path) -> None
 
     assert consumed is False
     assert store.get_record(approval_id)["status"] == ApprovalStatus.APPROVED.value
+
+
+def test_idempotent_evidence_replay_returns_original_artifact(tmp_path: Path) -> None:
+    store, evidence, _, _, _ = runtime(tmp_path)
+    values = {
+        "mission_id": "mission-idempotent",
+        "kind": "verification",
+        "title": "replay-safe evidence",
+        "content": "same immutable evidence",
+        "trace_id": "trace-idempotent",
+        "source": "test",
+        "idempotency_key": "evidence-replay-1",
+    }
+
+    first = evidence.add(**values)
+    second = evidence.add(**values)
+
+    assert second == first
+    assert store.count("records") == 1
+    assert store.count("events") == 1
+    assert store.get_record_envelope(first.evidence_id) is not None
+
+
+def test_idempotency_key_reuse_with_different_request_is_rejected(tmp_path: Path) -> None:
+    store, evidence, _, _, _ = runtime(tmp_path)
+    evidence.add(
+        mission_id="mission-idempotent",
+        kind="verification",
+        title="original",
+        content="original evidence",
+        trace_id="trace-idempotent",
+        source="test",
+        idempotency_key="evidence-replay-2",
+    )
+
+    try:
+        evidence.add(
+            mission_id="mission-idempotent",
+            kind="verification",
+            title="changed",
+            content="different evidence",
+            trace_id="trace-idempotent",
+            source="test",
+            idempotency_key="evidence-replay-2",
+        )
+    except ValueError as error:
+        assert str(error) == "evidence_idempotency_conflict"
+    else:
+        raise AssertionError("conflicting idempotency replay was accepted")
+
+    assert store.count("records") == 1
+    assert store.count("events") == 1
