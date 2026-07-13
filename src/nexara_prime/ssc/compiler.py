@@ -137,7 +137,40 @@ class SSCCompiler:
             if staging.exists():
                 staging.rmdir()
             raise
-        return BuildManifest.model_validate_json((destination / "build-manifest.json").read_text(encoding="utf-8"))
+        return self.verify(destination)
+
+    def verify(self, output_dir: Path | str) -> BuildManifest:
+        """Fail closed unless a build is exactly reproducible by this compiler."""
+        root = Path(output_dir)
+        if not root.is_dir() or root.is_symlink():
+            raise ValueError(f"ssc_build_not_directory:{root}")
+        for entry in root.rglob("*"):
+            if entry.is_symlink():
+                raise ValueError(f"ssc_build_symlink_forbidden:{entry.relative_to(root)}")
+
+        ir = load_ir(root / "system.ir.json")
+        expected = self.plan(ir)
+        actual_files = {
+            path.relative_to(root).as_posix(): path
+            for path in root.rglob("*")
+            if path.is_file()
+        }
+        if set(actual_files) != set(expected):
+            raise ValueError("ssc_build_artifact_set_mismatch")
+        for relative, content in expected.items():
+            if actual_files[relative].read_bytes() != content:
+                raise ValueError(f"ssc_build_artifact_mismatch:{relative}")
+
+        manifest = BuildManifest.model_validate_json(
+            actual_files["build-manifest.json"].read_text(encoding="utf-8")
+        )
+        if (
+            manifest.compiler_version != COMPILER_VERSION
+            or manifest.system_id != ir.system.id
+            or manifest.system_version != ir.system.version
+        ):
+            raise ValueError("ssc_build_manifest_identity_mismatch")
+        return manifest
 
     @staticmethod
     def _render_readme(ir: SovereignSystemIR) -> str:

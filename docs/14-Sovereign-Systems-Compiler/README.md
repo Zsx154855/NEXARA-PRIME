@@ -12,13 +12,14 @@ Every accepted IR preserves five non-disableable properties:
 - explicit human authority;
 - deterministic builds.
 
-Rules and generated tests are linked bidirectionally. Unknown, orphaned, duplicate, or untested rules fail validation. Every build must include the evidence target.
+Rules and generated tests are linked bidirectionally. Every rule must bind happy, negative, boundary, replay, mutation, and rollback tests. Unknown, orphaned, duplicate, or incompletely tested rules fail validation. Every build must include the evidence target.
 
 ## Commands
 
 ```bash
 nexara ssc validate examples/ssc/product_reality.system.json
 nexara ssc compile examples/ssc/product_reality.system.json --output build/product_reality
+nexara ssc verify build/product_reality
 ```
 
 Compilation refuses a non-empty destination so generated output cannot silently overwrite human-owned files. The compiler writes into a staging directory and atomically publishes the completed build.
@@ -34,3 +35,4 @@ Compilation refuses a non-empty destination so generated output cannot silently 
 - one build SHA-256 over the complete ordered artifact ledger.
 
 The same valid IR and compiler version produce byte-for-byte identical output.
+Verification rejects missing, unexpected, modified, or symlinked artifacts and succeeds only when the complete build is exactly reproducible by the declared compiler version.

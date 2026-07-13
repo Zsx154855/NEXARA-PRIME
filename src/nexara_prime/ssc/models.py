@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
+from pathlib import PurePosixPath
 
 from pydantic import Field, field_validator, model_validator
 
@@ -218,12 +219,13 @@ class SovereignSystemIR(NModel):
                 raise ValueError(f"policy_references_unknown_test:{policy.id}:{sorted(missing)[0]}")
             if declared != bound_by_rule[policy.id]:
                 raise ValueError(f"policy_test_binding_mismatch:{policy.id}")
-
-        kinds = {test.kind for test in self.tests}
-        if TestKind.NEGATIVE not in kinds:
-            raise ValueError("negative_test_required")
-        if TestKind.ROLLBACK not in kinds:
-            raise ValueError("rollback_test_required")
+            kinds = {
+                test.kind for test in self.tests if test.rule_id == policy.id
+            }
+            missing_kinds = set(TestKind) - kinds
+            if missing_kinds:
+                missing = sorted(kind.value for kind in missing_kinds)[0]
+                raise ValueError(f"policy_test_kind_required:{policy.id}:{missing}")
         if OutputTarget.EVIDENCE not in self.outputs:
             raise ValueError("evidence_output_required")
         return self
@@ -233,6 +235,21 @@ class BuildArtifact(NModel):
     path: str
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     size_bytes: int = Field(ge=0)
+
+    @field_validator("path")
+    @classmethod
+    def safe_relative_path(cls, value: str) -> str:
+        normalized = value.strip()
+        path = PurePosixPath(normalized)
+        if (
+            not normalized
+            or path.is_absolute()
+            or "\\" in normalized
+            or any(part in {"", ".", ".."} for part in path.parts)
+            or path.as_posix() != normalized
+        ):
+            raise ValueError("artifact_path_must_be_safe_relative_posix")
+        return normalized
 
 
 class BuildManifest(NModel):
@@ -244,3 +261,12 @@ class BuildManifest(NModel):
     build_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     artifacts: list[BuildArtifact]
 
+    @model_validator(mode="after")
+    def canonical_artifact_ledger(self) -> "BuildManifest":
+        paths = [artifact.path for artifact in self.artifacts]
+        _unique(paths, "artifact_path")
+        if paths != sorted(paths):
+            raise ValueError("artifact_ledger_must_be_sorted")
+        if "build-manifest.json" in paths:
+            raise ValueError("manifest_cannot_include_itself")
+        return self

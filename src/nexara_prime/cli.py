@@ -102,6 +102,8 @@ def build_parser() -> argparse.ArgumentParser:
     ssc_compile = ssc_sub.add_parser("compile", help="compile a validated Sovereign System IR")
     ssc_compile.add_argument("source")
     ssc_compile.add_argument("--output", required=True)
+    ssc_verify = ssc_sub.add_parser("verify", help="verify an SSC build and its artifact ledger")
+    ssc_verify.add_argument("build_dir")
 
     return parser
 
@@ -473,6 +475,10 @@ def cmd_ssc(args) -> int:
     """Validate or compile a Sovereign System IR without starting the runtime."""
     from .ssc import SSCCompiler, load_ir
 
+    compiler = SSCCompiler()
+    if args.ssc_command == "verify":
+        _print(compiler.verify(args.build_dir))
+        return 0
     ir = load_ir(args.source)
     if args.ssc_command == "validate":
         _print(
@@ -484,7 +490,7 @@ def cmd_ssc(args) -> int:
             }
         )
         return 0
-    manifest = SSCCompiler().compile(ir, args.output)
+    manifest = compiler.compile(ir, args.output)
     _print(manifest)
     return 0
 

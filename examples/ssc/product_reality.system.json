@@ -54,13 +54,22 @@
         "R4"
       ],
       "test_ids": [
+        "promotion_evidence_boundary",
         "promotion_evidence_missing",
+        "promotion_evidence_mutation",
         "promotion_evidence_ok",
+        "promotion_evidence_replay",
         "promotion_rollback_ok"
       ]
     }
   ],
   "tests": [
+    {
+      "id": "promotion_evidence_boundary",
+      "rule_id": "promotion_evidence",
+      "kind": "boundary",
+      "description": "Enforce the promotion risk boundary."
+    },
     {
       "id": "promotion_evidence_missing",
       "rule_id": "promotion_evidence",
@@ -68,10 +77,22 @@
       "description": "Reject absent or unverified evidence."
     },
     {
+      "id": "promotion_evidence_mutation",
+      "rule_id": "promotion_evidence",
+      "kind": "mutation",
+      "description": "Reject evidence mutated after verification."
+    },
+    {
       "id": "promotion_evidence_ok",
       "rule_id": "promotion_evidence",
       "kind": "happy",
       "description": "Accept verified mission-bound evidence."
+    },
+    {
+      "id": "promotion_evidence_replay",
+      "rule_id": "promotion_evidence",
+      "kind": "replay",
+      "description": "Reject replay outside the bound mission."
     },
     {
       "id": "promotion_rollback_ok",

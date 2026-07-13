@@ -41,12 +41,22 @@ def _payload() -> dict:
                 "failure_code": "promotion_evidence_required",
                 "enforcement_phase": "runtime",
                 "risk_tiers": ["R0", "R1", "R2", "R3", "R4"],
-                "test_ids": ["promotion_evidence_missing", "promotion_evidence_ok", "promotion_rollback_ok"],
+                "test_ids": [
+                    "promotion_evidence_boundary",
+                    "promotion_evidence_missing",
+                    "promotion_evidence_mutation",
+                    "promotion_evidence_ok",
+                    "promotion_evidence_replay",
+                    "promotion_rollback_ok",
+                ],
             }
         ],
         "tests": [
+            {"id": "promotion_evidence_boundary", "rule_id": "promotion_evidence", "kind": "boundary", "description": "Enforce the risk boundary."},
             {"id": "promotion_evidence_missing", "rule_id": "promotion_evidence", "kind": "negative", "description": "Reject absent evidence."},
+            {"id": "promotion_evidence_mutation", "rule_id": "promotion_evidence", "kind": "mutation", "description": "Reject mutated evidence."},
             {"id": "promotion_evidence_ok", "rule_id": "promotion_evidence", "kind": "happy", "description": "Accept verified evidence."},
+            {"id": "promotion_evidence_replay", "rule_id": "promotion_evidence", "kind": "replay", "description": "Reject invalid replay."},
             {"id": "promotion_rollback_ok", "rule_id": "promotion_evidence", "kind": "rollback", "description": "Preserve rollback path."},
         ],
         "outputs": ["python", "tests", "docs", "architecture", "evidence"],
@@ -75,6 +85,24 @@ def test_manifest_binds_every_non_manifest_artifact(tmp_path: Path) -> None:
     assert len(manifest.build_sha256) == 64
 
 
+def test_verifier_rejects_tampered_artifact(tmp_path: Path) -> None:
+    output = tmp_path / "out"
+    compiler = SSCCompiler()
+    compiler.compile(_ir(), output)
+    (output / "python" / "policies.json").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="ssc_build_artifact_mismatch"):
+        compiler.verify(output)
+
+
+def test_verifier_rejects_untracked_artifact(tmp_path: Path) -> None:
+    output = tmp_path / "out"
+    compiler = SSCCompiler()
+    compiler.compile(_ir(), output)
+    (output / "untracked.txt").write_text("not in ledger", encoding="utf-8")
+    with pytest.raises(ValueError, match="ssc_build_artifact_set_mismatch"):
+        compiler.verify(output)
+
+
 def test_compile_refuses_nonempty_output(tmp_path: Path) -> None:
     output = tmp_path / "out"
     output.mkdir()
@@ -92,7 +120,7 @@ def test_compile_refuses_nonempty_output(tmp_path: Path) -> None:
         (lambda p: p.update({"outputs": ["python", "tests"]}), "evidence_output_required"),
         (lambda p: p["tests"].__setitem__(0, {**p["tests"][0], "rule_id": "missing_rule"}), "test_references_unknown_policy"),
         (lambda p: p["policies"][0].update({"test_ids": ["promotion_evidence_ok"]}), "policy_test_binding_mismatch"),
-        (lambda p: p.update({"tests": [test for test in p["tests"] if test["kind"] != "negative"]}) or p["policies"][0].update({"test_ids": ["promotion_evidence_ok", "promotion_rollback_ok"]}), "negative_test_required"),
+        (lambda p: p.update({"tests": [test for test in p["tests"] if test["kind"] != "negative"]}) or p["policies"][0].update({"test_ids": [test_id for test_id in p["policies"][0]["test_ids"] if test_id != "promotion_evidence_missing"]}), "policy_test_kind_required"),
         (lambda p: p["system"].update({"id": "../escape"}), "identifier_must_be_lower_snake_case"),
         (lambda p: p["system"].update({"version": "v2"}), "version_must_be_semver"),
     ],
@@ -128,3 +156,6 @@ def test_cli_validates_and_compiles_without_starting_runtime(tmp_path: Path, cap
     compiled = json.loads(capsys.readouterr().out)
     assert compiled["system_id"] == "product_reality"
     assert (tmp_path / "build" / "build-manifest.json").is_file()
+    assert main(["ssc", "verify", str(tmp_path / "build")]) == 0
+    verified = json.loads(capsys.readouterr().out)
+    assert verified["build_sha256"] == compiled["build_sha256"]
