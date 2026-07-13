@@ -15,6 +15,15 @@ class EventBus:
     def subscribe(self, callback: Callable[[Event], None]) -> None:
         self._subscribers.append(callback)
 
+    def notify_persisted(self, event: Event) -> None:
+        """Notify subscribers only after an event is durably committed."""
+        for subscriber in list(self._subscribers):
+            try:
+                subscriber(event)
+            except Exception:
+                # A telemetry subscriber must never break the mission path.
+                continue
+
     def publish(
         self,
         event_type: str,
@@ -46,12 +55,7 @@ class EventBus:
         ):
             raise ValueError("event_idempotency_identity_conflict")
         if persisted.event_id == event.event_id:
-            for subscriber in list(self._subscribers):
-                try:
-                    subscriber(persisted)
-                except Exception:
-                    # A telemetry subscriber must never break the mission path.
-                    continue
+            self.notify_persisted(persisted)
         return persisted
 
     def replay(self, aggregate_id: str) -> list[dict[str, Any]]:

@@ -7,7 +7,7 @@ from typing import Any
 
 from .db import SQLiteStore
 from .events import EventBus
-from .models import EvidenceArtifact, new_id
+from .models import Event, EvidenceArtifact, new_id
 
 
 class EvidenceStore:
@@ -54,6 +54,13 @@ class EvidenceStore:
             f"evidence:{idempotency_key}".encode("utf-8")
         ).hexdigest()
         return f"evidence_{digest[:12]}"
+
+    @staticmethod
+    def _idempotent_event_id(idempotency_key: str) -> str:
+        digest = hashlib.sha256(
+            f"evidence-event:{idempotency_key}".encode("utf-8")
+        ).hexdigest()
+        return f"evt_{digest[:12]}"
 
     @staticmethod
     def _artifact_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -132,13 +139,6 @@ class EvidenceStore:
             "source_event_id": source_event_id,
             "verification_status": verification_status,
         }
-        if idempotency_key:
-            existing = self.store.find_record("evidence", "idempotency_key", idempotency_key)
-            if existing:
-                evidence_id = existing.get("evidence_id")
-                if not evidence_id:
-                    raise ValueError("evidence_idempotency_record_invalid")
-                return self._replay_artifact(str(evidence_id), expected_request)
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
         artifact = EvidenceArtifact(
             evidence_id=(
@@ -161,27 +161,41 @@ class EvidenceStore:
             idempotency_key=idempotency_key,
             source_event_id=source_event_id,
         )
-        event = self.events.publish(
-            "evidence.created",
-            mission_id,
-            "mission",
-            "evidence_store",
-            trace_id,
-            {"evidence_id": artifact.evidence_id, "kind": kind},
-            idempotency_key=idempotency_key,
-        )
+        if idempotency_key:
+            event = Event(
+                event_id=self._idempotent_event_id(idempotency_key),
+                event_type="evidence.created",
+                aggregate_id=mission_id,
+                aggregate_type="mission",
+                actor="evidence_store",
+                trace_id=trace_id,
+                payload={"evidence_id": artifact.evidence_id, "kind": kind},
+                idempotency_key=idempotency_key,
+            )
+        else:
+            event = self.events.publish(
+                "evidence.created",
+                mission_id,
+                "mission",
+                "evidence_store",
+                trace_id,
+                {"evidence_id": artifact.evidence_id, "kind": kind},
+            )
         artifact.source_event_id = artifact.source_event_id or event.event_id
         payload = artifact.model_dump(mode="json")
         payload["request_sha256"] = self._request_sha256(expected_request)
         payload["envelope_sha256"] = self._envelope_sha256(payload)
         if idempotency_key:
-            self.store.save_record_if_absent(
+            _, event_inserted, persisted_event = self.store.save_record_and_event_if_absent(
                 artifact.evidence_id,
                 "evidence",
                 payload,
                 artifact.created_at,
+                event.model_dump(mode="json"),
                 mission_id,
             )
+            if event_inserted and persisted_event is not None:
+                self.events.notify_persisted(Event.model_validate(persisted_event))
             return self._replay_artifact(artifact.evidence_id, expected_request)
         self.store.save_record(
             artifact.evidence_id, "evidence", payload, artifact.created_at, mission_id

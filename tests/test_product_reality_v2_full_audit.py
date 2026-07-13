@@ -183,6 +183,50 @@ def test_schema_upgrade_treats_present_null_hash_as_corrupt(
     assert "envelope_sha256" not in store.get_record("evidence-null-hash")
 
 
+def test_schema_upgrade_preserves_malformed_row_and_audit_counts_it(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "malformed-legacy.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE records(record_id TEXT PRIMARY KEY, record_type TEXT NOT NULL, "
+        "mission_id TEXT, payload TEXT NOT NULL, created_at TEXT NOT NULL)"
+    )
+    malformed = '{"mission_id":"mission-1",'
+    connection.execute(
+        "INSERT INTO records VALUES (?, ?, ?, ?, ?)",
+        (
+            "evidence-malformed",
+            "evidence",
+            "mission-1",
+            malformed,
+            "2026-01-01T00:00:00+00:00",
+        ),
+    )
+    connection.commit()
+    connection.close()
+
+    store, _, evidence = evidence_runtime(path)
+
+    with store._lock:
+        row = store._conn.execute(
+            "SELECT payload, integrity_sha256 FROM records WHERE record_id=?",
+            ("evidence-malformed",),
+        ).fetchone()
+    assert row["payload"] == malformed
+    assert row["integrity_sha256"] is None
+    assert store.get_record_envelope("evidence-malformed") is None
+    valid, invalid = store.audit_record_envelopes("evidence", "mission-1")
+    assert valid == []
+    assert invalid == ["evidence-malformed"]
+    assert evidence.verify_all("mission-1") == {
+        "total": 1,
+        "valid": 0,
+        "invalid": 1,
+        "coverage": 0.0,
+    }
+
+
 def test_verify_refuses_to_reseal_out_of_band_evidence_tampering(tmp_path: Path) -> None:
     store, _, evidence = evidence_runtime(tmp_path / "evidence.sqlite3")
     artifact = evidence.add(
@@ -249,6 +293,74 @@ def test_concurrent_idempotent_evidence_creates_one_record_and_event(tmp_path: P
     assert results[0] == results[1]
     assert runtimes[0][0].count("records") == 1
     assert runtimes[0][0].count("events") == 1
+
+
+def test_concurrent_conflicting_evidence_atomically_binds_winning_event(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "evidence-conflict.sqlite3"
+    runtimes = [evidence_runtime(path), evidence_runtime(path)]
+    barrier = threading.Barrier(2)
+    outcomes: list[str] = []
+
+    def add(index: int) -> None:
+        barrier.wait()
+        try:
+            runtimes[index][2].add(
+                "mission-1",
+                f"kind-{index}",
+                "proof",
+                f"content-{index}",
+                f"trace-{index}",
+                idempotency_key="conflicting-request",
+            )
+            outcomes.append("success")
+        except ValueError as error:
+            assert str(error) == "evidence_idempotency_conflict"
+            outcomes.append("conflict")
+
+    threads = [threading.Thread(target=add, args=(index,)) for index in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(outcomes) == ["conflict", "success"]
+    records = runtimes[0][0].list_record_envelopes("evidence")
+    events = runtimes[0][0].list_events()
+    assert len(records) == 1
+    assert len(events) == 1
+    assert events[0]["event_id"] == records[0]["payload"]["source_event_id"]
+    assert events[0]["payload"] == {
+        "evidence_id": records[0]["record_id"],
+        "kind": records[0]["payload"]["kind"],
+    }
+
+
+def test_event_collision_cannot_leave_an_unpaired_evidence_record(tmp_path: Path) -> None:
+    store, events, evidence = evidence_runtime(tmp_path / "event-collision.sqlite3")
+    events.publish(
+        "approval.requested",
+        "mission-1",
+        "mission",
+        "governance",
+        "trace-1",
+        {},
+        idempotency_key="shared-key",
+    )
+
+    with pytest.raises(ValueError, match="event_idempotency_identity_conflict"):
+        evidence.add(
+            "mission-1",
+            "verification",
+            "proof",
+            "content",
+            "trace-2",
+            idempotency_key="shared-key",
+        )
+
+    assert store.count("records") == 0
+    assert store.count("events") == 1
 
 
 @pytest.mark.parametrize(
