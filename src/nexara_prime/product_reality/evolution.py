@@ -27,7 +27,7 @@ class EvolutionPromotionGate:
         self.approvals = approvals
         self.evidence = evidence
         self.authorized_human_principals = frozenset(
-            authorized_human_principals or {"human_owner"}
+            authorized_human_principals or set()
         )
 
     def assess(
@@ -103,24 +103,14 @@ class EvolutionPromotionGate:
                 verified_evidence_refs=sorted(set(verified_evidence_refs)),
             )
 
-        consumed_ids: list[str] = []
-        for approval in approvals_to_consume:
-            consumed = self.approvals.store.compare_and_set_record_field(
-                approval.approval_id,
-                record_type="approval",
-                field="status",
-                expected_value=ApprovalStatus.APPROVED.value,
-                new_value=ApprovalStatus.CONSUMED.value,
+        if not self._consume_approvals_atomically(approvals_to_consume):
+            return PromotionDecision(
+                proposal_id=proposal.proposal_id,
+                allowed=False,
+                reasons=["approval consumption conflict"],
+                required_actions=["obtain fresh stored approval records"],
+                verified_evidence_refs=sorted(set(verified_evidence_refs)),
             )
-            if not consumed:
-                return PromotionDecision(
-                    proposal_id=proposal.proposal_id,
-                    allowed=False,
-                    reasons=["approval consumption conflict"],
-                    required_actions=["obtain fresh stored approval records"],
-                    verified_evidence_refs=sorted(set(verified_evidence_refs)),
-                )
-            consumed_ids.append(approval.approval_id)
 
         return PromotionDecision(
             proposal_id=proposal.proposal_id,
@@ -129,7 +119,7 @@ class EvolutionPromotionGate:
                 f"{proposal.risk_level.value} proposal satisfies evidence, recovery, governance, and approval prerequisites"
             ],
             verified_evidence_refs=sorted(set(verified_evidence_refs)),
-            consumed_approval_ids=consumed_ids,
+            consumed_approval_ids=[item.approval_id for item in approvals_to_consume],
         )
 
     def _verify_evidence_refs(
@@ -160,7 +150,9 @@ class EvolutionPromotionGate:
                 errors.append(f"{purpose} is not pre-verified: {evidence_id}")
                 continue
             if not self.evidence.is_preverified_and_integrity_bound(evidence_id):
-                errors.append(f"{purpose} failed envelope verification: {evidence_id}")
+                errors.append(
+                    f"{purpose} failed digest verification or envelope verification: {evidence_id}"
+                )
                 continue
             verified.append(evidence_id)
         return verified, errors
@@ -209,7 +201,10 @@ class EvolutionPromotionGate:
         if envelope.get("mission_id") != proposal.mission_id:
             return None, [f"stored {purpose} mission mismatch"]
 
-        approval = ApprovalRequest.model_validate(envelope["payload"])
+        try:
+            approval = ApprovalRequest.model_validate(envelope["payload"])
+        except (TypeError, ValueError):
+            return None, [f"stored {purpose} is invalid"]
         if approval.status != ApprovalStatus.APPROVED:
             return None, [f"stored {purpose} is not approved"]
         if approval.mission_id != proposal.mission_id:
@@ -243,3 +238,17 @@ class EvolutionPromotionGate:
         if expiry.tzinfo is None:
             expiry = expiry.replace(tzinfo=timezone.utc)
         return expiry > datetime.now(timezone.utc)
+
+    def _consume_approvals_atomically(self, approvals: list[ApprovalRequest]) -> bool:
+        return self.approvals.store.compare_and_set_record_fields_atomically(
+            [
+                {
+                    "record_id": approval.approval_id,
+                    "record_type": "approval",
+                    "field": "status",
+                    "expected_value": ApprovalStatus.APPROVED.value,
+                    "new_value": ApprovalStatus.CONSUMED.value,
+                }
+                for approval in approvals
+            ]
+        )

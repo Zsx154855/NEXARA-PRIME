@@ -211,6 +211,91 @@ class SQLiteStore:
                 return None
             return payload
 
+    def compare_and_set_record_fields_atomically(
+        self,
+        updates: list[dict[str, Any]],
+    ) -> bool:
+        """Apply multiple record field transitions in one SQLite transaction.
+
+        Every record must have a valid integrity envelope and every expected
+        value must still match. If any precondition fails, no record is
+        changed. This is used when one governed action consumes more than one
+        approval (for example an R4 promotion plus its release approval).
+        """
+        if not updates:
+            return True
+        record_ids = [str(item["record_id"]) for item in updates]
+        if len(record_ids) != len(set(record_ids)):
+            return False
+
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                prepared: list[tuple[str, str, str, str, str]] = []
+                for item in updates:
+                    record_id = str(item["record_id"])
+                    record_type = str(item["record_type"])
+                    field = str(item["field"])
+                    row = self._conn.execute(
+                        "SELECT record_id, record_type, mission_id, payload, "
+                        "created_at, integrity_sha256 FROM records "
+                        "WHERE record_id=? AND record_type=?",
+                        (record_id, record_type),
+                    ).fetchone()
+                    if not row:
+                        self._conn.rollback()
+                        return False
+
+                    payload = json.loads(row["payload"])
+                    current_integrity = self._record_integrity(
+                        row["record_id"],
+                        row["record_type"],
+                        row["mission_id"],
+                        row["created_at"],
+                        payload,
+                    )
+                    if (
+                        not row["integrity_sha256"]
+                        or row["integrity_sha256"] != current_integrity
+                        or payload.get(field) != item["expected_value"]
+                    ):
+                        self._conn.rollback()
+                        return False
+
+                    payload[field] = item["new_value"]
+                    canonical = self._canonical_payload(payload)
+                    new_integrity = self._record_integrity(
+                        row["record_id"],
+                        row["record_type"],
+                        row["mission_id"],
+                        row["created_at"],
+                        payload,
+                    )
+                    prepared.append(
+                        (
+                            canonical,
+                            new_integrity,
+                            record_id,
+                            record_type,
+                            row["integrity_sha256"],
+                        )
+                    )
+
+                for canonical, integrity, record_id, record_type, previous in prepared:
+                    cursor = self._conn.execute(
+                        "UPDATE records SET payload=?, integrity_sha256=? "
+                        "WHERE record_id=? AND record_type=? AND integrity_sha256=?",
+                        (canonical, integrity, record_id, record_type, previous),
+                    )
+                    if cursor.rowcount != 1:
+                        self._conn.rollback()
+                        return False
+                self._conn.commit()
+                return True
+            except Exception:
+                self._conn.rollback()
+                raise
+
     def list_records(
         self, record_type: str, mission_id: str | None = None
     ) -> list[dict[str, Any]]:

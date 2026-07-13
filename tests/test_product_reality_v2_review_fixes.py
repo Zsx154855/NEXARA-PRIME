@@ -148,7 +148,7 @@ def test_executor_must_be_non_empty_and_exact(tmp_path: Path) -> None:
     decision = gate.assess(item, validation)
 
     assert decision.allowed is False
-    assert "stored promotion approval executor mismatch" in decision.required_actions
+    assert "stored promotion approval has no executor binding" in decision.required_actions
 
 
 def test_approval_risk_must_match_proposal(tmp_path: Path) -> None:
@@ -189,7 +189,10 @@ def test_checkpoint_must_exist_and_match_mission(tmp_path: Path) -> None:
     )
 
     assert decision.allowed is False
-    assert "stored rollback checkpoint not found" in decision.required_actions
+    assert (
+        "stored rollback checkpoint not found or integrity invalid"
+        in decision.required_actions
+    )
 
 
 def test_nested_list_preserves_missing_vs_null(tmp_path: Path) -> None:
@@ -227,3 +230,74 @@ def test_single_action_approval_is_consumed_once_under_concurrency(tmp_path: Pat
 
     assert sorted(results) == [False, True]
     assert store.get_record(approval_id)["status"] == ApprovalStatus.CONSUMED.value
+    assert store.get_record_envelope(approval_id) is not None
+
+
+def test_checkpoint_must_be_a_real_checkpoint_record(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin, risk=RiskLevel.R2)
+    checkpoint = store.get_record(item.rollback_checkpoint_id)
+    assert checkpoint is not None
+    store.save_record(
+        item.rollback_checkpoint_id,
+        "unrelated_record",
+        checkpoint,
+        checkpoint["created_at"],
+        item.mission_id,
+    )
+
+    decision = gate.assess(
+        item,
+        EvolutionValidation(
+            simulation_passed=True,
+            verification_passed=True,
+            accessibility_passed=True,
+            governance_passed=True,
+        ),
+    )
+
+    assert decision.allowed is False
+    assert (
+        "stored rollback checkpoint not found or integrity invalid"
+        in decision.required_actions
+    )
+
+
+def test_multi_approval_consumption_is_all_or_nothing(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, _ = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    _, first_id = validation_for(approvals, item)
+    _, second_id = validation_for(approvals, item)
+    consumed = store.compare_and_set_record_field(
+        second_id,
+        record_type="approval",
+        field="status",
+        expected_value=ApprovalStatus.APPROVED.value,
+        new_value=ApprovalStatus.CONSUMED.value,
+    )
+    assert consumed is not None
+
+    result = store.compare_and_set_record_fields_atomically(
+        [
+            {
+                "record_id": first_id,
+                "record_type": "approval",
+                "field": "status",
+                "expected_value": ApprovalStatus.APPROVED.value,
+                "new_value": ApprovalStatus.CONSUMED.value,
+            },
+            {
+                "record_id": second_id,
+                "record_type": "approval",
+                "field": "status",
+                "expected_value": ApprovalStatus.APPROVED.value,
+                "new_value": ApprovalStatus.CONSUMED.value,
+            },
+        ]
+    )
+
+    assert result is False
+    assert store.get_record(first_id)["status"] == ApprovalStatus.APPROVED.value
+    assert store.get_record(second_id)["status"] == ApprovalStatus.CONSUMED.value
+    assert store.get_record_envelope(first_id) is not None
+    assert store.get_record_envelope(second_id) is not None
