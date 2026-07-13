@@ -97,7 +97,7 @@ class EvidenceStore:
             request_matches = all(
                 stored.get(key) == value
                 for key, value in expected_request.items()
-                if key not in {"source_event_id"}
+                if key not in {"source_event_id", "verification_status"}
             ) and (
                 expected_request.get("source_event_id") is None
                 or stored.get("source_event_id") == expected_request.get("source_event_id")
@@ -105,6 +105,66 @@ class EvidenceStore:
         if not request_matches:
             raise ValueError("evidence_idempotency_conflict")
         return EvidenceArtifact.model_validate(self._artifact_payload(stored))
+
+    def _replay_and_repair_event(
+        self,
+        evidence_id: str,
+        expected_request: dict[str, Any],
+        trace_id: str,
+    ) -> EvidenceArtifact:
+        """Replay an artifact and repair a missing legacy creation event."""
+        for _ in range(2):
+            artifact = self._replay_artifact(evidence_id, expected_request)
+            if not artifact.idempotency_key:
+                return artifact
+            envelope = self.store.get_record_envelope(evidence_id)
+            if not envelope:
+                raise ValueError("evidence_idempotency_record_invalid")
+            existing_event = self.store.get_event_by_idempotency(
+                artifact.idempotency_key
+            )
+            event_id = (
+                str(existing_event["event_id"])
+                if existing_event is not None
+                else self._idempotent_event_id(artifact.idempotency_key)
+            )
+            event = Event(
+                event_id=event_id,
+                event_type="evidence.created",
+                aggregate_id=artifact.mission_id,
+                aggregate_type="mission",
+                actor="evidence_store",
+                trace_id=trace_id,
+                timestamp=artifact.created_at,
+                payload={"evidence_id": artifact.evidence_id, "kind": artifact.kind},
+                idempotency_key=artifact.idempotency_key,
+            )
+            repaired_payload = dict(envelope["payload"])
+            # source_event_id may intentionally identify an upstream event
+            # supplied by the caller. Only fill it from the creation event
+            # when the legacy record never received a source binding.
+            repaired_payload["source_event_id"] = (
+                artifact.source_event_id or event_id
+            )
+            repaired_payload["envelope_sha256"] = self._envelope_sha256(
+                repaired_payload
+            )
+            repaired = self.store.repair_record_event(
+                evidence_id,
+                record_type="evidence",
+                expected_integrity_sha256=envelope["integrity_sha256"],
+                new_payload=repaired_payload,
+                event=event.model_dump(mode="json"),
+            )
+            if repaired is None:
+                continue
+            event_inserted, persisted_event = repaired
+            if event_inserted:
+                self.events.notify_persisted(
+                    Event.model_validate(persisted_event)
+                )
+            return self._replay_artifact(evidence_id, expected_request)
+        raise RuntimeError("evidence_idempotency_repair_conflict")
 
     def add(
         self,
@@ -140,12 +200,12 @@ class EvidenceStore:
             "verification_status": verification_status,
         }
         if idempotency_key:
-            legacy = self.store.find_record_envelope(
+            existing = self.store.find_record_envelope(
                 "evidence", "idempotency_key", idempotency_key
             )
-            if legacy is not None:
-                return self._replay_artifact(
-                    str(legacy["record_id"]), expected_request
+            if existing is not None:
+                return self._replay_and_repair_event(
+                    str(existing["record_id"]), expected_request, trace_id
                 )
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
         artifact = EvidenceArtifact(

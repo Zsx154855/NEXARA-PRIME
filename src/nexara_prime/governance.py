@@ -135,10 +135,16 @@ class ApprovalEngine:
         return approval
 
     def list(self, mission_id: str | None = None) -> list[dict]:
-        return [
-            envelope["payload"]
-            for envelope in self.store.list_record_envelopes("approval", mission_id)
-        ]
+        approvals: list[dict] = []
+        for envelope in self.store.list_record_envelopes("approval", mission_id):
+            approval = ApprovalRequest.model_validate(envelope["payload"])
+            if (
+                envelope.get("record_id") != approval.approval_id
+                or envelope.get("mission_id") != approval.mission_id
+            ):
+                raise ValueError("approval_integrity_invalid")
+            approvals.append(approval.model_dump(mode="json"))
+        return approvals
 
 
 class WriterLeaseManager:

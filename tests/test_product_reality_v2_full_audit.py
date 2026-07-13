@@ -411,6 +411,58 @@ def test_legacy_random_idempotent_evidence_replays_without_duplication(
     assert store.count("events") == 1
 
 
+def test_verified_legacy_evidence_replay_repairs_missing_creation_event(
+    tmp_path: Path,
+) -> None:
+    store, events, evidence = evidence_runtime(tmp_path / "legacy-repair.sqlite3")
+    notified: list[str] = []
+    events.subscribe(lambda event: notified.append(event.event_id))
+    content = "legacy content"
+    legacy = EvidenceArtifact(
+        evidence_id="evidence_legacy_missing_event",
+        mission_id="mission-1",
+        kind="verification",
+        title="proof",
+        content=content,
+        sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        idempotency_key="legacy-missing-event",
+        source_event_id=None,
+    )
+    payload = legacy.model_dump(mode="json")
+    payload["envelope_sha256"] = EvidenceStore._envelope_sha256(payload)
+    store.save_record(
+        legacy.evidence_id,
+        "evidence",
+        payload,
+        legacy.created_at,
+        legacy.mission_id,
+    )
+    assert evidence.verify(legacy.evidence_id)
+
+    replay = evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        content,
+        "retry-trace",
+        idempotency_key="legacy-missing-event",
+    )
+
+    assert replay.evidence_id == legacy.evidence_id
+    assert replay.verification_status == "verified"
+    assert replay.source_event_id is not None
+    event = store.get_event_by_idempotency("legacy-missing-event")
+    assert event is not None
+    assert event["event_id"] == replay.source_event_id
+    assert event["payload"] == {
+        "evidence_id": legacy.evidence_id,
+        "kind": legacy.kind,
+    }
+    assert notified == [event["event_id"]]
+    assert store.count("records") == 1
+    assert store.count("events") == 1
+
+
 def test_concurrent_conflicting_evidence_atomically_binds_winning_event(
     tmp_path: Path,
 ) -> None:
@@ -508,6 +560,36 @@ def test_evidence_replay_binds_source_event_and_status(
             idempotency_key="request-1",
             **override,
         )
+
+
+def test_idempotent_replay_preserves_explicit_upstream_source_event(
+    tmp_path: Path,
+) -> None:
+    store, _, evidence = evidence_runtime(tmp_path / "source-replay.sqlite3")
+    original = evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        "content",
+        "trace-1",
+        source_event_id="upstream-event",
+        idempotency_key="request-with-upstream",
+    )
+
+    replay = evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        "content",
+        "trace-2",
+        source_event_id="upstream-event",
+        idempotency_key="request-with-upstream",
+    )
+
+    assert replay == original
+    assert replay.source_event_id == "upstream-event"
+    assert store.count("records") == 1
+    assert store.count("events") == 1
 
 
 def test_event_idempotency_keeps_first_persisted_event(tmp_path: Path) -> None:
@@ -652,6 +734,25 @@ def test_approval_decision_refuses_corrupt_record(tmp_path: Path) -> None:
         approvals.decide(
             request.approval_id, True, "human", "approve", "trace-decision"
         )
+
+
+def test_approval_list_rejects_resealed_cross_mission_alias(tmp_path: Path) -> None:
+    store = SQLiteStore(tmp_path / "approval-list.sqlite3")
+    approvals = ApprovalEngine(store, EventBus(store))
+    original = approvals.request(
+        "mission-2", "action", RiskLevel.R2, "test", [], "trace"
+    )
+    payload = original.model_dump(mode="json")
+    store.save_record(
+        "approval-alias",
+        "approval",
+        payload,
+        original.created_at,
+        "mission-1",
+    )
+
+    with pytest.raises(ValueError, match="approval_integrity_invalid"):
+        approvals.list("mission-1")
 
 
 def test_product_twin_lookup_requires_integrity_envelope(tmp_path: Path) -> None:
