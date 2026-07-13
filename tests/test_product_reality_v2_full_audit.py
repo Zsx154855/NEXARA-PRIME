@@ -506,6 +506,45 @@ def test_evidence_replay_rejects_integrity_valid_row_mission_alias(
     assert store.count("events") == 1
 
 
+def test_evidence_replay_rejects_resealed_immutable_payload_changes(
+    tmp_path: Path,
+) -> None:
+    store, _, evidence = evidence_runtime(tmp_path / "payload-reseal.sqlite3")
+    artifact = evidence.add(
+        "mission-1",
+        "verification",
+        "proof",
+        "original content",
+        "trace-1",
+        idempotency_key="immutable-request",
+    )
+    payload = store.get_record(artifact.evidence_id)
+    assert payload is not None
+    payload["title"] = "altered proof"
+    payload["content"] = "altered content"
+    payload["sha256"] = hashlib.sha256(
+        payload["content"].encode("utf-8")
+    ).hexdigest()
+    payload["envelope_sha256"] = EvidenceStore._envelope_sha256(payload)
+    store.save_record(
+        artifact.evidence_id,
+        "evidence",
+        payload,
+        payload["created_at"],
+        artifact.mission_id,
+    )
+
+    with pytest.raises(ValueError, match="evidence_idempotency_conflict"):
+        evidence.add(
+            "mission-1",
+            "verification",
+            "proof",
+            "original content",
+            "trace-2",
+            idempotency_key="immutable-request",
+        )
+
+
 def test_legacy_creation_event_without_idempotency_is_claimed_not_duplicated(
     tmp_path: Path,
 ) -> None:
@@ -875,6 +914,33 @@ def test_product_twin_lookup_requires_integrity_envelope(tmp_path: Path) -> None
             ("mission-2", checkpoint.checkpoint_id),
         )
     assert twin.get_checkpoint(checkpoint.checkpoint_id) is None
+
+
+def test_product_twin_lookup_rejects_resealed_stale_snapshot_hash(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteStore(tmp_path / "twin-stale-hash.sqlite3")
+    twin = ProductTwinEngine(store)
+    checkpoint = twin.capture(
+        mission_id="mission-1",
+        expected_state={"version": 1},
+        observed_state={"version": 1},
+    )
+    payload = store.get_record(checkpoint.checkpoint_id)
+    assert payload is not None
+    payload["expected"]["state"] = {"version": 999}
+    store.save_record(
+        checkpoint.checkpoint_id,
+        "product_twin_checkpoint",
+        payload,
+        payload["created_at"],
+        checkpoint.mission_id,
+    )
+
+    with pytest.raises(
+        ValueError, match="product_twin_checkpoint_integrity_invalid"
+    ):
+        twin.get_checkpoint(checkpoint.checkpoint_id)
 
 
 def test_proposal_rejects_blank_duplicate_and_fake_recovery_fields() -> None:

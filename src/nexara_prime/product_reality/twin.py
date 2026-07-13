@@ -72,6 +72,10 @@ class ProductTwinEngine:
             envelope.get("record_id") != checkpoint_id
             or checkpoint.checkpoint_id != checkpoint_id
             or envelope.get("mission_id") != checkpoint.mission_id
+            or checkpoint.expected.state_sha256
+            != self._state_sha256(checkpoint.expected.state)
+            or checkpoint.observed.state_sha256
+            != self._state_sha256(checkpoint.observed.state)
         ):
             raise ValueError("product_twin_checkpoint_integrity_invalid")
         return checkpoint
@@ -105,6 +109,16 @@ class ProductTwinEngine:
         state: dict[str, Any],
         evidence_refs: list[str],
     ) -> TwinSnapshot:
+        return TwinSnapshot(
+            mission_id=mission_id,
+            kind=kind,
+            state=state,
+            state_sha256=self._state_sha256(state),
+            evidence_refs=evidence_refs,
+        )
+
+    @staticmethod
+    def _state_sha256(state: dict[str, Any]) -> str:
         encoded = json.dumps(
             state,
             sort_keys=True,
@@ -112,13 +126,7 @@ class ProductTwinEngine:
             separators=(",", ":"),
             default=str,
         ).encode("utf-8")
-        return TwinSnapshot(
-            mission_id=mission_id,
-            kind=kind,
-            state=state,
-            state_sha256=hashlib.sha256(encoded).hexdigest(),
-            evidence_refs=evidence_refs,
-        )
+        return hashlib.sha256(encoded).hexdigest()
 
     def _diff(
         self,

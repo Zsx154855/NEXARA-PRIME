@@ -87,23 +87,40 @@ class EvidenceStore:
         if (
             stored.get("evidence_id") != evidence_id
             or stored.get("mission_id") != envelope.get("mission_id")
+            or stored.get("sha256")
+            != hashlib.sha256(
+                str(stored.get("content", "")).encode("utf-8")
+            ).hexdigest()
             or stored.get("envelope_sha256") != self._envelope_sha256(stored)
         ):
             raise ValueError("evidence_idempotency_record_invalid")
+        immutable_request_matches = all(
+            stored.get(key) == expected_request.get(key)
+            for key in {
+                "mission_id",
+                "kind",
+                "title",
+                "content",
+                "task_id",
+                "tool_invocation_id",
+                "actor",
+                "mime_type",
+                "source",
+                "parent_evidence",
+                "idempotency_key",
+            }
+        ) and (
+            expected_request.get("source_event_id") is None
+            or stored.get("source_event_id")
+            == expected_request.get("source_event_id")
+        )
         request_sha256 = stored.get("request_sha256")
         if request_sha256:
             request_matches = hmac.compare_digest(
                 str(request_sha256), self._request_sha256(expected_request)
-            )
+            ) and immutable_request_matches
         else:
-            request_matches = all(
-                stored.get(key) == value
-                for key, value in expected_request.items()
-                if key not in {"source_event_id", "verification_status"}
-            ) and (
-                expected_request.get("source_event_id") is None
-                or stored.get("source_event_id") == expected_request.get("source_event_id")
-            )
+            request_matches = immutable_request_matches
         if not request_matches:
             raise ValueError("evidence_idempotency_conflict")
         return EvidenceArtifact.model_validate(self._artifact_payload(stored))
