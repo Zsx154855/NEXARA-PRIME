@@ -4,6 +4,7 @@ import hashlib
 import json
 from typing import Any
 
+from nexara_prime.db import SQLiteStore
 from nexara_prime.models import RiskLevel
 
 from .models import (
@@ -17,6 +18,9 @@ from .models import (
 
 class ProductTwinEngine:
     """Capture expected/observed product state and detect deterministic drift."""
+
+    def __init__(self, store: SQLiteStore | None = None):
+        self.store = store
 
     def capture(
         self,
@@ -37,7 +41,7 @@ class ProductTwinEngine:
             observed=observed_state,
             evidence_refs=refs,
         )
-        return ProductTwinCheckpoint(
+        checkpoint = ProductTwinCheckpoint(
             mission_id=mission_id,
             expected=expected,
             observed=observed,
@@ -45,6 +49,21 @@ class ProductTwinEngine:
             reversible=reversible,
             rollback_ref=rollback_ref,
         )
+        if self.store:
+            self.store.save_record(
+                checkpoint.checkpoint_id,
+                "product_twin_checkpoint",
+                checkpoint.model_dump(mode="json"),
+                checkpoint.created_at,
+                mission_id,
+            )
+        return checkpoint
+
+    def get_checkpoint(self, checkpoint_id: str) -> ProductTwinCheckpoint | None:
+        if not self.store:
+            return None
+        raw = self.store.get_record(checkpoint_id)
+        return ProductTwinCheckpoint.model_validate(raw) if raw else None
 
     def detect_drift(
         self,
@@ -103,28 +122,37 @@ class ProductTwinEngine:
                 child_path = f"{path}.{key}"
                 if key not in expected:
                     findings.append(
-                        (
-                            child_path,
-                            DriftValue.missing(),
-                            DriftValue.present(observed[key]),
-                        )
+                        (child_path, DriftValue.missing(), DriftValue.present(observed[key]))
                     )
                 elif key not in observed:
                     findings.append(
-                        (
-                            child_path,
-                            DriftValue.present(expected[key]),
-                            DriftValue.missing(),
-                        )
+                        (child_path, DriftValue.present(expected[key]), DriftValue.missing())
                     )
                 else:
                     findings.extend(self._diff(expected[key], observed[key], child_path))
             return findings
 
         if isinstance(expected, list) and isinstance(observed, list):
-            if expected != observed:
+            common = min(len(expected), len(observed))
+            for index in range(common):
+                findings.extend(
+                    self._diff(expected[index], observed[index], f"{path}[{index}]")
+                )
+            for index in range(common, len(expected)):
                 findings.append(
-                    (path, DriftValue.present(expected), DriftValue.present(observed))
+                    (
+                        f"{path}[{index}]",
+                        DriftValue.present(expected[index]),
+                        DriftValue.missing(),
+                    )
+                )
+            for index in range(common, len(observed)):
+                findings.append(
+                    (
+                        f"{path}[{index}]",
+                        DriftValue.missing(),
+                        DriftValue.present(observed[index]),
+                    )
                 )
             return findings
 
