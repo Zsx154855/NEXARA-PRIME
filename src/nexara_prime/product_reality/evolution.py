@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from nexara_prime.evidence import EvidenceStore
@@ -14,6 +18,12 @@ from .models import (
 )
 
 
+@dataclass(frozen=True)
+class _ValidatedApproval:
+    request: ApprovalRequest
+    integrity_sha256: str
+
+
 class EvolutionPromotionGate:
     """Evidence-backed and approval-bound gate for controlled evolution."""
 
@@ -22,13 +32,14 @@ class EvolutionPromotionGate:
         approvals: ApprovalEngine,
         evidence: EvidenceStore,
         *,
-        authorized_human_principals: set[str] | None = None,
+        authorized_human_principals: set[str],
     ):
         self.approvals = approvals
         self.evidence = evidence
-        self.authorized_human_principals = frozenset(
-            authorized_human_principals or set()
-        )
+        principals = {item.strip() for item in authorized_human_principals if item.strip()}
+        if not principals:
+            raise ValueError("authorized_human_principals_must_not_be_empty")
+        self.authorized_human_principals = frozenset(principals)
 
     def assess(
         self,
@@ -37,7 +48,7 @@ class EvolutionPromotionGate:
     ) -> PromotionDecision:
         required_actions: list[str] = []
         verified_evidence_refs: list[str] = []
-        approvals_to_consume: list[ApprovalRequest] = []
+        approvals_to_consume: list[_ValidatedApproval] = []
 
         verified, errors = self._verify_evidence_refs(
             proposal.evidence_refs,
@@ -119,7 +130,7 @@ class EvolutionPromotionGate:
                 f"{proposal.risk_level.value} proposal satisfies evidence, recovery, governance, and approval prerequisites"
             ],
             verified_evidence_refs=sorted(set(verified_evidence_refs)),
-            consumed_approval_ids=[item.approval_id for item in approvals_to_consume],
+            consumed_approval_ids=[item.request.approval_id for item in approvals_to_consume],
         )
 
     def _verify_evidence_refs(
@@ -143,6 +154,12 @@ class EvolutionPromotionGate:
                 errors.append(f"{purpose} mission mismatch: {evidence_id}")
                 continue
             raw = envelope["payload"]
+            if (
+                envelope.get("record_id") != evidence_id
+                or raw.get("evidence_id") != evidence_id
+            ):
+                errors.append(f"{purpose} identity mismatch: {evidence_id}")
+                continue
             if raw.get("mission_id") != mission_id:
                 errors.append(f"{purpose} payload mission mismatch: {evidence_id}")
                 continue
@@ -178,6 +195,10 @@ class EvolutionPromotionGate:
             errors.append("stored rollback checkpoint payload mission mismatch")
         if not checkpoint.reversible:
             errors.append("stored rollback checkpoint is not reversible")
+        if not self._snapshot_hash_valid(checkpoint.expected):
+            errors.append("stored rollback checkpoint expected snapshot hash mismatch")
+        if not self._snapshot_hash_valid(checkpoint.observed):
+            errors.append("stored rollback checkpoint observed snapshot hash mismatch")
         return errors
 
     def _validate_stored_approval(
@@ -189,10 +210,11 @@ class EvolutionPromotionGate:
         expected_action: str,
         expected_risk: RiskLevel,
         purpose: str,
-    ) -> tuple[ApprovalRequest | None, list[str]]:
+    ) -> tuple[_ValidatedApproval | None, list[str]]:
         if not approval_id:
             return None, [f"obtain stored {purpose}"]
-        if not actor_id:
+        normalized_actor = (actor_id or "").strip()
+        if not normalized_actor:
             return None, [f"identify executor for {purpose}"]
 
         envelope = self.approvals.store.get_record_envelope(approval_id)
@@ -205,6 +227,11 @@ class EvolutionPromotionGate:
             approval = ApprovalRequest.model_validate(envelope["payload"])
         except (TypeError, ValueError):
             return None, [f"stored {purpose} is invalid"]
+        if (
+            envelope.get("record_id") != approval_id
+            or approval.approval_id != approval_id
+        ):
+            return None, [f"stored {purpose} identity mismatch"]
         if approval.status != ApprovalStatus.APPROVED:
             return None, [f"stored {purpose} is not approved"]
         if approval.mission_id != proposal.mission_id:
@@ -215,17 +242,34 @@ class EvolutionPromotionGate:
             return None, [f"stored {purpose} risk mismatch"]
         if approval.approval_scope != "single_action":
             return None, [f"stored {purpose} must use single_action scope"]
-        if not approval.executor_id:
+        normalized_executor = (approval.executor_id or "").strip()
+        if not normalized_executor:
             return None, [f"stored {purpose} has no executor binding"]
-        if approval.executor_id != actor_id:
+        if normalized_executor != normalized_actor:
             return None, [f"stored {purpose} executor mismatch"]
-        if not approval.decided_by or not approval.decided_at:
+        normalized_decider = (approval.decided_by or "").strip()
+        if not normalized_decider or not approval.decided_at:
             return None, [f"stored {purpose} has no human decision record"]
-        if approval.decided_by not in self.authorized_human_principals:
+        if normalized_decider not in self.authorized_human_principals:
             return None, [f"stored {purpose} was not decided by an authorized human"]
         if not self._approval_is_unexpired(approval):
             return None, [f"stored {purpose} is expired or has invalid expiry"]
-        return approval, []
+        return _ValidatedApproval(
+            request=approval,
+            integrity_sha256=str(envelope["integrity_sha256"]),
+        ), []
+
+    @staticmethod
+    def _snapshot_hash_valid(snapshot) -> bool:
+        encoded = json.dumps(
+            snapshot.state,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+        expected = hashlib.sha256(encoded).hexdigest()
+        return hmac.compare_digest(expected, snapshot.state_sha256)
 
     @staticmethod
     def _approval_is_unexpired(approval: ApprovalRequest) -> bool:
@@ -239,15 +283,18 @@ class EvolutionPromotionGate:
             expiry = expiry.replace(tzinfo=timezone.utc)
         return expiry > datetime.now(timezone.utc)
 
-    def _consume_approvals_atomically(self, approvals: list[ApprovalRequest]) -> bool:
+    def _consume_approvals_atomically(
+        self, approvals: list[_ValidatedApproval]
+    ) -> bool:
         return self.approvals.store.compare_and_set_record_fields_atomically(
             [
                 {
-                    "record_id": approval.approval_id,
+                    "record_id": approval.request.approval_id,
                     "record_type": "approval",
                     "field": "status",
                     "expected_value": ApprovalStatus.APPROVED.value,
                     "new_value": ApprovalStatus.CONSUMED.value,
+                    "expected_integrity_sha256": approval.integrity_sha256,
                 }
                 for approval in approvals
             ]

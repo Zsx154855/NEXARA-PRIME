@@ -257,6 +257,11 @@ class SQLiteStore:
                     if (
                         not row["integrity_sha256"]
                         or row["integrity_sha256"] != current_integrity
+                        or (
+                            item.get("expected_integrity_sha256") is not None
+                            and row["integrity_sha256"]
+                            != item["expected_integrity_sha256"]
+                        )
                         or payload.get(field) != item["expected_value"]
                     ):
                         self._conn.rollback()

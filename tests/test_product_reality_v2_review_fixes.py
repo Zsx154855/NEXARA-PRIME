@@ -301,3 +301,146 @@ def test_multi_approval_consumption_is_all_or_nothing(tmp_path: Path) -> None:
     assert store.get_record(second_id)["status"] == ApprovalStatus.CONSUMED.value
     assert store.get_record_envelope(first_id) is not None
     assert store.get_record_envelope(second_id) is not None
+
+
+def test_gate_requires_explicit_authorized_human_principals(tmp_path: Path) -> None:
+    store = SQLiteStore(tmp_path / "nexara.sqlite3")
+    events = EventBus(store)
+    evidence = EvidenceStore(store, events)
+    approvals = ApprovalEngine(store, events)
+
+    try:
+        EvolutionPromotionGate(
+            approvals,
+            evidence,
+            authorized_human_principals=set(),
+        )
+    except ValueError as error:
+        assert str(error) == "authorized_human_principals_must_not_be_empty"
+    else:
+        raise AssertionError("empty authorized principal configuration was accepted")
+
+
+def test_evidence_payload_id_must_match_referenced_record(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin, risk=RiskLevel.R0)
+    original_id = item.evidence_refs[0]
+    copied = store.get_record(original_id)
+    assert copied is not None
+    alias_id = "evidence_alias"
+    store.save_record(
+        alias_id,
+        "evidence",
+        copied,
+        copied["created_at"],
+        item.mission_id,
+    )
+    item.evidence_refs = [alias_id]
+
+    decision = gate.assess(item, EvolutionValidation(verification_passed=True))
+
+    assert decision.allowed is False
+    assert f"promotion evidence identity mismatch: {alias_id}" in decision.required_actions
+
+
+def test_approval_payload_id_must_match_requested_record(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    validation, approval_id = validation_for(approvals, item)
+    copied = store.get_record(approval_id)
+    assert copied is not None
+    alias_id = "approval_alias"
+    store.save_record(
+        alias_id,
+        "approval",
+        copied,
+        copied["created_at"],
+        item.mission_id,
+    )
+    validation.approval_id = alias_id
+
+    decision = gate.assess(item, validation)
+
+    assert decision.allowed is False
+    assert "stored promotion approval identity mismatch" in decision.required_actions
+
+
+def test_whitespace_executor_principals_are_rejected(tmp_path: Path) -> None:
+    _, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    validation, _ = validation_for(
+        approvals,
+        item,
+        actor_id="   ",
+        executor_id="   ",
+    )
+
+    decision = gate.assess(item, validation)
+
+    assert decision.allowed is False
+    assert "identify executor for promotion approval" in decision.required_actions
+
+
+def test_checkpoint_snapshot_hashes_are_recomputed(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, gate = runtime(tmp_path)
+    item = proposal(evidence, twin, risk=RiskLevel.R2)
+    raw = store.get_record(item.rollback_checkpoint_id)
+    assert raw is not None
+    raw["expected"]["state"] = {"version": 999}
+    store.save_record(
+        item.rollback_checkpoint_id,
+        "product_twin_checkpoint",
+        raw,
+        raw["created_at"],
+        item.mission_id,
+    )
+
+    decision = gate.assess(
+        item,
+        EvolutionValidation(
+            simulation_passed=True,
+            verification_passed=True,
+            accessibility_passed=True,
+            governance_passed=True,
+        ),
+    )
+
+    assert decision.allowed is False
+    assert (
+        "stored rollback checkpoint expected snapshot hash mismatch"
+        in decision.required_actions
+    )
+
+
+def test_atomic_consume_rejects_rebound_approval_payload(tmp_path: Path) -> None:
+    store, evidence, approvals, twin, _ = runtime(tmp_path)
+    item = proposal(evidence, twin)
+    _, approval_id = validation_for(approvals, item)
+    envelope = store.get_record_envelope(approval_id)
+    assert envelope is not None
+    rebound = store.get_record(approval_id)
+    assert rebound is not None
+    rebound["action"] = "product_reality.promote:rebound"
+    store.save_record(
+        approval_id,
+        "approval",
+        rebound,
+        rebound["created_at"],
+        item.mission_id,
+    )
+
+    consumed = store.compare_and_set_record_fields_atomically(
+        [
+            {
+                "record_id": approval_id,
+                "record_type": "approval",
+                "field": "status",
+                "expected_value": ApprovalStatus.APPROVED.value,
+                "new_value": ApprovalStatus.CONSUMED.value,
+                "expected_integrity_sha256": envelope["integrity_sha256"],
+            }
+        ]
+    )
+
+    assert consumed is False
+    assert store.get_record(approval_id)["status"] == ApprovalStatus.APPROVED.value
