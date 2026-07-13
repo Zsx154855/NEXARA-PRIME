@@ -116,6 +116,16 @@ class SQLiteStore:
                 payload = json.loads(row["payload"])
                 payload_changed = False
                 if row["record_type"] == "evidence" and not payload.get("envelope_sha256"):
+                    if row["integrity_sha256"]:
+                        legacy_integrity = self._record_integrity(
+                            row["record_id"],
+                            row["record_type"],
+                            row["mission_id"],
+                            row["created_at"],
+                            payload,
+                        )
+                        if row["integrity_sha256"] != legacy_integrity:
+                            continue
                     payload["envelope_sha256"] = self._evidence_envelope_integrity(payload)
                     payload_changed = True
                 if not payload_changed and row["integrity_sha256"]:

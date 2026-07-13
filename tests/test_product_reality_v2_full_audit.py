@@ -79,6 +79,13 @@ def test_legacy_evidence_receives_inner_envelope_during_schema_upgrade(tmp_path:
         "source_event_id": None,
         "created_at": "2026-01-01T00:00:00+00:00",
     }
+    legacy_integrity = SQLiteStore._record_integrity(
+        "evidence-legacy",
+        "evidence",
+        "mission-1",
+        payload["created_at"],
+        payload,
+    )
     connection.execute(
         "INSERT INTO records VALUES (?, ?, ?, ?, ?, ?)",
         (
@@ -87,7 +94,7 @@ def test_legacy_evidence_receives_inner_envelope_during_schema_upgrade(tmp_path:
             "mission-1",
             json.dumps(payload),
             payload["created_at"],
-            "old-outer-hash",
+            legacy_integrity,
         ),
     )
     connection.commit()
@@ -99,6 +106,42 @@ def test_legacy_evidence_receives_inner_envelope_during_schema_upgrade(tmp_path:
     assert envelope is not None
     assert envelope["payload"]["envelope_sha256"]
     assert evidence.is_preverified_and_integrity_bound("evidence-legacy")
+
+
+def test_schema_upgrade_does_not_reseal_corrupt_legacy_evidence(tmp_path: Path) -> None:
+    path = tmp_path / "corrupt-legacy-evidence.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE records(record_id TEXT PRIMARY KEY, record_type TEXT NOT NULL, "
+        "mission_id TEXT, payload TEXT NOT NULL, created_at TEXT NOT NULL, "
+        "integrity_sha256 TEXT)"
+    )
+    payload = {
+        "evidence_id": "evidence-corrupt",
+        "mission_id": "mission-1",
+        "kind": "verification",
+        "content": "tampered",
+        "sha256": hashlib.sha256(b"original").hexdigest(),
+        "verification_status": "verified",
+    }
+    connection.execute(
+        "INSERT INTO records VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            "evidence-corrupt",
+            "evidence",
+            "mission-1",
+            json.dumps(payload),
+            "2026-01-01T00:00:00+00:00",
+            "invalid-existing-integrity",
+        ),
+    )
+    connection.commit()
+    connection.close()
+
+    store = SQLiteStore(path)
+
+    assert store.get_record_envelope("evidence-corrupt") is None
+    assert "envelope_sha256" not in store.get_record("evidence-corrupt")
 
 
 def test_verify_refuses_to_reseal_out_of_band_evidence_tampering(tmp_path: Path) -> None:
