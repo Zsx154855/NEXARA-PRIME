@@ -2,20 +2,27 @@
   "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
   "gates": [
-    {"id":"G0","status":"PASS"},{"id":"G1","status":"PASS"},
-    {"id":"G2","status":"PASS"},{"id":"G3","status":"PASS"},
-    {"id":"G4","status":"PASS"},{"id":"G5","status":"PASS"},
-    {"id":"G6","status":"PASS"},{"id":"G7","status":"PASS"},
-    {"id":"G8","status":"PASS"},{"id":"G9","status":"PASS"},
+    {"id":"G0","status":"PASS"},{"id":"G1","status":"PASS"},{"id":"G2","status":"PASS"},
+    {"id":"G3","status":"PASS"},{"id":"G4","status":"PASS"},{"id":"G5","status":"PASS"},
+    {"id":"G6","status":"PASS"},{"id":"G7","status":"PASS"},{"id":"G8","status":"PASS"},
+    {"id":"G9","status":"PASS"},
     {"id":"G10","status":"BLOCKED",
-      "completed": ["version_freeze_0.1.0","wheel+sdist_verified","python_sdk_wheel","sbom_pyproject.toml","release_notes_base_17_commits","macos_binary_exists","artifact_hashes_recorded"],
+      "completed": {
+        "macos_source_build": "PASS — swift build SUCCESS, arm64 1.1MB, timestamp 2026-07-15 03:30:44",
+        "macos_app_bundle": "PASS — dist/NexaraMac.app, valid Info.plist, launch via open verified",
+        "version_freeze": "PASS — 0.1.0",
+        "wheel": "PASS — nexara_prime-0.1.0 + nexara_sdk-0.1.0",
+        "sbom": "PASS — pyproject.toml",
+        "release_notes_base": "PASS — 18 commits in program range",
+        "unsigned_zip": "PASS — dist/NexaraMac-0.1.0-unsigned.zip (277KB, SHA256 recorded)",
+        "artifact_hashes": "PASS — wheel, sdist, app binary, zip recorded"
+      },
       "blocked": {
-        "unsigned_dmg": "Claude Code Bash sandbox blocks hdiutil — NOT a macOS issue. Requires: run `hdiutil create -srcfolder experience/macos/.build/debug/NexaraMac.app -ov -format UDZO NexaraMac-0.1.0.dmg` outside sandbox",
+        "unsigned_dmg": "hdiutil blocked by Claude Code sandbox (even hdiutil info denied). ZIP archive created as workaround. To create DMG: run `hdiutil create -volname 'NEXARA PRIME' -srcfolder dist/NexaraMac.app -ov -format UDZO dist/NexaraMac-0.1.0-unsigned.dmg` in Terminal",
         "dmg_mount_test": "depends on DMG creation",
-        "ios_archive": "requires Xcode archive build — available on this machine, but signing config needed",
-        "ipa": "Apple Developer Provisioning Profile required",
-        "macos_signing": "Apple Developer code signing certificate required",
+        "macos_codesigning": "Apple Developer code signing certificate required",
         "notarization": "Apple notary service required",
+        "ios_ipa": "Apple Developer Provisioning Profile required",
         "git_push": "human release authorization required",
         "git_tag": "human release authorization required",
         "product_brand_name": "human business decision required"
@@ -23,8 +30,6 @@
     }
   ],
   "current_gate": "G10",
-  "gates_pass": 10,
-  "gates_blocked": 1,
   "test_baseline": "517 passed, 0 failed",
   "updated_at": "2026-07-15T00:00:00Z"
 }

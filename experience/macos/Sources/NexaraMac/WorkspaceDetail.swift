@@ -1,3 +1,4 @@
+import NexaraCore
 import SwiftUI
 
 struct WorkspaceDetail: View {
@@ -71,19 +72,30 @@ struct WorkspaceDetail: View {
         }
     }
 
+    /// Check if a mission state is active (past a stage boundary).
+    private func isActive(_ state: MissionState, in allowedStates: Set<MissionState>) -> Bool {
+        allowedStates.contains(state)
+    }
+
     @ViewBuilder
     private func pipelineView(for mission: Mission) -> some View {
+        let contractedStates: Set<MissionState> = [.contracted, .planned, .ready, .running, .verifying, .completed]
+        let plannedStates: Set<MissionState> = [.planned, .ready, .running, .verifying, .completed]
+        let executingStates: Set<MissionState> = [.running, .verifying, .completed]
+        let verifyingStates: Set<MissionState> = [.verifying, .completed]
+        let completedStates: Set<MissionState> = [.completed]
+
         VStack(alignment: .leading, spacing: 8) {
             Label("执行路径", systemImage: "arrow.triangle.branch").font(.title3)
             let stages: [(String, Bool)] = [
                 ("意图 Intent", true),
                 ("上下文 Context", mission.state != .draft),
-                ("合约 Contract", [.contracted, .planned, .ready, .running, .verifying, .completed].contains(mission.state)),
-                ("计划 Plan", [.planned, .ready, .running, .verifying, .completed].contains(mission.state)),
-                ("执行 Execute", [.running, .verifying, .completed].contains(mission.state)),
-                ("验证 Verify", [.verifying, .completed].contains(mission.state)),
-                ("证据 Evidence", [.completed].contains(mission.state)),
-                ("记忆 Memory", [.completed].contains(mission.state)),
+                ("合约 Contract", isActive(mission.state, in: contractedStates)),
+                ("计划 Plan", isActive(mission.state, in: plannedStates)),
+                ("执行 Execute", isActive(mission.state, in: executingStates)),
+                ("验证 Verify", isActive(mission.state, in: verifyingStates)),
+                ("证据 Evidence", isActive(mission.state, in: completedStates)),
+                ("记忆 Memory", isActive(mission.state, in: completedStates)),
             ]
             ForEach(stages, id: \.0) { stage, active in
                 HStack(spacing: 10) {

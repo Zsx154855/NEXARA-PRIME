@@ -1,3 +1,4 @@
+import NexaraCore
 import SwiftUI
 
 struct EvidenceDetail: View {
