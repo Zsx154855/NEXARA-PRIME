@@ -1,23 +1,33 @@
 {
   "baseline_id": "NEXARA_PROGRAM_FACT_BASELINE_CONSOLIDATION_V1",
+  "sovereign_baseline_id": "INITIAL_SOVEREIGN_BASELINE_V1",
   "repository": "/Users/agentos/NEXARA-PRIME",
   "branch": "work/nexara-adaptive-runtime-v1",
-  "head": "66a86f8a0d1712d75b2af78cb1ad8b08783af7bb",
+  "head": "546edb8988a04b177aab39d116ec7e80a01e4bab",
   "python": "3.12.13",
   "test_command": ".venv/bin/python -m pytest -q",
-  "tests_passed": 507,
+  "tests_passed": 517,
   "tests_failed": 0,
   "validation": "PASS",
-  "next_program_gate": "G0",
+  "next_program_gate": "G10",
   "hermes_runtime_dependency": 0,
   "secret_leakage": 0,
-  "untracked": ["Chats/"],
+  "untracked": [],
   "worktree": "clean",
   "core_files_present": [
     "NEXARA_PROGRAM_CONSTITUTION_V1.md",
     "NEXARA_PRIME_SOVEREIGN_AGENT_MASTER_BLUEPRINT_V1.md",
     "NEXARA_DEVELOPMENT_GATES_V1.yaml"
   ],
-  "frozen_at": "2026-07-15T00:00:00Z",
-  "frozen_by": "Claude Code Prime — Program Fact Baseline Consolidation V1"
+  "sovereign_baseline_files": [
+    "governance/baselines/v0.1.0/BASELINE_ACCEPTANCE_V1.md",
+    "governance/baselines/v0.1.0/BASELINE_MANIFEST_V1.json",
+    "governance/baselines/v0.1.0/BASELINE_CHECKSUMS_V1.txt",
+    "governance/baselines/v0.1.0/BASELINE_PROVENANCE_V1.json",
+    "governance/baselines/v0.1.0/BASELINE_ENVIRONMENT_V1.json",
+    "governance/baselines/v0.1.0/BASELINE_RISK_REGISTER_V1.md",
+    "governance/baselines/v0.1.0/BASELINE_REPRODUCTION_V1.md"
+  ],
+  "frozen_at": "2026-07-14T20:52:15Z",
+  "frozen_by": "Claude Code Prime — NEXARA Sovereign Repository Governor"
 }

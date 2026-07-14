@@ -1,0 +1,166 @@
+# NEXARA PRIME — Merge Contract Schema V1
+# Validates all required fields in pull request merge contracts.
+# Schema version: 1.0.0
+
+version: 1
+contract_name: MERGE_CONTRACT_V1
+program: NEXARA_FIRST_PARTY_SOVEREIGN_AGENT
+platform: NEXARA_PRIME
+python: "3.12.13"
+swift: "6.3.3"
+xcode: "26.6"
+
+# ── Required Fields ──────────────────────────────────────────────────────────
+required_fields:
+  mission_id:
+    type: string
+    required: true
+    description: "Mission identifier linked to the program roadmap"
+    pattern: "^MISSION-\\d{4}-\\d{3,}$"
+    example: "MISSION-2026-007"
+    error_message: "mission_id must match pattern MISSION-YYYY-NNN (e.g. MISSION-2026-007)"
+
+  program_id:
+    type: string
+    required: true
+    description: "Program identifier"
+    enum:
+      - NEXARA_FIRST_PARTY_SOVEREIGN_AGENT
+    example: "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT"
+    error_message: "program_id must be a recognized program identifier"
+
+  gate_scope:
+    type: string
+    required: true
+    description: "Comma-separated list of gates this change touches"
+    pattern: "^G(?:[0-9]|10)(?:,\\s*G(?:[0-9]|10))*$"
+    example: "G7,G8,G10"
+    error_message: "gate_scope must be a comma-separated list of valid gate IDs (G0–G10)"
+
+  risk_level:
+    type: string
+    required: true
+    description: "Risk classification for this change"
+    enum:
+      - R0
+      - R1
+      - R2
+      - R3
+      - R4
+    example: "R2"
+    error_message: "risk_level must be one of R0, R1, R2, R3, R4"
+
+  changed_modules:
+    type: string
+    required: true
+    description: "Comma-separated list of affected modules or packages"
+    pattern: "^[A-Za-z0-9_/\\-]+(?:,\\s*[A-Za-z0-9_/\\-]+)*$"
+    example: "nexara_prime/cli, platform/sdk/typescript, experience/NexaraCore"
+    error_message: "changed_modules must be a comma-separated list of valid module paths"
+
+  test_summary:
+    type: string
+    required: true
+    description: "Summary of test results including pass/fail counts and coverage delta"
+    pattern: "^\\d+ passed, \\d+ failed"
+    example: "517 passed, 0 failed"
+    error_message: "test_summary must include a pass/fail count (e.g. '517 passed, 0 failed')"
+
+  evidence_refs:
+    type: string
+    required: true
+    description: "Links or paths to evidence files in the reports/ directory"
+    example: "reports/program/G10/04_local_release_evidence.md, reports/program/G10/05_artifact_manifest.json"
+    error_message: "evidence_refs must point to at least one evidence file"
+
+  rollback_plan:
+    type: string
+    required: true
+    description: "Description of the rollback strategy if this merge causes issues"
+    min_length: 20
+    example: "git revert <SHA> and restore previous .nexara state from baseline"
+    error_message: "rollback_plan must be at least 20 characters describing the rollback strategy"
+
+  external_dependencies:
+    type: string
+    required: true
+    description: "External services, API keys, certificates, or credentials required"
+    example: "macOS code signing certificate (Apple Developer Program)"
+    error_message: "external_dependencies must describe any external requirements (use 'None' if none)"
+
+  # ── Human-Checked Checklist Fields ─────────────────────────────────────────
+  pre_merge_checks:
+    type: object
+    required: false
+    description: "Pre-merge verification checklist"
+    fields:
+      ci_checks_pass:
+        type: boolean
+        required: true
+        description: "All CI pipeline checks pass"
+      tests_at_baseline:
+        type: boolean
+        required: true
+        description: "Tests pass at baseline level (517+ passed, 0 failed)"
+      secret_scan_pass:
+        type: boolean
+        required: true
+        description: "No hardcoded credentials detected"
+      state_drift_check_pass:
+        type: boolean
+        required: true
+        description: ".nexara state files are consistent with git HEAD"
+      rollback_plan_valid:
+        type: boolean
+        required: true
+        description: "Rollback plan is realistic and actionable"
+      evidence_valid:
+        type: boolean
+        required: true
+        description: "Evidence references point to existing files"
+
+# ── Risk-Level Gating Rules ──────────────────────────────────────────────────
+risk_gating:
+  R0:
+    auto_merge: true
+    required_approvals: 0
+    description: "Documentation / comments / whitespace only — no approval needed"
+  R1:
+    auto_merge: true
+    required_approvals: 0
+    description: "Isolated refactors, test additions, dependency updates — no approval needed"
+  R2:
+    auto_merge: false
+    required_approvals: 1
+    min_approver_role: "senior_contributor"
+    description: "Feature changes, moderate complexity — requires one approval"
+  R3:
+    auto_merge: false
+    required_approvals: 2
+    min_approver_role: "maintainer"
+    description: "Architecture changes, cross-module impact — requires two approvals"
+  R4:
+    auto_merge: false
+    required_approvals: 3
+    min_approver_role: "program_lead"
+    description: "Security, release, contract changes — requires three approvals including program lead"
+
+# ── Field Validation Rules ───────────────────────────────────────────────────
+validation_rules:
+  - field: rollback_plan
+    min_length: 20
+    description: "Rollback plan must be detailed enough to execute"
+
+  - field: evidence_refs
+    pattern: "reports/"
+    description: "Evidence references should typically point to the reports/ directory"
+
+  - field: test_summary
+    min_passed: 0
+    description: "Test pass count must be non-negative"
+
+  - field: gate_scope
+    depends_on:
+      - field: risk_level
+        values: [R3, R4]
+        description: "R3 and R4 changes must specify at least one gate"

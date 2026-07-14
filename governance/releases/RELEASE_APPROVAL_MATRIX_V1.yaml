@@ -1,0 +1,188 @@
+# NEXARA PRIME — Release Approval Matrix V1
+# Maps risk levels (R0–R4) to required approvals for merge and release gates.
+# Schema version: 1.0.0
+
+version: 1
+matrix_name: RELEASE_APPROVAL_MATRIX_V1
+program: NEXARA_FIRST_PARTY_SOVEREIGN_AGENT
+platform: NEXARA_PRIME
+python: "3.12.13"
+swift: "6.3.3"
+xcode: "26.6"
+
+# ── Risk Level Definitions ───────────────────────────────────────────────────
+risk_levels:
+  R0:
+    label: "Cosmetic / Documentation"
+    description: >
+      Changes with zero functional impact: comments, whitespace,
+      formatting, documentation-only edits, non-functional metadata.
+    auto_merge_allowed: true
+    override_allowed: true
+    override_authority: "any_contributor"
+
+  R1:
+    label: "Isolated / Low Risk"
+    description: >
+      Changes confined to a single module with no external contract impact:
+      test additions, refactors with identical behavior, dependency updates
+      that pass CI, dead code removal, utility extraction.
+    auto_merge_allowed: true
+    override_allowed: true
+    override_authority: "any_contributor"
+
+  R2:
+    label: "Moderate Risk"
+    description: >
+      Feature additions, moderate complexity changes, internal API changes
+      within a single module, configuration changes, dependency additions.
+    auto_merge_allowed: false
+    override_allowed: true
+    override_authority: "maintainer"
+
+  R3:
+    label: "High Risk"
+    description: >
+      Cross-module changes, architecture changes, API contract changes,
+      storage schema changes, security hardening, permission model changes,
+      new external integrations, SDK interface changes.
+    auto_merge_allowed: false
+    override_allowed: false
+
+  R4:
+    label: "Critical / Release"
+    description: >
+      Security-critical changes, release gate transitions, governance
+      contract changes, signing and notarization, program constitution
+      amendments, merge contract schema changes, recovery procedure changes.
+    auto_merge_allowed: false
+    override_allowed: false
+
+# ── Approval Requirements per Risk Level ─────────────────────────────────────
+approval_requirements:
+  R0:
+    merge:
+      required_approvals: 0
+      required_roles: []
+      description: "No review required; author may merge directly"
+    release:
+      required_approvals: 0
+      required_roles: []
+      description: "No release approval required"
+
+  R1:
+    merge:
+      required_approvals: 0
+      required_roles: []
+      description: "No review required; CI must pass"
+    release:
+      required_approvals: 0
+      required_roles: []
+      description: "No release approval required; CI must pass"
+
+  R2:
+    merge:
+      required_approvals: 1
+      required_roles: ["senior_contributor"]
+      description: "Requires one approval from a senior contributor"
+    release:
+      required_approvals: 2
+      required_roles: ["senior_contributor", "release_manager"]
+      description: "Requires senior contributor + release manager sign-off"
+
+  R3:
+    merge:
+      required_approvals: 2
+      required_roles: ["maintainer", "senior_contributor"]
+      description: "Requires one maintainer + one senior contributor"
+      security_review: true
+    release:
+      required_approvals: 3
+      required_roles: ["maintainer", "release_manager", "security_lead"]
+      description: "Requires maintainer, release manager, and security lead sign-off"
+      security_review: true
+
+  R4:
+    merge:
+      required_approvals: 3
+      required_roles: ["program_lead", "maintainer", "release_manager"]
+      description: "Requires program lead, maintainer, and release manager approval"
+      security_review: true
+    release:
+      required_approvals: 4
+      required_roles:
+        - "program_lead"
+        - "maintainer"
+        - "release_manager"
+        - "security_lead"
+      description: "Requires all four senior roles to approve"
+      security_review: true
+      governance_board_notify: true
+
+# ── Approval Roles ───────────────────────────────────────────────────────────
+roles:
+  any_contributor:
+    description: "Any contributor with write access to the repository"
+    authority: "can approve R0–R1 merges and overrides"
+
+  senior_contributor:
+    description: "Trusted contributor with deep knowledge of the codebase"
+    authority: "can approve R2 merges, R2 releases; required for R3 merges"
+    required_gates: [G0, G1, G2, G3, G4, G5, G6, G7, G8]
+
+  maintainer:
+    description: "Core maintainer with broader repository authority"
+    authority: "can approve R2–R3 merges, R3 releases; required for R4"
+    required_gates: [G0, G1, G2, G3, G4, G5, G6, G7, G8, G9]
+
+  release_manager:
+    description: "Designated release manager for the current release cycle"
+    authority: "signs off on R2+ release approvals; required for R4"
+    appointment: "appointed per release cycle by program lead"
+
+  security_lead:
+    description: "Security domain lead"
+    authority: "required for R3+ security reviews and release approvals"
+    required_gates: [G0, G1, G2, G3, G4, G5, G6]
+
+  program_lead:
+    description: "Program lead with ultimate authority"
+    authority: "required for R4 approvals; can block any release"
+    appointment: "defined in .nexara/PROGRAM_STATE.json"
+
+# ── Override Rules ───────────────────────────────────────────────────────────
+overrides:
+  emergency_hotfix:
+    description: >
+      Emergency hotfix override for R2+ when immediate deployment is necessary
+      to address a production outage or critical security vulnerability.
+    conditions:
+      - must_be_documented_in: ".nexara/DECISION_LOG.md"
+      - post_hoc_review_within: "72 hours"
+      - requires: "program_lead_approval"
+    allows:
+      - "reduce merge approvals by 1 for R2–R3"
+      - "skip release approval for R2"
+
+  rollback_override:
+    description: >
+      Override applied during a rollback deployment when restoring a previous
+      known-good release.
+    conditions:
+      - "rollback must follow ROLLBACK_POLICY_V1.md"
+      - "post-rollback review required within 48 hours"
+    allows:
+      - "reduce merge approvals to 1 for R2–R3"
+      - "skip release approval for rollback artifacts"
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  all_approvals_recorded_in: ".nexara/DECISION_LOG.md"
+  override_events:
+    required: true
+    format: |
+      ## Override: <type> — <date>
+      - Risk Level: <R0–R4>
+      - Override Authority: <name>
+      - Reason: <detailed rationale>
+      - Post-Hoc Review Due: <date + 72h>

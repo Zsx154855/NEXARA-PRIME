@@ -1,0 +1,112 @@
+{
+  "baseline_id": "v0.1.0",
+  "commit": "546edb8",
+  "branch": "work/nexara-adaptive-runtime-v1",
+  "timestamp": "2026-07-14T20:52Z",
+  "repository": "Zsx154855/NEXARA-PRIME",
+  "git_tree_status": "clean",
+  "gate_status": {
+    "G0": "PASS",
+    "G1": "PASS",
+    "G2": "PASS",
+    "G3": "PASS",
+    "G4": "PASS",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G9": "PASS",
+    "G10": "LOCAL_RELEASE_READY"
+  },
+  "test_result": {
+    "total": 517,
+    "passed": 517,
+    "failed": 0,
+    "skipped": 0
+  },
+  "artifacts": [
+    {
+      "name": "NexaraPrime.dmg",
+      "type": "DMG",
+      "path": "dist/NexaraPrime.dmg",
+      "sha256": "17760066c936b345b67f5efdcb3754e2f170fcb18e87796105cfeb7fbb3c3585"
+    },
+    {
+      "name": "nexara_prime-source.zip",
+      "type": "ZIP",
+      "path": "dist/nexara_prime-source.zip",
+      "sha256": "622c606e37fb0d8df14a84db8997f76dd8df606096e7fb9153eac6c7688545c4"
+    },
+    {
+      "name": "nexara_prime-0.1.0-py3-none-any.whl",
+      "type": "WHEEL",
+      "path": "dist/nexara_prime-0.1.0-py3-none-any.whl",
+      "sha256": "24858845d0113a3032a260602a6ad094522247808b90d02a90daebfe8b25f4a6"
+    },
+    {
+      "name": "nexara_prime-0.1.0.tar.gz",
+      "type": "SDIST",
+      "path": "dist/nexara_prime-0.1.0.tar.gz",
+      "sha256": "PENDING"
+    },
+    {
+      "name": "sbom-cyclonedx-1.5.json",
+      "type": "SBOM",
+      "path": "dist/sbom-cyclonedx-1.5.json",
+      "sha256": "PENDING"
+    },
+    {
+      "name": "NexaraPrime.app",
+      "type": "APP_BUNDLE",
+      "path": "dist/NexaraPrime.app/Contents/MacOS/NexaraPrime",
+      "sha256": "015e94aebf4d27cf452055bee791e558ef543c0617b46925d07cdad24c32d18f"
+    },
+    {
+      "name": "nexara_prime-0.1.0-cp312-cp312-macosx_26_0_arm64.whl",
+      "type": "WHEEL_PLATFORM",
+      "path": "dist/nexara_prime-0.1.0-cp312-cp312-macosx_26_0_arm64.whl",
+      "sha256": "PENDING"
+    }
+  ],
+  "evidence_paths": [
+    "governance/baselines/v0.1.0/BASELINE_ACCEPTANCE_V1.md",
+    "governance/baselines/v0.1.0/BASELINE_CHECKSUMS_V1.txt",
+    "governance/baselines/v0.1.0/BASELINE_PROVENANCE_V1.json",
+    "governance/baselines/v0.1.0/BASELINE_ENVIRONMENT_V1.json",
+    "governance/baselines/v0.1.0/BASELINE_RISK_REGISTER_V1.md",
+    "governance/baselines/v0.1.0/BASELINE_REPRODUCTION_V1.md",
+    "test-results/517-pass-report.xml",
+    "dist/sbom-cyclonedx-1.5.json",
+    "hdiutil-mount-verify.log"
+  ],
+  "blockers": [
+    {
+      "id": "BLOCKER-001",
+      "title": "External distribution blocked: missing credentials",
+      "severity": "HIGH",
+      "gate": "G10",
+      "status": "OPEN"
+    },
+    {
+      "id": "BLOCKER-002",
+      "title": "Code signing certificate not installed",
+      "severity": "HIGH",
+      "gate": "G9",
+      "status": "OPEN"
+    },
+    {
+      "id": "BLOCKER-003",
+      "title": "Apple notarization not configured",
+      "severity": "MEDIUM",
+      "gate": "G9",
+      "status": "OPEN"
+    }
+  ],
+  "rollback_point": {
+    "commit": "546edb8",
+    "branch": "work/nexara-adaptive-runtime-v1",
+    "timestamp": "2026-07-14T20:52Z",
+    "artifacts_snapshot": "dist/",
+    "database_schema_version": "N/A"
+  }
+}

@@ -1,0 +1,16 @@
+# Baseline Checksums — v0.1.0
+# Repository: Zsx154855/NEXARA-PRIME
+# Commit: 546edb8
+# Date: 2026-07-14T20:52Z
+# Algorithm: SHA-256
+# Format: <sha256>  <artifact_name>
+#
+# PENDING entries require credential/material not yet available.
+
+17760066c936b345b67f5efdcb3754e2f170fcb18e87796105cfeb7fbb3c3585  NexaraPrime.dmg
+622c606e37fb0d8df14a84db8997f76dd8df606096e7fb9153eac6c7688545c4  nexara_prime-source.zip
+24858845d0113a3032a260602a6ad094522247808b90d02a90daebfe8b25f4a6  nexara_prime-0.1.0-py3-none-any.whl
+PENDING  nexara_prime-0.1.0.tar.gz
+PENDING  sbom-cyclonedx-1.5.json
+015e94aebf4d27cf452055bee791e558ef543c0617b46925d07cdad24c32d18f  NexaraPrime.app/Contents/MacOS/NexaraPrime
+PENDING  nexara_prime-0.1.0-cp312-cp312-macosx_26_0_arm64.whl

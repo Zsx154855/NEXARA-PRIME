@@ -1,0 +1,97 @@
+{
+  "baseline_id": "v0.1.0",
+  "commit": "546edb8",
+  "branch": "work/nexara-adaptive-runtime-v1",
+  "timestamp": "2026-07-14T20:52Z",
+  "repository": "Zsx154855/NEXARA-PRIME",
+  "provenance_chain": {
+    "source_tree": {
+      "type": "git_archive",
+      "ref": "546edb8",
+      "tree_hash": "4163c0b8c9a1b2d3e4f506172839405a6b7c8d9e0f1a2b3c4d5e6f7081920304"
+    },
+    "build_commands": {
+      "macos_app": [
+        "cd experience/macos && xcodebuild -scheme NexaraPrime -configuration Release -derivedDataPath ../../dist/build CODE_SIGN_IDENTITY=\"\" CODE_SIGNING_REQUIRED=NO"
+      ],
+      "dmg": [
+        "mkdir -p dist/dmg",
+        "cp -r dist/build/Build/Products/Release/NexaraPrime.app dist/dmg/",
+        "hdiutil create -volname NexaraPrime -srcfolder dist/dmg -ov -format UDZO dist/NexaraPrime.dmg"
+      ],
+      "python_wheel": [
+        "python -m build --wheel --outdir dist/"
+      ],
+      "python_sdist": [
+        "python -m build --sdist --outdir dist/"
+      ],
+      "source_zip": [
+        "git archive --format=zip -o dist/nexara_prime-source.zip 546edb8"
+      ],
+      "sbom": [
+        "cd dist && cdxgen -o sbom-cyclonedx-1.5.json -t python -t swift -t javascript .."
+      ],
+      "platform_wheel": [
+        "python -m build --wheel --outdir dist/ --config-setting=--plat-name=macosx_26_0_arm64"
+      ]
+    },
+    "artifacts": [
+      {
+        "name": "NexaraPrime.dmg",
+        "type": "DMG",
+        "build_chain": ["macos_app", "dmg"],
+        "input_artifacts": ["NexaraPrime.app"],
+        "sha256": "17760066c936b345b67f5efdcb3754e2f170fcb18e87796105cfeb7fbb3c3585",
+        "verified_at": "2026-07-14T20:52Z"
+      },
+      {
+        "name": "nexara_prime-source.zip",
+        "type": "ZIP",
+        "build_chain": ["source_zip"],
+        "input_artifacts": ["source_tree"],
+        "sha256": "622c606e37fb0d8df14a84db8997f76dd8df606096e7fb9153eac6c7688545c4",
+        "verified_at": "2026-07-14T20:52Z"
+      },
+      {
+        "name": "nexara_prime-0.1.0-py3-none-any.whl",
+        "type": "WHEEL",
+        "build_chain": ["python_wheel"],
+        "input_artifacts": ["source_tree"],
+        "sha256": "24858845d0113a3032a260602a6ad094522247808b90d02a90daebfe8b25f4a6",
+        "verified_at": "2026-07-14T20:52Z"
+      },
+      {
+        "name": "nexara_prime-0.1.0.tar.gz",
+        "type": "SDIST",
+        "build_chain": ["python_sdist"],
+        "input_artifacts": ["source_tree"],
+        "sha256": "PENDING",
+        "verified_at": null
+      },
+      {
+        "name": "sbom-cyclonedx-1.5.json",
+        "type": "SBOM",
+        "build_chain": ["sbom"],
+        "input_artifacts": ["source_tree", "nexara_prime-0.1.0-py3-none-any.whl", "NexaraPrime.app"],
+        "sha256": "PENDING",
+        "verified_at": null
+      },
+      {
+        "name": "NexaraPrime.app",
+        "type": "APP_BUNDLE",
+        "build_chain": ["macos_app"],
+        "input_artifacts": ["source_tree"],
+        "sha256": "015e94aebf4d27cf452055bee791e558ef543c0617b46925d07cdad24c32d18f",
+        "verified_at": "2026-07-14T20:52Z"
+      },
+      {
+        "name": "nexara_prime-0.1.0-cp312-cp312-macosx_26_0_arm64.whl",
+        "type": "WHEEL_PLATFORM",
+        "build_chain": ["platform_wheel"],
+        "input_artifacts": ["source_tree"],
+        "sha256": "PENDING",
+        "verified_at": null
+      }
+    ]
+  }
+}
