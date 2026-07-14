@@ -2,18 +2,15 @@
   "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
   "gates": [
-    {"id": "G0", "name": "产品宪章与边界冻结", "status": "PASS"},
-    {"id": "G1", "name": "第一方 Agent Identity Domain", "status": "PASS"},
-    {"id": "G2", "name": "Mission Agent 闭环", "status": "PASS"},
-    {"id": "G3", "name": "Platform Runtime Services", "status": "PASS"},
-    {"id": "G4", "name": "Capability & Tool Runtime", "status": "PASS"},
-    {"id": "G5", "name": "Memory & Knowledge Fabric", "status": "PASS"},
-    {"id": "G6", "name": "Governance & Evidence Hardening", "status": "RUNNING"},
-    {"id": "G7", "name": "三端产品体验", "status": "NOT_STARTED"},
-    {"id": "G8", "name": "SDK / Plugin Boundary", "status": "NOT_STARTED"},
-    {"id": "G9", "name": "Evaluation & Evolution", "status": "NOT_STARTED"},
-    {"id": "G10", "name": "RC 与发布闭环", "status": "NOT_STARTED"}
+    {"id": "G0", "status": "PASS"}, {"id": "G1", "status": "PASS"},
+    {"id": "G2", "status": "PASS"}, {"id": "G3", "status": "PASS"},
+    {"id": "G4", "status": "PASS"}, {"id": "G5", "status": "PASS"},
+    {"id": "G6", "status": "PASS"},
+    {"id": "G7", "status": "RUNNING"},
+    {"id": "G8", "status": "NOT_STARTED"},
+    {"id": "G9", "status": "NOT_STARTED"},
+    {"id": "G10", "status": "NOT_STARTED"}
   ],
-  "current_gate": "G6",
+  "current_gate": "G7",
   "updated_at": "2026-07-15T00:00:00Z"
 }
