@@ -1,3 +1,4 @@
+<!-- SUPERSEDED by forensic_audit/10_final_verdict.md — truthful status differs from claimed PASS. See forensic_audit/09_corrected_gate_status.json for authoritative status. -->
 # G9 — Gate Acceptance
 
 **Gate:** G9 — Evaluation & Evolution

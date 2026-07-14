@@ -1,0 +1,32 @@
+{
+  "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
+  "audit": "FORENSIC — 2026-07-15",
+  "supersedes": "GATE_STATUS.json from 612e7e1",
+  "gates": [
+    {"id": "G0", "name": "产品宪章与边界冻结", "truthful_status": "PASS", "type": "documentation"},
+    {"id": "G1", "name": "第一方 Agent Identity Domain", "truthful_status": "PASS", "type": "implementation"},
+    {"id": "G2", "name": "Mission Agent 闭环", "truthful_status": "PASS", "type": "verification"},
+    {"id": "G3", "name": "Platform Runtime Services", "truthful_status": "PASS", "type": "organizational"},
+    {"id": "G4", "name": "Capability & Tool Runtime", "truthful_status": "PASS", "type": "verification"},
+    {"id": "G5", "name": "Memory & Knowledge Fabric", "truthful_status": "PASS", "type": "verification"},
+    {"id": "G6", "name": "Governance & Evidence Hardening", "truthful_status": "PASS", "type": "verification"},
+    {"id": "G7", "name": "三端产品体验", "truthful_status": "PARTIAL", "type": "product",
+      "missing": ["macOS native project", "iOS native project", "iPad layout", "screenshots", "usability acceptance", "native builds"]},
+    {"id": "G8", "name": "SDK / Plugin Boundary", "truthful_status": "NOT_STARTED", "type": "ecosystem",
+      "missing": ["5 empty SDK dirs", "no installable SDK", "no plugin schema", "no signature verification"]},
+    {"id": "G9", "name": "Evaluation & Evolution", "truthful_status": "PARTIAL", "type": "quality",
+      "missing": ["benchmark runner execution", "regression suite isolation", "candidate comparison pipeline", "approval-gated evolution E2E"]},
+    {"id": "G10", "name": "RC 与发布闭环", "truthful_status": "BLOCKED", "type": "release",
+      "blocked_by": ["macOS code signing certificate", "Apple Developer Provisioning Profile"],
+      "missing": ["DMG generation", "DMG install verification", "IPA generation", "formal Release Notes", "operational runbook completeness"]}
+  ],
+  "corrected_current_gate": "G7",
+  "earliest_incomplete_gate": "G7",
+  "gates_verified_pass": 7,
+  "gates_partial": 2,
+  "gates_blocked": 1,
+  "gates_not_started": 1,
+  "previous_gates_acceptance_reports": "Marked SUPERSEDED — preserved for audit trail, not deleted",
+  "updated_at": "2026-07-15T00:00:00Z",
+  "updated_by": "Claude Code Prime — Forensic Audit V1"
+}

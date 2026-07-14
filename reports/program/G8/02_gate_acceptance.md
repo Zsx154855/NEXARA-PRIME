@@ -1,3 +1,4 @@
+<!-- SUPERSEDED by forensic_audit/10_final_verdict.md — truthful status differs from claimed PASS. See forensic_audit/09_corrected_gate_status.json for authoritative status. -->
 # G8 — Gate Acceptance
 
 **Gate:** G8 — SDK / Plugin Boundary

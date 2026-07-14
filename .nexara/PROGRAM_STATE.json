@@ -8,16 +8,20 @@
   "baseline_head": "66a86f8a0d1712d75b2af78cb1ad8b08783af7bb",
   "python": "3.12.13",
   "test_baseline": "508 passed, 0 failed",
-  "current_program_gate": "COMPLETE",
-  "gate_status": "PASS",
-  "completed_gates": ["G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10"],
+  "current_program_gate": "G7",
+  "gate_status": "PARTIAL",
+  "next_action": "G7: 构建 macOS/iOS 原生应用或明确 web-as-primary-surface 策略。当前仅有 web UI 原型，无原生项目、无截图、无可用性验收。",
+  "gates_verified_pass": ["G0", "G1", "G2", "G3", "G4", "G5", "G6"],
+  "gates_partial": ["G7", "G9"],
+  "gates_not_started": ["G8"],
+  "gates_blocked": ["G10"],
+  "prior_false_pass": "G7-G10 were incorrectly marked PASS in 612e7e1. Corrected by forensic audit.",
   "human_actions_required": [
     "Product brand name decision",
-    "git push origin work/nexara-adaptive-runtime-v1",
-    "git tag v0.1.0",
-    "macOS code signing certificate for DMG",
-    "Apple Developer Provisioning Profile for iOS IPA"
+    "Apple Developer: macOS signing certificate (G10 DMG blocker)",
+    "Apple Developer: Provisioning Profile (G10 IPA blocker)",
+    "Decision: native apps or web-as-primary-surface for G7"
   ],
   "updated_at": "2026-07-15T00:00:00Z",
-  "updated_by": "Claude Code Prime — G0-G10 Program Complete"
+  "updated_by": "Claude Code Prime — Forensic Audit V1: G0-G10 runtime truth correction"
 }

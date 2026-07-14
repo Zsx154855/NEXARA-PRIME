@@ -1,14 +1,22 @@
 {
   "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
+  "audit": "FORENSIC — 2026-07-15. Supersedes all prior PASS claims for G7-G10.",
+  "authoritative_status": "See forensic_audit/09_corrected_gate_status.json for full details.",
   "gates": [
-    {"id": "G0", "status": "PASS"}, {"id": "G1", "status": "PASS"},
-    {"id": "G2", "status": "PASS"}, {"id": "G3", "status": "PASS"},
-    {"id": "G4", "status": "PASS"}, {"id": "G5", "status": "PASS"},
-    {"id": "G6", "status": "PASS"}, {"id": "G7", "status": "PASS"},
-    {"id": "G8", "status": "PASS"}, {"id": "G9", "status": "PASS"},
-    {"id": "G10", "status": "PASS"}
+    {"id": "G0", "status": "PASS", "type": "documentation"},
+    {"id": "G1", "status": "PASS", "type": "implementation"},
+    {"id": "G2", "status": "PASS", "type": "verification"},
+    {"id": "G3", "status": "PASS", "type": "organizational"},
+    {"id": "G4", "status": "PASS", "type": "verification"},
+    {"id": "G5", "status": "PASS", "type": "verification"},
+    {"id": "G6", "status": "PASS", "type": "verification"},
+    {"id": "G7", "status": "PARTIAL", "missing": "macOS/iOS native projects, screenshots, usability acceptance"},
+    {"id": "G8", "status": "NOT_STARTED", "missing": "5 empty SDK dirs, no installable SDK, no plugin schema"},
+    {"id": "G9", "status": "PARTIAL", "missing": "benchmark runner execution, regression isolation, candidate comparison pipeline"},
+    {"id": "G10", "status": "BLOCKED", "blocked_by": "macOS signing cert, Apple Provisioning Profile"}
   ],
-  "current_gate": "COMPLETE",
+  "current_gate": "G7",
+  "earliest_incomplete_gate": "G7",
   "updated_at": "2026-07-15T00:00:00Z"
 }
