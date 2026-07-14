@@ -6,35 +6,26 @@
     {"id":"G3","status":"PASS"},{"id":"G4","status":"PASS"},{"id":"G5","status":"PASS"},
     {"id":"G6","status":"PASS"},{"id":"G7","status":"PASS"},{"id":"G8","status":"PASS"},
     {"id":"G9","status":"PASS"},
-    {"id":"G10","status":"LOCAL_RELEASE_READY",
-      "completed": {
-        "version_freeze": "PASS — 0.1.0",
-        "sbom": "PASS — dist/sbom-0.1.0.json (CycloneDX 1.5)",
-        "python_wheel": "PASS — nexara_prime-0.1.0 wheel + sdist, hashes recorded",
-        "python_sdk": "PASS — nexara-sdk-0.1.0 wheel",
-        "typescript_sdk": "PASS — npm ci + tsc --noEmit, package-lock.json",
-        "macos_source_build": "PASS — clean swift build, arm64 1.1MB",
-        "macos_app_bundle": "PASS — dist/NexaraMac.app, valid Info.plist, launch via open",
-        "unsigned_dmg": "PASS — dist/NexaraMac-0.1.0-unsigned.dmg (572KB)",
-        "dmg_mount_verify": "PASS — SHA256 17760066c936b345b67f5efdcb3754e2f170fcb18e87796105cfeb7fbb3c3585",
-        "unsigned_zip": "PASS — dist/NexaraMac-0.1.0-unsigned.zip",
-        "checksums": "PASS — dist/checksums-0.1.0.txt",
-        "release_notes": "PASS — 19 commits in program range 407707a..HEAD",
-        "full_regression": "PASS — 517/517 tests",
-        "artifacts_manifest": "PASS — SBOM + checksums + DMG + wheel + app bundle"
-      },
-      "external_distribution_blocked": {
-        "macos_codesigning": "Apple Developer code signing certificate required",
-        "notarization": "Apple notary service required",
-        "ios_ipa": "Apple Developer Provisioning Profile required",
-        "git_push": "human release authorization required",
-        "git_tag": "human release authorization required",
-        "product_brand_name": "human business decision required"
-      }
-    }
+    {"id":"G10","status":"LOCAL_RELEASE_READY"}
   ],
   "current_gate": "G10",
   "g10_status": "LOCAL_RELEASE_READY",
+  "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
+  "git_push_tag": "PENDING_HUMAN_APPROVAL",
+  "product_brand_name": "PRODUCT_DECISION_PENDING",
   "test_baseline": "517 passed, 0 failed",
-  "updated_at": "2026-07-15T00:00:00Z"
+  "release_artifacts_tracked": [
+    "reports/program/G10/04_local_release_evidence.md",
+    "reports/program/G10/05_artifact_manifest.json"
+  ],
+  "release_artifacts_ignored": [
+    "dist/NexaraMac-0.1.0-unsigned.dmg (572KB, SHA256 verified)",
+    "dist/NexaraMac-0.1.0-unsigned.zip (277KB)",
+    "dist/NexaraMac.app (app bundle, launch verified)",
+    "dist/nexara_prime-0.1.0-py3-none-any.whl",
+    "dist/nexara_prime-0.1.0.tar.gz",
+    "dist/sbom-0.1.0.json",
+    "dist/checksums-0.1.0.txt"
+  ],
+  "updated_at": "2026-07-14T20:52:15Z"
 }
