@@ -77,3 +77,5 @@ dist/
 .build/
 *.xcuserdata/
 DerivedData/
+platform/sdk/typescript/platform/
+platform/sdk/typescript/node_modules/
