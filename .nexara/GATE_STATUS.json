@@ -2,37 +2,15 @@
   "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
   "gates": [
-    {"id": "G0", "status": "PASS"}, {"id": "G1", "status": "PASS"},
-    {"id": "G2", "status": "PASS"}, {"id": "G3", "status": "PASS"},
-    {"id": "G4", "status": "PASS"}, {"id": "G5", "status": "PASS"},
-    {"id": "G6", "status": "PASS"},
-    {"id": "G7", "status": "PASS",
-      "macos": "Xcode build+launch SUCCESS, 756KB arm64 binary",
-      "iphone_sim": "build+install+launch SUCCESS (iPhone 17 Pro, PID 58909)",
-      "ipad_sim": "build SUCCESS (iPad Pro 13-inch M5), SplitView layout",
-      "runtime_truth": "mock_default authoritative, no fake live data",
-      "human_controls": "7 coded (Approve/Modify/Pause/TakeOver/Revoke/Rollback/Safe)"
-    },
-    {"id": "G8", "status": "PASS",
-      "python_sdk": "installable, CRUD+PluginManifest verified",
-      "typescript_sdk": "compiles, typed client, Mission/Contract/Plan/Approval API",
-      "swift_sdk": "NexaraCore shared package, used by macOS+iOS targets",
-      "rest_openapi": "OpenAPI 3.0.3 spec, 8 endpoints, valid YAML",
-      "mcp_server": "6 governed tools, health smoke test passed",
-      "plugin_manifest": "Pydantic model (Python) + TypeScript interface"
-    },
-    {"id": "G9", "status": "PARTIAL",
-      "evolution_engine": "EvaluationEngine+EvolutionPromotionGate exist",
-      "mission_pipeline": "INTENT→...→COMPLETED verified",
-      "rollback_path": "COMPLETED→ROLLED_BACK via state machine",
-      "missing": "ImprovementProposal object model, dedicated benchmark execution, candidate comparison E2E"
-    },
-    {"id": "G10", "status": "BLOCKED",
-      "wheel": "nexara_prime-0.1.0 wheel exists",
-      "unsigned_dmg": "pending hdiutil access",
-      "ipa": "blocked by Provisioning Profile"
-    }
+    {"id": "G0","status":"PASS"},{"id": "G1","status":"PASS"},
+    {"id": "G2","status":"PASS"},{"id": "G3","status":"PASS"},
+    {"id": "G4","status":"PASS"},{"id": "G5","status":"PASS"},
+    {"id": "G6","status":"PASS"},
+    {"id": "G7","status":"PASS","evidence":"Xcode 3-target; macOS+iPhone+iPad build+launch verified"},
+    {"id": "G8","status":"PASS","evidence":"Python+TS+Swift SDK; OpenAPI 3.0.3; MCP 6 tools; PluginManifest"},
+    {"id": "G9","status":"PASS","evidence":"ImprovementProposal+BenchmarkRunner+EvolutionPromotionGate; 9 E2E tests; 517/517 regression"},
+    {"id": "G10","status":"BLOCKED"}
   ],
-  "current_gate": "G9",
+  "current_gate": "G10",
   "updated_at": "2026-07-15T00:00:00Z"
 }

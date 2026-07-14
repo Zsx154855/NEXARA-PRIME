@@ -5,15 +5,13 @@
   "hermes_runtime_dependency": 0,
   "repo": "/Users/agentos/NEXARA-PRIME",
   "branch": "work/nexara-adaptive-runtime-v1",
-  "head": "6cfe090",
   "python": "3.12.13",
-  "test_baseline": "508 passed, 0 failed",
-  "current_program_gate": "G8",
-  "gate_status": "RUNNING",
-  "next_action": "G8: TypeScript SDK + Swift SDK + REST OpenAPI + MCP server + Plugin Boundary",
-  "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7"],
-  "gates_partial": ["G8","G9"],
+  "test_baseline": "517 passed, 0 failed",
+  "current_program_gate": "G10",
+  "gate_status": "BLOCKED",
+  "next_action": "G10: unsigned DMG (diagnose hdiutil), SBOM, Release Notes, wheel verification",
+  "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
   "gates_blocked": ["G10"],
   "updated_at": "2026-07-15T00:00:00Z",
-  "updated_by": "Claude Code Prime — G7 PASS (Xcode 3-target project), entering G8"
+  "updated_by": "Claude Code Prime — G9 PASS (517 tests, evolution pipeline E2E), entering G10"
 }

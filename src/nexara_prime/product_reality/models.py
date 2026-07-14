@@ -215,3 +215,47 @@ class PromotionDecision(NModel):
     verified_evidence_refs: list[str] = Field(default_factory=list)
     consumed_approval_ids: list[str] = Field(default_factory=list)
     assessed_at: str = Field(default_factory=now_iso)
+
+
+class ImprovementProposal(NModel):
+    """Evidence-driven improvement candidate — per Blueprint §9 and §16.
+
+    Distinct from EvolutionProposal: ImprovementProposal focuses on the
+    observe→diagnose→candidate→simulate→benchmark→approve cycle.
+    EvolutionProposal handles the promotion gate with rollback checkpoints.
+    """
+    proposal_id: str = Field(default_factory=lambda: new_id("improvement"))
+    mission_id: str
+    target: str = Field(description="Component or capability being improved")
+    hypothesis: str = Field(description="Expected improvement and why")
+    evidence_refs: list[str] = Field(min_length=1, description="Evidence driving this proposal")
+    expected_gain: dict[str, Any] = Field(default_factory=dict, description="Quantified improvement targets")
+    risk_level: RiskLevel = RiskLevel.R2
+    experiment_plan: list[str] = Field(default_factory=list, description="Steps to validate the hypothesis")
+    benchmark_ids: list[str] = Field(default_factory=list)
+    candidate_deployment: dict[str, Any] = Field(default_factory=dict)
+    rollback_plan: list[str] = Field(default_factory=list)
+    status: str = "proposed"
+    created_at: str = Field(default_factory=now_iso)
+
+    @field_validator("proposal_id", "mission_id", "target", "hypothesis")
+    @classmethod
+    def require_non_blank(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("identity/hypothesis fields must not be blank")
+        return normalized
+
+
+class BenchmarkResult(NModel):
+    """Result of running a benchmark suite against a candidate."""
+    benchmark_id: str = Field(default_factory=lambda: new_id("benchmark"))
+    proposal_id: str
+    mission_id: str
+    baseline_score: dict[str, Any] = Field(default_factory=dict)
+    candidate_score: dict[str, Any] = Field(default_factory=dict)
+    improvement_pct: float = 0.0
+    regression_flags: list[str] = Field(default_factory=list)
+    passed: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+    created_at: str = Field(default_factory=now_iso)
