@@ -1,0 +1,33 @@
+{
+  "migration_date": "2026-07-15",
+  "new_framework": "G0–G10 per NEXARA_DEVELOPMENT_GATES_V1.yaml",
+  "authority": "NEXARA_PROGRAM_CONSTITUTION_V1.md §24",
+  "mappings": [
+    {
+      "legacy_name": "NEXARA_PRIME_REPOSITORY_BASELINE_AND_STATE_TRACKING_V1",
+      "status": "PASS",
+      "completed": "2026-07-10T23:19:16Z",
+      "commit": "1a54a47",
+      "mapped_to": "pre-G0 milestone",
+      "rationale": "Repository baseline work established .nexara/ directory and CLI — absorbed as prerequisite for G0 product boundary freeze."
+    },
+    {
+      "legacy_name": "NEXARA_PRIME_AGENTSOS_ENGINE_INTEGRATION_V1",
+      "status": "IN_PROGRESS (stale)",
+      "mapped_to": "superseded by G0",
+      "rationale": "Integration scope (import path, config, CLI namespace) merged into G0 product boundary freeze. No separate integration gate needed."
+    },
+    {
+      "legacy_name": "NEXARA_PRIME_PRODUCTION_CONNECTORS_AND_SECURITY_V2",
+      "status": "NOT_STARTED",
+      "mapped_to": "distributed across G3/G4/G6",
+      "rationale": "Connector productionization covered by G3 (Platform Runtime Services), capability runtime by G4 (Capability & Tool Runtime), security hardening by G6 (Governance & Evidence Hardening)."
+    }
+  ],
+  "deprecated_files": [
+    {"file": ".nexara/CURRENT_GATE.md", "action": "marked DEPRECATED, content preserved"},
+    {"file": ".nexara/NEXT_ACTION.md", "action": "marked DEPRECATED, content preserved"},
+    {"file": ".nexara/EXECUTION_CHECKPOINT.json", "action": "marked DEPRECATED, content preserved"},
+    {"file": ".nexara/PROJECT_STATE.json", "action": "replaced by PROGRAM_STATE.json"}
+  ]
+}

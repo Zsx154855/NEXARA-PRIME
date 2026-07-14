@@ -1,0 +1,77 @@
+version: 1
+program: NEXARA_FIRST_PARTY_SOVEREIGN_AGENT
+platform: NEXARA_PRIME
+agent_package: nexara_prime.agent
+hermes_runtime_dependency: 0
+status_values: [NOT_STARTED, RUNNING, PARTIAL, BLOCKED, PASS]
+execution_policy:
+  autonomous_until: [human_approval_required, irreversible_blocker, architecture_deadlock, release_action]
+  forbidden_without_explicit_approval: [push, merge, tag, deploy, payment, external_send, destructive_delete, sudo]
+  required_after_each_gate: [tests, evidence, state_update, local_commit, clean_worktree]
+gates:
+  - id: G0
+    name: "产品宪章与边界冻结"
+    effort_units: 60
+    depends_on: []
+    exit_condition: "唯一事实源、命名、主权、对象/事件/API 兼容基线、非目标"
+    status: NOT_STARTED
+  - id: G1
+    name: "第一方 Agent Identity Domain"
+    effort_units: 100
+    depends_on: [G0]
+    exit_condition: "AgentIdentity、Profile、Memory Namespace、权限模板；Hermes runtime dependency=0"
+    status: NOT_STARTED
+  - id: G2
+    name: "Mission Agent 闭环"
+    effort_units: 150
+    depends_on: [G1]
+    exit_condition: "Intent→Context→Contract→Plan→Execute→Verify→Evidence→Memory 全闭环"
+    status: NOT_STARTED
+  - id: G3
+    name: "Platform Runtime Services"
+    effort_units: 150
+    depends_on: [G2]
+    exit_condition: "Capability/Policy/Telemetry/Knowledge 服务从 YAML 变成可运行服务"
+    status: NOT_STARTED
+  - id: G4
+    name: "Capability & Tool Runtime"
+    effort_units: 120
+    depends_on: [G3]
+    exit_condition: "统一能力注册、健康、依赖、沙箱、幂等、连接器与模型路由"
+    status: NOT_STARTED
+  - id: G5
+    name: "Memory & Knowledge Fabric"
+    effort_units: 110
+    depends_on: [G4]
+    exit_condition: "证据支持记忆、Knowledge Graph、检索、冲突和保留策略"
+    status: NOT_STARTED
+  - id: G6
+    name: "Governance & Evidence Hardening"
+    effort_units: 100
+    depends_on: [G5]
+    exit_condition: "R0-R4、E0-E2、审批绑定、审计链、secret、rollback、red-team"
+    status: NOT_STARTED
+  - id: G7
+    name: "三端产品体验"
+    effort_units: 160
+    depends_on: [G6]
+    exit_condition: "Mac/iPhone/iPad 独立布局；Runtime Truth；五模式；截图与可用性验收"
+    status: NOT_STARTED
+  - id: G8
+    name: "SDK / Plugin Boundary"
+    effort_units: 80
+    depends_on: [G7]
+    exit_condition: "Python/TypeScript/Swift/REST/MCP SDK，插件签名和隔离"
+    status: NOT_STARTED
+  - id: G9
+    name: "Evaluation & Evolution"
+    effort_units: 100
+    depends_on: [G8]
+    exit_condition: "Benchmark、失败回归、候选改进、模拟、审批升级、回滚"
+    status: NOT_STARTED
+  - id: G10
+    name: "RC 与发布闭环"
+    effort_units: 70
+    depends_on: [G9]
+    exit_condition: "版本冻结、打包、SBOM、发布说明、DMG、IPA 条件、运维手册"
+    status: NOT_STARTED

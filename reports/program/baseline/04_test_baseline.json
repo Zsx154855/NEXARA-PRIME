@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-15",
+  "python": "3.12.13",
+  "venv": "/Users/agentos/NEXARA-PRIME/.venv",
+  "command": ".venv/bin/python -m pytest tests/ -q",
+  "result": {
+    "total": 507,
+    "passed": 507,
+    "failed": 0,
+    "verdict": "POST_MERGE_VALIDATION_PASS"
+  },
+  "note": "Earlier scan showing 504 passed / 3 failed was produced using system python3 without project .venv. That result is invalid and must not be used as baseline."
+}

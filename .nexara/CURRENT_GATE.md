@@ -1,4 +1,8 @@
-# Current Gate
+<!-- DEPRECATED as of 2026-07-15: Content migrated to GATE_STATUS.json and PROGRAM_STATE.json -->
+<!-- Do not use this file as program authority. Read .nexara/GATE_STATUS.json instead. -->
+<!-- See reports/program/baseline/03_legacy_gate_mapping.json for migration details. -->
+
+# Current Gate [DEPRECATED]
 
 **Gate:** NEXARA_PRIME_REPOSITORY_BASELINE_AND_STATE_TRACKING_V1
 

@@ -1,0 +1,20 @@
+{
+  "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
+  "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
+  "status_values": ["NOT_STARTED", "RUNNING", "PARTIAL", "BLOCKED", "PASS"],
+  "gates": [
+    {"id": "G0", "name": "产品宪章与边界冻结", "depends_on": [], "status": "RUNNING"},
+    {"id": "G1", "name": "第一方 Agent Identity Domain", "depends_on": ["G0"], "status": "NOT_STARTED"},
+    {"id": "G2", "name": "Mission Agent 闭环", "depends_on": ["G1"], "status": "NOT_STARTED"},
+    {"id": "G3", "name": "Platform Runtime Services", "depends_on": ["G2"], "status": "NOT_STARTED"},
+    {"id": "G4", "name": "Capability & Tool Runtime", "depends_on": ["G3"], "status": "NOT_STARTED"},
+    {"id": "G5", "name": "Memory & Knowledge Fabric", "depends_on": ["G4"], "status": "NOT_STARTED"},
+    {"id": "G6", "name": "Governance & Evidence Hardening", "depends_on": ["G5"], "status": "NOT_STARTED"},
+    {"id": "G7", "name": "三端产品体验", "depends_on": ["G6"], "status": "NOT_STARTED"},
+    {"id": "G8", "name": "SDK / Plugin Boundary", "depends_on": ["G7"], "status": "NOT_STARTED"},
+    {"id": "G9", "name": "Evaluation & Evolution", "depends_on": ["G8"], "status": "NOT_STARTED"},
+    {"id": "G10", "name": "RC 与发布闭环", "depends_on": ["G9"], "status": "NOT_STARTED"}
+  ],
+  "current_gate": "G0",
+  "updated_at": "2026-07-15T00:00:00Z"
+}

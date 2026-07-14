@@ -1,0 +1,24 @@
+{
+  "project": "NEXARA-PRIME",
+  "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
+  "platform": "NEXARA_PRIME",
+  "agent_package": "nexara_prime.agent",
+  "hermes_runtime_dependency": 0,
+  "repo": {
+    "path": "/Users/agentos/NEXARA-PRIME",
+    "remote": "https://github.com/Zsx154855/NEXARA-PRIME.git",
+    "branch": "work/nexara-adaptive-runtime-v1",
+    "head": "66a86f8a0d1712d75b2af78cb1ad8b08783af7bb"
+  },
+  "runtime": {
+    "python": "3.12.13",
+    "package": "nexara-prime==0.1.0",
+    "entry_point": "nexara"
+  },
+  "tests": {"total": 507, "passed": 507, "failed": 0},
+  "security": {"secret_leakage": 0, "approval_bypass": 0, "sandbox_escape": 0},
+  "current_gate": "G0",
+  "gate_status": "RUNNING",
+  "next_gate": "G1",
+  "updated_at": "2026-07-15T00:00:00Z"
+}

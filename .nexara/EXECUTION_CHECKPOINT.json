@@ -1,4 +1,8 @@
 {
+  "_deprecated": true,
+  "_deprecated_at": "2026-07-15T00:00:00Z",
+  "_migrated_to": ".nexara/GATE_STATUS.json",
+  "_note": "This file is preserved for audit trail. All gate state now lives in GATE_STATUS.json.",
   "gate": "NEXARA_PRIME_REPOSITORY_BASELINE_AND_STATE_TRACKING_V1",
   "last_checkpoint": "2026-07-10T23:19:16Z",
   "completed_phases": [
@@ -14,5 +18,6 @@
   "in_progress": [],
   "pending": [],
   "gate_status": "PASS",
-  "commit_sha": "1a54a47"
+  "commit_sha": "1a54a47",
+  "legacy_gate_mapping": "mapped to pre-G0 milestone in GATE_STATUS.json"
 }

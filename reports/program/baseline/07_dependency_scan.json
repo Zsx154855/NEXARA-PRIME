@@ -1,0 +1,19 @@
+{
+  "date": "2026-07-15",
+  "scan_type": "static analysis — import and reference scan in src/",
+  "hermes_runtime_dependency": {
+    "import_statements": 0,
+    "string_references": [
+      {"file": "src/nexara_prime/models.py", "line": 111, "content": "HERMES = \"Hermes\" — Persona enum member, NOT external import"},
+      {"file": "src/nexara_prime/runtime.py", "lines": "171,179,185,189,194", "content": "actor=\"hermes\" string literals in _advance() calls — legacy labeling, not functional dependency"},
+      {"file": "src/nexara_prime/adaptive_scheduler.py", "lines": "21,250,293", "content": "Persona.HERMES default persona mapping — local enum reference"},
+      {"file": "src/nexara_prime/scheduler.py", "line": 8, "content": "Persona.HERMES default persona mapping — local enum reference"}
+    ],
+    "verdict": "hermes_runtime_dependency = 0. No import hermes. Persona.HERMES is a string constant that can be renamed in G1 without functional impact."
+  },
+  "claude_codex_dependency": {
+    "import_statements": 0,
+    "verdict": "clean — no Claude/Codex imports in product runtime"
+  },
+  "overall_verdict": "PASS — product runtime does not import Hermes, Claude, or Codex packages"
+}
