@@ -7,12 +7,11 @@
   "branch": "work/nexara-adaptive-runtime-v1",
   "baseline_head": "66a86f8a0d1712d75b2af78cb1ad8b08783af7bb",
   "python": "3.12.13",
-  "test_command": ".venv/bin/python -m pytest -q",
   "test_baseline": "508 passed, 0 failed",
-  "current_program_gate": "G4",
+  "current_program_gate": "G5",
   "gate_status": "RUNNING",
-  "next_action": "统一能力注册、健康、依赖、沙箱、幂等、连接器与模型路由",
-  "completed_gates": ["G0", "G1", "G2", "G3"],
+  "next_action": "证据支持记忆、Knowledge Graph、检索、冲突和保留策略",
+  "completed_gates": ["G0", "G1", "G2", "G3", "G4"],
   "updated_at": "2026-07-15T00:00:00Z",
-  "updated_by": "Claude Code Prime — G3 PASS, entering G4"
+  "updated_by": "Claude Code Prime — G4 PASS, entering G5"
 }
