@@ -168,7 +168,7 @@ class NexaraRuntime:
         mission = self._load_mission(mission_id)
         if mission.state != MissionState.INTENT.value:
             return mission
-        self._advance(mission, MissionState.CONTEXT, "hermes")
+        self._advance(mission, MissionState.CONTEXT, "nexara")
         if mission.spec.source_dir:
             try:
                 root = Path(mission.spec.source_dir).resolve()
@@ -182,16 +182,16 @@ class NexaraRuntime:
         else:
             context_summary = "No external source directory; task is bounded to the NEXARA workspace."
         self.recovery.checkpoint(mission.mission_id, "context_assembled", mission.trace_id, data={"summary": context_summary})
-        self._advance(mission, MissionState.CONTRACT, "hermes")
+        self._advance(mission, MissionState.CONTRACT, "nexara")
         mission.contract = self.contracts.create(mission.spec)
         self._save_mission(mission)
         self.recovery.checkpoint(mission.mission_id, "contract_created", mission.trace_id, data={"contract_id": mission.contract.contract_id})
-        self._advance(mission, MissionState.PLAN, "hermes")
+        self._advance(mission, MissionState.PLAN, "nexara")
         mission.assignments = self.scheduler.schedule(mission.spec)
         steps = [{"role": assignment.runtime_role.value, "persona": assignment.persona.value, "capabilities": assignment.loaded_capabilities} for assignment in mission.assignments]
         mission.plan = self._build_plan(mission, steps)
         self._save_mission(mission)
-        self._advance(mission, MissionState.SIMULATION, "hermes")
+        self._advance(mission, MissionState.SIMULATION, "nexara")
         mission.plan.simulated = True
         self._save_mission(mission)
         self.recovery.checkpoint(mission.mission_id, "plan_simulated", mission.trace_id, data={"steps": len(mission.plan.steps)})
