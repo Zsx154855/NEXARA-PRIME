@@ -1,31 +1,33 @@
 {
   "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
+  "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
   "gates": [
     {"id":"G0","status":"PASS"},{"id":"G1","status":"PASS"},{"id":"G2","status":"PASS"},
     {"id":"G3","status":"PASS"},{"id":"G4","status":"PASS"},{"id":"G5","status":"PASS"},
     {"id":"G6","status":"PASS"},{"id":"G7","status":"PASS"},{"id":"G8","status":"PASS"},
-    {"id":"G9","status":"PASS"},
-    {"id":"G10","status":"LOCAL_RELEASE_READY"}
+    {"id":"G9","status":"PASS"}
   ],
   "current_gate": "G10",
-  "g10_status": "LOCAL_RELEASE_READY",
-  "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
-  "git_push_tag": "PENDING_HUMAN_APPROVAL",
-  "product_brand_name": "PRODUCT_DECISION_PENDING",
+  "g10_composite_status": {
+    "local_release": "LOCAL_RELEASE_READY",
+    "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
+    "git_push_tag": "PENDING_HUMAN_APPROVAL",
+    "product_brand_name": "PRODUCT_DECISION_PENDING"
+  },
   "test_baseline": "517 passed, 0 failed",
   "release_artifacts_tracked": [
     "reports/program/G10/04_local_release_evidence.md",
     "reports/program/G10/05_artifact_manifest.json"
   ],
   "release_artifacts_ignored": [
-    "dist/NexaraMac-0.1.0-unsigned.dmg (572KB, SHA256 verified)",
-    "dist/NexaraMac-0.1.0-unsigned.zip (277KB)",
-    "dist/NexaraMac.app (app bundle, launch verified)",
+    "dist/NexaraMac-0.1.0-unsigned.dmg",
+    "dist/NexaraMac-0.1.0-unsigned.zip",
+    "dist/NexaraMac.app",
     "dist/nexara_prime-0.1.0-py3-none-any.whl",
     "dist/nexara_prime-0.1.0.tar.gz",
     "dist/sbom-0.1.0.json",
     "dist/checksums-0.1.0.txt"
   ],
-  "updated_at": "2026-07-14T20:52:15Z"
+  "updated_at": "2026-07-14T22:31:32Z"
 }

@@ -4,25 +4,35 @@
   "agent_package": "nexara_prime.agent",
   "hermes_runtime_dependency": 0,
   "repo": "/Users/agentos/NEXARA-PRIME",
-  "branch": "work/nexara-adaptive-runtime-v1",
+  "branch": "work/nexara-post-baseline-v1",
   "python": "3.12.13",
   "test_baseline": "517 passed, 0 failed",
   "current_program_gate": "G10",
   "gate_status": "LOCAL_RELEASE_READY",
   "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
-  "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
+  "g10_composite_status": {
+    "local_release": "LOCAL_RELEASE_READY",
+    "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
+    "git_push_tag": "PENDING_HUMAN_APPROVAL",
+    "product_brand_name": "PRODUCT_DECISION_PENDING"
+  },
+  "branch_model": {
+    "default": "main",
+    "historical_program": "work/nexara-adaptive-runtime-v1",
+    "current_development": "work/nexara-post-baseline-v1"
+  },
   "external_blockers": [
     "macOS code signing certificate (Apple Developer Program)",
     "macOS notarization (Apple notary service)",
     "iOS Provisioning Profile (Apple Developer Program)"
   ],
   "pending_human_approval": [
-    "git push origin work/nexara-adaptive-runtime-v1",
+    "git push origin work/nexara-post-baseline-v1",
     "git tag v0.1.0"
   ],
   "product_decision_pending": [
     "product brand name"
   ],
-  "updated_at": "2026-07-14T20:52:15Z",
-  "updated_by": "Claude Code Prime — G10 evidence consistency audit"
+  "updated_at": "2026-07-14T22:31:32Z",
+  "updated_by": "Claude Code Prime — drift resolution on post-baseline branch"
 }

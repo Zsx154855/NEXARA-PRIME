@@ -2,18 +2,24 @@
   "baseline_id": "NEXARA_PROGRAM_FACT_BASELINE_CONSOLIDATION_V1",
   "sovereign_baseline_id": "INITIAL_SOVEREIGN_BASELINE_V1",
   "repository": "/Users/agentos/NEXARA-PRIME",
-  "branch": "work/nexara-adaptive-runtime-v1",
-  "head": "5e27eb2b33db6cc3adf2589b3dc8eb69080a483e",
+  "branch": "work/nexara-post-baseline-v1",
+  "product_source_commit": "546edb8988a04b177aab39d116ec7e80a01e4bab",
+  "baseline_declaration_commit": "5e27eb2b33db6cc3adf2589b3dc8eb69080a483e",
+  "governance_validation_commit": "e58e22d239451f7845e5bb3812f268062172ac5b",
+  "remote_main_commit": "e58e22d239451f7845e5bb3812f268062172ac5b",
+  "baseline_head_semantics": {
+    "product_source_commit": "The commit that produced the delivered artifacts (G0-G10 loop result)",
+    "baseline_declaration_commit": "The commit that added sovereign baseline governance files",
+    "governance_validation_commit": "The commit after CI/governance/drift validation passes",
+    "remote_main_commit": "The commit on origin/main after all pushes confirmed"
+  },
   "python": "3.12.13",
   "test_command": ".venv/bin/python -m pytest -q",
   "tests_passed": 517,
   "tests_failed": 0,
   "validation": "PASS",
-  "next_program_gate": "G10",
   "hermes_runtime_dependency": 0,
   "secret_leakage": 0,
-  "untracked": [],
-  "worktree": "clean",
   "core_files_present": [
     "NEXARA_PROGRAM_CONSTITUTION_V1.md",
     "NEXARA_PRIME_SOVEREIGN_AGENT_MASTER_BLUEPRINT_V1.md",
@@ -28,6 +34,6 @@
     "governance/baselines/v0.1.0/BASELINE_RISK_REGISTER_V1.md",
     "governance/baselines/v0.1.0/BASELINE_REPRODUCTION_V1.md"
   ],
-  "frozen_at": "2026-07-14T20:52:15Z",
+  "frozen_at": "2026-07-14T22:31:32Z",
   "frozen_by": "Claude Code Prime — NEXARA Sovereign Repository Governor"
 }
