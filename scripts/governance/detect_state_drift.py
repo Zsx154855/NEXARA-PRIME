@@ -107,13 +107,34 @@ def check_consistency(
             f"PROGRAM_STATE says '{ps_gate}'"
         )
 
-    # 3. Gate status
-    gs_status = gate_status.get("g10_status", "")
-    ps_status = program_state.get("gate_status", "")
-    if gs_status and ps_status and gs_status != ps_status:
+    # 3. Gate status — handle both flat and composite G10 schema
+    gs_composite = gate_status.get("g10_composite_status", None)
+    ps_composite = program_state.get("g10_composite_status", None)
+
+    if gs_composite is None:
         inconsistencies.append(
-            f"Gate status mismatch: GATE_STATUS says '{gs_status}', "
-            f"PROGRAM_STATE says '{ps_status}'"
+            "GATE_STATUS is missing 'g10_composite_status' — schema may be stale"
+        )
+    elif not isinstance(gs_composite, dict):
+        inconsistencies.append(
+            f"GATE_STATUS.g10_composite_status must be an object, got {type(gs_composite).__name__}"
+        )
+    else:
+        # Check each sub-field against PROGRAM_STATE
+        for field in ("local_release", "external_distribution", "git_push_tag", "product_brand_name"):
+            gs_val = gs_composite.get(field, "")
+            ps_val = ps_composite.get(field, "") if isinstance(ps_composite, dict) else ""
+            if gs_val and ps_val and gs_val != ps_val:
+                inconsistencies.append(
+                    f"G10 composite status mismatch for '{field}': "
+                    f"GATE_STATUS says '{gs_val}', PROGRAM_STATE says '{ps_val}'"
+                )
+
+    # Also check that top-level external_distribution is NOT present (should be nested)
+    if "external_distribution" in gate_status and not isinstance(gate_status.get("external_distribution"), dict):
+        inconsistencies.append(
+            "GATE_STATUS has top-level 'external_distribution' — "
+            "should be nested inside 'g10_composite_status'"
         )
 
     # 4. Passed gates list
@@ -133,15 +154,6 @@ def check_consistency(
             inconsistencies.append(
                 f"Gates passed only in PROGRAM_STATE: {sorted(only_in_ps)}"
             )
-
-    # 5. External distribution status
-    gs_ext = gate_status.get("external_distribution", "")
-    ps_ext = program_state.get("external_distribution", "")
-    if gs_ext and ps_ext and gs_ext != ps_ext:
-        inconsistencies.append(
-            f"External distribution status mismatch: "
-            f"GATE_STATUS says '{gs_ext}', PROGRAM_STATE says '{ps_ext}'"
-        )
 
     return inconsistencies
 
