@@ -18,7 +18,7 @@ from .models import (
 
 
 PERSONA_BY_ROLE: dict[RuntimeRole, Persona] = {
-    RuntimeRole.ORCHESTRATOR: Persona.HERMES,
+    RuntimeRole.ORCHESTRATOR: Persona.NEXARA,
     RuntimeRole.PLANNER: Persona.SOLACE,
     RuntimeRole.ANALYST: Persona.NYX,
     RuntimeRole.RESEARCHER: Persona.ORION,
@@ -247,7 +247,7 @@ class AdaptiveMultiAgentScheduler:
 
         # Create agents for each base role
         for role in ordered_roles:
-            persona = PERSONA_BY_ROLE.get(role, Persona.HERMES)
+            persona = PERSONA_BY_ROLE.get(role, Persona.NEXARA)
             agent_caps = self._select_capabilities(role, capabilities)
             agent = self.create_role(role, persona, [c.capability_id for c in agent_caps])
             agents.append(agent)
@@ -290,7 +290,7 @@ class AdaptiveMultiAgentScheduler:
             )
 
             if roi >= roi_threshold:
-                persona = PERSONA_BY_ROLE.get(role, Persona.HERMES)
+                persona = PERSONA_BY_ROLE.get(role, Persona.NEXARA)
                 agent_caps = self._select_capabilities(role, capabilities)
                 agent = self.create_role(
                     role, persona, [c.capability_id for c in agent_caps]

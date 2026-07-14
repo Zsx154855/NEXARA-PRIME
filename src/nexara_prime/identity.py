@@ -44,6 +44,58 @@ class SessionIdentity:
     is_agent: bool = False  # Agent sessions have reduced permissions
 
 
+@dataclass
+class AgentIdentity:
+    """First-party sovereign agent identity — model-independent.
+
+    Per Constitution §4 and Blueprint §7: agent_id, product principles,
+    capability profile, permission profile, memory namespace, and version
+    are owned by the platform. Models are replaceable reasoning resources
+    that do NOT own any part of this identity.
+    """
+    agent_id: str = "nexara_prime.agent"
+    display_name: str = "NEXARA"
+    product_principles: list[str] = field(default_factory=lambda: [
+        "Human sovereignty — user owns goals, approval, takeover, revocation",
+        "First-party identity — agent_id, memory namespace, evolution history owned by platform",
+        "Model independence — models are replaceable reasoning resources",
+        "Runtime Truth — UI displays authoritative state only",
+        "Evidence before Completion — no E1/E2 evidence means not complete",
+        "Single Writer — one writer lease per mutable resource",
+        "Policy before Capability — capability available ≠ authorized to execute",
+        "Evolution by Experiment — proposal → simulate → benchmark → approve → deploy → rollback",
+        "Local-first — default local persistence, cloud is optional migration",
+        "Hermes dependency = 0 — product runtime, tests, packaging never require Hermes",
+    ])
+    capability_profile: list[str] = field(default_factory=lambda: [
+        "mission.compile", "mission.plan", "mission.execute",
+        "context.build", "context.refresh",
+        "contract.generate", "contract.validate",
+        "plan.generate", "plan.simulate",
+        "reasoning.route", "reasoning.compare",
+        "capability.resolve", "capability.health",
+        "execution.run", "execution.checkpoint",
+        "verification.test", "verification.assert",
+        "evidence.collect", "evidence.verify",
+        "memory.store", "memory.retrieve", "memory.resolve_conflict",
+        "evolution.propose", "evolution.evaluate",
+    ])
+    permission_profile: list[str] = field(default_factory=list)
+    memory_namespace: str = "nexara_prime.agent.memory"
+    version: str = "1.0.0"
+    created_at: str = field(default_factory=now_iso)
+    updated_at: str = field(default_factory=now_iso)
+
+
+# Agent permission templates — what the first-party agent is allowed by default
+AGENT_DEFAULT_PERMISSIONS = {
+    "mission.read", "mission.create", "mission.pause", "mission.resume", "mission.cancel",
+    "connector.read", "connector.invoke",
+    "evidence.read", "audit.read",
+    "approval.read",
+}
+
+
 PERMISSIONS = {
     "mission.read": "Read mission status and results",
     "mission.create": "Create new missions",

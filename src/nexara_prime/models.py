@@ -108,7 +108,7 @@ class RuntimeRole(str, Enum):
 
 
 class Persona(str, Enum):
-    HERMES = "Hermes"
+    NEXARA = "Nexara"
     ATLAS = "Atlas"
     NYX = "Nyx"
     ORION = "Orion"

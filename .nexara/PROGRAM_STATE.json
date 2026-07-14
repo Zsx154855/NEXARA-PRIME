@@ -9,35 +9,20 @@
   "baseline_head": "66a86f8a0d1712d75b2af78cb1ad8b08783af7bb",
   "python": "3.12.13",
   "test_command": ".venv/bin/python -m pytest -q",
-  "test_baseline": "507 passed, 0 failed",
-  "current_program_gate": "G1",
+  "test_baseline": "508 passed, 0 failed",
+  "current_program_gate": "G2",
   "gate_status": "RUNNING",
-  "next_action": "建立第一方 AgentIdentity、Profile、Memory Namespace、权限模板；清理 Persona.HERMES 命名；hermes_runtime_dependency=0 持续保持",
+  "next_action": "Intent→Context→Contract→Plan→Execute→Verify→Evidence→Memory 全闭环 — Mission 生命周期端到端可运行",
   "release_actions_require_human_approval": true,
   "constitution_file": "NEXARA_PROGRAM_CONSTITUTION_V1.md",
   "blueprint_file": "NEXARA_PRIME_SOVEREIGN_AGENT_MASTER_BLUEPRINT_V1.md",
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
-  "completed_gates": ["G0"],
+  "completed_gates": ["G0", "G1"],
   "legacy_milestones": [
-    {
-      "name": "NEXARA_PRIME_REPOSITORY_BASELINE_AND_STATE_TRACKING_V1",
-      "status": "PASS",
-      "completed": "2026-07-10T23:19:16Z",
-      "commit": "1a54a47",
-      "mapped_to": "pre-G0 baseline"
-    },
-    {
-      "name": "NEXARA_PRIME_AGENTSOS_ENGINE_INTEGRATION_V1",
-      "status": "IN_PROGRESS",
-      "mapped_to": "superseded by G0",
-      "note": "Integration scope merged into G0 product boundary freeze"
-    },
-    {
-      "name": "NEXARA_PRIME_PRODUCTION_CONNECTORS_AND_SECURITY_V2",
-      "status": "NOT_STARTED",
-      "mapped_to": "distributed across G3/G4/G6"
-    }
+    {"name": "NEXARA_PRIME_REPOSITORY_BASELINE_AND_STATE_TRACKING_V1", "status": "PASS", "completed": "2026-07-10T23:19:16Z", "commit": "1a54a47", "mapped_to": "pre-G0 baseline"},
+    {"name": "NEXARA_PRIME_AGENTSOS_ENGINE_INTEGRATION_V1", "status": "IN_PROGRESS", "mapped_to": "superseded by G0"},
+    {"name": "NEXARA_PRIME_PRODUCTION_CONNECTORS_AND_SECURITY_V2", "status": "NOT_STARTED", "mapped_to": "distributed across G3/G4/G6"}
   ],
   "updated_at": "2026-07-15T00:00:00Z",
-  "updated_by": "Claude Code Prime — G0 PASS, entering G1"
+  "updated_by": "Claude Code Prime — G1 PASS, entering G2"
 }

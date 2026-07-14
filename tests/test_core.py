@@ -58,7 +58,7 @@ class KernelTests(unittest.TestCase):
         spec = self.runtime.compiler.compile("Analyze the local project materials and generate a report", str(self.workspace))
         assignments = AdaptiveScheduler(CapabilityRegistry()).schedule(spec)
         personas = {a.persona.value for a in assignments}
-        self.assertIn("Hermes", personas)
+        self.assertIn("Nexara", personas)
         self.assertIn("Nyx", personas)
         self.assertIn("Vertex", personas)
         compiled = TokenCompiler().compile(spec, ["tool.file_read"], ["MissionSpec"], [], "bounded context")

@@ -415,7 +415,7 @@ class RuntimeIntegrationTests(TempRuntimeMixin, unittest.TestCase):
         mission = self.runtime.create_mission("Analyze and report on a local project", str(self.workspace / "sample"))
         planned = self.runtime.plan_mission(mission.mission_id)
         personas = {assignment.persona.value for assignment in planned.assignments}
-        self.assertTrue({"Hermes", "Nyx", "Orion", "Vertex"}.issubset(personas))
+        self.assertTrue({"Nexara", "Nyx", "Orion", "Vertex"}.issubset(personas))
 
 
 class EndToEndMissionTests(TempRuntimeMixin, unittest.TestCase):

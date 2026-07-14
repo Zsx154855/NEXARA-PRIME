@@ -4,8 +4,8 @@
   "status_values": ["NOT_STARTED", "RUNNING", "PARTIAL", "BLOCKED", "PASS"],
   "gates": [
     {"id": "G0", "name": "产品宪章与边界冻结", "depends_on": [], "status": "PASS"},
-    {"id": "G1", "name": "第一方 Agent Identity Domain", "depends_on": ["G0"], "status": "RUNNING"},
-    {"id": "G2", "name": "Mission Agent 闭环", "depends_on": ["G1"], "status": "NOT_STARTED"},
+    {"id": "G1", "name": "第一方 Agent Identity Domain", "depends_on": ["G0"], "status": "PASS"},
+    {"id": "G2", "name": "Mission Agent 闭环", "depends_on": ["G1"], "status": "RUNNING"},
     {"id": "G3", "name": "Platform Runtime Services", "depends_on": ["G2"], "status": "NOT_STARTED"},
     {"id": "G4", "name": "Capability & Tool Runtime", "depends_on": ["G3"], "status": "NOT_STARTED"},
     {"id": "G5", "name": "Memory & Knowledge Fabric", "depends_on": ["G4"], "status": "NOT_STARTED"},
@@ -15,6 +15,6 @@
     {"id": "G9", "name": "Evaluation & Evolution", "depends_on": ["G8"], "status": "NOT_STARTED"},
     {"id": "G10", "name": "RC 与发布闭环", "depends_on": ["G9"], "status": "NOT_STARTED"}
   ],
-  "current_gate": "G1",
+  "current_gate": "G2",
   "updated_at": "2026-07-15T00:00:00Z"
 }

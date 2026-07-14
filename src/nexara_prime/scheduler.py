@@ -5,7 +5,7 @@ from .models import AgentAssignment, MissionSpec, Persona, RuntimeRole
 
 
 PERSONA_BY_ROLE = {
-    RuntimeRole.ORCHESTRATOR: Persona.HERMES,
+    RuntimeRole.ORCHESTRATOR: Persona.NEXARA,
     RuntimeRole.PLANNER: Persona.SOLACE,
     RuntimeRole.ANALYST: Persona.NYX,
     RuntimeRole.RESEARCHER: Persona.ORION,

@@ -176,7 +176,7 @@ class NexaraRuntime:
                 relative = str(root.relative_to(workspace)) if root != workspace else "."
                 inventory = self.tools.invoke(mission.mission_id, "file_read", {"path": relative}, mission.trace_id, safe_mode=True, idempotency_key=f"{mission.mission_id}:context-inventory")
                 context_summary = json.dumps(inventory.result, ensure_ascii=False)[:1_500]
-                self.evidence.add(mission.mission_id, "context_snapshot", "Source inventory", context_summary, mission.trace_id, tool_invocation_id=inventory.invocation_id, actor="hermes", source="file_read", verification_status="verified", idempotency_key=f"{mission.mission_id}:context-evidence")
+                self.evidence.add(mission.mission_id, "context_snapshot", "Source inventory", context_summary, mission.trace_id, tool_invocation_id=inventory.invocation_id, actor="nexara", source="file_read", verification_status="verified", idempotency_key=f"{mission.mission_id}:context-evidence")
             except (ValueError, PermissionError, RuntimeError):
                 context_summary = "Source directory recorded; runtime read skipped because it is outside the approved workspace root."
         else:

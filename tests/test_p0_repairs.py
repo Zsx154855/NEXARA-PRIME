@@ -65,6 +65,25 @@ class ApprovalBindingTests(unittest.TestCase):
                 {"path": "m1/test2.md", "content": "x"}, "t2",
                 approval_id=app.approval_id, actor_id="test")
 
+    def test_agent_identity_first_party_defaults(self):
+        """G1: AgentIdentity must carry first-party defaults — not model-dependent."""
+        from nexara_prime.identity import AgentIdentity, AGENT_DEFAULT_PERMISSIONS
+        aid = AgentIdentity()
+        self.assertEqual(aid.agent_id, "nexara_prime.agent")
+        self.assertEqual(aid.display_name, "NEXARA")
+        self.assertEqual(aid.version, "1.0.0")
+        self.assertEqual(aid.memory_namespace, "nexara_prime.agent.memory")
+        self.assertEqual(len(aid.product_principles), 10)
+        self.assertIn("Model independence", aid.product_principles[2])
+        self.assertIn("Hermes dependency = 0", aid.product_principles[9])
+        self.assertGreater(len(aid.capability_profile), 20)
+        self.assertIn("mission.execute", aid.capability_profile)
+        # AGENT_DEFAULT_PERMISSIONS must not include admin/secret operations
+        self.assertIn("mission.read", AGENT_DEFAULT_PERMISSIONS)
+        self.assertNotIn("secret.manage", AGENT_DEFAULT_PERMISSIONS)
+        self.assertNotIn("security.admin", AGENT_DEFAULT_PERMISSIONS)
+        self.assertNotIn("runtime.control", AGENT_DEFAULT_PERMISSIONS)
+
     def test_agent_cannot_escalate_security_admin(self):
         from nexara_prime.identity import IdentityStore
         store = IdentityStore()
