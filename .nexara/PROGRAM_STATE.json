@@ -5,28 +5,15 @@
   "hermes_runtime_dependency": 0,
   "repo": "/Users/agentos/NEXARA-PRIME",
   "branch": "work/nexara-adaptive-runtime-v1",
-  "head": "ace0d98",
+  "head": "6cfe090",
   "python": "3.12.13",
   "test_baseline": "508 passed, 0 failed",
-  "current_program_gate": "G7",
-  "gate_status": "PARTIAL",
-  "gates_pass": ["G0","G1","G2","G3","G4","G5","G6"],
-  "gates_partial": ["G7","G8","G9"],
+  "current_program_gate": "G8",
+  "gate_status": "RUNNING",
+  "next_action": "G8: TypeScript SDK + Swift SDK + REST OpenAPI + MCP server + Plugin Boundary",
+  "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7"],
+  "gates_partial": ["G8","G9"],
   "gates_blocked": ["G10"],
-  "deliverable_truth": {
-    "macos_app": "PASS — clean build, arm64 1.1MB, launch 5s stable, RuntimeTruth binding",
-    "ios_app": "PARTIAL — code+layouts exist, no Simulator (no Xcode project)",
-    "python_sdk": "PASS — installable, importable, health+CRUD verified, PluginManifest schema",
-    "other_sdks": "NOT_STARTED — 4 empty dirs",
-    "evaluation": "PARTIAL — Create→Plan→Execute→Rollback path verified, no dedicated benchmark",
-    "packaging": "wheel exists, unsigned DMG not generated, IPA blocked"
-  },
-  "human_actions_required": [
-    "Product brand name",
-    "Apple Developer: macOS signing cert → DMG",
-    "Apple Developer: Provisioning Profile → IPA",
-    "git push + git tag authorization"
-  ],
   "updated_at": "2026-07-15T00:00:00Z",
-  "updated_by": "Claude Code Prime — G7-G10 Deliverable Truth Acceptance V1"
+  "updated_by": "Claude Code Prime — G7 PASS (Xcode 3-target project), entering G8"
 }

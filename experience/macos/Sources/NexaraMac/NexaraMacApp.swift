@@ -1,5 +1,4 @@
 import SwiftUI
-import NexaraCore
 
 @main
 struct NexaraMacApp: App {

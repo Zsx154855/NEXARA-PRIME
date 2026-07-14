@@ -1,5 +1,4 @@
 import SwiftUI
-import NexaraCore
 
 struct WorkspaceDetail: View {
     @EnvironmentObject private var model: RuntimeViewModel

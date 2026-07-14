@@ -1,0 +1,88 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		101 /* RuntimeTruth.swift */ = {isa = PBXBuildFile; fileRef = 201; };
+		102 /* RuntimeClient.swift */ = {isa = PBXBuildFile; fileRef = 202; };
+		103 /* NexaraMacApp.swift */ = {isa = PBXBuildFile; fileRef = 203; };
+		104 /* ContentView.swift */ = {isa = PBXBuildFile; fileRef = 204; };
+		105 /* RuntimeViewModel.swift */ = {isa = PBXBuildFile; fileRef = 205; };
+		106 /* OverviewDetail.swift */ = {isa = PBXBuildFile; fileRef = 206; };
+		107 /* ComposerDetail.swift */ = {isa = PBXBuildFile; fileRef = 207; };
+		108 /* WorkspaceDetail.swift */ = {isa = PBXBuildFile; fileRef = 208; };
+		109 /* EvidenceDetail.swift */ = {isa = PBXBuildFile; fileRef = 209; };
+		110 /* NexaraIOSApp.swift */ = {isa = PBXBuildFile; fileRef = 210; };
+		111 /* AdaptiveContentView.swift */ = {isa = PBXBuildFile; fileRef = 211; };
+		112 /* IOSRuntimeViewModel.swift */ = {isa = PBXBuildFile; fileRef = 212; };
+		113 /* iPhoneTabs.swift */ = {isa = PBXBuildFile; fileRef = 213; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		201 /* RuntimeTruth.swift */ = {isa = PBXFileReference; path = "../NexaraCore/Sources/NexaraCore/RuntimeTruth.swift"; sourceTree = "<group>"; };
+		202 /* RuntimeClient.swift */ = {isa = PBXFileReference; path = "../NexaraCore/Sources/NexaraCore/RuntimeClient.swift"; sourceTree = "<group>"; };
+		203 /* NexaraMacApp.swift */ = {isa = PBXFileReference; path = "../macos/Sources/NexaraMac/NexaraMacApp.swift"; sourceTree = "<group>"; };
+		204 /* ContentView.swift */ = {isa = PBXFileReference; path = "../macos/Sources/NexaraMac/ContentView.swift"; sourceTree = "<group>"; };
+		205 /* RuntimeViewModel.swift */ = {isa = PBXFileReference; path = "../macos/Sources/NexaraMac/RuntimeViewModel.swift"; sourceTree = "<group>"; };
+		206 /* OverviewDetail.swift */ = {isa = PBXFileReference; path = "../macos/Sources/NexaraMac/OverviewDetail.swift"; sourceTree = "<group>"; };
+		207 /* ComposerDetail.swift */ = {isa = PBXFileReference; path = "../macos/Sources/NexaraMac/ComposerDetail.swift"; sourceTree = "<group>"; };
+		208 /* WorkspaceDetail.swift */ = {isa = PBXFileReference; path = "../macos/Sources/NexaraMac/WorkspaceDetail.swift"; sourceTree = "<group>"; };
+		209 /* EvidenceDetail.swift */ = {isa = PBXFileReference; path = "../macos/Sources/NexaraMac/EvidenceDetail.swift"; sourceTree = "<group>"; };
+		210 /* NexaraIOSApp.swift */ = {isa = PBXFileReference; path = "../ios/Sources/NexaraIOS/NexaraIOSApp.swift"; sourceTree = "<group>"; };
+		211 /* AdaptiveContentView.swift */ = {isa = PBXFileReference; path = "../ios/Sources/NexaraIOS/AdaptiveContentView.swift"; sourceTree = "<group>"; };
+		212 /* IOSRuntimeViewModel.swift */ = {isa = PBXFileReference; path = "../ios/Sources/NexaraIOS/IOSRuntimeViewModel.swift"; sourceTree = "<group>"; };
+		213 /* iPhoneTabs.swift */ = {isa = PBXFileReference; path = "../ios/Sources/NexaraIOS/iPhoneTabs.swift"; sourceTree = "<group>"; };
+		301 /* NexaraMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = NexaraMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		302 /* NexaraIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = NexaraIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		401 /* Info-macos.plist */ = {isa = PBXFileReference; path = "Info-macos.plist"; sourceTree = "<group>"; };
+		402 /* Info-ios.plist */ = {isa = PBXFileReference; path = "Info-ios.plist"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		501 = {isa = PBXGroup; children = (502, 503, 504, 505); sourceTree = "<group>"; };
+		502 /* Shared */ = {isa = PBXGroup; children = (201, 202); name = Shared; sourceTree = "<group>"; };
+		503 /* macOS */ = {isa = PBXGroup; children = (203, 204, 205, 206, 207, 208, 209); name = macOS; sourceTree = "<group>"; };
+		504 /* iOS */ = {isa = PBXGroup; children = (210, 211, 212, 213); name = iOS; sourceTree = "<group>"; };
+		505 /* Config */ = {isa = PBXGroup; children = (401, 402); name = Config; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		601 /* NexaraMac */ = {isa = PBXNativeTarget; buildConfigurationList = 701; buildPhases = (801, 901); buildRules = (); dependencies = (); name = NexaraMac; productName = NexaraMac; productReference = 301; productType = "com.apple.product-type.application"; };
+		602 /* NexaraIOS */ = {isa = PBXNativeTarget; buildConfigurationList = 702; buildPhases = (802, 902); buildRules = (); dependencies = (); name = NexaraIOS; productName = NexaraIOS; productReference = 302; productType = "com.apple.product-type.application"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1001 /* Project object */ = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; }; buildConfigurationList = 703; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base, "zh-Hans"); mainGroup = 501; projectDirPath = ""; targets = (601, 602); };
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		801 /* Sources Mac */ = {isa = PBXSourcesBuildPhase; files = (101, 102, 103, 104, 105, 106, 107, 108, 109); };
+		802 /* Sources iOS */ = {isa = PBXSourcesBuildPhase; files = (101, 102, 110, 111, 112, 113); };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		901 /* Frameworks Mac */ = {isa = PBXFrameworksBuildPhase; files = (); };
+		902 /* Frameworks iOS */ = {isa = PBXFrameworksBuildPhase; files = (); };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		DBG = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }; name = Debug; };
+		REL = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }; name = Release; };
+		MDBG = {isa = XCBuildConfiguration; buildSettings = {INFOPLIST_FILE = "Info-macos.plist"; PRODUCT_NAME = NexaraMac; PRODUCT_BUNDLE_IDENTIFIER = com.nexara.macos; SUPPORTED_PLATFORMS = macosx; MACOSX_DEPLOYMENT_TARGET = 14.0; }; name = Debug; };
+		MREL = {isa = XCBuildConfiguration; buildSettings = {INFOPLIST_FILE = "Info-macos.plist"; PRODUCT_NAME = NexaraMac; PRODUCT_BUNDLE_IDENTIFIER = com.nexara.macos; SUPPORTED_PLATFORMS = macosx; MACOSX_DEPLOYMENT_TARGET = 14.0; }; name = Release; };
+		IDBG = {isa = XCBuildConfiguration; buildSettings = {INFOPLIST_FILE = "Info-ios.plist"; PRODUCT_NAME = NexaraIOS; PRODUCT_BUNDLE_IDENTIFIER = com.nexara.ios; TARGETED_DEVICE_FAMILY = "1,2"; SUPPORTED_PLATFORMS = "iphonesimulator iphoneos"; IPHONEOS_DEPLOYMENT_TARGET = 17.0; }; name = Debug; };
+		IREL = {isa = XCBuildConfiguration; buildSettings = {INFOPLIST_FILE = "Info-ios.plist"; PRODUCT_NAME = NexaraIOS; PRODUCT_BUNDLE_IDENTIFIER = com.nexara.ios; TARGETED_DEVICE_FAMILY = "1,2"; SUPPORTED_PLATFORMS = "iphonesimulator iphoneos"; IPHONEOS_DEPLOYMENT_TARGET = 17.0; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		701 /* Mac */ = {isa = XCConfigurationList; buildConfigurations = (MDBG, MREL); defaultConfigurationName = Release; };
+		702 /* iOS */ = {isa = XCConfigurationList; buildConfigurations = (IDBG, IREL); defaultConfigurationName = Release; };
+		703 /* Project */ = {isa = XCConfigurationList; buildConfigurations = (DBG, REL); defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+
+	};
+	rootObject = 1001;
+}

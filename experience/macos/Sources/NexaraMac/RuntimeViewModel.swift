@@ -1,5 +1,4 @@
 import SwiftUI
-import NexaraCore
 
 @MainActor
 final class RuntimeViewModel: ObservableObject {
