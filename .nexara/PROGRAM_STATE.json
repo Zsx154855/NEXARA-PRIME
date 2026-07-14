@@ -10,13 +10,14 @@
   "python": "3.12.13",
   "test_command": ".venv/bin/python -m pytest -q",
   "test_baseline": "507 passed, 0 failed",
-  "current_program_gate": "G0",
+  "current_program_gate": "G1",
   "gate_status": "RUNNING",
-  "next_action": "完成产品宪章、兼容基线、第一方主权边界和非目标冻结",
+  "next_action": "建立第一方 AgentIdentity、Profile、Memory Namespace、权限模板；清理 Persona.HERMES 命名；hermes_runtime_dependency=0 持续保持",
   "release_actions_require_human_approval": true,
   "constitution_file": "NEXARA_PROGRAM_CONSTITUTION_V1.md",
   "blueprint_file": "NEXARA_PRIME_SOVEREIGN_AGENT_MASTER_BLUEPRINT_V1.md",
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
+  "completed_gates": ["G0"],
   "legacy_milestones": [
     {
       "name": "NEXARA_PRIME_REPOSITORY_BASELINE_AND_STATE_TRACKING_V1",
@@ -38,5 +39,5 @@
     }
   ],
   "updated_at": "2026-07-15T00:00:00Z",
-  "updated_by": "Claude Code Prime — Program Fact Baseline Consolidation V1"
+  "updated_by": "Claude Code Prime — G0 PASS, entering G1"
 }

@@ -1,0 +1,49 @@
+{
+  "gate": "G0",
+  "frozen_at": "2026-07-15",
+  "schemas": {
+    "count": 4,
+    "files": ["event.json", "evidence_artifact.json", "mission_spec.json", "work_contract.json"],
+    "format": "JSON Schema",
+    "compatibility_policy": "additive only within same major version"
+  },
+  "models": {
+    "file": "src/nexara_prime/models.py",
+    "core_objects": [
+      {"name": "MissionSpec", "version": null, "status": "frozen"},
+      {"name": "WorkContract", "version": 1, "status": "frozen"},
+      {"name": "MissionPlan", "version": null, "status": "frozen"},
+      {"name": "PlanStep", "version": null, "status": "frozen"},
+      {"name": "AgentAssignment", "version": 1, "status": "frozen"},
+      {"name": "EvidenceEnvelope", "version": 1, "status": "frozen"},
+      {"name": "MemoryItem", "version": 2, "status": "frozen"},
+      {"name": "PolicyDecision", "version": 1, "status": "frozen"},
+      {"name": "CapabilityManifest", "version": 1, "status": "frozen"},
+      {"name": "ToolContract", "version": 1, "status": "frozen"},
+      {"name": "Event", "version": null, "status": "frozen"},
+      {"name": "RuntimeRole", "version": null, "status": "frozen"},
+      {"name": "Persona", "version": null, "status": "frozen — G1 rename for HERMES"}
+    ]
+  },
+  "api": {
+    "file": "src/nexara_prime/api.py",
+    "framework": "FastAPI",
+    "endpoints": [
+      {"method": "GET", "path": "/health"},
+      {"method": "GET", "path": "/api/runtime/overview"},
+      {"method": "GET", "path": "/api/missions"},
+      {"method": "POST", "path": "/api/missions"},
+      {"method": "GET", "path": "/api/missions/{mission_id}"},
+      {"method": "POST", "path": "/api/missions/{mission_id}/plan"},
+      {"method": "POST", "path": "/api/missions/{mission_id}/approve"},
+      {"method": "POST", "path": "/api/missions/{mission_id}/run"},
+      {"method": "POST", "path": "/api/missions/{mission_id}/pause"}
+    ]
+  },
+  "events": {
+    "file": "src/nexara_prime/events.py",
+    "core_families": ["mission.*", "contract.*", "plan.*", "approval.*", "execution.*", "evidence.*", "memory.*"],
+    "idempotency": "event_id + aggregate_id + event_type uniqueness check"
+  },
+  "test_baseline": {"total": 507, "passed": 507, "failed": 0}
+}

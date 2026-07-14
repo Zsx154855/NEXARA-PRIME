@@ -6,15 +6,15 @@
       "description": "Persona.HERMES string constant exists in models.py, adaptive_scheduler.py, scheduler.py — used as a default persona label, not a runtime import. No functional dependency on external hermes package, but naming should be cleaned up in G1.",
       "severity": "low",
       "gate": "G1",
-      "status": "acknowledged"
+      "status": "active"
     },
     {
       "id": "BLOCKER-002",
       "type": "legacy_state_cleanup",
-      "description": "Old .nexara files (CURRENT_GATE.md, NEXT_ACTION.md, EXECUTION_CHECKPOINT.json) contain deprecated gate names and should be retired after confirming no external references.",
+      "description": "Old .nexara files (CURRENT_GATE.md, NEXT_ACTION.md, EXECUTION_CHECKPOINT.json) contain deprecated gate names. Marked DEPRECATED in G0. No external references found. Can be physically removed in a future cleanup.",
       "severity": "low",
       "gate": "G0",
-      "status": "pending_verification"
+      "status": "resolved_in_G0"
     }
   ],
   "updated_at": "2026-07-15T00:00:00Z"
