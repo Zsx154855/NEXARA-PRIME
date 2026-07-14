@@ -5,12 +5,11 @@
     {"id": "G0", "status": "PASS"}, {"id": "G1", "status": "PASS"},
     {"id": "G2", "status": "PASS"}, {"id": "G3", "status": "PASS"},
     {"id": "G4", "status": "PASS"}, {"id": "G5", "status": "PASS"},
-    {"id": "G6", "status": "PASS"},
-    {"id": "G7", "status": "RUNNING"},
-    {"id": "G8", "status": "NOT_STARTED"},
+    {"id": "G6", "status": "PASS"}, {"id": "G7", "status": "PASS"},
+    {"id": "G8", "status": "RUNNING"},
     {"id": "G9", "status": "NOT_STARTED"},
     {"id": "G10", "status": "NOT_STARTED"}
   ],
-  "current_gate": "G7",
+  "current_gate": "G8",
   "updated_at": "2026-07-15T00:00:00Z"
 }
