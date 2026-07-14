@@ -94,6 +94,17 @@ def build_parser() -> argparse.ArgumentParser:
     triage = adaptive_sub.add_parser("triage")
     triage.add_argument("mission_id")
 
+    # sovereign systems compiler
+    ssc = sub.add_parser("ssc", help="validate and compile Sovereign System IR")
+    ssc_sub = ssc.add_subparsers(dest="ssc_command", required=True)
+    ssc_validate = ssc_sub.add_parser("validate", help="validate a Sovereign System IR JSON document")
+    ssc_validate.add_argument("source")
+    ssc_compile = ssc_sub.add_parser("compile", help="compile a validated Sovereign System IR")
+    ssc_compile.add_argument("source")
+    ssc_compile.add_argument("--output", required=True)
+    ssc_verify = ssc_sub.add_parser("verify", help="verify an SSC build and its artifact ledger")
+    ssc_verify.add_argument("build_dir")
+
     return parser
 
 
@@ -460,8 +471,38 @@ def cmd_security(args) -> int:
     return 0
 
 
+def cmd_ssc(args) -> int:
+    """Validate or compile a Sovereign System IR without starting the runtime."""
+    from .ssc import SSCCompiler, load_ir
+
+    compiler = SSCCompiler()
+    if args.ssc_command == "verify":
+        _print(compiler.verify(args.build_dir))
+        return 0
+    ir = load_ir(args.source)
+    if args.ssc_command == "validate":
+        _print(
+            {
+                "valid": True,
+                "schema_version": ir.schema_version,
+                "system_id": ir.system.id,
+                "system_version": ir.system.version,
+            }
+        )
+        return 0
+    manifest = compiler.compile(ir, args.output)
+    _print(manifest)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "ssc":
+        try:
+            return cmd_ssc(args)
+        except Exception as exc:
+            print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 1
     settings = Settings.from_env(Path.cwd())
     runtime = NexaraRuntime(settings)
     try:
