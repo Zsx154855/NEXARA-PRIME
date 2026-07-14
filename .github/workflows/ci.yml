@@ -16,12 +16,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install and test
-        run: |
-          python -m pip install --upgrade pip
-          pip install hatchling
-          pip install -e .
-          python -m pytest tests/ -q
+      - run: pip install hatchling httpx2
+      - run: pip install -e .
+      - run: python -m pytest tests/ -q
 
   typescript:
     runs-on: ubuntu-latest
@@ -30,22 +27,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install and build
+      - run: npm ci
         working-directory: platform/sdk/typescript
-        run: |
-          npm ci
-          npx tsc --noEmit
+      - run: npx tsc --noEmit
+        working-directory: platform/sdk/typescript
 
   swift:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build NexaraCore
+      - run: swift build
         working-directory: experience/NexaraCore
-        run: swift build
-      - name: Build NexaraMac
+      - run: swift build
         working-directory: experience/macos
-        run: swift build
 
   governance:
     runs-on: ubuntu-latest
@@ -54,38 +48,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install deps
-        run: pip install pyyaml
-      - name: Validate JSON state files
-        run: |
+      - run: pip install pyyaml
+      - run: |
           for f in .nexara/*.json; do
-            echo "Checking $f..."
-            python3 -c "import json; json.load(open('$f')); print('  OK')" || exit 1
+            python3 -c "import json; json.load(open('$f'))" || exit 1
           done
-      - name: Detect state drift
-        run: python3 scripts/governance/detect_state_drift.py
-      - name: Validate YAML governance files
-        run: |
+      - run: python3 scripts/governance/detect_state_drift.py
+      - run: |
           shopt -s globstar
           for f in governance/**/*.yaml; do
-            echo "Checking $f..."
-            python3 -c "import yaml; yaml.safe_load(open('$f')); print('  OK')" || exit 1
+            python3 -c "import yaml; yaml.safe_load(open('$f'))" || exit 1
           done
 
   secret-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Scan for hardcoded secrets
-        run: |
-          echo "Scanning for hardcoded secrets..."
-          FOUND=0
-          PATTERN='(api_key|secret_key|private_key|password|token)\s*=\s*"[A-Za-z0-9_\-]{8,}"'
-          if grep -rnE "$PATTERN" src/ tests/ --include="*.py" 2>/dev/null; then
-            FOUND=1
-          fi
-          if [ "$FOUND" -eq 1 ]; then
-            echo "SECRET SCAN FAILED: hardcoded secrets found"
+      - run: |
+          if grep -rnE '(api_key|secret_key|private_key|password|token)\s*=\s*"[A-Za-z0-9_\-]{8,}"' src/ tests/ --include="*.py" 2>/dev/null; then
+            echo "SECRET SCAN FAILED"
             exit 1
           fi
           echo "Secret scan: CLEAN"
