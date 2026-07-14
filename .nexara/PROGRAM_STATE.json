@@ -8,10 +8,10 @@
   "baseline_head": "66a86f8a0d1712d75b2af78cb1ad8b08783af7bb",
   "python": "3.12.13",
   "test_baseline": "508 passed, 0 failed",
-  "current_program_gate": "G5",
+  "current_program_gate": "G6",
   "gate_status": "RUNNING",
-  "next_action": "证据支持记忆、Knowledge Graph、检索、冲突和保留策略",
-  "completed_gates": ["G0", "G1", "G2", "G3", "G4"],
+  "next_action": "R0-R4、E0-E2、审批绑定、审计链、secret、rollback、red-team 全面硬化",
+  "completed_gates": ["G0", "G1", "G2", "G3", "G4", "G5"],
   "updated_at": "2026-07-15T00:00:00Z",
-  "updated_by": "Claude Code Prime — G4 PASS, entering G5"
+  "updated_by": "Claude Code Prime — G5 PASS, entering G6"
 }
