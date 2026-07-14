@@ -79,3 +79,7 @@ dist/
 DerivedData/
 platform/sdk/typescript/platform/
 platform/sdk/typescript/node_modules/
+
+# ── Session artifacts ──
+Chats/
+platform/sdk/typescript/node_modules/

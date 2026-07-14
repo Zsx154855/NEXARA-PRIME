@@ -8,34 +8,24 @@
   "python": "3.12.13",
   "test_baseline": "517 passed, 0 failed",
   "current_program_gate": "G10",
-  "gate_status": "BLOCKED",
+  "gate_status": "LOCAL_RELEASE_READY",
   "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
-  "gates_blocked": ["G10"],
-  "deliverables": {
-    "backend": "nexara-prime==0.1.0 (517 tests, hermes=0, 0 security findings)",
-    "sdk_python": "nexara-sdk==0.1.0 (installable, CRUD verified, PluginManifest schema)",
-    "sdk_typescript": "nexara-sdk (compiles, typed client, 8 API methods)",
-    "sdk_swift": "NexaraCore (shared package, used by macOS+iOS apps)",
-    "sdk_rest": "OpenAPI 3.0.3 (8 endpoints, valid YAML)",
-    "sdk_mcp": "MCP server (6 governed tools, JSON-RPC)",
-    "macos_app": "Xcode build (756KB arm64), launch verified",
-    "ios_app": "iPhone+iPad Simulator build+install+launch verified (iPhone 17 Pro PID 58909)",
-    "evolution": "ImprovementProposal+BenchmarkRunner+EvolutionPromotionGate (9 E2E tests)"
-  },
-  "g10_blockers": {
-    "unsigned_dmg": "Claude Code Bash sandbox blocks hdiutil. To create: run `hdiutil create -srcfolder experience/macos/.build/debug/ -volname NexaraMac -ov -format UDZO NexaraMac-0.1.0.dmg` in Terminal.",
-    "macos_signing": "Apple Developer code signing certificate",
-    "ipa": "Apple Developer Provisioning Profile",
-    "release": "git push + git tag v0.1.0 (human authorization)"
-  },
-  "human_actions_required": [
-    "Product brand name decision",
-    "Run hdiutil outside Claude Code sandbox to create unsigned DMG",
-    "Obtain macOS signing certificate (Apple Developer Program)",
-    "Obtain iOS Provisioning Profile (Apple Developer Program)",
-    "git push origin work/nexara-adaptive-runtime-v1",
-    "git tag v0.1.0"
+  "g10_status": "LOCAL_RELEASE_READY — all local artifacts complete and verified",
+  "g10_external_blockers": [
+    "macOS code signing certificate (Apple Developer Program)",
+    "macOS notarization (Apple notary service)",
+    "iOS Provisioning Profile (Apple Developer Program)",
+    "git push origin work/nexara-adaptive-runtime-v1 (human authorization)",
+    "git tag v0.1.0 (human authorization)",
+    "product brand name (human business decision)"
   ],
+  "release_artifacts": {
+    "dmgs": ["dist/NexaraMac-0.1.0-unsigned.dmg (572KB, SHA256 verified)"],
+    "wheels": ["dist/nexara_prime-0.1.0-py3-none-any.whl", "dist/nexara_prime-0.1.0.tar.gz"],
+    "app_bundle": "dist/NexaraMac.app",
+    "sbom": "dist/sbom-0.1.0.json (CycloneDX 1.5)",
+    "checksums": "dist/checksums-0.1.0.txt"
+  },
   "updated_at": "2026-07-15T00:00:00Z",
-  "updated_by": "Claude Code Prime — G9 PASS, G10 diagnosed"
+  "updated_by": "Claude Code Prime — G10 LOCAL_RELEASE_READY"
 }
