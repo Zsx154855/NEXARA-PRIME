@@ -1,0 +1,17 @@
+{
+  "name": "nexara-sdk",
+  "version": "0.1.0",
+  "description": "NEXARA PRIME TypeScript SDK — Runtime Truth API client",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.5"
+  },
+  "files": ["dist/", "src/"],
+  "license": "MIT"
+}

@@ -1,0 +1,152 @@
+openapi: "3.0.3"
+info:
+  title: NEXARA PRIME Runtime Truth API
+  version: "0.1.0"
+  description: |
+    First-party sovereign agent Runtime Truth API.
+    All endpoints serve authoritative state from the NEXARA Runtime.
+    Mock/live mode is governed by the `mock_default` system flag.
+servers:
+  - url: http://127.0.0.1:8765
+    description: Local NEXARA Runtime
+paths:
+  /health:
+    get:
+      operationId: health
+      summary: Connection health and provider info
+      responses:
+        "200":
+          description: Runtime is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  provider: { type: string }
+                  db_path: { type: string }
+                  event_count: { type: integer }
+
+  /api/runtime/overview:
+    get:
+      operationId: overview
+      summary: System state summary — missions, approvals, evidence, tools, capabilities
+      responses:
+        "200":
+          description: Runtime overview with authoritative mock/live flag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeOverview"
+
+  /api/missions:
+    get:
+      operationId: listMissions
+      summary: List all missions
+      responses:
+        "200":
+          description: Array of missions
+    post:
+      operationId: createMission
+      summary: Create a new mission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [objective]
+              properties:
+                objective: { type: string }
+                source_dir: { type: string }
+      responses:
+        "200":
+          description: Created mission
+
+  /api/missions/{mission_id}:
+    get:
+      operationId: getMission
+      summary: Get mission detail
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Mission detail
+
+  /api/missions/{mission_id}/plan:
+    post:
+      operationId: planMission
+      summary: Generate plan for a mission
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Mission with plan
+
+  /api/missions/{mission_id}/approve:
+    post:
+      operationId: approveMission
+      summary: Human approval gate
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approved: { type: boolean }
+                decision: { type: string }
+      responses:
+        "200":
+          description: Approval decision applied
+
+  /api/missions/{mission_id}/run:
+    post:
+      operationId: runMission
+      summary: Execute a mission
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Mission execution started
+
+  /api/missions/{mission_id}/pause:
+    post:
+      operationId: pauseMission
+      summary: Pause a running mission
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Mission paused
+
+components:
+  schemas:
+    RuntimeOverview:
+      type: object
+      properties:
+        system:
+          type: object
+          properties:
+            name: { type: string }
+            mode: { type: string, enum: [mock, dry_run, local, live] }
+            healthy: { type: boolean }
+            human_control: { type: boolean }
+            mock_default: { type: boolean }
