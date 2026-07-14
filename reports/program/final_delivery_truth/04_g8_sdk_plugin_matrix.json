@@ -1,0 +1,22 @@
+{
+  "gate": "G8",
+  "claimed": "PASS",
+  "verified": "PARTIAL",
+  "sdk_matrix": {
+    "python": {
+      "status": "PASS",
+      "evidence": "pip install nexara-sdk==0.1.0; NexaraClient.health()→status=ok; create_mission→mission_id; PluginManifest schema (10 fields)"
+    },
+    "typescript": {"status": "NOT_STARTED", "evidence": "platform/sdk/typescript/ — 0 files, empty directory"},
+    "swift": {"status": "NOT_STARTED", "evidence": "platform/sdk/swift/ — 0 files, empty directory"},
+    "rest": {"status": "NOT_STARTED", "evidence": "platform/sdk/rest/ — 0 files, empty directory"},
+    "mcp": {"status": "NOT_STARTED", "evidence": "platform/sdk/mcp/ — 0 files, empty directory"}
+  },
+  "plugin_boundary": {
+    "manifest_schema": "PASS — PluginManifest Pydantic model",
+    "signature_verification": "NOT_STARTED",
+    "isolation_test": "NOT_STARTED"
+  },
+  "corrected_status": "PARTIAL",
+  "reason": "Python SDK works. 4 of 5 SDKs are empty. Only 1 of 3 plugin criteria met."
+}

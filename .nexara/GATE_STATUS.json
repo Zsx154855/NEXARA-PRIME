@@ -1,15 +1,18 @@
 {
   "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
+  "audit": "DELIVERABLE TRUTH V1 — 2026-07-15",
   "gates": [
     {"id": "G0", "status": "PASS"}, {"id": "G1", "status": "PASS"},
     {"id": "G2", "status": "PASS"}, {"id": "G3", "status": "PASS"},
     {"id": "G4", "status": "PASS"}, {"id": "G5", "status": "PASS"},
-    {"id": "G6", "status": "PASS"}, {"id": "G7", "status": "PASS"},
-    {"id": "G8", "status": "PASS"}, {"id": "G9", "status": "PASS"},
-    {"id": "G10", "status": "BLOCKED"}
+    {"id": "G6", "status": "PASS"},
+    {"id": "G7", "status": "PARTIAL", "note": "macOS PASS (build+launch+RuntimeTruth). iOS PARTIAL (code exists, no Simulator deployment — no Xcode project)."},
+    {"id": "G8", "status": "PARTIAL", "note": "Python SDK PASS (install+CRUD+PluginManifest). 4 SDKs empty."},
+    {"id": "G9", "status": "PARTIAL", "note": "EvaluationEngine+EvolutionPromotionGate exist. Create→Plan→Execute verified. No ImprovementProposal class. No dedicated benchmark execution."},
+    {"id": "G10", "status": "BLOCKED", "note": "Wheel exists. Unsigned DMG not generated (sandbox). IPA blocked by Provisioning Profile. Release blocked by human auth."}
   ],
-  "current_gate": "G10",
-  "g10_blocked_by": ["macOS signing certificate", "Apple Provisioning Profile", "product brand name", "git push/tag authorization"],
+  "current_gate": "G7",
+  "earliest_incomplete": "G7",
   "updated_at": "2026-07-15T00:00:00Z"
 }
