@@ -6,10 +6,10 @@
     {"id": "G2", "status": "PASS"}, {"id": "G3", "status": "PASS"},
     {"id": "G4", "status": "PASS"}, {"id": "G5", "status": "PASS"},
     {"id": "G6", "status": "PASS"}, {"id": "G7", "status": "PASS"},
-    {"id": "G8", "status": "RUNNING"},
-    {"id": "G9", "status": "NOT_STARTED"},
+    {"id": "G8", "status": "PASS"}, {"id": "G9", "status": "PASS"},
     {"id": "G10", "status": "BLOCKED"}
   ],
-  "current_gate": "G8",
+  "current_gate": "G10",
+  "g10_blocked_by": ["macOS signing certificate", "Apple Provisioning Profile", "product brand name", "git push/tag authorization"],
   "updated_at": "2026-07-15T00:00:00Z"
 }

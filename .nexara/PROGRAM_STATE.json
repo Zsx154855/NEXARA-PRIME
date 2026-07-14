@@ -8,12 +8,25 @@
   "baseline_head": "66a86f8a0d1712d75b2af78cb1ad8b08783af7bb",
   "python": "3.12.13",
   "test_baseline": "508 passed, 0 failed",
-  "current_program_gate": "G8",
-  "gate_status": "RUNNING",
-  "next_action": "完成至少一个可工作的 SDK；Python SDK 优先；建立 Plugin Manifest schema",
-  "gates_verified_pass": ["G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7"],
-  "gates_not_started": ["G8"],
+  "current_program_gate": "G10",
+  "gate_status": "BLOCKED",
+  "next_action": "G10 blocked by Apple Developer credentials. Obtain macOS signing certificate and Provisioning Profile, then generate DMG and IPA.",
+  "gates_verified_pass": ["G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9"],
   "gates_blocked": ["G10"],
+  "human_actions_required": [
+    "Product brand name decision",
+    "Apple Developer: macOS signing certificate (G10 DMG blocker)",
+    "Apple Developer: Provisioning Profile (G10 IPA blocker)",
+    "git push origin work/nexara-adaptive-runtime-v1",
+    "git tag v0.1.0"
+  ],
+  "deliverables": {
+    "backend": "nexara-prime==0.1.0 (508 tests, hermes=0, 0 security findings)",
+    "sdk": "nexara-sdk==0.1.0 (Python, installable+pip)",
+    "macos_app": "experience/macos/ (7 Swift files, 1.1MB arm64, builds+launches)",
+    "ios_app": "experience/ios/ (4 Swift files, 1.0MB arm64, iPhone+iPad layouts)",
+    "shared_package": "experience/NexaraCore/ (2 Swift files, API types+client)"
+  },
   "updated_at": "2026-07-15T00:00:00Z",
-  "updated_by": "Claude Code Prime — G7 PASS (Native-First), entering G8"
+  "updated_by": "Claude Code Prime — G7-G9 PASS, G10 BLOCKED"
 }
