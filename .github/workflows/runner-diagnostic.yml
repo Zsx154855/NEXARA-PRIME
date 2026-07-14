@@ -1,8 +1,14 @@
 name: Runner Diagnostic
+
 on:
+  push:
+    branches:
+      - diagnostics/github-actions-runner-20260715
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   probe:
     runs-on: ubuntu-latest
