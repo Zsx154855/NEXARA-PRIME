@@ -48,6 +48,9 @@ GitHub connector limitations required sequential repository commits; this change
 
 - Skill replacement commit: `ffc41c8e4770f3e01c928509ff655b95a5a7fadb`
 - Split reference deletion commit: `c6bdca04f49ce188074a66985d6834086d0b8182`
+- Initial Evidence commit: `b32003f743a86dd8f674bd69e7b764e3d7319e52`
+
+The user's current instruction authorized this repository repair on the existing remote development branch.
 
 No merge, tag, release, deploy, Secret operation, destructive reset, stash, clean, or unknown-file overwrite was performed.
 
@@ -87,11 +90,12 @@ Existing state remains authoritative and was not rewritten because this Skill re
 
 - `.nexara/GATE_STATUS.json`: G0–G9 PASS; current Gate G10
 - `.nexara/PROGRAM_STATE.json`: `LOCAL_RELEASE_READY`
-- existing human boundaries:
-  - branch push approval pending
-  - tag `v0.1.0` approval pending
-  - product brand name decision pending
-  - Apple signing/notarization/provisioning credentials unavailable
+- existing state file still contains a combined `git_push_tag: PENDING_HUMAN_APPROVAL`
+- this Mission updated the already-existing remote development branch only
+- merge and tag were not performed
+- local Mac worktree parity was not observable, so the broader push/tag state was not rewritten
+- product brand name decision remains pending
+- Apple signing/notarization/provisioning credentials remain unavailable
 
 - state_change: `none`
 - state_update_reason: no Gate or release-truth transition occurred in this Mission
@@ -102,7 +106,7 @@ The next real action is not another autonomous code task. Current authoritative 
 
 Required human actions, in priority order:
 
-1. Decide whether to push/merge the current development branch.
+1. Decide whether to merge `work/nexara-post-baseline-v1` into `main`.
 2. Decide the final product brand name.
 3. Decide whether to create tag `v0.1.0`.
 4. Provide Apple Developer signing, notarization and iOS provisioning credentials only when external distribution is approved.
