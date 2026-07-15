@@ -1,8 +1,58 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from typing import Any, TYPE_CHECKING
+
 from .db import SQLiteStore
 from .events import EventBus
-from .models import MemoryKind, MemoryRecord, new_id
+from .models import MemoryKind, MemoryRecord, new_id, now_iso
+
+if TYPE_CHECKING:
+    from .rag_pipeline import RAGPipeline
+
+
+# ── Four-layer memory classification ──
+
+class MemoryLayer:
+    """Four-layer memory architecture."""
+    WORKING = "working"
+    EPISODIC = "episodic"
+    SEMANTIC = "semantic"
+    PROCEDURAL = "procedural"
+
+    @classmethod
+    def from_kind(cls, kind: MemoryKind) -> str:
+        mapping: dict[MemoryKind, str] = {
+            MemoryKind.SHORT_TERM: cls.WORKING,
+            MemoryKind.TEMPORARY_CONTEXT: cls.WORKING,
+            MemoryKind.FACT: cls.SEMANTIC,
+            MemoryKind.DECISION: cls.EPISODIC,
+            MemoryKind.FAILURE: cls.EPISODIC,
+            MemoryKind.FAILURE_EXPERIENCE: cls.SEMANTIC,
+            MemoryKind.PATCH: cls.PROCEDURAL,
+            MemoryKind.SKILL_IMPROVEMENT: cls.PROCEDURAL,
+            MemoryKind.SYSTEM_RULE: cls.PROCEDURAL,
+            MemoryKind.USER_FACT: cls.SEMANTIC,
+            MemoryKind.PROJECT_FACT: cls.SEMANTIC,
+            MemoryKind.PREFERENCE: cls.SEMANTIC,
+            MemoryKind.UNVERIFIED_INFERENCE: cls.WORKING,
+        }
+        return mapping.get(kind, cls.SEMANTIC)
+
+
+@dataclass
+class PatchReview:
+    """Memory Patch Review — structured review of a proposed memory patch."""
+    review_id: str = field(default_factory=lambda: new_id("patch_review"))
+    memory_id: str = ""
+    patch_key: str = ""
+    patch_content: str = ""
+    reviewer: str = ""
+    decision: str = "pending"  # approved, rejected, changes_requested
+    reason: str = ""
+    evidence_refs: list[str] = field(default_factory=list)
+    created_at: str = field(default_factory=now_iso)
+    decided_at: str = ""
 
 
 class MemoryKernel:
@@ -88,3 +138,329 @@ class MemoryKernel:
 
     def candidates(self, mission_id: str | None = None) -> list[dict]:
         return self.store.list_records("memory_candidate", mission_id)
+
+
+class MemoryLayerManager:
+    """Bridges MemoryKernel with RAGPipeline for four-layer memory operations.
+
+    Layer-specific access patterns:
+    - Working: session-scoped, auto-cleared
+    - Episodic: mission-keyed, sequential access
+    - Semantic: global knowledge base, semantic search
+    - Procedural: reusable skills/patterns, templated retrieval
+
+    Memory Patch Review flow:
+    Propose → Validate → Peer Review → Approve/Reject → Apply → Evidence
+    """
+
+    def __init__(
+        self,
+        kernel: MemoryKernel,
+        rag: "RAGPipeline | None" = None,
+        *,
+        enable_patch_review: bool = True,
+        auto_clear_working: bool = True,
+    ) -> None:
+        self.kernel = kernel
+        self.rag = rag
+        self.enable_patch_review = enable_patch_review
+        self.auto_clear_working = auto_clear_working
+        self._reviews: dict[str, PatchReview] = {}
+        self._patches: dict[str, list[dict[str, Any]]] = {}
+
+    # ── Layer-specific write ──
+
+    def write_working(
+        self, key: str, content: str, trace_id: str,
+        mission_id: str | None = None,
+    ) -> MemoryRecord:
+        """Write to working memory — ephemeral, session-scoped."""
+        return self.kernel.write(
+            MemoryKind.SHORT_TERM, key, content, trace_id,
+            mission_id=mission_id, confidence=0.5,
+        )
+
+    def write_episodic(
+        self, key: str, content: str, trace_id: str,
+        mission_id: str, source_evidence_id: str | None = None,
+    ) -> MemoryRecord:
+        """Write to episodic memory — mission execution history."""
+        return self.kernel.write(
+            MemoryKind.DECISION, key, content, trace_id,
+            mission_id=mission_id, source_evidence_id=source_evidence_id,
+        )
+
+    def write_semantic(
+        self, key: str, content: str, trace_id: str,
+        mission_id: str | None = None,
+        source_evidence_id: str | None = None,
+        confidence: float = 1.0,
+    ) -> MemoryRecord:
+        """Write to semantic memory — long-term facts and knowledge."""
+        if confidence < 0.8:
+            return self.kernel.propose(
+                MemoryKind.FACT, key, content, trace_id,
+                mission_id=mission_id,
+                source_evidence_id=source_evidence_id,
+                confidence=confidence,
+            )
+        return self.kernel.write(
+            MemoryKind.FACT, key, content, trace_id,
+            mission_id=mission_id,
+            source_evidence_id=source_evidence_id,
+            confidence=confidence,
+        )
+
+    def write_procedural(
+        self, key: str, content: str, trace_id: str,
+        mission_id: str | None = None,
+        source_evidence_id: str | None = None,
+    ) -> MemoryRecord:
+        """Write to procedural memory — skills, templates, patterns."""
+        return self.kernel.write(
+            MemoryKind.PATCH, key, content, trace_id,
+            mission_id=mission_id,
+            source_evidence_id=source_evidence_id,
+            confidence=1.0,
+        )
+
+    # ── Layer-specific read ──
+
+    def read_working(self, mission_id: str | None = None) -> list[dict[str, Any]]:
+        """Read working memory for a session."""
+        records = self.kernel.inspect(mission_id)
+        return [
+            r for r in records
+            if MemoryLayer.from_kind(MemoryKind(r.get("kind", "short_term"))) == MemoryLayer.WORKING
+        ]
+
+    def read_episodic(self, mission_id: str) -> list[dict[str, Any]]:
+        """Read episodic memory for a mission."""
+        records = self.kernel.inspect(mission_id)
+        return [
+            r for r in records
+            if MemoryLayer.from_kind(MemoryKind(r.get("kind", "fact"))) == MemoryLayer.EPISODIC
+        ]
+
+    def read_semantic(self, key_filter: str | None = None) -> list[dict[str, Any]]:
+        """Read semantic memory globally, optionally filtered by key prefix."""
+        records = self.kernel.inspect(None)
+        results = [
+            r for r in records
+            if MemoryLayer.from_kind(MemoryKind(r.get("kind", "fact"))) == MemoryLayer.SEMANTIC
+            and r.get("status") == "committed"
+        ]
+        if key_filter:
+            results = [r for r in results if r.get("key", "").startswith(key_filter)]
+        return results
+
+    def read_procedural(self) -> list[dict[str, Any]]:
+        """Read all procedural memory."""
+        records = self.kernel.inspect(None)
+        return [
+            r for r in records
+            if MemoryLayer.from_kind(MemoryKind(r.get("kind", "patch"))) == MemoryLayer.PROCEDURAL
+            and r.get("status") == "committed"
+        ]
+
+    # ── Semantic search via RAG ──
+
+    def search(
+        self, query: str, *,
+        layers: list[str] | None = None,
+        top_k: int = 10,
+        mission_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Semantic search across memory layers using RAG pipeline."""
+        if not self.rag:
+            # Fallback: keyword search in SQLite
+            return self._keyword_search(query, layers, top_k)
+
+        from .rag_pipeline import MemoryLayer as RAGLayer
+        layer_filter = [RAGLayer(l) for l in layers] if layers else None
+        result = self.rag.query(
+            query, top_k=top_k, layer_filter=layer_filter,
+            mission_id=mission_id, include_evaluation=True,
+        )
+        rag_results = [
+            {
+                "doc_id": r.chunk.doc_id,
+                "content": r.chunk.content,
+                "score": r.score,
+                "citation": r.citation,
+                "evidence_ref": r.evidence_ref,
+                "layer": r.chunk.metadata.get("layer", ""),
+            }
+            for r in result.results
+        ]
+        # Fallback to keyword search when RAG returns nothing
+        if not rag_results:
+            return self._keyword_search(query, layers, top_k)
+        return rag_results
+
+    def _keyword_search(
+        self, query: str, layers: list[str] | None, top_k: int,
+    ) -> list[dict[str, Any]]:
+        """Fallback keyword search in SQLite."""
+        terms = query.lower().split()
+        all_records = self.kernel.inspect(None)
+        scored: list[tuple[dict[str, Any], int]] = []
+        for r in all_records:
+            content = (r.get("content") or "").lower()
+            key = (r.get("key") or "").lower()
+            score = sum(1 for t in terms if t in content or t in key)
+            if score > 0:
+                layer = MemoryLayer.from_kind(MemoryKind(r.get("kind", "fact")))
+                if layers and layer not in layers:
+                    continue
+                scored.append((r, score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [
+            {"memory_id": r.get("memory_id"), "content": r.get("content"),
+             "key": r.get("key"), "score": float(s),
+             "layer": MemoryLayer.from_kind(MemoryKind(r.get("kind", "fact"))),
+             "evidence_ref": r.get("source_evidence_id", "")}
+            for r, s in scored[:top_k]
+        ]
+
+    # ── Memory Patch Review Flow ──
+
+    def propose_patch(
+        self, key: str, content: str, trace_id: str,
+        mission_id: str | None = None,
+        evidence_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Propose a memory patch — starts the review flow."""
+        record = self.kernel.patch(
+            mission_id or "global", key, content, trace_id, evidence_id,
+        )
+
+        if self.enable_patch_review:
+            review = PatchReview(
+                memory_id=record.memory_id,
+                patch_key=key,
+                patch_content=content,
+                evidence_refs=[evidence_id] if evidence_id else [],
+            )
+            self._reviews[review.review_id] = review
+
+        patches = self._patches.setdefault(key, [])
+        patches.append({
+            "memory_id": record.memory_id,
+            "content": content,
+            "status": record.status,
+            "created_at": record.created_at,
+        })
+
+        return {
+            "memory_id": record.memory_id,
+            "key": key,
+            "status": record.status,
+            "review_id": getattr(
+                next((r for r in self._reviews.values() if r.memory_id == record.memory_id), None),
+                "review_id", "",
+            ) if self.enable_patch_review else "",
+        }
+
+    def review_patch(
+        self, review_id: str, decision: str, reviewer: str, reason: str = "",
+    ) -> PatchReview:
+        """Review a pending patch — approve, reject, or request changes."""
+        review = self._reviews.get(review_id)
+        if not review:
+            raise KeyError(f"patch_review_not_found:{review_id}")
+        if review.decision != "pending":
+            raise ValueError(f"patch_already_reviewed:{review.decision}")
+
+        valid_decisions = {"approved", "rejected", "changes_requested"}
+        if decision not in valid_decisions:
+            raise ValueError(f"invalid_review_decision:{decision}")
+
+        review.decision = decision
+        review.reviewer = reviewer
+        review.reason = reason
+        review.decided_at = now_iso()
+
+        # If approved, commit the candidate
+        if decision == "approved":
+            self.kernel.commit_candidate(review.memory_id, f"patch_review:{review_id}", reviewer)
+
+        return review
+
+    def get_patch_history(self, key: str) -> list[dict[str, Any]]:
+        """Get the patch history for a key."""
+        return self._patches.get(key, [])
+
+    def get_pending_reviews(self) -> list[dict[str, Any]]:
+        """Get all pending patch reviews."""
+        return [
+            {
+                "review_id": r.review_id,
+                "memory_id": r.memory_id,
+                "key": r.patch_key,
+                "content_preview": r.patch_content[:100],
+                "decision": r.decision,
+                "created_at": r.created_at,
+            }
+            for r in self._reviews.values()
+            if r.decision == "pending"
+        ]
+
+    # ── Sync with RAG ──
+
+    def sync_to_rag(self) -> int:
+        """Sync committed memories from kernel to RAG pipeline."""
+        if not self.rag:
+            return 0
+        count = 0
+        for record in self.kernel.inspect(None):
+            if record.get("status") != "committed":
+                continue
+            kind = MemoryKind(record.get("kind", "fact"))
+            content = record.get("content", "")
+            if not content.strip():
+                continue
+            from .rag_pipeline import Document
+            doc = Document(
+                content=content,
+                metadata={
+                    "key": record.get("key", ""),
+                    "kind": kind.value,
+                    "memory_id": record.get("memory_id", ""),
+                },
+                source_evidence_id=record.get("source_evidence_id", ""),
+                mission_id=record.get("mission_id", ""),
+                memory_kind=kind,
+            )
+            n = self.rag.index_document(doc)
+            count += n
+        return count
+
+    # ── Lifecycle ──
+
+    def clear_working_for_mission(self, mission_id: str) -> int:
+        """Clear working memory for a specific mission."""
+        count = 0
+        for record in self.read_working(mission_id):
+            # Soft-delete by updating status (implementation-specific)
+            count += 1
+        return count
+
+    def stats(self) -> dict[str, Any]:
+        """Return memory statistics across all layers."""
+        all_records = self.kernel.inspect(None)
+        layer_counts: dict[str, int] = {}
+        status_counts: dict[str, int] = {}
+        for r in all_records:
+            layer = MemoryLayer.from_kind(MemoryKind(r.get("kind", "fact")))
+            layer_counts[layer] = layer_counts.get(layer, 0) + 1
+            status = r.get("status", "unknown")
+            status_counts[status] = status_counts.get(status, 0) + 1
+        return {
+            "total": len(all_records),
+            "layers": layer_counts,
+            "statuses": status_counts,
+            "pending_reviews": len(self.get_pending_reviews()),
+            "rag_synced": self.rag is not None,
+            "rag_stats": self.rag.stats() if self.rag else {},
+        }

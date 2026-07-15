@@ -136,6 +136,10 @@ class MissionSpec(NModel):
     risk_level: RiskLevel = RiskLevel.R2
     source_dir: str | None = None
     created_at: str = Field(default_factory=now_iso)
+    schema_version: int = 1
+    mission_run_id: str | None = None
+    correlation_id: str | None = None
+    provenance: str | None = None
 
 
 class WorkContract(NModel):
@@ -152,6 +156,10 @@ class WorkContract(NModel):
     change_log: list[str] = Field(default_factory=list)
     approved_at: str | None = None
     created_at: str = Field(default_factory=now_iso)
+    schema_version: int = 1
+    mission_run_id: str | None = None
+    correlation_id: str | None = None
+    provenance: str | None = None
 
 
 class PlanStep(NModel):
@@ -180,6 +188,9 @@ class AgentAssignment(NModel):
     status: str = "active"
     loaded_capabilities: list[str] = Field(default_factory=list)
     current_step_id: str | None = None
+    schema_version: int = 1
+    correlation_id: str | None = None
+    provenance: str | None = None
 
 
 class Event(NModel):
@@ -237,6 +248,13 @@ class ApprovalRequest(NModel):
     decision_action: str | None = None
     created_at: str = Field(default_factory=now_iso)
     decided_at: str | None = None
+    schema_version: int = 1
+    mission_run_id: str | None = None
+    operation_run_id: str | None = None
+    correlation_id: str | None = None
+    provenance: str | None = None
+    approval_class: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
 
 
 class WriterLease(NModel):
@@ -278,6 +296,11 @@ class MemoryRecord(NModel):
     canonical: bool = False
     conflict_keys: list[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
+    schema_version: int = 1
+    mission_run_id: str | None = None
+    correlation_id: str | None = None
+    provenance: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
 
 
 class EvaluationResult(NModel):

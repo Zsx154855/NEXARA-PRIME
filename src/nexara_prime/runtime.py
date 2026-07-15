@@ -29,6 +29,111 @@ from .state_machine import MissionStateMachine
 from .token_compiler import TokenCompiler
 from .tools import ToolRuntime
 
+# ── Runtime Closure v1: Governed Adapters ──
+_ADAPTERS_INITIALIZED = False
+_browser_adapter = None
+_computer_use_adapter = None
+_git_adapter = None
+_message_adapter = None
+_deployment_adapter = None
+_rag_pipeline = None
+_memory_layer_manager = None
+_repair_loop = None
+_program_loop = None
+
+def _ensure_adapters(runtime):
+    global _ADAPTERS_INITIALIZED, _browser_adapter, _computer_use_adapter
+    global _git_adapter, _message_adapter, _deployment_adapter
+    global _rag_pipeline, _memory_layer_manager, _repair_loop, _program_loop
+    # Reset if runtime changed (new test fixture, etc.)
+    if _ADAPTERS_INITIALIZED and getattr(_ensure_adapters, '_last_runtime_id', None) == id(runtime):
+        return
+    _ensure_adapters._last_runtime_id = id(runtime)
+    _ADAPTERS_INITIALIZED = False  # Force re-init for new runtime
+    try:
+        from .browser_adapter import GovernedBrowserAdapter, MockBrowserDriver
+        _browser_adapter = GovernedBrowserAdapter(
+            MockBrowserDriver(),
+            evidence_store=runtime.evidence,
+            approval_engine=runtime.approvals,
+        )
+    except ImportError:
+        pass
+    try:
+        from .computer_use_adapter import GovernedComputerUseAdapter, MockComputerUseDriver
+        _computer_use_adapter = GovernedComputerUseAdapter(
+            MockComputerUseDriver(),
+            evidence_store=runtime.evidence,
+            approval_engine=runtime.approvals,
+        )
+    except ImportError:
+        pass
+    try:
+        from .git_adapter import GovernedGitAdapter, MockGitDriver
+        _git_adapter = GovernedGitAdapter(
+            MockGitDriver(),
+            evidence_store=runtime.evidence,
+            approval_engine=runtime.approvals,
+        )
+    except ImportError:
+        pass
+    try:
+        from .message_adapter import GovernedMessageAdapter, MockMessageProvider
+        _message_adapter = GovernedMessageAdapter(
+            MockMessageProvider(),
+            evidence_store=runtime.evidence,
+            approval_engine=runtime.approvals,
+        )
+    except ImportError:
+        pass
+    try:
+        from .deployment_adapter import GovernedDeploymentAdapter, MockDeploymentDriver
+        _deployment_adapter = GovernedDeploymentAdapter(
+            MockDeploymentDriver(),
+            evidence_store=runtime.evidence,
+            approval_engine=runtime.approvals,
+        )
+    except ImportError:
+        pass
+    try:
+        from .rag_pipeline import RAGPipeline, MockEmbedder
+        _rag_pipeline = RAGPipeline(MockEmbedder())
+    except ImportError:
+        pass
+    try:
+        from .memory import MemoryLayerManager
+        if _rag_pipeline:
+            _memory_layer_manager = MemoryLayerManager(
+                runtime.memory, _rag_pipeline, enable_patch_review=True,
+            )
+        else:
+            _memory_layer_manager = MemoryLayerManager(
+                runtime.memory, rag=None, enable_patch_review=True,
+            )
+    except ImportError:
+        pass
+    try:
+        from .repair_loop import RepairLoop
+        _repair_loop = RepairLoop(
+            evidence_store=runtime.evidence,
+            approval_engine=runtime.approvals,
+        )
+    except ImportError:
+        pass
+    try:
+        from .program_loop import ProgramLoop, ProgramLoopConfig
+        _program_loop = ProgramLoop(
+            ProgramLoopConfig(max_cycles=0),
+            store=runtime.store,
+            events=runtime.events,
+            evidence=runtime.evidence,
+            scheduler=runtime.scheduler,
+            runtime=runtime,
+        )
+    except ImportError:
+        pass
+    _ADAPTERS_INITIALIZED = True
+
 # Adaptive Runtime imports (lazy — loaded on first use)
 _ADAPTIVE_IMPORTS_DONE = False
 _adaptive_triage = None
@@ -107,6 +212,53 @@ class NexaraRuntime:
         self.evaluator = EvaluationEngine(self.store, self.events)
         self.state_machine = MissionStateMachine(self.events, self.evidence)
         self.recovery = DurableRecovery(self.store, self.events)
+
+    # ── Adapter accessors ──
+
+    @property
+    def browser(self):
+        _ensure_adapters(self)
+        return _browser_adapter
+
+    @property
+    def computer_use(self):
+        _ensure_adapters(self)
+        return _computer_use_adapter
+
+    @property
+    def git(self):
+        _ensure_adapters(self)
+        return _git_adapter
+
+    @property
+    def messenger(self):
+        _ensure_adapters(self)
+        return _message_adapter
+
+    @property
+    def deployment(self):
+        _ensure_adapters(self)
+        return _deployment_adapter
+
+    @property
+    def rag(self):
+        _ensure_adapters(self)
+        return _rag_pipeline
+
+    @property
+    def memory_layers(self):
+        _ensure_adapters(self)
+        return _memory_layer_manager
+
+    @property
+    def repair(self):
+        _ensure_adapters(self)
+        return _repair_loop
+
+    @property
+    def program(self):
+        _ensure_adapters(self)
+        return _program_loop
 
     def _build_model_gateway(self) -> ModelGateway:
         provider_name = self.settings.model_provider.lower()
@@ -394,7 +546,19 @@ class NexaraRuntime:
         return self.recovery.recover()
 
     def overview(self) -> dict:
-        return {"system": {"name": "NEXARA PRIME", "mode": self.models.provider.name, "healthy": True, "human_control": True, "mock_default": self.settings.mock_model}, "missions": self.list_missions()[-20:], "approvals": self.approvals.list()[-20:], "evidence": self.evidence.list()[-20:], "tools": self.tools.list_invocations()[-20:], "capabilities": self.capabilities.list(), "recovery": self.recover().__dict__}
+        _ensure_adapters(self)
+        adapter_status = {
+            "browser": _browser_adapter is not None,
+            "computer_use": _computer_use_adapter is not None,
+            "git": _git_adapter is not None,
+            "messenger": _message_adapter is not None,
+            "deployment": _deployment_adapter is not None,
+            "rag_pipeline": _rag_pipeline is not None,
+            "memory_layer_manager": _memory_layer_manager is not None,
+            "repair_loop": _repair_loop is not None,
+            "program_loop": _program_loop is not None,
+        }
+        return {"system": {"name": "NEXARA PRIME", "mode": self.models.provider.name, "healthy": True, "human_control": True, "mock_default": self.settings.mock_model, "adapters": adapter_status}, "missions": self.list_missions()[-20:], "approvals": self.approvals.list()[-20:], "evidence": self.evidence.list()[-20:], "tools": self.tools.list_invocations()[-20:], "capabilities": self.capabilities.list(), "recovery": self.recover().__dict__}
 
     def health(self) -> dict:
         return {"status": "ok", "provider": self.models.provider.name, "db_path": str(self.settings.db_path), "event_count": len(self.store.list_events()), "recovery": self.recover().__dict__}
