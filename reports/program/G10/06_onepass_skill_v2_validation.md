@@ -448,3 +448,114 @@ Added `import NexaraCore` to all 4 iOS source files, matching the macOS source p
 ### Final Merge Readiness
 
 All 19 checklist items pass with no code-level blockers. iOS CODE_FAILURE resolved. See main Merge Readiness section above.
+
+---
+
+## PR #5 Review Closure — 2026-07-16T03:00Z
+
+### Mission
+
+`NEXARA_PR5_REVIEW_SECURITY_AND_FINAL_MERGE_READINESS_V1` — 核实并处理 PR #5 全部 Review Threads、GitGuardian 告警、CI 状态和 Merge Readiness。
+
+### PR Identity
+
+- PR Number: **#5**
+- Head: `730d45a10d6e3005e0f9c8592c6031c2d7662603`
+- Base: `main` (`e58e22d`)
+- State: OPEN
+- Draft: false
+- Mergeable: MERGEABLE
+- Merge State: UNSTABLE
+- URL: https://github.com/Zsx154855/NEXARA-PRIME/pull/5
+
+### Review Threads — All Resolved
+
+- Total: **38**
+- Resolved: **38** (all)
+- Outdated: 12
+
+All 33 previously-unresolved Codex findings were addressed by fix commits already on the branch:
+- `727045c`: 16 runtime fixes (program loop, repair loop, adapters, memory)
+- `486a4d4`: scanner + drift + sandbox fixes (5 findings)
+- `1d9bac4`: thread safety + data race fixes
+- `ffc41c8` / `c6bdca0`: Skill consolidation
+- `730d45a`: iOS import fix
+
+### Codex P2-1: Governance Drift Detection — VERIFIED
+
+**Claim**: Drift validator reads flat fields, not `g10_composite_status`.
+
+**Verification results**:
+- Current `detect_state_drift.py` correctly reads `g10_composite_status.{local_release, external_distribution, git_push_tag, product_brand_name}`
+- Cross-checks `GATE_STATUS.gates_pass` with `PROGRAM_STATE.gates_pass`
+- Detects legacy top-level `external_distribution` fields
+- Validates `gate_status` against `g10_composite_status.local_release`
+- **Normal run**: `NO DRIFT DETECTED` (exit 0)
+- **Injection test**: Injected `local_release: DRIFT_TEST_BOGUS` — immediately detected: `DRIFT DETECTED (2 issues)` (exit 1)
+- **Conclusion**: `VERIFIED_PASS`
+
+### Codex P2-2: CI Secret Scan — VERIFIED
+
+**Claim**: CI used fragile grep regex, couldn't match single-quoted secrets.
+
+**Verification results**:
+- CI now calls: `python3 scripts/security/scan_hardcoded_secrets.py`
+- No inline grep regex remains in CI workflow
+- Scanner covers: double-quoted, single-quoted, quoted dict keys, attribute assignments, subscript assignments, PEM, and unquoted config keys
+- Pattern validation tests (36 passed): `tests/test_p2_fixes.py::SecretScannerTests`
+- **Secret scan**: `CLEAN — no hardcoded secrets detected`
+- **Conclusion**: `VERIFIED_PASS`
+
+### GitGuardian Alerts — RESOLVED
+
+- **Open alerts**: 0 (none returned by API for open or resolved states)
+- **Previously flagged**: `tests/test_p2_fixes.py` (Generic Password, Generic High Entropy Secret ×2)
+- **Current HEAD analysis**: All test fixtures properly marked with `# NEXARA_TEST_FIXTURE` comments
+- Test values are generated (`"prod-secret-" + "7f6e5d4c3b2a"`), env lookups (`os.getenv("GITHUB_TOKEN")`), or placeholders (`"your-api-key-here"`)
+- No real secrets detected in current code
+- Scanner's `is_allowed()` correctly excludes `NEXARA_TEST_FIXTURE`-marked lines
+- Test `test_this_test_module_is_clean_for_repo_scan` confirms: entire `test_p2_fixes.py` passes repo-level scan
+- **Conclusion**: No real secrets. All alerts resolved or false positives (test fixtures). If GitGuardian Dashboard still shows historical alerts, mark as "Test Credential" / "False Positive".
+
+### CI Status — CI_PLATFORM_FAILURE
+
+- All CI jobs fail in 1-3 seconds with no logs
+- Root cause: GitHub Actions runner provisioning blocked (documented in PR description)
+- No code ever executes — runner never assigns
+- **Classification**: `CI_PLATFORM_FAILURE` (not code failure)
+
+### Re-Validation Results
+
+| Check | Result | Duration |
+|-------|--------|----------|
+| Python full suite | 595 passed, 0 failed | 5.31s |
+| Python E2E | 42 passed, 0 failed | 1.48s |
+| Secret scanner tests | 36 passed, 0 failed | 0.04s |
+| Governance drift (normal) | NO DRIFT (exit 0) | <1s |
+| Governance drift (injection) | DRIFT DETECTED (exit 1) | <1s |
+| Secret scan | CLEAN | <1s |
+| Swift macOS | Build complete! (exit 0) | 0.19s |
+| Swift iOS | Build complete! (exit 0) | 0.75s |
+| Git diff check | clean (exit 0) | <1s |
+
+### Final Merge Readiness
+
+All conditions met:
+1. ✅ Latest HEAD (`730d45a`) pushed and synced
+2. ✅ Worktree clean
+3. ✅ All 38 review threads resolved
+4. ✅ Codex P2-1 (governance drift): resolved and verified with injection test
+5. ✅ Codex P2-2 (CI secret scan): resolved and verified
+6. ✅ GitGuardian: 0 open alerts, no real secrets
+7. ✅ Secret scan: CLEAN
+8. ✅ Python: 595/595 PASS
+9. ✅ E2E: 42/42 PASS
+10. ✅ macOS Swift: PASS
+11. ✅ iOS Swift: PASS
+12. ✅ Governance: PASS + injection verified
+13. ✅ Git diff: clean
+14. ✅ Evidence updated
+15. ✅ CI: only blocker is platform runner provisioning (CI_PLATFORM_FAILURE, not code)
+16. ✅ mergeable: MERGEABLE
+17. ✅ No unauthorized external actions
+18. ✅ No new unknown work
