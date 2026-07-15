@@ -2,7 +2,7 @@
 P0-1: No silent fallback. OS_SANDBOX_CAPABLE vs OS_SANDBOX_ENFORCED vs FULL_OS_ISOLATION_ACCEPTED."""
 from __future__ import annotations
 
-import os, platform, resource, shlex, shutil, signal, subprocess, tempfile, time
+import os, platform, re, resource, shlex, shutil, signal, subprocess, tempfile, time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -103,8 +103,9 @@ def _build_sandbox_profile(workspace_root: str, tmpdir: str = "/tmp",
         real = os.path.realpath(executable)
         if real and real not in executable_paths:
             executable_paths.append(real)
-        # Homebrew/Framework Python launches its embedded Python.app.
-        if "/Python.framework/Versions/" in real:
+        # Homebrew/Framework Python (e.g. Python.framework or Python3.framework)
+        # launches its embedded Python.app.
+        if re.search(r"/Python\d*\.framework/Versions/", real):
             version_root = Path(real).parent.parent
             app_executable = version_root / "Resources" / "Python.app" / "Contents" / "MacOS" / "Python"
             app_real = os.path.realpath(app_executable)
@@ -227,6 +228,14 @@ class MacOSSandboxBackend(SandboxBackend):
                     elapsed = (time.time() - started) * 1000
                     stdout = (out or "")[:invocation.max_output_bytes]
                     stderr = (err_out or "")[:invocation.max_output_bytes]
+                    # Detect posix_spawn failures in sandbox-exec (macOS hardened runtime)
+                    if proc.returncode != 0 and "posix_spawn" in (err_out or ""):
+                        return SandboxReceipt(
+                            invocation_id=invocation.invocation_id,
+                            exit_code=proc.returncode,
+                            error="sandbox_posix_spawn_failure",
+                            duration_ms=elapsed,
+                        )
                     return SandboxReceipt(
                         invocation_id=invocation.invocation_id,
                         exit_code=proc.returncode,
@@ -328,7 +337,7 @@ def _validate_path(path_str: str, workspace_root: str) -> tuple[bool, str]:
         return True, ""
     import urllib.parse
     decoded = urllib.parse.unquote(path_str)
-    if "\\x00" in path_str or "\\0" in path_str:
+    if "\0" in path_str or "\x00" in path_str:
         return False, "null byte in path"
     for pat in _PATH_TRAVERSAL_PATTERNS:
         if pat in decoded:

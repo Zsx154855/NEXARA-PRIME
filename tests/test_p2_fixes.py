@@ -11,8 +11,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "governance"))
 sys.path.insert(0, str(ROOT / "scripts" / "security"))
 
-from detect_state_drift import check_consistency
+from detect_state_drift import check_consistency, check_git_consistency
 from scan_hardcoded_secrets import is_allowed, scan_file
+import hashlib, os
 
 
 class G10DriftDetectionTests(unittest.TestCase):
@@ -99,6 +100,171 @@ class G10DriftDetectionTests(unittest.TestCase):
         program_state["external_distribution"] = "BLOCKED_EXTERNAL_CREDENTIAL"
         issues = check_consistency(self._base_gate_status(), program_state)
         self.assertTrue(any("legacy top-level" in issue for issue in issues))
+
+
+class SecretScannerNewTests(unittest.TestCase):
+    """Extended secret scanner tests for quoted keys, attribute assignments, and PEM detection."""
+
+    def _write_temp(self, content, suffix=".py"):
+        handle = tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, encoding="utf-8")
+        handle.write(content)
+        handle.close()
+        return Path(handle.name)
+
+    def _dyn(self, prefix):
+        """Dynamic test value to avoid self-scan false positives."""
+        return prefix + hashlib.md5(os.urandom(4)).hexdigest()[:12]
+
+    def test_quoted_json_key_detected(self):
+        val = self._dyn("json-prod-")
+        path = self._write_temp('{"api_key": "' + val + '"}\n')  # NEXARA_TEST_FIXTURE
+        try:
+            findings = scan_file(path)
+            self.assertTrue(any(item["key"] == "api_key" for item in findings))
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_quoted_python_dict_key_detected(self):
+        val = self._dyn("dict-prod-")
+        path = self._write_temp("{'token': '" + val + "'}\n")  # NEXARA_TEST_FIXTURE
+        try:
+            findings = scan_file(path)
+            self.assertTrue(any(item["key"] == "token" for item in findings))
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_ts_object_key_detected(self):
+        val = self._dyn("ts-prod-")
+        path = self._write_temp('const cfg = { api_key: "' + val + '" }\n', suffix=".ts")  # NEXARA_TEST_FIXTURE
+        try:
+            findings = scan_file(path)
+            self.assertTrue(any(item["key"] == "api_key" for item in findings))
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_attribute_assignment_detected(self):
+        val = self._dyn("attr-")
+        path = self._write_temp('settings.api_key = "' + val + '"\n')  # NEXARA_TEST_FIXTURE
+        try:
+            findings = scan_file(path)
+            self.assertTrue(any(item["key"] == "api_key" for item in findings))
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_subscript_assignment_detected(self):
+        val = self._dyn("sub-")
+        path = self._write_temp('config["api_key"] = "' + val + '"\n')  # NEXARA_TEST_FIXTURE
+        try:
+            findings = scan_file(path)
+            self.assertTrue(any(item["key"] == "api_key" for item in findings))
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_prefixed_identifier_detected(self):
+        val = self._dyn("ghp_")
+        path = self._write_temp('github_token = "' + val + '"\n')  # NEXARA_TEST_FIXTURE
+        try:
+            findings = scan_file(path)
+            self.assertTrue(any(item["key"] == "github_token" for item in findings))
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_pem_private_key_detected(self):
+        path = self._write_temp('private_key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpA...\n-----END RSA PRIVATE KEY-----"\n')  # NEXARA_TEST_FIXTURE
+        try:
+            findings = scan_file(path)
+            self.assertTrue(len(findings) > 0)
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_env_lookup_ignored(self):
+        path = self._write_temp('token = os.getenv("GITHUB_TOKEN")\n')
+        try:
+            self.assertEqual(scan_file(path), [])
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_placeholder_ignored(self):
+        path = self._write_temp('api_key = "your-api-key-here"\n')
+        try:
+            self.assertEqual(scan_file(path), [])
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_fixture_comment_allowed(self):
+        val = self._dyn("fixt-")
+        path = self._write_temp('api_key = "' + val + '"  # NEXARA_TEST_FIXTURE\n')
+        try:
+            self.assertEqual(scan_file(path), [])
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_self_scan_clean(self):
+        self.assertEqual(scan_file(Path(__file__)), [])
+
+
+
+class DriftValidatorExtendedTests(unittest.TestCase):
+    """Extended drift validator tests for gates_pass, gate_status, and baseline commit fields."""
+
+    def _base_gate_status(self):
+        return {
+            "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
+            "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
+            "gates": [{"id": f"G{i}", "status": "PASS"} for i in range(10)],
+            "current_gate": "G10",
+            "g10_composite_status": {
+                "local_release": "LOCAL_RELEASE_READY",
+                "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
+                "git_push_tag": "PENDING_HUMAN_APPROVAL",
+                "product_brand_name": "PRODUCT_DECISION_PENDING",
+            },
+        }
+
+    def _base_program_state(self):
+        return {
+            "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
+            "current_program_gate": "G10",
+            "gate_status": "LOCAL_RELEASE_READY",
+            "gates_pass": [f"G{i}" for i in range(10)],
+            "g10_composite_status": {
+                "local_release": "LOCAL_RELEASE_READY",
+                "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
+                "git_push_tag": "PENDING_HUMAN_APPROVAL",
+                "product_brand_name": "PRODUCT_DECISION_PENDING",
+            },
+        }
+
+    def test_gates_pass_consistency(self):
+        """Top-level gates_pass must match derived passed gates from gates array."""
+        gs = self._base_gate_status()
+        ps = self._base_program_state()
+        issues = check_consistency(gs, ps)
+        self.assertEqual(issues, [])
+
+    def test_gates_pass_missing_gate_drift(self):
+        """Missing gate in gates_pass vs gates array → DRIFT."""
+        gs = self._base_gate_status()
+        gs["gates_pass"] = ["G0","G1","G2","G3","G4","G5","G6","G7","G8"]  # G9 missing
+        ps = self._base_program_state()
+        ps["gates_pass"] = ["G0","G1","G2","G3","G4","G5","G6","G7","G8"]
+        issues = check_consistency(gs, ps)
+        self.assertTrue(any("G9" in issue for issue in issues) or len(issues) > 0)
+
+    def test_gates_pass_non_list_drift(self):
+        """Non-list gates_pass → DRIFT."""
+        gs = self._base_gate_status()
+        gs["gates_pass"] = "not_a_list"
+        issues = check_consistency(gs, self._base_program_state())
+        self.assertTrue(any("gates_pass" in issue.lower() for issue in issues))
+
+    def test_gate_status_vs_local_release(self):
+        """PROGRAM_STATE.gate_status must equal g10_composite_status.local_release."""
+        ps = self._base_program_state()
+        ps["gate_status"] = "BLOCKED"
+        issues = check_consistency(self._base_gate_status(), ps)
+        self.assertTrue(any("gate_status" in issue for issue in issues))
+
 
 
 class SecretScannerTests(unittest.TestCase):

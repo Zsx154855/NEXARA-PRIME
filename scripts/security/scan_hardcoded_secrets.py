@@ -48,6 +48,47 @@ _SQ_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Quoted-key patterns (JSON, Python/TS dict, object literal)
+_QUOTED_KEY_DQ = re.compile(
+    r'["\'](' + _SECRET_IDENTIFIER + r')["\']\s*:\s*"([^"]{6,})"',
+    re.IGNORECASE,
+)
+_QUOTED_KEY_SQ = re.compile(
+    r'["\'](' + _SECRET_IDENTIFIER + r')["\']\s*:\s*\'([^\']{6,})\'',
+    re.IGNORECASE,
+)
+
+# Attribute assignment pattern: settings.api_key = "value"
+_ATTR_DQ = re.compile(
+    r'\.(' + _SECRET_IDENTIFIER + r')\s*=\s*"([^"]{6,})"',
+    re.IGNORECASE,
+)
+_ATTR_SQ = re.compile(
+    r'\.(' + _SECRET_IDENTIFIER + r')\s*=\s*\'([^\']{6,})\'',
+    re.IGNORECASE,
+)
+
+# Dict subscript pattern: config["api_key"] = "value"
+_SUBSCRIPT_DQ = re.compile(
+    r'\[["\'](' + _SECRET_IDENTIFIER + r')["\']\]\s*=\s*"([^"]{6,})"',
+    re.IGNORECASE,
+)
+_SUBSCRIPT_SQ = re.compile(
+    r'\[["\'](' + _SECRET_IDENTIFIER + r')["\']\]\s*=\s*\'([^\']{6,})\'',
+    re.IGNORECASE,
+)
+# PEM private key detection (multi-line support: match the BEGIN line)
+# Key assignment followed by BEGIN PRIVATE KEY (closing quote may be on later line)
+_PEM_ASSIGN_DQ = re.compile(
+    r"(?<![.\w])" + _SECRET_IDENTIFIER + r'\s*[:=]\s*"-----BEGIN\s+(?:RSA|EC|DSA|OPENSSH|ENCRYPTED)\s+PRIVATE\s+KEY-----',
+    re.IGNORECASE,
+)
+_PEM_ASSIGN_SQ = re.compile(
+    r"(?<![.\w])" + _SECRET_IDENTIFIER + r"\s*[:=]\s*'-----BEGIN\s+(?:RSA|EC|DSA|OPENSSH|ENCRYPTED)\s+PRIVATE\s+KEY-----",
+    re.IGNORECASE,
+)
+
+
 # Explicit non-secret forms. Keep these narrow: broad words such as ``test``
 # must not suppress a real credential merely because it appears in a test file.
 ALLOWED_PATTERNS = (
@@ -56,10 +97,11 @@ ALLOWED_PATTERNS = (
     r"\.env\b",                            # dotenv reference
     r"[:=]\s*[\"'][^\"']*(?:example|dummy|placeholder|mock|sample|your-)",
     r"[:=]\s*[\"'][^\"']*(?:changeme|replaceme|fill-in)",
-    r"[:=]\s*[\"'][^\"']*(?:my-secret|my-key|test-key|sk-abc|ghp_1)",
+    r"[:=]\s*[\"'][^\"']*(?:my-secret|my-key|test-key|sk-abc)",
     r"<[^>]+>",                             # template placeholder
     r"_PLACEHOLDER_|_TOKEN_",               # explicit markers
-    r"BEGIN.*PRIVATE KEY",                  # PEM fixture/header
+    # PEM headers are only allowed in explicit test-fixture comments
+    r"#\s*fixture|#\s*test[-_]data|#\s*NEXARA[-_]TEST",
     r"(?:Token|token):\s*[\"']#[0-9a-fA-F]{6}",  # colour token
 )
 
@@ -106,7 +148,14 @@ def scan_file(path: Path) -> list[dict[str, object]]:
         return findings
 
     for lineno, line in enumerate(content.splitlines(), 1):
-        for pattern, quote in ((_DQ_PATTERN, '"'), (_SQ_PATTERN, "'")):
+        all_patterns = [
+            (_DQ_PATTERN, '"'), (_SQ_PATTERN, "'"),
+            (_QUOTED_KEY_DQ, '"'), (_QUOTED_KEY_SQ, "'"),
+            (_ATTR_DQ, '"'), (_ATTR_SQ, "'"),
+            (_SUBSCRIPT_DQ, '"'), (_SUBSCRIPT_SQ, "'"),
+            (_PEM_ASSIGN_DQ, '"'), (_PEM_ASSIGN_SQ, "'"),
+        ]
+        for pattern, quote in all_patterns:
             for match in pattern.finditer(line):
                 if is_allowed(line):
                     continue

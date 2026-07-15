@@ -15,7 +15,7 @@ from .evidence import EvidenceStore
 from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine
 from .models import ApprovalStatus, RiskLevel, ToolInvocation, new_id, now_iso
-from .sandbox_v2 import MacOSSandboxBackend, SandboxInvocation
+from .sandbox_v2 import MacOSSandboxBackend, ProcessConstrainedBackend, SandboxInvocation
 from .security_audit import SecurityAuditLedger
 
 
@@ -41,6 +41,7 @@ class ToolRuntime:
         self.report_root = report_root.resolve()
         self.audit = audit
         self.sandbox = MacOSSandboxBackend(str(self.workspace_root))
+        self._fallback_sandbox: ProcessConstrainedBackend | None = None
         self.workspace_root.mkdir(parents=True, exist_ok=True)
         self.report_root.mkdir(parents=True, exist_ok=True)
 
@@ -241,6 +242,8 @@ class ToolRuntime:
             max_output_bytes=self.MAX_OUTPUT_BYTES,
             workspace_root=str(self.workspace_root),
         ))
+        # posix_spawn failure is now handled in MacOSSandboxBackend
+        # by properly including Python.app in the sandbox profile
         if receipt.timed_out:
             raise RuntimeError("tool_timeout")
         if receipt.error:

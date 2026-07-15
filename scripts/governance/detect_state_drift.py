@@ -215,6 +215,37 @@ def check_consistency(
                 f"{sorted(only_in_program_state)}"
             )
 
+    # Top-level gates_pass validation (GATE_STATUS)
+    gs_gates_pass = gate_status.get("gates_pass")
+    if gs_gates_pass is not None:
+        if not isinstance(gs_gates_pass, list):
+            inconsistencies.append("GATE_STATUS.gates_pass must be an array")
+        else:
+            gs_top_level_ids = {str(g) for g in gs_gates_pass}
+            if gs_top_level_ids != gs_passed_ids:
+                extra = gs_top_level_ids - gs_passed_ids
+                missing = gs_passed_ids - gs_top_level_ids
+                if extra:
+                    inconsistencies.append(
+                        "GATE_STATUS.gates_pass contains gates not present in gates array: "
+                        f"{sorted(extra)}"
+                    )
+                if missing:
+                    inconsistencies.append(
+                        "GATE_STATUS.gates_pass is missing gates from the gates array: "
+                        f"{sorted(missing)}"
+                    )
+
+    # PROGRAM_STATE.gate_status vs g10_composite_status.local_release
+    ps_gate_status = program_state.get("gate_status", "")
+    if ps_composite is not None and ps_gate_status:
+        local_release = ps_composite.get("local_release", "")
+        if local_release and ps_gate_status != local_release:
+            inconsistencies.append(
+                f"PROGRAM_STATE.gate_status ('{ps_gate_status}') "
+                f"does not match g10_composite_status.local_release ('{local_release}')"
+            )
+
     return inconsistencies
 
 
@@ -273,12 +304,27 @@ def check_git_consistency(
     if BASELINE_PATH.exists():
         try:
             baseline = load_json(BASELINE_PATH)
-            baseline_head = baseline.get("head", "")
-            if baseline_head and baseline_head != current_sha:
-                issues.append(
-                    f"Baseline HEAD ({str(baseline_head)[:12]}) differs from "
-                    f"current HEAD ({current_sha[:12]}) — baseline may be stale"
-                )
+            # Validate new commit fields (post-baseline schema)
+            commit_fields = (
+                "product_source_commit",
+                "baseline_declaration_commit",
+                "governance_validation_commit",
+                "remote_main_commit",
+            )
+            for field in commit_fields:
+                value = baseline.get(field, "")
+                if not value:
+                    issues.append(f"BASELINE.{field} is missing or empty")
+                elif not (isinstance(value, str) and len(value) == 40 and all(c in "0123456789abcdef" for c in value.lower())):
+                    issues.append(f"BASELINE.{field} is not a valid 40-char SHA: '{str(value)[:20]}'")
+            # Legacy head fallback — only if new fields absent
+            if not any(baseline.get(f) for f in commit_fields):
+                baseline_head = baseline.get("head", "")
+                if baseline_head and baseline_head != current_sha:
+                    issues.append(
+                        f"Baseline HEAD ({str(baseline_head)[:12]}) differs from "
+                        f"current HEAD ({current_sha[:12]}) — baseline may be stale"
+                    )
         except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
             issues.append(f"Could not read BASELINE.json: {exc}")
 
