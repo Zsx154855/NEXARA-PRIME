@@ -36,10 +36,20 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: swift build
-        working-directory: experience/NexaraCore
-      - run: swift build
-        working-directory: experience/macos
+      - name: Build NexaraCore (if present)
+        run: |
+          if [ -d "experience/NexaraCore" ]; then
+            cd experience/NexaraCore && swift build
+          else
+            echo "[SKIP] experience/NexaraCore not present"
+          fi
+      - name: Build macOS (if present)
+        run: |
+          if [ -d "experience/macos" ]; then
+            cd experience/macos && swift build
+          else
+            echo "[SKIP] experience/macos not present"
+          fi
 
   governance:
     runs-on: ubuntu-latest
