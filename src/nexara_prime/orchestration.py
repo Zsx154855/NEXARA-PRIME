@@ -523,16 +523,18 @@ class ApprovalQueue:
         req = ApprovalRequest(**p)
         if req.status != ApprovalStatus.APPROVED:
             return None
-        # Atomic compare-and-set: re-read to detect concurrent consumer
-        recheck = self._store.find_record("approval_requests", "approval_id", approval_id)
-        if recheck is None:
-            return None
-        rp = recheck.get("payload", recheck)
-        if rp.get("status") != ApprovalStatus.APPROVED.value:
-            return None  # another consumer already consumed
+        # Atomic CAS via SQLiteStore: only one consumer wins
+        result = self._store.compare_and_set_record_field(
+            record_id=approval_id,
+            record_type="approval_requests",
+            field="status",
+            expected_value=ApprovalStatus.APPROVED.value,
+            new_value=ApprovalStatus.CONSUMED.value,
+        )
+        if result is None:
+            return None  # CAS failed — another consumer won
         req.status = ApprovalStatus.CONSUMED
         req.decided_at = now_iso()
-        _sr(self._store, approval_id, "approval_requests", req.model_dump(mode="json"))
         _add_evidence(self._evidence,
             mission_id=req.mission_id, kind="approval_receipt",
             title=f"Approval consumed: {req.action}",
@@ -810,7 +812,7 @@ class RuntimeOrchestrator:
             if next_mission.mission_id in processed_in_cycle:
                 break  # prevent infinite loop on same item
             processed_in_cycle.add(next_mission.mission_id)
-            if self._has_pending_approval(next_mission.mission_id):
+            if self._is_approval_blocked(next_mission.mission_id):
                 # Transition to WAITING_APPROVAL so it doesn't block other READY missions
                 self.mission_queue.transition(
                     next_mission.mission_id, QueueItemState.WAITING_APPROVAL,
@@ -895,6 +897,25 @@ class RuntimeOrchestrator:
             if req.mission_id == mission_id:
                 return True
         return False
+
+    def _is_approval_blocked(self, mission_id: str) -> bool:
+        """Return True if this mission requires approval but has NOT been approved+consumed."""
+        for raw in self._store.list_records("approval_requests"):
+            p = raw.get("payload", raw)
+            if p.get("mission_id") != mission_id:
+                continue
+            status = p.get("status")
+            if status == ApprovalStatus.CONSUMED.value:
+                return False  # approved and consumed — good to go
+            if status in (ApprovalStatus.APPROVED.value,):
+                return False  # approved but not yet consumed — still unblocked
+            if status in (ApprovalStatus.PENDING.value,):
+                return True  # waiting for human
+            if status in (ApprovalStatus.REJECTED.value,):
+                return True  # explicitly rejected — blocked
+            if status in (ApprovalStatus.EXPIRED.value,):
+                return True  # expired — blocked
+        return False  # no approval request exists — not blocked
 
     def human_action_required(self) -> dict:
         pending = self.approvals.list_pending()
