@@ -211,8 +211,9 @@ class WorkerScheduler:
             return None
         p = raw.get("payload", raw)
         w = WorkerDescriptor(**p)
+        if not w.available:
+            return None  # do not reactivate unregistered workers
         w.last_heartbeat = now_iso()
-        w.available = True
         _sr(self._store, worker_id, "worker_registry", w.model_dump(mode="json"))
         return w
 
@@ -670,6 +671,8 @@ class RuntimeOrchestrator:
         self._loop_thread: threading.Thread | None = None
 
     def start(self, block: bool = False) -> None:
+        if self._active:
+            return  # already running — idempotent
         self._active = True
         self._stop_flag.clear()
         self._started_at = _utc_now_ts()
@@ -706,12 +709,14 @@ class RuntimeOrchestrator:
                 _emit(self._events, "orchestrator_cycle_error", "orchestrator", {})
             self._cycle_count += 1
             if self.config.max_cycles and self._cycle_count >= self.config.max_cycles:
+                self._active = False
                 break
             self._stop_flag.wait(self.config.cycle_delay_s)
 
     def _execute_cycle(self) -> None:
         if self.config.auto_resume:
             self._crash_resume()
+        self.approvals.expire_stale()  # expire stale approvals before dispatching
         # Promote QUEUED → READY when dependencies are met
         for item in self.mission_queue.list_by_state(QueueItemState.QUEUED):
             if self.mission_queue._dependencies_met(item):
