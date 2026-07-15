@@ -418,6 +418,17 @@ class GovernedDeploymentAdapter:
         started = time.monotonic()
         result = DeploymentResult(plan_id=plan_id, state=DeployState.DEPLOYING)
 
+        # Re-verify step integrity before execution
+        for step in plan.steps:
+            if step.integrity_sha256 and hasattr(step, 'compute_integrity'):
+                if step.compute_integrity() != step.integrity_sha256:
+                    result.error = f"step_integrity_violation:{step.name}"
+                    result.state = DeployState.FAILED
+                    plan.state = DeployState.FAILED
+                    result.duration_ms = (time.monotonic() - started) * 1000
+                    result.evidence_ids = self._record_evidence(plan, result)
+                    return result
+
         # Execute each step
         for step in plan.steps:
             step.started_at = now_iso()

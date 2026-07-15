@@ -271,6 +271,7 @@ class RAGPipeline:
 
         self.index = VectorIndex()
         self._documents: dict[str, Document] = {}
+        self._chunk_to_doc: dict[str, str] = {}  # chunk_id -> doc_id
         self._doc_hash_index: dict[str, str] = {}  # content_hash → doc_id
 
     # ── Step 1: Ingest ──
@@ -676,13 +677,18 @@ class RAGPipeline:
         }
 
     def clear_working_memory(self) -> int:
-        """Clear all working memory (ephemeral)."""
+        """Clear all working memory (ephemeral), including index entries."""
         count = 0
         to_remove = [doc_id for doc_id, doc in self._documents.items()
                      if doc.layer == MemoryLayer.WORKING]
+        chunks_to_remove = [
+            chunk_id for chunk_id, doc_id in self._chunk_to_doc.items()
+            if doc_id in to_remove
+        ]
+        for chunk_id in chunks_to_remove:
+            self.index.remove(chunk_id)
+            del self._chunk_to_doc[chunk_id]
         for doc_id in to_remove:
             del self._documents[doc_id]
-            # Also remove chunks from index
-            # (In production, we'd track chunk→doc mapping)
             count += 1
         return count

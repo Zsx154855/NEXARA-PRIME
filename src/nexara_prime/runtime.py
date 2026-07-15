@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from pathlib import Path
 
 from .adaptive_runtime import AdaptiveRuntime as AdaptiveOrchestrator
@@ -40,99 +41,106 @@ _rag_pipeline = None
 _memory_layer_manager = None
 _repair_loop = None
 _program_loop = None
+_adapters_lock = threading.Lock()
 
 def _ensure_adapters(runtime):
     global _ADAPTERS_INITIALIZED, _browser_adapter, _computer_use_adapter
     global _git_adapter, _message_adapter, _deployment_adapter
     global _rag_pipeline, _memory_layer_manager, _repair_loop, _program_loop
-    # Reset if runtime changed (new test fixture, etc.)
+    # Fast-path check (no lock needed for already-initialized same runtime)
     if _ADAPTERS_INITIALIZED and getattr(_ensure_adapters, '_last_runtime_id', None) == id(runtime):
         return
-    _ensure_adapters._last_runtime_id = id(runtime)
-    _ADAPTERS_INITIALIZED = False  # Force re-init for new runtime
-    try:
-        from .browser_adapter import GovernedBrowserAdapter, MockBrowserDriver
-        _browser_adapter = GovernedBrowserAdapter(
-            MockBrowserDriver(),
-            evidence_store=runtime.evidence,
-            approval_engine=runtime.approvals,
-        )
-    except ImportError:
-        pass
-    try:
-        from .computer_use_adapter import GovernedComputerUseAdapter, MockComputerUseDriver
-        _computer_use_adapter = GovernedComputerUseAdapter(
-            MockComputerUseDriver(),
-            evidence_store=runtime.evidence,
-            approval_engine=runtime.approvals,
-        )
-    except ImportError:
-        pass
-    try:
-        from .git_adapter import GovernedGitAdapter, MockGitDriver
-        _git_adapter = GovernedGitAdapter(
-            MockGitDriver(),
-            evidence_store=runtime.evidence,
-            approval_engine=runtime.approvals,
-        )
-    except ImportError:
-        pass
-    try:
-        from .message_adapter import GovernedMessageAdapter, MockMessageProvider
-        _message_adapter = GovernedMessageAdapter(
-            MockMessageProvider(),
-            evidence_store=runtime.evidence,
-            approval_engine=runtime.approvals,
-        )
-    except ImportError:
-        pass
-    try:
-        from .deployment_adapter import GovernedDeploymentAdapter, MockDeploymentDriver
-        _deployment_adapter = GovernedDeploymentAdapter(
-            MockDeploymentDriver(),
-            evidence_store=runtime.evidence,
-            approval_engine=runtime.approvals,
-        )
-    except ImportError:
-        pass
-    try:
-        from .rag_pipeline import RAGPipeline, MockEmbedder
-        _rag_pipeline = RAGPipeline(MockEmbedder())
-    except ImportError:
-        pass
-    try:
-        from .memory import MemoryLayerManager
-        if _rag_pipeline:
-            _memory_layer_manager = MemoryLayerManager(
-                runtime.memory, _rag_pipeline, enable_patch_review=True,
+    with _adapters_lock:
+        # Double-check under lock
+        if _ADAPTERS_INITIALIZED and getattr(_ensure_adapters, '_last_runtime_id', None) == id(runtime):
+            return
+        _ensure_adapters._last_runtime_id = id(runtime)
+        _ADAPTERS_INITIALIZED = False  # Force re-init for new runtime
+        try:
+    
+            from .browser_adapter import GovernedBrowserAdapter, MockBrowserDriver
+            _browser_adapter = GovernedBrowserAdapter(
+                MockBrowserDriver(),
+                evidence_store=runtime.evidence,
+                approval_engine=runtime.approvals,
             )
-        else:
-            _memory_layer_manager = MemoryLayerManager(
-                runtime.memory, rag=None, enable_patch_review=True,
+        except ImportError:
+            pass
+        try:
+            from .computer_use_adapter import GovernedComputerUseAdapter, MockComputerUseDriver
+            _computer_use_adapter = GovernedComputerUseAdapter(
+                MockComputerUseDriver(),
+                evidence_store=runtime.evidence,
+                approval_engine=runtime.approvals,
             )
-    except ImportError:
-        pass
-    try:
-        from .repair_loop import RepairLoop
-        _repair_loop = RepairLoop(
-            evidence_store=runtime.evidence,
-            approval_engine=runtime.approvals,
-        )
-    except ImportError:
-        pass
-    try:
-        from .program_loop import ProgramLoop, ProgramLoopConfig
-        _program_loop = ProgramLoop(
-            ProgramLoopConfig(max_cycles=0),
-            store=runtime.store,
-            events=runtime.events,
-            evidence=runtime.evidence,
-            scheduler=runtime.scheduler,
-            runtime=runtime,
-        )
-    except ImportError:
-        pass
-    _ADAPTERS_INITIALIZED = True
+        except ImportError:
+            pass
+        try:
+            from .git_adapter import GovernedGitAdapter, MockGitDriver
+            _git_adapter = GovernedGitAdapter(
+                MockGitDriver(),
+                evidence_store=runtime.evidence,
+                approval_engine=runtime.approvals,
+            )
+        except ImportError:
+            pass
+        try:
+            from .message_adapter import GovernedMessageAdapter, MockMessageProvider
+            _message_adapter = GovernedMessageAdapter(
+                MockMessageProvider(),
+                evidence_store=runtime.evidence,
+                approval_engine=runtime.approvals,
+            )
+        except ImportError:
+            pass
+        try:
+            from .deployment_adapter import GovernedDeploymentAdapter, MockDeploymentDriver
+            _deployment_adapter = GovernedDeploymentAdapter(
+                MockDeploymentDriver(),
+                evidence_store=runtime.evidence,
+                approval_engine=runtime.approvals,
+            )
+        except ImportError:
+            pass
+        try:
+            from .rag_pipeline import RAGPipeline, MockEmbedder
+            _rag_pipeline = RAGPipeline(MockEmbedder())
+        except ImportError:
+            pass
+        try:
+            from .memory import MemoryLayerManager
+            if _rag_pipeline:
+                _memory_layer_manager = MemoryLayerManager(
+                    runtime.memory, _rag_pipeline, enable_patch_review=True,
+                )
+            else:
+                _memory_layer_manager = MemoryLayerManager(
+                    runtime.memory, rag=None, enable_patch_review=True,
+                )
+        except ImportError:
+            pass
+        try:
+            from .repair_loop import RepairLoop
+            _repair_loop = RepairLoop(
+                evidence_store=runtime.evidence,
+                approval_engine=runtime.approvals,
+            )
+        except ImportError:
+            pass
+        try:
+            from .program_loop import ProgramLoop, ProgramLoopConfig
+            _program_loop = ProgramLoop(
+                ProgramLoopConfig(max_cycles=0),
+                store=runtime.store,
+                events=runtime.events,
+                evidence=runtime.evidence,
+                scheduler=runtime.scheduler,
+                runtime=runtime,
+            )
+        except ImportError:
+            pass
+    
+        _ADAPTERS_INITIALIZED = True
 
 # Adaptive Runtime imports (lazy — loaded on first use)
 _ADAPTIVE_IMPORTS_DONE = False

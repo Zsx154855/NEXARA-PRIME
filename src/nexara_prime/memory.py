@@ -55,6 +55,15 @@ class PatchReview:
     decided_at: str = ""
 
 
+
+def _safe_memory_kind(kind_str: str, default: "MemoryKind" = None) -> "MemoryKind":
+    '''Parse MemoryKind safely, falling back to default on bad input.'''
+    from .models import MemoryKind
+    try:
+        return MemoryKind(kind_str)
+    except ValueError:
+        return default or MemoryKind.FACT
+
 class MemoryKernel:
     def __init__(self, store: SQLiteStore, events: EventBus):
         self.store = store
@@ -231,7 +240,7 @@ class MemoryLayerManager:
         records = self.kernel.inspect(mission_id)
         return [
             r for r in records
-            if MemoryLayer.from_kind(MemoryKind(r.get("kind", "short_term"))) == MemoryLayer.WORKING
+            if MemoryLayer.from_kind(_safe_memory_kind(r.get("kind", "short_term"))) == MemoryLayer.WORKING
         ]
 
     def read_episodic(self, mission_id: str) -> list[dict[str, Any]]:
@@ -239,7 +248,7 @@ class MemoryLayerManager:
         records = self.kernel.inspect(mission_id)
         return [
             r for r in records
-            if MemoryLayer.from_kind(MemoryKind(r.get("kind", "fact"))) == MemoryLayer.EPISODIC
+            if MemoryLayer.from_kind(_safe_memory_kind(r.get("kind", "fact"))) == MemoryLayer.EPISODIC
         ]
 
     def read_semantic(self, key_filter: str | None = None) -> list[dict[str, Any]]:
@@ -247,7 +256,7 @@ class MemoryLayerManager:
         records = self.kernel.inspect(None)
         results = [
             r for r in records
-            if MemoryLayer.from_kind(MemoryKind(r.get("kind", "fact"))) == MemoryLayer.SEMANTIC
+            if MemoryLayer.from_kind(_safe_memory_kind(r.get("kind", "fact"))) == MemoryLayer.SEMANTIC
             and r.get("status") == "committed"
         ]
         if key_filter:
@@ -259,7 +268,7 @@ class MemoryLayerManager:
         records = self.kernel.inspect(None)
         return [
             r for r in records
-            if MemoryLayer.from_kind(MemoryKind(r.get("kind", "patch"))) == MemoryLayer.PROCEDURAL
+            if MemoryLayer.from_kind(_safe_memory_kind(r.get("kind", "patch"))) == MemoryLayer.PROCEDURAL
             and r.get("status") == "committed"
         ]
 
@@ -310,7 +319,7 @@ class MemoryLayerManager:
             key = (r.get("key") or "").lower()
             score = sum(1 for t in terms if t in content or t in key)
             if score > 0:
-                layer = MemoryLayer.from_kind(MemoryKind(r.get("kind", "fact")))
+                layer = MemoryLayer.from_kind(_safe_memory_kind(r.get("kind", "fact")))
                 if layers and layer not in layers:
                     continue
                 scored.append((r, score))
@@ -318,7 +327,7 @@ class MemoryLayerManager:
         return [
             {"memory_id": r.get("memory_id"), "content": r.get("content"),
              "key": r.get("key"), "score": float(s),
-             "layer": MemoryLayer.from_kind(MemoryKind(r.get("kind", "fact"))),
+             "layer": MemoryLayer.from_kind(_safe_memory_kind(r.get("kind", "fact"))),
              "evidence_ref": r.get("source_evidence_id", "")}
             for r, s in scored[:top_k]
         ]
@@ -452,7 +461,7 @@ class MemoryLayerManager:
         layer_counts: dict[str, int] = {}
         status_counts: dict[str, int] = {}
         for r in all_records:
-            layer = MemoryLayer.from_kind(MemoryKind(r.get("kind", "fact")))
+            layer = MemoryLayer.from_kind(_safe_memory_kind(r.get("kind", "fact")))
             layer_counts[layer] = layer_counts.get(layer, 0) + 1
             status = r.get("status", "unknown")
             status_counts[status] = status_counts.get(status, 0) + 1

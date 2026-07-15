@@ -136,6 +136,7 @@ class ProgramLoop:
         self._thread: threading.Thread | None = None
         self._cycles: list[CycleResult] = []
         self._active_leases: dict[str, str] = {}
+        self._started_monotonic: float = 0.0
 
     # ── Lifecycle ──
 
@@ -146,6 +147,7 @@ class ProgramLoop:
                 return
             self.state.status = LoopStatus.STARTING
             self.state.started_at = now_iso()
+            self._started_monotonic = time.monotonic()
             self._stop_event.clear()
             self._pause_event.set()
 
@@ -180,7 +182,8 @@ class ProgramLoop:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout_seconds)
             if self._thread.is_alive():
-                self.state.status = LoopStatus.STOPPED  # Force stop
+                with self._lock:
+                    self.state.status = LoopStatus.STOPPED  # Force stop
 
     # ── Main loop ──
 
@@ -245,9 +248,7 @@ class ProgramLoop:
 
         with self._lock:
             self.state.status = LoopStatus.STOPPED
-            self.state.uptime_seconds = time.monotonic() - (
-                time.monotonic() if not self.state.started_at else 0
-            )
+            self.state.uptime_seconds = time.monotonic() - self._started_monotonic
 
     def _execute_cycle(self) -> CycleResult:
         """Execute a single orchestration cycle."""

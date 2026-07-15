@@ -179,6 +179,12 @@ class GitDriver(ABC):
     @abstractmethod
     def get_head_sha(self) -> str: ...
 
+    @property
+    @abstractmethod
+    def current_branch(self) -> str:
+        """Return the currently checked-out branch name."""
+        ...
+
 
 class MockGitDriver(GitDriver):
     """Deterministic mock git driver for tests — no real git operations."""
@@ -194,6 +200,10 @@ class MockGitDriver(GitDriver):
         self._working_changes: list[str] = ["mock_modified.py"]
         self._prs: list[dict[str, Any]] = []
         self._remote_refs: dict[str, str] = {"main": "abc123def4567890123456789012345678abcd"}
+
+    @property
+    def current_branch(self) -> str:
+        return self._current_branch
 
     def probe_capability(self) -> GitCapability:
         return GitCapability(
@@ -450,7 +460,7 @@ class GovernedGitAdapter:
 
         # Branch protection before push/merge to protected branches
         if self.enable_branch_protection and action_type in {"push", "merge_pr"}:
-            branch = target if target else self.driver._current_branch
+            branch = target if target else self.driver.current_branch
             if self._is_protected_branch(branch):
                 if action_type == "push":
                     return GitResult(
@@ -549,13 +559,13 @@ class GovernedGitAdapter:
 
     def push(self, remote: str = "origin", branch: str = "",
              *, expected_head: str = "") -> GitResult:
-        return self._execute("push", branch or self.driver._current_branch, remote,
+        return self._execute("push", branch or self.driver.current_branch, remote,
                              lambda: self.driver.push(remote, branch),
                              expected_head=expected_head, scan_diff=True)
 
     def open_pr(self, title: str, body: str, base: str = "main",
                 head: str = "") -> GitResult:
-        h = head or self.driver._current_branch
+        h = head or self.driver.current_branch
         return self._execute("open_pr", f"{h}->{base}", title,
                              lambda: self.driver.open_pr(title, body, base, head))
 
@@ -584,7 +594,7 @@ class GovernedGitAdapter:
         warnings: list[str] = []
         if status.changed_files:
             warnings.append(f"uncommitted_changes:{len(status.changed_files)}")
-        current = self.driver._current_branch if hasattr(self.driver, '_current_branch') else "unknown"
+        current = self.driver.current_branch if hasattr(self.driver, '_current_branch') else "unknown"
         head_sha = self.driver.get_head_sha()
         if not head_sha:
             issues.append("no_commits_in_repository")
