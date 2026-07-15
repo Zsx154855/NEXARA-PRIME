@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .models import new_id, now_iso
+from .models import RiskLevel, new_id, now_iso
 
 
 # ── Capability flags ──
@@ -428,16 +428,38 @@ class GovernedGitAdapter:
             return GitResult(action_id=new_id("git"),
                              error=f"action_denied:{action_type}:destructive_or_dangerous_operation")
 
-        # REQUIRE_APPROVAL — needs human approval (we record the need, caller handles)
+        # REQUIRE_APPROVAL — needs human approval
         if classification == "REQUIRE_APPROVAL":
-            if not self.approvals:
-                # In mock/test mode without approval engine, we allow but flag
-                pass  # proceed with warning in result
+            if self.approvals:
+                # Request approval — gate the mutation
+                approval = self.approvals.request(
+                    "git", action_type, RiskLevel.R2,
+                    f"git_{action_type}:{target or ''}", [], "git",
+                    affected_resources=[target] if target else [],
+                    external_effect=(action_type == "push"),
+                    reversible=(action_type in {"commit", "create_branch"}),
+                )
+                if not approval:
+                    return GitResult(
+                        action_id=new_id("git"),
+                        success=False,
+                        error=f"approval_required:{action_type}",
+                    )
+            # In mock/test mode without approval engine, proceed with warning
 
         # Secret scan before commit/push
         if self.enable_secret_scan and action_type in {"commit", "push"}:
             if scan_diff:
-                diff_result = self.driver.diff_staged() if action_type == "commit" else self.driver.diff()
+                if action_type == "commit":
+                    diff_result = self.driver.diff_staged()
+                elif action_type == "push":
+                    # Scan commits about to be pushed, not worktree diff
+                    if hasattr(self.driver, 'diff_range'):
+                        diff_result = self.driver.diff_range(target or self.driver.current_branch, "origin/" + (target or self.driver.current_branch))
+                    else:
+                        diff_result = self.driver.diff()  # Fallback when diff_range unavailable
+                else:
+                    diff_result = self.driver.diff()
                 secrets = self._scan_diff_secrets(diff_result.diff)
                 if secrets:
                     return GitResult(

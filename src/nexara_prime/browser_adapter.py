@@ -290,7 +290,11 @@ class GovernedBrowserAdapter:
 
     def upload_file(self, selector: str, file_path: str) -> BrowserResult:
         resolved = str(Path(file_path).resolve())
-        if not resolved.startswith(self.download_sandbox_dir):
+        sandbox_dir = str(Path(self.download_sandbox_dir).resolve())
+        # Use real path containment, not string prefix match
+        try:
+            Path(resolved).relative_to(sandbox_dir)
+        except ValueError:
             return BrowserResult(error="upload_path_outside_sandbox")
         result = self.driver.upload_file(selector, resolved)
         action = BrowserAction(action_type="upload", target=selector, value=file_path)

@@ -459,15 +459,29 @@ class RepairLoop:
                 self._results[result.repair_id] = result
                 return result
 
-        # Apply (in mock mode, this is simulated)
+        # Apply — use supplied patch function when available, otherwise simulate
         contract.status = RepairStatus.APPLYING
-        patch_applied = True
+        apply_fn = getattr(self, "_active_apply_patch_fn", None)
+        if apply_fn:
+            try:
+                apply_result = apply_fn(contract)
+                patch_applied = apply_result.success
+                tests_passed_actual = apply_result.tests_passed
+                tests_failed_actual = apply_result.tests_failed
+            except Exception as exc:
+                patch_applied = False
+                tests_passed_actual = 0
+                tests_failed_actual = 1
+                contract.error = f"apply_patch_fn_failed:{exc}"
+        else:
+            patch_applied = True
+            tests_passed_actual = 3  # Simulated
+            tests_failed_actual = 0
         contract.status = RepairStatus.RESOLVED if patch_applied else RepairStatus.FAILED
 
-        # Verify (simulated)
-        # In production, this would run actual tests
-        tests_passed = 3  # Simulated
-        tests_failed = 0
+        # Verify results
+        tests_passed = tests_passed_actual
+        tests_failed = tests_failed_actual
 
         result = RepairResult(
             contract_id=contract.contract_id,
@@ -516,16 +530,20 @@ class RepairLoop:
         )
 
         # Try up to MAX_ATTEMPTS
+        self._active_apply_patch_fn = apply_patch_fn
         last_result: RepairResult | None = None
-        for _ in range(self.MAX_ATTEMPTS):
-            result = self.attempt_repair(failure.failure_id)
-            last_result = result
+        try:
+            for _ in range(self.MAX_ATTEMPTS):
+                result = self.attempt_repair(failure.failure_id)
+                last_result = result
 
-            if result.success:
-                return result
+                if result.success:
+                    return result
 
-            if result.status == RepairStatus.ESCALATED:
-                return result
+                if result.status == RepairStatus.ESCALATED:
+                    return result
+        finally:
+            self._active_apply_patch_fn = None
 
         # Escalate if all attempts failed
         return RepairResult(

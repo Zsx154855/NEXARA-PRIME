@@ -260,6 +260,7 @@ class ProgramLoop:
         missions = self._load_runnable_missions()
         if not missions:
             result.skipped_count = 1
+            result.success = True  # Idle cycle with no runnable missions is not a failure
             with self._lock:
                 self.state.skipped_count += 1
             result.phase_reached = LoopPhase.LOADING
@@ -356,21 +357,50 @@ class ProgramLoop:
         return missions[0] if missions else None
 
     def _acquire_lease(self, mission_id: str) -> bool:
-        """Acquire a writer lease for the mission."""
+        """Acquire a durable writer lease for the mission via store."""
         if mission_id in self._active_leases:
             return False
+        if self.runtime and hasattr(self.runtime, 'store'):
+            try:
+                # Use store-based lease for cross-instance coordination
+                lease_key = f"program_loop_lease:{mission_id}"
+                existing = self.runtime.store.get_record(lease_key)
+                if existing:
+                    return False
+                self.runtime.store.save_record(
+                    lease_key, "lease",
+                    {"mission_id": mission_id, "acquired_at": now_iso(), "instance_id": self.instance_id},
+                    now_iso(), mission_id,
+                )
+            except Exception:
+                pass  # Fall through to in-memory only
         self._active_leases[mission_id] = now_iso()
         return True
 
     def _release_lease(self, mission_id: str) -> None:
         """Release the writer lease."""
         self._active_leases.pop(mission_id, None)
+        if self.runtime and hasattr(self.runtime, 'store'):
+            try:
+                lease_key = f"program_loop_lease:{mission_id}"
+                self.runtime.store.delete_record(lease_key)
+            except Exception:
+                pass
 
     def _execute_mission(self, mission: dict[str, Any]) -> dict[str, Any]:
         """Execute the selected mission."""
         if self.runtime and hasattr(self.runtime, 'run_mission'):
             try:
-                return self.runtime.run_mission(mission)
+                mission_id = mission.get("mission_id", "")
+                if not mission_id:
+                    return {"success": False, "action": "execute", "output": "", "error": "mission_id_missing_in_record"}
+                mission_result = self.runtime.run_mission(mission_id)
+                return {
+                    "success": mission_result.state.value not in ("Failed", "Crashed"),
+                    "action": "execute",
+                    "output": str(mission_result),
+                    "error": "" if mission_result.state.value not in ("Failed", "Crashed") else mission_result.error or "",
+                }
             except Exception as exc:
                 return {"success": False, "action": "execute", "output": "", "error": str(exc)}
         # Mock execution

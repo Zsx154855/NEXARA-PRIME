@@ -150,7 +150,7 @@ class MockMessageProvider(MessageProvider):
         record = {
             "draft_id": draft.draft_id,
             "channel": draft.channel,
-            "recipients": draft.recipients,
+            "recipients": getattr(draft, "recipients", []),
             "subject": draft.subject,
             "body": draft.body,
             "content_digest": draft.content_digest,
@@ -165,7 +165,7 @@ class MockMessageProvider(MessageProvider):
             success=True,
             sent=True,
             channel=draft.channel,
-            recipients=draft.recipients,
+            recipients=getattr(draft, "recipients", []),
             content_digest=draft.content_digest,
             provider_message_id=provider_id,
             idempotency_key=idempotency_key,
@@ -200,7 +200,7 @@ class LocalCaptureProvider(MessageProvider):
         payload = {
             "draft_id": draft.draft_id,
             "channel": draft.channel,
-            "recipients": draft.recipients,
+            "recipients": getattr(draft, "recipients", []),
             "subject": draft.subject,
             "body": draft.body,
             "content_digest": draft.content_digest,
@@ -217,7 +217,7 @@ class LocalCaptureProvider(MessageProvider):
             sent=False,
             captured=True,
             channel=draft.channel,
-            recipients=draft.recipients,
+            recipients=getattr(draft, "recipients", []),
             content_digest=draft.content_digest,
             provider_message_id=f"local:{filepath}",
             idempotency_key=idempotency_key,
@@ -344,7 +344,7 @@ class GovernedMessageAdapter:
         payload = json.dumps({
             "draft_id": draft.draft_id,
             "channel": draft.channel,
-            "recipients": draft.recipients,
+            "recipients": getattr(draft, "recipients", []),
             "subject": draft.subject,
             "content_digest": draft.content_digest,
             "success": result.success,
@@ -405,7 +405,7 @@ class GovernedMessageAdapter:
         requires_approval = True
 
         # Recipient validation
-        ok, reason, invalid = self._validate_all_recipients(draft.recipients)
+        ok, reason, invalid = self._validate_all_recipients(getattr(draft, "recipients", []))
         if not ok:
             warnings.append(f"recipient_validation:{reason}")
             requires_approval = True
@@ -433,7 +433,7 @@ class GovernedMessageAdapter:
         return MessagePreview(
             draft_id=draft_id,
             channel=draft.channel,
-            recipients=draft.recipients,
+            recipients=getattr(draft, "recipients", []),
             subject=draft.subject,
             body_preview=body_preview,
             body_length=len(draft.body),
@@ -475,7 +475,7 @@ class GovernedMessageAdapter:
             )
 
         # Validate recipients
-        ok, reason, _ = self._validate_all_recipients(draft.recipients)
+        ok, reason, _ = self._validate_all_recipients(getattr(draft, "recipients", []))
         if not ok:
             return MessageResult(draft_id=draft_id, error=f"recipient_validation_failed:{reason}")
 
@@ -491,13 +491,14 @@ class GovernedMessageAdapter:
 
         # External send gate
         if not self.external_send_enabled:
-            # Always capture locally, never send externally
+            # Capture locally only — NEVER call provider.send() when disabled
             started = time.monotonic()
-            result = self.provider.send(draft, idempotency_key)
-            result.duration_ms = (time.monotonic() - started) * 1000
-            # Override: always mark as captured, not sent
-            result.sent = False
-            result.captured = True
+            result = MessageResult(
+                draft_id=draft_id,
+                success=True, sent=False, captured=True,
+                message_id=new_id("msg"),
+                duration_ms=(time.monotonic() - started) * 1000,
+            )
             self._sent_keys.add(idempotency_key)
             result.evidence_ids = self._record_evidence(draft, result)
             self._action_history.append({
@@ -508,6 +509,18 @@ class GovernedMessageAdapter:
             return result
 
         # External send path: requires approval
+        if self.approvals and not force_send:
+            approval = self.approvals.request(
+                getattr(draft, "mission_id", None) or "msg", "send", RiskLevel.R2,
+                f"external_send:{draft_id}", draft.content, getattr(draft, "created_by", "system"),
+                affected_resources=getattr(draft, "recipients", []) or [],
+                external_effect=True, reversible=False,
+            )
+            if not approval:
+                return MessageResult(
+                    draft_id=draft_id,
+                    error="external_send_requires_approval",
+                )
         if not force_send:
             return MessageResult(
                 draft_id=draft_id,

@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from .models import new_id, now_iso
+from .models import RiskLevel, new_id, now_iso
 
 
 # ── Capability flags ──
@@ -407,13 +407,29 @@ class GovernedDeploymentAdapter:
         if not plan:
             return DeploymentResult(plan_id=plan_id, error="plan_not_found")
 
-        # Production gate
-        if plan.environment == "production" and not self.production_deploy_enabled:
-            return DeploymentResult(
-                plan_id=plan_id,
-                success=False, state=DeployState.CANCELLED,
-                error="production_deploy_disabled:NEXARA_PRODUCTION_DEPLOY_ENABLED=false",
-            )
+        # Production gate — require explicit approval
+        if plan.environment == "production":
+            if not self.production_deploy_enabled:
+                return DeploymentResult(
+                    plan_id=plan_id,
+                    success=False, state=DeployState.CANCELLED,
+                    error="production_deploy_disabled:NEXARA_PRODUCTION_DEPLOY_ENABLED=false",
+                )
+            # When production deploys are enabled, require approval or force flag
+            if not force and self.approvals:
+                approval = self.approvals.request(
+                    plan.mission_id or "deploy", "deploy", RiskLevel.R2,
+                    f"production_deploy:{plan_id}", plan.steps, plan.created_by,
+                    affected_resources=[s.get("target") for s in plan.steps],
+                    external_effect=True, reversible=bool(plan.rollback_steps),
+                    rollback_plan={"kind": "rollback_deployment", "steps": len(plan.rollback_steps)},
+                )
+                if not approval:
+                    return DeploymentResult(
+                        plan_id=plan_id,
+                        success=False, state=DeployState.CANCELLED,
+                        error="production_deploy_requires_approval",
+                    )
 
         started = time.monotonic()
         result = DeploymentResult(plan_id=plan_id, state=DeployState.DEPLOYING)
@@ -467,6 +483,8 @@ class GovernedDeploymentAdapter:
             else:
                 plan.state = DeployState.UNHEALTHY
                 result.state = DeployState.UNHEALTHY
+                result.success = False
+                result.error = f"health_check_failed:{hc.recommendations}"
                 result.output += f"\n[HEALTH_CHECK] FAILED: {hc.recommendations}"
 
                 if self.auto_rollback and plan.rollback_steps:

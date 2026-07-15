@@ -340,6 +340,34 @@ class MemoryLayerManager:
         evidence_id: str | None = None,
     ) -> dict[str, Any]:
         """Propose a memory patch — starts the review flow."""
+        # When patch review is enabled and evidence-backed, create pending record first
+        if self.enable_patch_review and evidence_id:
+            # Create a pending patch that requires review before becoming canonical
+            pending_id = new_id("pending_mem")
+            pending_record = {
+                "memory_id": pending_id,
+                "key": key,
+                "content": content,
+                "layer": "working",
+                "status": "pending_review",
+                "mission_id": mission_id or "global",
+                "created_at": now_iso(),
+                "trace_id": trace_id,
+                "source_evidence_id": evidence_id,
+            }
+            self.kernel.store.save_record(pending_id, "memory", pending_record, now_iso(), mission_id or "global")
+            
+            review = PatchReview(
+                memory_id=pending_id,
+                patch_key=key,
+                patch_content=content,
+                evidence_refs=[evidence_id] if evidence_id else [],
+            )
+            self._reviews[review.review_id] = review
+            
+            return {"memory_id": pending_id, "status": "pending_review", "review_id": review.review_id}
+        
+        # Non-evidence or review-disabled: commit directly
         record = self.kernel.patch(
             mission_id or "global", key, content, trace_id, evidence_id,
         )
@@ -451,7 +479,13 @@ class MemoryLayerManager:
         """Clear working memory for a specific mission."""
         count = 0
         for record in self.read_working(mission_id):
-            # Soft-delete by updating status (implementation-specific)
+            # Mark as cleared by updating status
+            memory_id = record.get("memory_id", "")
+            if memory_id:
+                updated = dict(record)
+                updated["status"] = "cleared"
+                updated["cleared_at"] = now_iso()
+                self.kernel.store.save_record(memory_id, "memory", updated, now_iso(), mission_id)
             count += 1
         return count
 
