@@ -1,102 +1,147 @@
 #!/usr/bin/env python3
 """NEXARA PRIME — Hardcoded Secret Scanner.
 
-Scans source files for hardcoded credentials. Detects both single-quoted and
-double-quoted patterns. Excludes fixtures, examples, env lookups, and
-explicitly allowed placeholder values.
+Scans source and configuration files for literal credentials. The scanner is
+fail-closed for common secret-bearing variable names, including provider- or
+service-prefixed names such as ``openai_api_key`` and ``github_token``.
 
-Exit: 0 = clean, 1 = secrets found, 2 = config error.
+Exit codes:
+    0 — clean
+    1 — one or more probable hardcoded secrets found
+    2 — scanner configuration/runtime error
 """
+
+from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# ── Patterns to detect ──
+# Longest/specific suffixes first. A secret-bearing identifier may be the exact
+# suffix (``api_key``) or a prefixed identifier (``openai_api_key``).
 SECRET_KEYS = (
-    "api_key", "secret_key", "private_key", "password", "token",
-    "access_token", "api_token", "client_secret", "signing_key",
+    "access_token",
+    "client_secret",
+    "private_key",
+    "secret_key",
+    "signing_key",
+    "api_token",
+    "api_key",
+    "password",
+    "token",
+)
+_SECRET_SUFFIX = "(?:" + "|".join(re.escape(key) for key in SECRET_KEYS) + ")"
+_SECRET_IDENTIFIER = (
+    r"((?:[A-Za-z_][A-Za-z0-9_]*_)?" + _SECRET_SUFFIX + r")"
 )
 
-# Regex: SECRET_KEY = "value" or SECRET_KEY = 'value'
-# Handles nesting variations: env vars, f-strings, dict access
+# Match assignments and mapping entries using either quote style. The negative
+# lookbehind prevents matching attribute reads such as ``client.api_key``.
 _DQ_PATTERN = re.compile(
-    r'(?:^|[^.\w])(' + "|".join(SECRET_KEYS) + r')\s*[:=]\s*"([^"]{6,})"',
+    r"(?<![.\w])" + _SECRET_IDENTIFIER + r'\s*[:=]\s*"([^"]{6,})"',
     re.IGNORECASE,
 )
 _SQ_PATTERN = re.compile(
-    r'(?:^|[^.\w])(' + "|".join(SECRET_KEYS) + r")\s*[:=]\s*'([^']{6,})'",
+    r"(?<![.\w])" + _SECRET_IDENTIFIER + r"\s*[:=]\s*'([^']{6,})'",
     re.IGNORECASE,
 )
 
-# ── Allowed patterns (not secrets) ──
+# Explicit non-secret forms. Keep these narrow: broad words such as ``test``
+# must not suppress a real credential merely because it appears in a test file.
 ALLOWED_PATTERNS = (
-    r'os\.(environ|getenv)\b',             # env var lookup
-    r'\$\{?[A-Z_]',                         # ${VAR} or $VAR reference
-    r'\.env\.',                             # dotenv reference
-    r'example|dummy|test|placeholder|mock|sample|your-',  # test/examples
-    r'<.*>',                                # template placeholder
-    r'changeme|replaceme|fill-in',          # explicit placeholders
-    r'_PLACEHOLDER_|_TOKEN_',              # placeholder markers
-    r'\bfixture\b',                         # fixture
-    r'my-secret|my-key|test-key|sk-abc|ghp_1',  # test fixture values
-    r'BEGIN.*PRIVATE KEY',                 # PEM markers in tests
-    r'(Token|token):\s*["\']#[0-9a-fA-F]{6}',  # pygments color tokens
+    r"os\.(environ|getenv)\b",              # environment lookup
+    r"\$\{?[A-Z_][A-Z0-9_]*\}?",           # ${VAR} or $VAR reference
+    r"\.env\b",                            # dotenv reference
+    r"[:=]\s*[\"'][^\"']*(?:example|dummy|placeholder|mock|sample|your-)",
+    r"[:=]\s*[\"'][^\"']*(?:changeme|replaceme|fill-in)",
+    r"[:=]\s*[\"'][^\"']*(?:my-secret|my-key|test-key|sk-abc|ghp_1)",
+    r"<[^>]+>",                             # template placeholder
+    r"_PLACEHOLDER_|_TOKEN_",               # explicit markers
+    r"BEGIN.*PRIVATE KEY",                  # PEM fixture/header
+    r"(?:Token|token):\s*[\"']#[0-9a-fA-F]{6}",  # colour token
 )
 
-# ── File extensions to scan ──
-EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".swift", ".yaml", ".yml", ".json", ".sh", ".toml"}
+EXTENSIONS = {
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".swift",
+    ".yaml",
+    ".yml",
+    ".json",
+    ".sh",
+    ".toml",
+}
 
-# ── Directories to skip ──
-SKIP_DIRS = {".venv", ".git", "__pycache__", "node_modules", ".build", "DerivedData", ".obsidian", "dist", "Chats"}
-SKIP_DIR_PREFIXES = (".venv",)  # matches .venv, .venv.backup, .venv.backup.20260714-051419, etc.
+SKIP_DIRS = {
+    ".venv",
+    ".git",
+    "__pycache__",
+    "node_modules",
+    ".build",
+    "DerivedData",
+    ".obsidian",
+    "dist",
+    "Chats",
+}
+SKIP_DIR_PREFIXES = (".venv",)
 
 
 def is_allowed(line: str) -> bool:
-    """Return True if the line matches an allowed (non-secret) pattern."""
-    return any(re.search(p, line, re.IGNORECASE) for p in ALLOWED_PATTERNS)
+    """Return True when a line is an explicit non-secret placeholder/reference."""
+
+    return any(re.search(pattern, line, re.IGNORECASE) for pattern in ALLOWED_PATTERNS)
 
 
-def scan_file(path: Path) -> list[dict]:
-    """Scan a single file. Returns list of findings."""
-    findings = []
+def scan_file(path: Path) -> list[dict[str, object]]:
+    """Scan one file and return normalized findings."""
+
+    findings: list[dict[str, object]] = []
     try:
         content = path.read_text(encoding="utf-8", errors="replace")
-    except Exception:
+    except OSError:
         return findings
 
     for lineno, line in enumerate(content.splitlines(), 1):
-        for pattern in (_DQ_PATTERN, _SQ_PATTERN):
+        for pattern, quote in ((_DQ_PATTERN, '"'), (_SQ_PATTERN, "'")):
             for match in pattern.finditer(line):
-                full = match.group(0)
-                if not is_allowed(full):
-                    try:
-                        rel = str(path.relative_to(REPO_ROOT))
-                    except ValueError:
-                        rel = str(path)
-                    findings.append({
+                if is_allowed(line):
+                    continue
+                try:
+                    rel = str(path.relative_to(REPO_ROOT))
+                except ValueError:
+                    rel = str(path)
+                findings.append(
+                    {
                         "file": rel,
                         "line": lineno,
                         "key": match.group(1),
-                        "match": full.strip()[:120],
-                        "quote": '"' if '"' in full else "'",
-                    })
+                        "match": match.group(0).strip()[:120],
+                        "quote": quote,
+                    }
+                )
     return findings
 
 
-def scan_repo(root: Path) -> list[dict]:
-    """Scan entire repo for hardcoded secrets."""
-    all_findings = []
+def scan_repo(root: Path) -> list[dict[str, object]]:
+    """Recursively scan supported files below ``root``."""
+
+    findings: list[dict[str, object]] = []
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if any(part in SKIP_DIRS or part.startswith(SKIP_DIR_PREFIXES) for part in path.parts):
+        if any(
+            part in SKIP_DIRS or part.startswith(SKIP_DIR_PREFIXES)
+            for part in path.parts
+        ):
             continue
         if path.suffix.lower() not in EXTENSIONS:
             continue
-        all_findings.extend(scan_file(path))
-    return all_findings
+        findings.extend(scan_file(path))
+    return findings
 
 
 def main() -> int:
@@ -106,11 +151,19 @@ def main() -> int:
         return 0
 
     print(f"Secret scan: FAILED — {len(findings)} finding(s)")
-    for f in findings:
-        print(f"  {f['file']}:{f['line']}  {f['key']} = {f['quote']}...{f['quote']}")
-        print(f"    → {f['match']}")
+    for finding in findings:
+        quote = finding["quote"]
+        print(
+            f"  {finding['file']}:{finding['line']}  "
+            f"{finding['key']} = {quote}...{quote}"
+        )
+        print(f"    → {finding['match']}")
     return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as exc:  # pragma: no cover - defensive CI boundary
+        print(f"Secret scan: ERROR — {exc}", file=sys.stderr)
+        sys.exit(2)
