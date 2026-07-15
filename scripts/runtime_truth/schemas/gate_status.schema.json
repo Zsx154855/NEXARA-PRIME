@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GateStatus",
+  "type": "object",
+  "required": ["program", "current_gate", "test_baseline", "updated_at"],
+  "properties": {
+    "program": {"type": "string"},
+    "gates_file": {"type": "string"},
+    "gates_pass": {"type": "array", "items": {"type": "string"}},
+    "gates": {"type": "array"},
+    "current_gate": {"type": "string"},
+    "g10_composite_status": {"type": "object"},
+    "test_baseline": {"type": "string"},
+    "release_artifacts_tracked": {"type": "array"},
+    "release_artifacts_ignored": {"type": "array"},
+    "updated_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"}
+  }
+}
