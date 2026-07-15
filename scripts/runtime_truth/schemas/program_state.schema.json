@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgramState",
+  "type": "object",
+  "required": ["program", "platform", "branch", "test_baseline", "current_program_gate", "updated_at"],
+  "properties": {
+    "program": {"type": "string"},
+    "platform": {"type": "string"},
+    "agent_package": {"type": "string"},
+    "hermes_runtime_dependency": {"type": "integer"},
+    "repo": {"type": "string"},
+    "branch": {"type": "string"},
+    "python": {"type": "string"},
+    "test_baseline": {"type": "string"},
+    "current_program_gate": {"type": "string"},
+    "gate_status": {"type": "string"},
+    "gates_pass": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "g10_composite_status": {
+      "type": "object"
+    },
+    "pr5_squash_merge": {
+      "type": "object",
+      "required": ["merged_at", "squash_commit"],
+      "properties": {
+        "merged_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"},
+        "squash_commit": {"type": "string", "minLength": 40, "maxLength": 40}
+      }
+    },
+    "pr8_orchestration": {
+      "type": "object",
+      "required": ["commit", "merged_at", "status"],
+      "properties": {
+        "commit": {"type": "string", "minLength": 40, "maxLength": 40},
+        "squash_merge_commit": {"type": "string", "minLength": 40, "maxLength": 40},
+        "merged_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"},
+        "status": {"type": "string"}
+      }
+    },
+    "pr10_state_sync": {
+      "type": "object",
+      "required": ["merged_at", "head", "status"],
+      "properties": {
+        "merged_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"},
+        "head": {"type": "string", "minLength": 40, "maxLength": 40},
+        "status": {"type": "string"}
+      }
+    },
+    "updated_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"},
+    "updated_by": {"type": "string"}
+  }
+}
