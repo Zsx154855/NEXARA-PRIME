@@ -560,3 +560,154 @@ class SchedulerPolicyVersion(NModel):
     de_escalation_thresholds: dict[str, float] = Field(default_factory=dict)
     schema_version: int = 1
     created_at: str = Field(default_factory=now_iso)
+
+
+# ── Autonomous Runtime Orchestration Models ──
+
+
+class QueueItemState(str, Enum):
+    QUEUED = "queued"
+    READY = "ready"
+    LEASED = "leased"
+    RUNNING = "running"
+    VERIFYING = "verifying"
+    EVIDENCE_PENDING = "evidence_pending"
+    WAITING_APPROVAL = "waiting_approval"
+    RECOVERING = "recovering"
+    COMPLETED = "completed"
+    BLOCKED = "blocked"
+    CANCELLED = "cancelled"
+
+
+class FailureClass(str, Enum):
+    CODE_FAILURE = "code_failure"
+    TEST_FAILURE = "test_failure"
+    ENVIRONMENT_FAILURE = "environment_failure"
+    CI_PLATFORM_FAILURE = "ci_platform_failure"
+    EXTERNAL_SERVICE_FAILURE = "external_service_failure"
+    PERMISSION_BLOCK = "permission_block"
+    WORKER_FAILURE = "worker_failure"
+    LEASE_EXPIRED = "lease_expired"
+    STATE_DRIFT = "state_drift"
+    EVIDENCE_FAILURE = "evidence_failure"
+
+
+class WorkerType(str, Enum):
+    LOCAL_TOOL = "local_tool"
+    CLAUDE = "claude"
+    CODE_REVIEWER = "code_reviewer"
+    TEST_WORKER = "test_worker"
+    EVIDENCE_REVIEWER = "evidence_reviewer"
+
+
+class EvidenceType(str, Enum):
+    COMMAND_RECEIPT = "command_receipt"
+    TEST_REPORT = "test_report"
+    BUILD_REPORT = "build_report"
+    DIFF_REPORT = "diff_report"
+    SECURITY_SCAN = "security_scan"
+    APPROVAL_RECEIPT = "approval_receipt"
+    ARTIFACT_MANIFEST = "artifact_manifest"
+    CHECKSUM = "checksum"
+    RUNTIME_LOG = "runtime_log"
+    RECOVERY_REPORT = "recovery_report"
+    WORKER_RESULT = "worker_result"
+    LEASE_EVENT = "lease_event"
+
+
+class RecoveryState(str, Enum):
+    PENDING = "pending"
+    ANALYZING = "analyzing"
+    STRATEGY_1 = "strategy_1"
+    STRATEGY_2 = "strategy_2"
+    EXHAUSTED = "exhausted"
+    ROLLED_BACK = "rolled_back"
+
+
+class MissionQueueItem(NModel):
+    mission_id: str
+    program_id: str = "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT"
+    priority: int = 0
+    state: QueueItemState = QueueItemState.QUEUED
+    risk_level: RiskLevel = RiskLevel.R2
+    dependencies: list[str] = Field(default_factory=list)
+    required_capabilities: list[str] = Field(default_factory=list)
+    preferred_worker: str | None = None
+    attempt_count: int = 0
+    max_attempts: int = 3
+    available_at: str | None = None
+    idempotency_key: str | None = None
+    lease_owner: str | None = None
+    lease_expires_at: str | None = None
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class WorkerDescriptor(NModel):
+    worker_id: str = Field(default_factory=lambda: new_id("worker"))
+    worker_type: WorkerType
+    capabilities: list[str] = Field(default_factory=list)
+    available: bool = True
+    health: str = "healthy"
+    cost_class: str = "standard"
+    token_budget: int = 100000
+    writer_capable: bool = False
+    last_heartbeat: str = Field(default_factory=now_iso)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkerResult(NModel):
+    worker_id: str
+    mission_id: str
+    success: bool
+    failure_class: FailureClass | None = None
+    output: dict[str, Any] = Field(default_factory=dict)
+    artifacts: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    token_usage: int = 0
+    duration_ms: int = 0
+    next_action: str | None = None
+    created_at: str = Field(default_factory=now_iso)
+
+
+class RecoveryItem(NModel):
+    recovery_id: str = Field(default_factory=lambda: new_id("recovery"))
+    mission_id: str
+    failure_class: FailureClass
+    root_cause: str | None = None
+    failed_strategy: str | None = None
+    next_strategy: str | None = None
+    rollback_checkpoint: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+    attempt: int = 1
+    max_attempts: int = 3
+    state: RecoveryState = RecoveryState.PENDING
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class EvidenceJob(NModel):
+    evidence_job_id: str = Field(default_factory=lambda: new_id("evjob"))
+    mission_id: str
+    evidence_type: EvidenceType
+    source: str = "runtime"
+    artifact_path: str | None = None
+    checksum: str | None = None
+    command: str | None = None
+    exit_code: int | None = None
+    runtime_mode: str = "live"
+    verification_status: str = "pending"
+    created_at: str = Field(default_factory=now_iso)
+    completed_at: str | None = None
+
+
+class OrchestratorStatus(NModel):
+    active: bool = False
+    total_queued: int = 0
+    total_running: int = 0
+    total_blocked: int = 0
+    total_completed: int = 0
+    pending_approvals: int = 0
+    active_workers: int = 0
+    uptime_seconds: float = 0.0
+    last_cycle_at: str | None = None
