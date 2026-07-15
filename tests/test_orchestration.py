@@ -596,3 +596,229 @@ class TestE2EOrchestration:
         orchestrator.worker_scheduler.unregister("claude_1")
         orchestrator.worker_scheduler.unregister("reviewer_1")
         assert len(orchestrator.worker_scheduler.list_available()) == 0
+
+
+# ── Regression Tests — Codex Review Fixes ──
+
+
+class TestIdempotencyMixedRecords:
+    """Idempotency must scan ALL matching records, not just the first."""
+
+    def test_active_blocked_by_nonterminal(self, queue):
+        key = "idem_mixed"
+        terminal = _make_item("done", idempotency_key=key, state=QueueItemState.COMPLETED)
+        active = _make_item("active", idempotency_key=key, state=QueueItemState.READY)
+        queue.enqueue(terminal)
+        # Simulate: first record stored is terminal → second enqueue should find active, not be tricked by terminal
+        # Directly save a terminal record via store, then enqueue an active one with same key
+        queue.enqueue(active)
+        # The active item should have been deduped (returned existing active, not created duplicate)
+        items = [i for i in queue.list_by_state(QueueItemState.READY) if i.idempotency_key == key]
+        assert len(items) == 1
+
+
+class TestUnregisterPreservesDescriptor:
+    """Unregister must set available=False on the full WorkerDescriptor."""
+
+    def test_unregister_preserves_fields(self, scheduler):
+        w = _make_worker("w1", worker_type=WorkerType.CLAUDE, capabilities=["edit"])
+        scheduler.register(w)
+        scheduler.unregister("w1")
+        # After unregister, get() should still return the full descriptor
+        got = scheduler.get("w1")
+        assert got is not None
+        assert got.worker_id == "w1"
+        assert got.worker_type == WorkerType.CLAUDE
+        assert got.capabilities == ["edit"]
+        assert got.available is False
+
+    def test_unregister_nonexistent_noop(self, scheduler):
+        scheduler.unregister("ghost")  # must not raise
+
+
+class TestLeaseOwnerValidation:
+    """Release must validate worker ownership."""
+
+    def test_non_owner_cannot_release(self, lease_mgr):
+        lease_mgr.acquire("mission_a", "owner")
+        assert not lease_mgr.release("mission_a", "intruder")
+
+    def test_owner_can_release(self, lease_mgr):
+        lease_mgr.acquire("mission_a", "owner")
+        assert lease_mgr.release("mission_a", "owner")
+
+    def test_release_nonexistent(self, lease_mgr):
+        assert not lease_mgr.release("no_mission", "anyone")
+
+
+class TestLeaseAcquireScansAll:
+    """Acquire must scan ALL leases for a mission, not just the first match."""
+
+    def test_dual_writer_blocked_by_second_active_lease(self, lease_mgr):
+        # Simulate two lease records for same mission: one released, one active
+        lease_mgr.acquire("mission_a", "writer_1")
+        lease_mgr.release("mission_a", "writer_1")
+        lease_mgr.acquire("mission_a", "writer_2")  # re-acquire
+        # writer_3 must be blocked — there's an active lease from writer_2
+        assert not lease_mgr.acquire("mission_a", "writer_3")
+
+
+class TestRenewCustomTTL:
+    """Renew must honor the caller-provided ttl_seconds."""
+
+    def test_renew_uses_custom_ttl(self, lease_mgr):
+        lease_mgr.acquire("mission_a", "w1", ttl_seconds=60)
+        assert lease_mgr.renew("mission_a", "w1", ttl_seconds=3600)
+
+    def test_renew_defaults_to_heartbeat_ttl(self, lease_mgr):
+        lease_mgr.acquire("mission_a", "w1")
+        assert lease_mgr.renew("mission_a", "w1")
+
+
+class TestApprovalExpiryRejection:
+    """Expired approvals must be rejected, not decided."""
+
+    def test_approve_expired_fails(self, approval_q):
+        from datetime import datetime, timezone, timedelta
+        req = ApprovalRequest(
+            mission_id="mission_a", action="merge", risk_level=RiskLevel.R2,
+            rationale="test", reversible=True,
+            expires_at=(datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
+        )
+        approval_q.create(req)
+        result = approval_q.approve(req.approval_id)
+        assert result is None  # expired — cannot approve
+
+    def test_reject_expired_fails(self, approval_q):
+        from datetime import datetime, timezone, timedelta
+        req = ApprovalRequest(
+            mission_id="mission_a", action="merge", risk_level=RiskLevel.R2,
+            rationale="test", reversible=True,
+            expires_at=(datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
+        )
+        approval_q.create(req)
+        result = approval_q.reject(req.approval_id)
+        assert result is None  # expired — cannot reject
+
+
+class TestCompletionGateFailedBlocks:
+    """Completion gate must fail when any evidence job has status=failed."""
+
+    def test_failed_job_blocks_completion(self, evidence_q):
+        job = EvidenceJob(mission_id="mission_a", evidence_type=EvidenceType.TEST_REPORT, command="pytest")
+        evidence_q.enqueue(job)
+        evidence_q.complete(job.evidence_job_id, exit_code=1)
+        assert not evidence_q.completion_gate_passed("mission_a")
+
+    def test_mixed_pending_and_failed_blocks(self, evidence_q):
+        job1 = EvidenceJob(mission_id="mission_a", evidence_type=EvidenceType.TEST_REPORT, command="pytest")
+        job2 = EvidenceJob(mission_id="mission_a", evidence_type=EvidenceType.BUILD_REPORT, command="build")
+        evidence_q.enqueue(job1)
+        evidence_q.enqueue(job2)
+        evidence_q.complete(job1.evidence_job_id, exit_code=0)  # verified
+        # job2 is still pending — gate should be blocked
+        assert not evidence_q.completion_gate_passed("mission_a")
+
+    def test_all_verified_passes(self, evidence_q):
+        job = EvidenceJob(mission_id="mission_a", evidence_type=EvidenceType.TEST_REPORT, command="pytest")
+        evidence_q.enqueue(job)
+        evidence_q.complete(job.evidence_job_id, exit_code=0)
+        assert evidence_q.completion_gate_passed("mission_a")
+
+
+class TestChecksumValidation:
+    """Checksum mismatch must cause verification failure."""
+
+    def test_complete_with_exit0_but_checksum_mismatch_fails(self, evidence_q):
+        job = EvidenceJob(
+            mission_id="mission_a", evidence_type=EvidenceType.ARTIFACT_MANIFEST,
+            command="sha256sum dist/*",
+            checksum="expected_abc123",  # set expected checksum at enqueue time
+        )
+        evidence_q.enqueue(job)
+        # Complete with wrong checksum — even with exit_code=0
+        completed = evidence_q.complete(job.evidence_job_id, exit_code=0, checksum="wrong_xyz")
+        assert completed and completed.verification_status == "failed"
+
+    def test_complete_with_matching_checksum_succeeds(self, evidence_q):
+        job = EvidenceJob(
+            mission_id="mission_a", evidence_type=EvidenceType.ARTIFACT_MANIFEST,
+            command="sha256sum dist/*",
+            checksum="expected_abc123",
+        )
+        evidence_q.enqueue(job)
+        completed = evidence_q.complete(job.evidence_job_id, exit_code=0, checksum="expected_abc123")
+        assert completed and completed.verification_status == "verified"
+
+
+class TestOrchestratorNonBlockingStart:
+    """start(block=False) must launch a background thread."""
+
+    def test_nonblocking_start_launches_thread(self, orchestrator):
+        orchestrator.start(block=False)
+        try:
+            assert orchestrator._active
+            assert orchestrator._loop_thread is not None
+            assert orchestrator._loop_thread.is_alive()
+        finally:
+            orchestrator.stop()
+            if orchestrator._loop_thread:
+                orchestrator._loop_thread.join(timeout=2)
+
+
+class TestCompleteMissionEvidenceGate:
+    """complete_mission() must verify evidence gate before completing."""
+
+    def test_complete_without_evidence_succeeds(self, orchestrator):
+        """Mission with no evidence jobs can complete (gate vacuously passes)."""
+        orchestrator.mission_queue.enqueue(_make_item("mission_x"))
+        orchestrator.mission_queue.transition("mission_x", QueueItemState.RUNNING)
+        assert orchestrator.complete_mission("mission_x", "w1")
+        assert orchestrator.mission_queue.get("mission_x").state == QueueItemState.COMPLETED
+
+    def test_complete_with_failed_evidence_fails(self, orchestrator):
+        orchestrator.mission_queue.enqueue(_make_item("mission_x"))
+        orchestrator.mission_queue.transition("mission_x", QueueItemState.RUNNING)
+        job = EvidenceJob(mission_id="mission_x", evidence_type=EvidenceType.TEST_REPORT, command="pytest")
+        orchestrator.evidence_queue.enqueue(job)
+        orchestrator.evidence_queue.complete(job.evidence_job_id, exit_code=1)
+        assert not orchestrator.complete_mission("mission_x", "w1")
+
+    def test_complete_with_verified_evidence_succeeds(self, orchestrator):
+        orchestrator.mission_queue.enqueue(_make_item("mission_x"))
+        orchestrator.worker_scheduler.register(_make_worker("w1", writer=True))
+        orchestrator.mission_queue.transition("mission_x", QueueItemState.RUNNING)
+        orchestrator.leases.acquire("mission_x", "w1")
+        job = EvidenceJob(mission_id="mission_x", evidence_type=EvidenceType.TEST_REPORT, command="pytest")
+        orchestrator.evidence_queue.enqueue(job)
+        orchestrator.evidence_queue.complete(job.evidence_job_id, exit_code=0)
+        assert orchestrator.complete_mission("mission_x", "w1")
+        item = orchestrator.mission_queue.get("mission_x")
+        assert item.state == QueueItemState.COMPLETED
+
+    def test_complete_not_running_fails(self, orchestrator):
+        orchestrator.mission_queue.enqueue(_make_item("mission_x"))
+        # Not RUNNING — should fail
+        assert not orchestrator.complete_mission("mission_x", "w1")
+
+
+class TestApprovalNonblockingCycle:
+    """Approval-blocked mission must not stall lower-priority READY missions."""
+
+    def test_approval_mission_does_not_block_others(self, orchestrator):
+        orchestrator.worker_scheduler.register(_make_worker("w1", writer=True))
+        # Mission A needs approval
+        orchestrator.mission_queue.enqueue(_make_item("mission_a", priority=10))
+        req = ApprovalRequest(mission_id="mission_a", action="merge", risk_level=RiskLevel.R2,
+                              rationale="test", reversible=True)
+        orchestrator.approvals.create(req)
+        # Mission B is independent and lower priority
+        orchestrator.mission_queue.enqueue(_make_item("mission_b", priority=1))
+        # Run one cycle
+        orchestrator._execute_cycle()
+        # Mission A should be WAITING_APPROVAL (not blocking)
+        a = orchestrator.mission_queue.get("mission_a")
+        assert a.state == QueueItemState.WAITING_APPROVAL
+        # Mission B should be RUNNING (dispatched, not blocked)
+        b = orchestrator.mission_queue.get("mission_b")
+        assert b.state == QueueItemState.RUNNING

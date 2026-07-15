@@ -37,6 +37,7 @@ from .models import (
     RecoveryState,
     RiskLevel,
     WorkerDescriptor,
+    WorkerResult,
     new_id,
     now_iso,
 )
@@ -88,11 +89,11 @@ class MissionQueue:
 
     def enqueue(self, item: MissionQueueItem) -> MissionQueueItem:
         if item.idempotency_key:
-            existing = self._store.find_record("mission_queue", "idempotency_key", item.idempotency_key)
-            if existing:
-                p = existing.get("payload", existing)
-                terminal = {QueueItemState.COMPLETED.value, QueueItemState.CANCELLED.value}
-                if p.get("state") not in terminal:
+            all_records = self._store.list_records("mission_queue")
+            terminal = {QueueItemState.COMPLETED.value, QueueItemState.CANCELLED.value}
+            for raw in all_records:
+                p = raw.get("payload", raw)
+                if p.get("idempotency_key") == item.idempotency_key and p.get("state") not in terminal:
                     return MissionQueueItem(**p)
         payload = item.model_dump(mode="json")
         _sr(self._store, item.mission_id, "mission_queue", payload)
@@ -195,7 +196,14 @@ class WorkerScheduler:
         return worker
 
     def unregister(self, worker_id: str) -> None:
-        _sr(self._store, worker_id, "worker_registry", {"active": False, "worker_id": worker_id})
+        raw = self._store.find_record("worker_registry", "worker_id", worker_id)
+        if raw is None:
+            return
+        p = raw.get("payload", raw)
+        w = WorkerDescriptor(**p)
+        w.available = False
+        _sr(self._store, worker_id, "worker_registry", w.model_dump(mode="json"))
+        _emit(self._events, "worker_unregistered", worker_id, {})
 
     def heartbeat(self, worker_id: str) -> WorkerDescriptor | None:
         raw = self._store.find_record("worker_registry", "worker_id", worker_id)
@@ -289,12 +297,18 @@ class WriterLeaseManager:
         ttl = ttl_seconds or self.HEARTBEAT_TTL_S
         now = now_iso()
         with self._lock:
-            existing = self._store.find_record("writer_leases", "mission_id", mission_id)
-            if existing:
-                p = existing.get("payload", existing)
-                if p.get("state") == "released":
-                    pass  # released — allow re-acquire
-                elif p.get("state") in (None, "active") and p.get("expires_at", "") > now:
+            # Scan ALL leases for this mission — any active unexpired lease blocks
+            all_leases = self._store.list_records("writer_leases")
+            for raw in all_leases:
+                p = raw.get("payload", raw)
+                if p.get("mission_id") != mission_id:
+                    continue
+                state = p.get("state")
+                if state == "released":
+                    continue
+                if state == "stale":
+                    continue
+                if state in (None, "active") and p.get("expires_at", "") > now:
                     return False
             record = {
                 "lease_id": new_id("lease"),
@@ -330,7 +344,7 @@ class WriterLeaseManager:
         p = existing.get("payload", existing)
         if p.get("worker_id") != worker_id:
             return False
-        p["expires_at"] = self._extend_expiry()
+        p["expires_at"] = self._extend_expiry(ttl_seconds)
         p["heartbeat_at"] = now_iso()
         _sr(self._store, p["lease_id"], "writer_leases", p)
         return True
@@ -340,6 +354,8 @@ class WriterLeaseManager:
         if existing is None:
             return False
         p = existing.get("payload", existing)
+        if p.get("worker_id") != worker_id:
+            return False  # non-owner cannot release
         p["state"] = "released"
         p["released_at"] = now_iso()
         _sr(self._store, p["lease_id"], "writer_leases", p)
@@ -367,9 +383,10 @@ class WriterLeaseManager:
             return p
         return None
 
-    def _extend_expiry(self) -> str:
+    def _extend_expiry(self, ttl_seconds: int | None = None) -> str:
         from datetime import datetime, timezone, timedelta
-        return (datetime.now(timezone.utc) + timedelta(seconds=self.HEARTBEAT_TTL_S)).isoformat()
+        ttl = ttl_seconds if ttl_seconds is not None else self.HEARTBEAT_TTL_S
+        return (datetime.now(timezone.utc) + timedelta(seconds=ttl)).isoformat()
 
 
 # ── 4. Human Approval Queue ──
@@ -410,10 +427,17 @@ class ApprovalQueue:
         req = ApprovalRequest(**p)
         if req.status != ApprovalStatus.APPROVED:
             return None
+        # Atomic compare-and-set: re-read to detect concurrent consumer
+        recheck = self._store.find_record("approval_requests", "approval_id", approval_id)
+        if recheck is None:
+            return None
+        rp = recheck.get("payload", recheck)
+        if rp.get("status") != ApprovalStatus.APPROVED.value:
+            return None  # another consumer already consumed
         req.status = ApprovalStatus.CONSUMED
         req.decided_at = now_iso()
         _sr(self._store, approval_id, "approval_requests", req.model_dump(mode="json"))
-        _add_evidence(self._evidence, 
+        _add_evidence(self._evidence,
             mission_id=req.mission_id, kind="approval_receipt",
             title=f"Approval consumed: {req.action}",
             content=f"approval_id={approval_id} action={req.action}",
@@ -428,6 +452,13 @@ class ApprovalQueue:
         p = raw.get("payload", raw)
         req = ApprovalRequest(**p)
         if not revoke and req.status != ApprovalStatus.PENDING:
+            return None
+        # Reject expired approvals — cannot approve/reject after expiry
+        if not revoke and req.expires_at and req.expires_at < now_iso():
+            req.status = ApprovalStatus.EXPIRED
+            req.decided_at = now_iso()
+            _sr(self._store, approval_id, "approval_requests", req.model_dump(mode="json"))
+            _emit(self._events, "approval_expired", req.mission_id, {"approval_id": approval_id})
             return None
         req.status = status
         req.decided_by = actor
@@ -540,16 +571,26 @@ class EvidenceQueue:
         if raw is None:
             return None
         p = raw.get("payload", raw)
-        job = EvidenceJob(**p)
+        # Filter to only known EvidenceJob fields for model construction
+        from .models import EvidenceJob as EJ
+        known_fields = {f for f in EJ.model_fields}
+        filtered = {k: v for k, v in p.items() if k in known_fields}
+        job = EvidenceJob(**filtered)
         job.exit_code = exit_code
+        # Determine verification: exit_code must be 0
+        verified = exit_code == 0
+        # If the enqueued job had an expected checksum, validate it
+        expected_checksum = p.get("checksum")  # checksum set at enqueue time
+        if verified and expected_checksum and checksum != expected_checksum:
+            verified = False
+        job.verification_status = "verified" if verified else "failed"
         job.checksum = checksum
-        job.verification_status = "verified" if exit_code == 0 else "failed"
         job.completed_at = now_iso()
         _sr(self._store, evidence_job_id, "evidence_queue", job.model_dump(mode="json"))
-        _add_evidence(self._evidence, 
+        _add_evidence(self._evidence,
             mission_id=job.mission_id, kind=job.evidence_type.value,
             title=f"{job.evidence_type.value}: {job.command or 'N/A'}",
-            content=f"exit_code={exit_code} checksum={checksum}", actor="system",
+            content=f"exit_code={exit_code} checksum={checksum} status={job.verification_status}", actor="system",
         )
         return job
 
@@ -561,8 +602,18 @@ class EvidenceQueue:
             and r.get("payload", r).get("verification_status") == "pending"
         ]
 
+    def failed_for_mission(self, mission_id: str) -> list[EvidenceJob]:
+        return [
+            EvidenceJob(**(r.get("payload", r)))
+            for r in self._store.list_records("evidence_queue")
+            if r.get("payload", r).get("mission_id") == mission_id
+            and r.get("payload", r).get("verification_status") == "failed"
+        ]
+
     def completion_gate_passed(self, mission_id: str) -> bool:
-        return len(self.pending_for_mission(mission_id)) == 0
+        # Gate passes only when no pending AND no failed jobs exist
+        return (len(self.pending_for_mission(mission_id)) == 0
+                and len(self.failed_for_mission(mission_id)) == 0)
 
 
 # ── 7. Runtime Orchestrator ──
@@ -595,6 +646,7 @@ class RuntimeOrchestrator:
         self._stop_flag = threading.Event()
         self._cycle_count = 0
         self._started_at: float | None = None
+        self._loop_thread: threading.Thread | None = None
 
     def start(self, block: bool = False) -> None:
         self._active = True
@@ -603,6 +655,10 @@ class RuntimeOrchestrator:
         _emit(self._events, "orchestrator_started", "orchestrator", {})
         if block:
             self._run_loop()
+        else:
+            t = threading.Thread(target=self._run_loop, daemon=True, name="nexara-orchestrator")
+            t.start()
+            self._loop_thread = t
 
     def stop(self) -> None:
         self._active = False
@@ -634,28 +690,60 @@ class RuntimeOrchestrator:
 
     def _execute_cycle(self) -> None:
         self._crash_resume()
+        # Promote QUEUED → READY when dependencies are met
         for item in self.mission_queue.list_by_state(QueueItemState.QUEUED):
             if self.mission_queue._dependencies_met(item):
                 self.mission_queue.transition(item.mission_id, QueueItemState.READY)
-        next_mission = self.mission_queue.dequeue()
-        if next_mission is None:
-            return
-        if self._has_pending_approval(next_mission.mission_id):
-            _emit(self._events, "mission_waiting_approval", next_mission.mission_id, {})
-            return
-        worker = self.worker_scheduler.schedule(next_mission)
-        if worker is None:
-            self.mission_queue.transition(next_mission.mission_id, QueueItemState.BLOCKED)
-            _emit(self._events, "no_capable_worker", next_mission.mission_id, {})
-            return
-        if not self.leases.acquire(next_mission.mission_id, worker.worker_id):
-            return
-        self.mission_queue.transition(
-            next_mission.mission_id, QueueItemState.RUNNING,
-            lease_owner=worker.worker_id, lease_expires_at=now_iso(),
-        )
-        self.leases.release(next_mission.mission_id, worker.worker_id)
-        self.mission_queue.transition(next_mission.mission_id, QueueItemState.COMPLETED)
+        # Process READY missions, skipping approval-blocked ones to not stall the queue
+        processed_in_cycle: set[str] = set()
+        while True:
+            next_mission = self.mission_queue.dequeue()
+            if next_mission is None:
+                break
+            if next_mission.mission_id in processed_in_cycle:
+                break  # prevent infinite loop on same item
+            processed_in_cycle.add(next_mission.mission_id)
+            if self._has_pending_approval(next_mission.mission_id):
+                # Transition to WAITING_APPROVAL so it doesn't block other READY missions
+                self.mission_queue.transition(
+                    next_mission.mission_id, QueueItemState.WAITING_APPROVAL,
+                )
+                _emit(self._events, "mission_waiting_approval", next_mission.mission_id, {})
+                continue  # try next READY mission
+            worker = self.worker_scheduler.schedule(next_mission)
+            if worker is None:
+                self.mission_queue.transition(next_mission.mission_id, QueueItemState.BLOCKED)
+                _emit(self._events, "no_capable_worker", next_mission.mission_id, {})
+                continue  # try next READY mission
+            if not self.leases.acquire(next_mission.mission_id, worker.worker_id):
+                continue  # lease conflict — try next READY mission
+            # Mission is now LEASED and RUNNING — orchestrator hands off to worker
+            # Completion happens via complete_mission() which verifies evidence gate
+            self.mission_queue.transition(
+                next_mission.mission_id, QueueItemState.RUNNING,
+                lease_owner=worker.worker_id, lease_expires_at=now_iso(),
+            )
+            _emit(self._events, "mission_dispatched", next_mission.mission_id,
+                  {"worker_id": worker.worker_id})
+
+    def complete_mission(self, mission_id: str, worker_id: str,
+                         worker_result: WorkerResult | None = None) -> bool:
+        """Complete a RUNNING mission after evidence gate passes.
+
+        Returns True if the mission was successfully completed.
+        Returns False if evidence gate is not satisfied or mission is not RUNNING.
+        """
+        item = self.mission_queue.get(mission_id)
+        if item is None or item.state != QueueItemState.RUNNING:
+            return False
+        if not self.evidence_queue.completion_gate_passed(mission_id):
+            _emit(self._events, "evidence_gate_blocked", mission_id, {})
+            return False
+        self.mission_queue.transition(mission_id, QueueItemState.COMPLETED)
+        self.leases.release(mission_id, worker_id)
+        _emit(self._events, "mission_completed", mission_id,
+              {"worker_id": worker_id, "result": worker_result.model_dump(mode="json") if worker_result else {}})
+        return True
 
     def _crash_resume(self) -> None:
         for mid in self.leases.expire_stale():
