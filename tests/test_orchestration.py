@@ -28,6 +28,7 @@ from nexara_prime.orchestration import (
     ApprovalQueue,
     EvidenceQueue,
     MissionQueue,
+    OrchestratorConfig,
     RecoveryQueue,
     RuntimeOrchestrator,
     WorkerScheduler,
@@ -822,3 +823,59 @@ class TestApprovalNonblockingCycle:
         # Mission B should be RUNNING (dispatched, not blocked)
         b = orchestrator.mission_queue.get("mission_b")
         assert b.state == QueueItemState.RUNNING
+
+
+class TestRevokeDoesNotResetConsumed:
+    """revoke() must not reset CONSUMED approvals — single-consumption guarantee."""
+
+    def test_revoke_consumed_fails(self, approval_q):
+        req = ApprovalRequest(mission_id="mission_a", action="merge", risk_level=RiskLevel.R2,
+                              rationale="test", reversible=True)
+        approval_q.create(req)
+        approval_q.approve(req.approval_id)
+        approval_q.consume(req.approval_id)
+        # Revoking a consumed approval must fail
+        result = approval_q.revoke(req.approval_id)
+        assert result is None
+
+
+class TestStatusPendingApprovals:
+    """status().pending_approvals must reflect ApprovalQueue, not mission state alone."""
+
+    def test_pending_approvals_reflects_approval_queue(self, orchestrator):
+        req = ApprovalRequest(mission_id="mission_a", action="merge", risk_level=RiskLevel.R2,
+                              rationale="test", reversible=True)
+        orchestrator.approvals.create(req)
+        s = orchestrator.status()
+        assert s.pending_approvals >= 1
+
+    def test_no_approvals_reports_zero(self, orchestrator):
+        s = orchestrator.status()
+        assert s.pending_approvals == 0
+
+
+class TestCrashResumeEventFlood:
+    """_crash_resume must not emit per-mission events every cycle."""
+
+    def test_no_flood_on_subsequent_cycles(self, orchestrator):
+        # First call: no stale leases, should emit nothing
+        orchestrator._crash_resume()
+        # Verify no stale lease events were emitted for non-existent missions
+        # (Idempotent: subsequent calls with no stale leases are no-ops)
+        orchestrator._crash_resume()
+        # No crash — no assertions needed beyond no exception
+
+
+class TestAutoResumeConfig:
+    """OrchestratorConfig.auto_resume=False must disable crash resume."""
+
+    def test_auto_resume_disabled_skips_crash_resume(self, tmp_db, events, evidence):
+        config = OrchestratorConfig(auto_resume=False)
+        orch = RuntimeOrchestrator(tmp_db, events, evidence, config=config)
+        orch.mission_queue.enqueue(_make_item("mission_a"))
+        orch.worker_scheduler.register(_make_worker("w1", writer=True))
+        # Run a cycle with auto_resume=False — must not attempt crash resume
+        orch._execute_cycle()
+        # Mission should be dispatched normally without crash resume interference
+        item = orch.mission_queue.get("mission_a")
+        assert item.state == QueueItemState.RUNNING

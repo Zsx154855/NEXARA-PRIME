@@ -417,6 +417,14 @@ class ApprovalQueue:
         return self._decide(approval_id, ApprovalStatus.REJECTED, actor)
 
     def revoke(self, approval_id: str) -> ApprovalRequest | None:
+        raw = self._store.find_record("approval_requests", "approval_id", approval_id)
+        if raw is None:
+            return None
+        p = raw.get("payload", raw)
+        req = ApprovalRequest(**p)
+        # Cannot revoke already-consumed approvals — single-consumption guarantee
+        if req.status == ApprovalStatus.CONSUMED:
+            return None
         return self._decide(approval_id, ApprovalStatus.PENDING, "system", revoke=True)
 
     def consume(self, approval_id: str) -> ApprovalRequest | None:
@@ -672,7 +680,7 @@ class RuntimeOrchestrator:
             total_running=counts.get("running", 0) + counts.get("leased", 0),
             total_blocked=counts.get("blocked", 0),
             total_completed=counts.get("completed", 0),
-            pending_approvals=counts.get("waiting_approval", 0),
+            pending_approvals=len(self.approvals.list_pending()),
             active_workers=len(self.worker_scheduler.list_available()),
             uptime_seconds=_utc_now_ts() - (self._started_at or _utc_now_ts()),
         )
@@ -689,7 +697,8 @@ class RuntimeOrchestrator:
             self._stop_flag.wait(self.config.cycle_delay_s)
 
     def _execute_cycle(self) -> None:
-        self._crash_resume()
+        if self.config.auto_resume:
+            self._crash_resume()
         # Promote QUEUED → READY when dependencies are met
         for item in self.mission_queue.list_by_state(QueueItemState.QUEUED):
             if self.mission_queue._dependencies_met(item):
@@ -746,6 +755,7 @@ class RuntimeOrchestrator:
         return True
 
     def _crash_resume(self) -> None:
+        recovered_count = 0
         for mid in self.leases.expire_stale():
             stale = self.leases.recover_stale(mid)
             if stale:
@@ -753,11 +763,11 @@ class RuntimeOrchestrator:
                 item = self.mission_queue.get(mid)
                 if item and item.state in (QueueItemState.LEASED, QueueItemState.RUNNING):
                     self.mission_queue.transition(mid, QueueItemState.READY)
-        for state in (QueueItemState.QUEUED, QueueItemState.READY, QueueItemState.LEASED,
-                      QueueItemState.RUNNING, QueueItemState.VERIFYING,
-                      QueueItemState.EVIDENCE_PENDING, QueueItemState.RECOVERING):
-            for item in self.mission_queue.list_by_state(state):
-                _emit(self._events, "mission_reconciled", item.mission_id, {"state": state.value})
+                recovered_count += 1
+        # Only emit a single reconciled event when actual recovery happened
+        if recovered_count > 0:
+            _emit(self._events, "crash_resume_performed", "orchestrator",
+                  {"recovered_leases": recovered_count})
 
     def _has_pending_approval(self, mission_id: str) -> bool:
         for req in self.approvals.list_pending():
