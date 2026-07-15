@@ -223,11 +223,18 @@ class WorkerScheduler:
         return WorkerDescriptor(**(raw.get("payload", raw)))
 
     def list_available(self) -> list[WorkerDescriptor]:
-        return [
-            WorkerDescriptor(**(r.get("payload", r)))
-            for r in self._store.list_records("worker_registry")
-            if r.get("payload", r).get("available")
-        ]
+        from datetime import datetime, timezone, timedelta
+        stale_threshold = (datetime.now(timezone.utc) - timedelta(seconds=300)).isoformat()
+        available: list[WorkerDescriptor] = []
+        for r in self._store.list_records("worker_registry"):
+            p = r.get("payload", r)
+            if not p.get("available"):
+                continue
+            w = WorkerDescriptor(**p)
+            if w.last_heartbeat < stale_threshold:
+                continue  # stale worker — heartbeat expired
+            available.append(w)
+        return available
 
     def schedule(self, item: MissionQueueItem) -> WorkerDescriptor | None:
         available = self.list_available()
@@ -297,6 +304,10 @@ class WriterLeaseManager:
         ttl = ttl_seconds or self.HEARTBEAT_TTL_S
         now = now_iso()
         with self._lock:
+            # NOTE: This per-instance lock serializes within one process. Cross-instance
+            # serialization requires DB-level advisory lock or unique constraint on
+            # (mission_id, state) WHERE state='active'. For single-orchestrator deployments
+            # this lock is sufficient. Multi-process deployments should add DB serialization.
             # Scan ALL leases for this mission — any active unexpired lease blocks
             all_leases = self._store.list_records("writer_leases")
             for raw in all_leases:
@@ -324,18 +335,22 @@ class WriterLeaseManager:
             return True
 
     def heartbeat(self, mission_id: str, worker_id: str) -> bool:
-        existing = self._store.find_record("writer_leases", "mission_id", mission_id)
-        if existing is None:
-            return False
-        p = existing.get("payload", existing)
-        if p.get("worker_id") != worker_id:
-            return False
-        if p.get("expires_at", "") < now_iso():
-            return False
-        p["heartbeat_at"] = now_iso()
-        p["expires_at"] = self._extend_expiry()
-        _sr(self._store, p["lease_id"], "writer_leases", p)
-        return True
+        now = now_iso()
+        for raw in self._store.list_records("writer_leases"):
+            p = raw.get("payload", raw)
+            if p.get("mission_id") != mission_id:
+                continue
+            if p.get("state") != "active":
+                continue
+            if p.get("worker_id") != worker_id:
+                return False
+            if p.get("expires_at", "") < now:
+                return False
+            p["heartbeat_at"] = now
+            p["expires_at"] = self._extend_expiry()
+            _sr(self._store, p["lease_id"], "writer_leases", p)
+            return True
+        return False
 
     def renew(self, mission_id: str, worker_id: str, ttl_seconds: int | None = None) -> bool:
         existing = self._store.find_record("writer_leases", "mission_id", mission_id)
@@ -375,12 +390,10 @@ class WriterLeaseManager:
         return stale
 
     def recover_stale(self, mission_id: str) -> dict | None:
-        existing = self._store.find_record("writer_leases", "mission_id", mission_id)
-        if existing is None:
-            return None
-        p = existing.get("payload", existing)
-        if p.get("state") == "stale":
-            return p
+        for raw in self._store.list_records("writer_leases"):
+            p = raw.get("payload", raw)
+            if p.get("mission_id") == mission_id and p.get("state") == "stale":
+                return p
         return None
 
     def _extend_expiry(self, ttl_seconds: int | None = None) -> str:
@@ -703,6 +716,10 @@ class RuntimeOrchestrator:
         for item in self.mission_queue.list_by_state(QueueItemState.QUEUED):
             if self.mission_queue._dependencies_met(item):
                 self.mission_queue.transition(item.mission_id, QueueItemState.READY)
+        # Promote WAITING_APPROVAL → READY when approval has been consumed
+        for item in self.mission_queue.list_by_state(QueueItemState.WAITING_APPROVAL):
+            if not self._has_pending_approval(item.mission_id):
+                self.mission_queue.transition(item.mission_id, QueueItemState.READY)
         # Process READY missions, skipping approval-blocked ones to not stall the queue
         processed_in_cycle: set[str] = set()
         while True:
@@ -740,19 +757,36 @@ class RuntimeOrchestrator:
         """Complete a RUNNING mission after evidence gate passes.
 
         Returns True if the mission was successfully completed.
-        Returns False if evidence gate is not satisfied or mission is not RUNNING.
+        Returns False if evidence gate is not satisfied, mission is not RUNNING,
+        lease is held by a different worker, or worker result indicates failure.
         """
         item = self.mission_queue.get(mission_id)
         if item is None or item.state != QueueItemState.RUNNING:
             return False
+        # Verify lease owner — only the lease holder can complete
+        if not self._lease_held_by(mission_id, worker_id):
+            _emit(self._events, "complete_mission_lease_mismatch", mission_id, {"worker_id": worker_id})
+            return False
         if not self.evidence_queue.completion_gate_passed(mission_id):
             _emit(self._events, "evidence_gate_blocked", mission_id, {})
+            return False
+        # Reject failed worker results — drive recovery instead
+        if worker_result is not None and not worker_result.success:
+            _emit(self._events, "worker_result_failed", mission_id,
+                  {"worker_id": worker_id, "failure_class": worker_result.failure_class})
             return False
         self.mission_queue.transition(mission_id, QueueItemState.COMPLETED)
         self.leases.release(mission_id, worker_id)
         _emit(self._events, "mission_completed", mission_id,
               {"worker_id": worker_id, "result": worker_result.model_dump(mode="json") if worker_result else {}})
         return True
+
+    def _lease_held_by(self, mission_id: str, worker_id: str) -> bool:
+        for raw in self._store.list_records("writer_leases"):
+            p = raw.get("payload", raw)
+            if p.get("mission_id") == mission_id and p.get("state") == "active":
+                return p.get("worker_id") == worker_id
+        return False  # no active lease found
 
     def _crash_resume(self) -> None:
         recovered_count = 0
@@ -762,7 +796,14 @@ class RuntimeOrchestrator:
                 _emit(self._events, "stale_lease_recovered", mid, {"worker_id": stale.get("worker_id")})
                 item = self.mission_queue.get(mid)
                 if item and item.state in (QueueItemState.LEASED, QueueItemState.RUNNING):
-                    self.mission_queue.transition(mid, QueueItemState.READY)
+                    self.mission_queue.bump_attempt(mid)
+                    updated = self.mission_queue.get(mid)
+                    if updated and updated.attempt_count >= updated.max_attempts:
+                        self.mission_queue.transition(mid, QueueItemState.BLOCKED)
+                        self.recovery.enqueue(mid, FailureClass.LEASE_EXPIRED,
+                                              root_cause=f"Stale lease recovery exhausted after {updated.attempt_count} attempts")
+                    else:
+                        self.mission_queue.transition(mid, QueueItemState.READY)
                 recovered_count += 1
         # Only emit a single reconciled event when actual recovery happened
         if recovered_count > 0:

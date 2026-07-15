@@ -774,12 +774,14 @@ class TestCompleteMissionEvidenceGate:
         """Mission with no evidence jobs can complete (gate vacuously passes)."""
         orchestrator.mission_queue.enqueue(_make_item("mission_x"))
         orchestrator.mission_queue.transition("mission_x", QueueItemState.RUNNING)
+        orchestrator.leases.acquire("mission_x", "w1")
         assert orchestrator.complete_mission("mission_x", "w1")
         assert orchestrator.mission_queue.get("mission_x").state == QueueItemState.COMPLETED
 
     def test_complete_with_failed_evidence_fails(self, orchestrator):
         orchestrator.mission_queue.enqueue(_make_item("mission_x"))
         orchestrator.mission_queue.transition("mission_x", QueueItemState.RUNNING)
+        orchestrator.leases.acquire("mission_x", "w1")
         job = EvidenceJob(mission_id="mission_x", evidence_type=EvidenceType.TEST_REPORT, command="pytest")
         orchestrator.evidence_queue.enqueue(job)
         orchestrator.evidence_queue.complete(job.evidence_job_id, exit_code=1)
@@ -879,3 +881,111 @@ class TestAutoResumeConfig:
         # Mission should be dispatched normally without crash resume interference
         item = orch.mission_queue.get("mission_a")
         assert item.state == QueueItemState.RUNNING
+
+
+class TestRequeueAfterApproval:
+    """WAITING_APPROVAL missions must return to READY after approval consumed."""
+
+    def test_requeue_after_approval_consumed(self, orchestrator):
+        orchestrator.worker_scheduler.register(_make_worker("w1", writer=True))
+        orchestrator.mission_queue.enqueue(_make_item("mission_a"))
+        req = ApprovalRequest(mission_id="mission_a", action="merge", risk_level=RiskLevel.R2,
+                              rationale="test", reversible=True)
+        orchestrator.approvals.create(req)
+        # Cycle 1: mission moves to WAITING_APPROVAL
+        orchestrator._execute_cycle()
+        a = orchestrator.mission_queue.get("mission_a")
+        assert a.state == QueueItemState.WAITING_APPROVAL
+        # Human approves and consumes
+        orchestrator.approvals.approve(req.approval_id)
+        orchestrator.approvals.consume(req.approval_id)
+        # Cycle 2: mission should be promoted back to READY, then dispatched
+        orchestrator.mission_queue.transition("mission_a", QueueItemState.WAITING_APPROVAL)
+        orchestrator._execute_cycle()
+        a = orchestrator.mission_queue.get("mission_a")
+        assert a.state == QueueItemState.RUNNING
+
+
+class TestCompleteMissionLeaseOwner:
+    """complete_mission() must verify lease owner before completing."""
+
+    def test_non_owner_cannot_complete(self, orchestrator):
+        orchestrator.mission_queue.enqueue(_make_item("mission_x"))
+        orchestrator.mission_queue.transition("mission_x", QueueItemState.RUNNING)
+        orchestrator.leases.acquire("mission_x", "owner_w")
+        assert not orchestrator.complete_mission("mission_x", "intruder_w")
+
+    def test_owner_can_complete(self, orchestrator):
+        orchestrator.mission_queue.enqueue(_make_item("mission_x"))
+        orchestrator.mission_queue.transition("mission_x", QueueItemState.RUNNING)
+        orchestrator.leases.acquire("mission_x", "owner_w")
+        assert orchestrator.complete_mission("mission_x", "owner_w")
+        assert orchestrator.mission_queue.get("mission_x").state == QueueItemState.COMPLETED
+
+
+class TestRejectFailedWorkerResult:
+    """complete_mission() must reject WorkerResult with success=False."""
+
+    def test_failed_worker_result_rejected(self, orchestrator):
+        orchestrator.mission_queue.enqueue(_make_item("mission_x"))
+        orchestrator.mission_queue.transition("mission_x", QueueItemState.RUNNING)
+        orchestrator.leases.acquire("mission_x", "w1")
+        failed_result = WorkerResult(
+            worker_id="w1", mission_id="mission_x", success=False,
+            failure_class=FailureClass.CODE_FAILURE,
+        )
+        assert not orchestrator.complete_mission("mission_x", "w1", worker_result=failed_result)
+
+
+class TestStaleLeaseMaxAttempts:
+    """Stale lease recovery must enforce max_attempts."""
+
+    def test_max_attempts_exceeded_blocks_mission(self, orchestrator):
+        item = _make_item("retry_mission", max_attempts=2, attempt_count=1,
+                          state=QueueItemState.RUNNING)
+        orchestrator.mission_queue.enqueue(item)
+        orchestrator.leases.acquire("retry_mission", "w1", ttl_seconds=-1)
+        orchestrator._crash_resume()
+        updated = orchestrator.mission_queue.get("retry_mission")
+        assert updated.state == QueueItemState.BLOCKED
+
+
+class TestHeartbeatScansAllLeases:
+    """heartbeat() must find the current active lease, not just first match."""
+
+    def test_heartbeat_finds_active_after_reacquire(self, lease_mgr):
+        lease_mgr.acquire("mission_a", "w1")
+        lease_mgr.release("mission_a", "w1")
+        lease_mgr.acquire("mission_a", "w2")
+        # heartbeat for w2 must find the new active lease, not the old released one
+        assert lease_mgr.heartbeat("mission_a", "w2")
+
+
+class TestRecoverStaleScansAllLeases:
+    """recover_stale() must find the stale lease across all records."""
+
+    def test_recover_stale_after_reacquire(self, lease_mgr):
+        lease_mgr.acquire("mission_a", "w1", ttl_seconds=-1)
+        lease_mgr.expire_stale()  # marks first lease stale
+        lease_mgr.acquire("mission_a", "w2", ttl_seconds=-1)
+        lease_mgr.expire_stale()  # marks second lease stale
+        # recover_stale must find a stale lease (either one)
+        recovered = lease_mgr.recover_stale("mission_a")
+        assert recovered is not None
+        assert recovered["state"] == "stale"
+
+
+class TestListAvailableExpiresStaleWorkers:
+    """list_available() must filter out workers with expired heartbeats."""
+
+    def test_stale_worker_not_listed(self, scheduler):
+        w = _make_worker("stale_w", health="healthy")
+        scheduler.register(w)
+        # Manually set last_heartbeat to old
+        raw = scheduler._store.find_record("worker_registry", "worker_id", "stale_w")
+        p = raw.get("payload", raw)
+        p["last_heartbeat"] = "2020-01-01T00:00:00Z"
+        from nexara_prime.orchestration import _sr
+        _sr(scheduler._store, "stale_w", "worker_registry", p)
+        available = scheduler.list_available()
+        assert all(w.worker_id != "stale_w" for w in available)
