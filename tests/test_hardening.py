@@ -90,7 +90,7 @@ class ProviderAdapterUnitTests(unittest.TestCase):
         self.assertEqual(response.trace_id, "t1")
 
     def test_redaction_dict(self):
-        self.assertEqual(redact_secrets({"api_key": "secret", "safe": "ok"})["api_key"], "[REDACTED]")
+        self.assertEqual(redact_secrets({"api_key": "secret", "safe": "ok"})["api_key"], "[REDACTED]")  # NEXARA_TEST_FIXTURE
 
     def test_redaction_bearer(self):
         self.assertIn("[REDACTED]", redact_secrets("Bearer abcdef012345"))

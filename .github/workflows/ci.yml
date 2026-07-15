@@ -14,7 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.12"}
+        with:
+          python-version: "3.12"
+      - run: pip install hatchling httpx2
       - run: pip install -e .
       - run: python -m pytest tests/ -q
 
@@ -22,28 +24,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cd platform/sdk/typescript && npm ci && npx tsc --noEmit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+        working-directory: platform/sdk/typescript
+      - run: npx tsc --noEmit
+        working-directory: platform/sdk/typescript
 
   swift:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cd experience/NexaraCore && swift build
-      - run: cd experience/macos && swift build
+      - run: swift build
+        working-directory: experience/NexaraCore
+      - run: swift build
+        working-directory: experience/macos
 
   governance:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.12"}
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
       - run: |
           for f in .nexara/*.json; do
             python3 -c "import json; json.load(open('$f'))" || exit 1
           done
       - run: python3 scripts/governance/detect_state_drift.py
       - run: |
-          pip install pyyaml
+          shopt -s globstar
           for f in governance/**/*.yaml; do
             python3 -c "import yaml; yaml.safe_load(open('$f'))" || exit 1
           done
@@ -52,9 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          if grep -rnE '(api_key|secret|password|token)\s*=\s*["'"'"'][A-Za-z0-9_\-]{8,}' src/ tests/ --include="*.py"; then
-            echo "SECRET SCAN FAILED"
-            exit 1
-          fi
-          echo "Secret scan: CLEAN"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 scripts/security/scan_hardcoded_secrets.py

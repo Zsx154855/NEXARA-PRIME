@@ -138,7 +138,7 @@ class SecretSecurityTests(unittest.TestCase):
             pass
 
     def test_redact_private_key(self):
-        text = "private_key = '-----BEGIN RSA PRIVATE KEY-----\\nabc123\\n-----END-----'"
+        text = "private_key = '-----BEGIN RSA PRIVATE KEY-----\\nabc123\\n-----END-----'"  # NEXARA_TEST_FIXTURE
         cleaned = self.redact_secrets(text)
         self.assertNotIn("BEGIN RSA", cleaned)
 

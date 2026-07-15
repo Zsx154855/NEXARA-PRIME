@@ -1,3 +1,4 @@
+import NexaraCore
 import SwiftUI
 
 // MARK: - iPhone Missions Tab
