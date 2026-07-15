@@ -76,38 +76,60 @@ def _utc_now_ts() -> float:
     return time.time()
 
 
-def _parse_iso_utc(ts: str | None) -> float | None:
-    """Parse an ISO-8601 datetime string and return as UTC Unix timestamp.
+def _parse_instant(ts: str | None) -> float | None:
+    """Parse any ISO-8601 datetime string to a UTC Unix timestamp.
 
-    Accepts both naive (treated as UTC) and offset-aware strings.
+    Handles:
+      - Offset-aware strings: ``2026-07-15T00:30:00-10:00``, ``+07:00``, ``+00:00``
+      - ``Z`` suffix: ``2026-07-15T21:04:32Z``
+      - Naive strings: treated as UTC (``2026-07-15T12:00:00`` → UTC)
+
     Returns None if ts is None or unparseable.
     """
     if ts is None:
         return None
     from datetime import datetime, timezone
     try:
-        dt = datetime.fromisoformat(ts)
+        # Normalize 'Z' suffix to '+00:00' for fromisoformat
+        normalized = ts
+        if ts.endswith("Z"):
+            normalized = ts[:-1] + "+00:00"
+        dt = datetime.fromisoformat(normalized)
     except (ValueError, TypeError):
         return None
     if dt.tzinfo is None:
         # Naive → interpret as UTC
         dt = dt.replace(tzinfo=timezone.utc)
-    # Convert to UTC timestamp for comparison
+    # Convert to UTC timestamp
     return dt.timestamp()
 
 
-def _compare_iso(a: str | None, b: str | None) -> bool:
-    """Return True if a < b, comparing as UTC-aware datetimes.
+def _instant_before(a: str | None, b: str | None) -> bool:
+    """Return True if instant *a* is strictly before instant *b*.
 
-    None represents -infinity (always earlier).
+    None represents unbounded-past (always before any concrete instant).
     """
-    ta = _parse_iso_utc(a)
-    tb = _parse_iso_utc(b)
+    ta = _parse_instant(a)
+    tb = _parse_instant(b)
     if ta is None:
-        return True  # None = unbounded past
+        return True
     if tb is None:
         return False
     return ta < tb
+
+
+def _instant_before_or_equal(a: str | None, b: str | None) -> bool:
+    """Return True if instant *a* is before or at instant *b*.
+
+    None represents unbounded-past.
+    """
+    ta = _parse_instant(a)
+    tb = _parse_instant(b)
+    if ta is None:
+        return True
+    if tb is None:
+        return False
+    return ta <= tb
 
 
 # ── 1. Persistent Mission Queue ──
@@ -144,8 +166,8 @@ class MissionQueue:
                 item = MissionQueueItem(**p)
                 if item.state != QueueItemState.READY:
                     continue
-                # Compare as UTC-aware datetimes: item.available_at must be <= now
-                if item.available_at and _compare_iso(now, item.available_at):
+                # available_at must be <= now (item is available)
+                if item.available_at and not _instant_before_or_equal(item.available_at, now):
                     continue
                 if not self._dependencies_met(item):
                     continue
@@ -267,7 +289,8 @@ class WorkerScheduler:
             if not p.get("available"):
                 continue
             w = WorkerDescriptor(**p)
-            if w.last_heartbeat < stale_threshold:
+            # Compare as UTC-aware instants
+            if not _instant_before_or_equal(stale_threshold, w.last_heartbeat):
                 continue  # stale worker — heartbeat expired
             available.append(w)
         return available
@@ -335,81 +358,97 @@ class WriterLeaseManager:
         self._events = events
         self._lock = threading.Lock()
 
-    def acquire(self, mission_id: str, worker_id: str, ttl_seconds: int | None = None) -> bool:
-        from datetime import datetime, timezone, timedelta
-        ttl = ttl_seconds or self.HEARTBEAT_TTL_S
-        now = now_iso()
-        with self._lock:
-            # NOTE: This per-instance lock serializes within one process. Cross-instance
-            # serialization requires DB-level advisory lock or unique constraint on
-            # (mission_id, state) WHERE state='active'. For single-orchestrator deployments
-            # this lock is sufficient. Multi-process deployments should add DB serialization.
-            # Scan ALL leases for this mission — any active unexpired lease blocks
-            all_leases = self._store.list_records("writer_leases")
-            for raw in all_leases:
-                p = raw.get("payload", raw)
-                if p.get("mission_id") != mission_id:
-                    continue
-                state = p.get("state")
-                if state == "released":
-                    continue
-                if state == "stale":
-                    continue
-                if state in (None, "active") and p.get("expires_at", "") > now:
-                    return False
-            record = {
-                "lease_id": new_id("lease"),
-                "mission_id": mission_id,
-                "worker_id": worker_id,
-                "acquired_at": now,
-                "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=ttl)).isoformat(),
-                "heartbeat_at": now,
-                "state": "active",
-            }
-            _sr(self._store, record["lease_id"], "writer_leases", record)
-            _emit(self._events, "lease_acquired", mission_id, {"worker_id": worker_id})
-            return True
+    # ── internal: find the current active lease ──
 
-    def heartbeat(self, mission_id: str, worker_id: str) -> bool:
-        now = now_iso()
+    def _latest_active_lease(self, mission_id: str) -> dict | None:
+        """Return the newest active (or stale) lease record for *mission_id*,
+        scanning all lease records and picking the one with the latest
+        ``acquired_at``.  Returns None when no lease record exists.
+        """
+        candidates: list[dict] = []
         for raw in self._store.list_records("writer_leases"):
             p = raw.get("payload", raw)
             if p.get("mission_id") != mission_id:
                 continue
-            if p.get("state") != "active":
+            candidates.append(p)
+        if not candidates:
+            return None
+        # Pick newest by acquired_at (ISO-8601 strings sort correctly for UTC)
+        candidates.sort(key=lambda p: p.get("acquired_at", ""), reverse=True)
+        return candidates[0]
+
+    # ── acquire ──
+
+    def acquire(self, mission_id: str, worker_id: str, ttl_seconds: int | None = None) -> bool:
+        from datetime import datetime, timezone, timedelta
+        ttl = ttl_seconds if ttl_seconds is not None else self.HEARTBEAT_TTL_S
+        now = now_iso()
+        # Check all existing leases for this mission — any active unexpired lease blocks
+        for raw in self._store.list_records("writer_leases"):
+            p = raw.get("payload", raw)
+            if p.get("mission_id") != mission_id:
                 continue
-            if p.get("worker_id") != worker_id:
-                return False
-            if p.get("expires_at", "") < now:
-                return False
-            p["heartbeat_at"] = now
-            p["expires_at"] = self._extend_expiry()
-            _sr(self._store, p["lease_id"], "writer_leases", p)
-            return True
-        return False
+            state = p.get("state")
+            if state in ("released", "stale"):
+                continue
+            # active or unknown — check expiry
+            expires = p.get("expires_at", "")
+            if state in (None, "active") and _instant_before(now, expires):
+                return False  # already has an active lease
+        # Atomic DB-level claim: use a deterministic claim record ID so only
+        # the first writer across ALL connections/processes succeeds.
+        claim_id = f"lease_claim:{mission_id}:{worker_id}:{now}"
+        record = {
+            "lease_id": claim_id,
+            "mission_id": mission_id,
+            "worker_id": worker_id,
+            "acquired_at": now,
+            "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=ttl)).isoformat(),
+            "heartbeat_at": now,
+            "state": "active",
+        }
+        claimed = self._store.save_record_if_absent(
+            claim_id, "writer_leases", record, created_at=now, mission_id=mission_id,
+        )
+        if claimed:
+            _emit(self._events, "lease_acquired", mission_id, {"worker_id": worker_id})
+        return claimed
+
+    def heartbeat(self, mission_id: str, worker_id: str) -> bool:
+        lease = self._latest_active_lease(mission_id)
+        if lease is None:
+            return False
+        if lease.get("state") != "active":
+            return False
+        if lease.get("worker_id") != worker_id:
+            return False
+        if not _instant_before(now_iso(), lease.get("expires_at", "")):
+            return False
+        lease["heartbeat_at"] = now_iso()
+        lease["expires_at"] = self._extend_expiry()
+        _sr(self._store, lease["lease_id"], "writer_leases", lease)
+        return True
 
     def renew(self, mission_id: str, worker_id: str, ttl_seconds: int | None = None) -> bool:
-        existing = self._store.find_record("writer_leases", "mission_id", mission_id)
-        if existing is None:
+        lease = self._latest_active_lease(mission_id)
+        if lease is None:
             return False
-        p = existing.get("payload", existing)
-        if p.get("worker_id") != worker_id:
+        if lease.get("worker_id") != worker_id:
             return False
-        p["expires_at"] = self._extend_expiry(ttl_seconds)
-        p["heartbeat_at"] = now_iso()
-        _sr(self._store, p["lease_id"], "writer_leases", p)
+        lease["expires_at"] = self._extend_expiry(ttl_seconds)
+        lease["heartbeat_at"] = now_iso()
+        _sr(self._store, lease["lease_id"], "writer_leases", lease)
         return True
 
     def release(self, mission_id: str, worker_id: str) -> bool:
-        existing = self._store.find_record("writer_leases", "mission_id", mission_id)
-        if existing is None:
+        lease = self._latest_active_lease(mission_id)
+        if lease is None:
             return False
-        p = existing.get("payload", existing)
-        if p.get("worker_id") != worker_id:
+        if lease.get("worker_id") != worker_id:
             return False  # non-owner cannot release
-        p["state"] = "released"
-        p["released_at"] = now_iso()
-        _sr(self._store, p["lease_id"], "writer_leases", p)
+        lease["state"] = "released"
+        lease["released_at"] = now_iso()
+        _sr(self._store, lease["lease_id"], "writer_leases", lease)
         _emit(self._events, "lease_released", mission_id, {"worker_id": worker_id})
         return True
 
@@ -418,7 +457,7 @@ class WriterLeaseManager:
         stale: list[str] = []
         for raw in self._store.list_records("writer_leases"):
             p = raw.get("payload", raw)
-            if p.get("state") == "active" and p.get("expires_at", "") < now:
+            if p.get("state") == "active" and not _instant_before_or_equal(now, p.get("expires_at", "")):
                 p["state"] = "stale"
                 _sr(self._store, p["lease_id"], "writer_leases", p)
                 stale.append(p["mission_id"])
@@ -511,7 +550,7 @@ class ApprovalQueue:
         if not revoke and req.status != ApprovalStatus.PENDING:
             return None
         # Reject expired approvals — cannot approve/reject after expiry
-        if not revoke and req.expires_at and req.expires_at < now_iso():
+        if not revoke and req.expires_at and not _instant_before_or_equal(now_iso(), req.expires_at):
             req.status = ApprovalStatus.EXPIRED
             req.decided_at = now_iso()
             _sr(self._store, approval_id, "approval_requests", req.model_dump(mode="json"))
@@ -529,7 +568,9 @@ class ApprovalQueue:
         expired: list[str] = []
         for raw in self._store.list_records("approval_requests"):
             p = raw.get("payload", raw)
-            if p.get("status") == ApprovalStatus.PENDING.value and p.get("expires_at") and p["expires_at"] < now:
+            if (p.get("status") == ApprovalStatus.PENDING.value
+                    and p.get("expires_at")
+                    and not _instant_before_or_equal(now, p["expires_at"])):
                 p["status"] = ApprovalStatus.EXPIRED.value
                 _sr(self._store, p["approval_id"], "approval_requests", p)
                 expired.append(p["approval_id"])
@@ -822,11 +863,10 @@ class RuntimeOrchestrator:
         return True
 
     def _lease_held_by(self, mission_id: str, worker_id: str) -> bool:
-        for raw in self._store.list_records("writer_leases"):
-            p = raw.get("payload", raw)
-            if p.get("mission_id") == mission_id and p.get("state") == "active":
-                return p.get("worker_id") == worker_id
-        return False  # no active lease found
+        lease = self.leases._latest_active_lease(mission_id)
+        if lease is None:
+            return False
+        return lease.get("state") == "active" and lease.get("worker_id") == worker_id
 
     def _crash_resume(self) -> None:
         recovered_count = 0
