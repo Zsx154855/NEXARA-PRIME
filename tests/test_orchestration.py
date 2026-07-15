@@ -183,6 +183,41 @@ class TestMissionQueue:
         queue.enqueue(item)
         assert queue.dequeue() is None  # not yet available
 
+    def test_available_at_negative_10_offset(self, queue):
+        """available_at with -10:00 offset must be compared as UTC-aware datetime."""
+        # -10:00 means 10 hours behind UTC. A timestamp 1 hour in the future
+        # in -10:00 is actually 11 hours from now in UTC.
+        from datetime import datetime, timezone, timedelta
+        tz_m10 = timezone(timedelta(hours=-10))
+        dt = datetime.now(tz_m10) + timedelta(hours=1)
+        item = _make_item("neg10", available_at=dt.isoformat())
+        queue.enqueue(item)
+        # The item is 1 hour in the future in -10:00 → not yet available in UTC
+        assert queue.dequeue() is None
+
+    def test_available_at_positive_07_offset(self, queue):
+        """available_at with +07:00 offset must be compared as UTC-aware datetime."""
+        # +07:00 means 7 hours ahead of UTC. A timestamp 1 hour in the past
+        # in +07:00 was actually 8 hours ago in UTC.
+        from datetime import datetime, timezone, timedelta
+        tz_p7 = timezone(timedelta(hours=7))
+        dt = datetime.now(tz_p7) - timedelta(hours=1)
+        item = _make_item("pos7", available_at=dt.isoformat())
+        queue.enqueue(item)
+        # The item is 1 hour ago — already available
+        result = queue.dequeue()
+        assert result is not None
+        assert result.mission_id == "pos7"
+
+    def test_available_at_naive_treated_as_utc(self, queue):
+        """Naive ISO datetime strings are treated as UTC."""
+        from datetime import datetime, timezone, timedelta
+        past = (datetime.now(timezone.utc) - timedelta(hours=1)).replace(tzinfo=None)
+        item = _make_item("naive_past", available_at=past.isoformat())
+        queue.enqueue(item)
+        # Already past — should be available
+        assert queue.dequeue() is not None
+
     def test_restart_persistence(self, queue, tmp_db, events):
         queue.enqueue(_make_item("persist_me"))
         # simulate restart: new queue with same store

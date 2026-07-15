@@ -76,6 +76,40 @@ def _utc_now_ts() -> float:
     return time.time()
 
 
+def _parse_iso_utc(ts: str | None) -> float | None:
+    """Parse an ISO-8601 datetime string and return as UTC Unix timestamp.
+
+    Accepts both naive (treated as UTC) and offset-aware strings.
+    Returns None if ts is None or unparseable.
+    """
+    if ts is None:
+        return None
+    from datetime import datetime, timezone
+    try:
+        dt = datetime.fromisoformat(ts)
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is None:
+        # Naive → interpret as UTC
+        dt = dt.replace(tzinfo=timezone.utc)
+    # Convert to UTC timestamp for comparison
+    return dt.timestamp()
+
+
+def _compare_iso(a: str | None, b: str | None) -> bool:
+    """Return True if a < b, comparing as UTC-aware datetimes.
+
+    None represents -infinity (always earlier).
+    """
+    ta = _parse_iso_utc(a)
+    tb = _parse_iso_utc(b)
+    if ta is None:
+        return True  # None = unbounded past
+    if tb is None:
+        return False
+    return ta < tb
+
+
 # ── 1. Persistent Mission Queue ──
 
 
@@ -110,7 +144,8 @@ class MissionQueue:
                 item = MissionQueueItem(**p)
                 if item.state != QueueItemState.READY:
                     continue
-                if item.available_at and item.available_at > now:
+                # Compare as UTC-aware datetimes: item.available_at must be <= now
+                if item.available_at and _compare_iso(now, item.available_at):
                     continue
                 if not self._dependencies_met(item):
                     continue
