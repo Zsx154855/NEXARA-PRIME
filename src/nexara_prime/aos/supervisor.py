@@ -19,7 +19,7 @@ from ..orchestration import RuntimeOrchestrator
 
 from .execution_gateway import ExecutionGateway
 from .permission_broker import PermissionBroker
-from .recovery_engine import RecoveryEngine
+from .recovery_engine import RecoveryEngine, RecoveryStrategy
 from .cost_optimizer import CostOptimizer
 from .health_monitor import HealthMonitor
 
@@ -45,6 +45,7 @@ class SupervisorConfig:
     stale_lease_timeout_s: float = 300.0
     approval_expiry_timeout_s: float = 3600.0
     max_consecutive_errors: int = 10
+    default_lease_duration_s: float = 600.0
 
 
 class AutonomousSupervisor:
@@ -53,14 +54,15 @@ class AutonomousSupervisor:
     Responsibilities:
     - Read current state from .nexara/*
     - Select next mission from the program loop
-    - Dispatch through ExecutionGateway
+    - Select worker via scheduler for unpinned missions
+    - Dispatch through ExecutionGateway (which enforces PermissionBroker)
+    - Handle WorkerResult: success→complete, retryable→recover, fatal→BLOCKED
     - Monitor worker health and progress
     - Trigger recovery on failures
-    - Write evidence on completion (idempotent)
+    - Write evidence on completion (idempotent, with trace_id)
     - Auto-advance to next mission
     """
 
-    # States that require the supervisor to keep cycling
     _ACTIVE_STATES: set[QueueItemState] = {
         QueueItemState.QUEUED,
         QueueItemState.READY,
@@ -70,6 +72,12 @@ class AutonomousSupervisor:
         QueueItemState.RECOVERING,
         QueueItemState.VERIFYING,
         QueueItemState.EVIDENCE_PENDING,
+    }
+
+    # Failure classes that are retryable
+    _RETRYABLE_FAILURES: set[str] = {
+        "worker_failure", "lease_expired", "code_failure",
+        "test_failure", "environment_failure", "external_service_failure",
     }
 
     def __init__(
@@ -90,8 +98,11 @@ class AutonomousSupervisor:
         self.recovery = recovery_engine or RecoveryEngine()
         self.cost = cost_optimizer or CostOptimizer()
         self.health = health_monitor or HealthMonitor()
-        self.gateway = execution_gateway or ExecutionGateway()
+        self.gateway = execution_gateway or ExecutionGateway(permission_broker=self.permissions)
         self.config = config or SupervisorConfig()
+
+        # Wire PermissionBroker into the gateway
+        self.gateway.permissions = self.permissions
 
         self._state = SupervisorState.IDLE
         self._current_mission_id: str | None = None
@@ -100,9 +111,7 @@ class AutonomousSupervisor:
         self._stop_flag = threading.Event()
         self._started_at: float | None = None
 
-        # Idempotency guard for completion evidence
         self._completed_evidence_written: set[str] = set()
-        # Consecutive error counter
         self._consecutive_errors: int = 0
 
     # ── lifecycle ──
@@ -148,8 +157,6 @@ class AutonomousSupervisor:
         self._state = SupervisorState.PLANNING
 
         status = self.orchestrator.status()
-
-        # Check if any work needs attention beyond just queued items
         has_active_work = (
             status.total_queued > 0
             or status.total_running > 0
@@ -158,108 +165,186 @@ class AutonomousSupervisor:
 
         if has_active_work:
             self._state = SupervisorState.DISPATCHING
-            # Process queued → ready transitions
             self._process_queued()
-            # Dispatch ready missions through gateway
             self._dispatch_ready()
-            # Recover stale leases
             self._recover_stale_leases()
-            # Expire old approvals
             self._expire_stale_approvals()
 
-        # Check for completed missions needing evidence + advance
         self._check_completions()
-
-        # Health check
         self._state = SupervisorState.MONITORING
         self.health.check_all()
 
     def _has_pending_items(self) -> bool:
-        """Check for items in states that need supervisor attention."""
-        try:
-            for state in self._ACTIVE_STATES:
-                items = self.orchestrator.mission_queue.list_by_state(state)
-                if items:
-                    return True
-            return False
-        except Exception:
-            return True  # fail open — continue cycling if we can't check
+        for state in self._ACTIVE_STATES:
+            items = self.orchestrator.mission_queue.list_by_state(state)
+            if items:
+                return True
+        return False
+
+    # ── dispatching ──
 
     def _process_queued(self) -> None:
-        """Move queued items to ready if dependencies are met."""
-        try:
-            queued = self.orchestrator.mission_queue.list_by_state(QueueItemState.QUEUED)
-            for item in queued:
-                if self._dependencies_satisfied(item):
-                    self.orchestrator.mission_queue.transition(
-                        item.mission_id, QueueItemState.READY
-                    )
-        except Exception:
-            pass  # Will be caught by cycle error handler
+        """Move queued items to ready if dependencies are met.
+
+        Errors propagate to _run() for structured handling.
+        """
+        queued = self.orchestrator.mission_queue.list_by_state(QueueItemState.QUEUED)
+        for item in queued:
+            if self._dependencies_satisfied(item):
+                self.orchestrator.mission_queue.transition(
+                    item.mission_id, QueueItemState.READY
+                )
 
     def _dispatch_ready(self) -> None:
-        """Dispatch ready missions through the execution gateway."""
-        try:
-            ready = self.orchestrator.mission_queue.list_by_state(QueueItemState.READY)
-            for item in ready:
-                if self.gateway and item.preferred_worker:
-                    self.orchestrator.mission_queue.transition(
-                        item.mission_id, QueueItemState.RUNNING
-                    )
-                    self.gateway.dispatch(
-                        item.preferred_worker, item.mission_id,
-                        {"mission_id": item.mission_id, "priority": item.priority},
-                    )
-        except Exception:
-            pass
+        """Dispatch ready missions through the execution gateway.
+
+        - Auto-selects worker if preferred_worker is None
+        - Sets lease_expires_at on transition to RUNNING
+        - Handles WorkerResult: success→COMPLETED, retryable→recover, fatal→BLOCKED
+        """
+        ready = self.orchestrator.mission_queue.list_by_state(QueueItemState.READY)
+        for item in ready:
+            # Auto-select worker if none pinned
+            worker_id = item.preferred_worker
+            if not worker_id:
+                scheduled = self.orchestrator.worker_scheduler.schedule(item)
+                if scheduled is None:
+                    # No suitable worker — leave in READY, will retry next cycle
+                    continue
+                worker_id = scheduled.worker_id
+
+            # Set lease and transition to RUNNING
+            self.orchestrator.mission_queue.transition(
+                item.mission_id, QueueItemState.RUNNING
+            )
+            # Update lease fields on the item
+            item.lease_owner = worker_id
+            item.lease_expires_at = (
+                datetime.now(timezone.utc).timestamp()
+                + self.config.default_lease_duration_s
+            )
+            try:
+                item.lease_expires_at = datetime.fromtimestamp(
+                    item.lease_expires_at, tz=timezone.utc
+                ).isoformat()
+            except (TypeError, OSError):
+                item.lease_expires_at = datetime.now(timezone.utc).isoformat()
+
+            # Increment attempt counter
+            item.attempt_count += 1
+
+            # Dispatch through gateway (PermissionBroker enforced inside)
+            result = self.gateway.dispatch(
+                worker_id, item.mission_id,
+                {"mission_id": item.mission_id, "priority": item.priority},
+            )
+
+            # Handle result
+            if result.success:
+                self.orchestrator.mission_queue.transition(
+                    item.mission_id, QueueItemState.COMPLETED
+                )
+            elif result.failure_class and result.failure_class.value in self._RETRYABLE_FAILURES:
+                self._handle_retryable_failure(item, result)
+            else:
+                self.orchestrator.mission_queue.transition(
+                    item.mission_id, QueueItemState.BLOCKED
+                )
+                self._record_evidence(item.mission_id, "mission_blocked", {
+                    "mission_id": item.mission_id,
+                    "reason": str(result.output.get("error", "non-retryable failure")),
+                    "failure_class": result.failure_class.value if result.failure_class else "unknown",
+                })
+
+    def _handle_retryable_failure(
+        self, item: MissionQueueItem, result: Any,
+    ) -> None:
+        """Route retryable failure through RecoveryEngine."""
+        recovery_result = self.recovery.recover(
+            item.mission_id,
+            result.failure_class.value if result.failure_class else "unknown",
+            attempt=item.attempt_count,
+            last_error=str(result.output.get("error", "")),
+        )
+        if recovery_result.success and recovery_result.strategy != RecoveryStrategy.ESCALATE:
+            self.orchestrator.mission_queue.transition(
+                item.mission_id, QueueItemState.RECOVERING
+            )
+            # Re-queue for retry
+            self.orchestrator.mission_queue.transition(
+                item.mission_id, QueueItemState.QUEUED
+            )
+        else:
+            self.orchestrator.mission_queue.transition(
+                item.mission_id, QueueItemState.BLOCKED
+            )
+
+    # ── stale lease recovery ──
 
     def _recover_stale_leases(self) -> None:
-        """Recover missions with stale leases."""
-        try:
-            now = time.time()
-            for state in (QueueItemState.LEASED, QueueItemState.RUNNING):
-                items = self.orchestrator.mission_queue.list_by_state(state)
-                for item in items:
-                    if item.lease_expires_at:
-                        try:
-                            expires = datetime.fromisoformat(item.lease_expires_at)
-                            if (now - expires.timestamp()) > self.config.stale_lease_timeout_s:
-                                self.orchestrator.mission_queue.transition(
-                                    item.mission_id, QueueItemState.RECOVERING
-                                )
-                                self.recovery.recover(
-                                    item.mission_id, "stale_lease",
-                                    attempt=item.attempt_count + 1,
-                                    last_error="lease expired",
-                                )
-                        except (ValueError, OSError):
-                            pass
-        except Exception:
-            pass
+        """Recover missions with stale leases. Processes recovery result."""
+        now = time.time()
+        for state in (QueueItemState.LEASED, QueueItemState.RUNNING):
+            items = self.orchestrator.mission_queue.list_by_state(state)
+            for item in items:
+                if not item.lease_expires_at:
+                    continue
+                try:
+                    expires = datetime.fromisoformat(item.lease_expires_at)
+                    if (now - expires.timestamp()) <= self.config.stale_lease_timeout_s:
+                        continue
+                except (ValueError, OSError):
+                    continue
+
+                self.orchestrator.mission_queue.transition(
+                    item.mission_id, QueueItemState.RECOVERING
+                )
+                recovery_result = self.recovery.recover(
+                    item.mission_id, "stale_lease",
+                    attempt=item.attempt_count + 1,
+                    last_error="lease expired",
+                )
+
+                # Process recovery result
+                if recovery_result.success and recovery_result.strategy != RecoveryStrategy.ESCALATE:
+                    # Retryable — requeue
+                    self.orchestrator.mission_queue.transition(
+                        item.mission_id, QueueItemState.QUEUED
+                    )
+                else:
+                    # Exhausted or escalated — BLOCKED
+                    self.orchestrator.mission_queue.transition(
+                        item.mission_id, QueueItemState.BLOCKED
+                    )
+                    self._record_evidence(item.mission_id, "stale_lease_exhausted", {
+                        "mission_id": item.mission_id,
+                        "attempt": item.attempt_count + 1,
+                        "strategy": recovery_result.strategy.value,
+                    })
 
     def _expire_stale_approvals(self) -> None:
         """Expire approvals that have timed out."""
-        try:
-            waiting = self.orchestrator.mission_queue.list_by_state(
-                QueueItemState.WAITING_APPROVAL
+        waiting = self.orchestrator.mission_queue.list_by_state(
+            QueueItemState.WAITING_APPROVAL
+        )
+        now = time.time()
+        for item in waiting:
+            if not item.updated_at:
+                continue
+            try:
+                updated = datetime.fromisoformat(item.updated_at)
+                if (now - updated.timestamp()) <= self.config.approval_expiry_timeout_s:
+                    continue
+            except (ValueError, OSError):
+                continue
+
+            self.orchestrator.mission_queue.transition(
+                item.mission_id, QueueItemState.BLOCKED
             )
-            now = time.time()
-            for item in waiting:
-                if item.updated_at:
-                    try:
-                        updated = datetime.fromisoformat(item.updated_at)
-                        if (now - updated.timestamp()) > self.config.approval_expiry_timeout_s:
-                            self.orchestrator.mission_queue.transition(
-                                item.mission_id, QueueItemState.BLOCKED
-                            )
-                            self._record_evidence(
-                                item.mission_id, "approval_expired",
-                                {"mission_id": item.mission_id, "reason": "approval timeout"},
-                            )
-                    except (ValueError, OSError):
-                        pass
-        except Exception:
-            pass
+            self._record_evidence(item.mission_id, "approval_expired", {
+                "mission_id": item.mission_id,
+                "reason": "approval timeout",
+            })
 
     def _dependencies_satisfied(self, item: MissionQueueItem) -> bool:
         if not item.dependencies:
@@ -270,6 +355,8 @@ class AutonomousSupervisor:
                 return False
         return True
 
+    # ── completions ──
+
     def _check_completions(self) -> None:
         completed = self.orchestrator.mission_queue.list_by_state(QueueItemState.COMPLETED)
         for item in completed:
@@ -279,7 +366,7 @@ class AutonomousSupervisor:
         """Record completion evidence — idempotent per mission_id + state."""
         evidence_key = f"{item.mission_id}:{item.state.value}:completed"
         if evidence_key in self._completed_evidence_written:
-            return  # Already recorded — skip
+            return
 
         self._mission_history.append({
             "mission_id": item.mission_id, "completed_at": _utc_now(),
@@ -317,24 +404,31 @@ class AutonomousSupervisor:
 
     # ── evidence ──
 
-    def _record_evidence(self, mission_id: str, kind: str, content: dict[str, Any]) -> None:
+    def _record_evidence(
+        self, mission_id: str, kind: str, content: dict[str, Any],
+        trace_id: str | None = None,
+    ) -> None:
+        tid = trace_id or f"sv:{mission_id}:{kind}:{_utc_now()}"
         try:
             self._evidence.add(
                 mission_id=mission_id, kind=kind,
                 title=f"{kind}: {mission_id}",
                 content=json.dumps(content, default=str),
+                trace_id=tid,
             )
-        except Exception:
-            # Don't silently swallow — at minimum emit to event bus
-            try:
-                self._events.emit("evidence_write_failure", {
-                    "mission_id": mission_id, "kind": kind,
-                })
-            except Exception:
-                pass
+        except Exception as exc:
+            self._events.publish(
+                event_type="evidence_write_failure",
+                aggregate_id=mission_id,
+                aggregate_type="mission",
+                actor="supervisor",
+                trace_id=tid,
+                payload={"mission_id": mission_id, "kind": kind, "error": str(exc)},
+            )
 
     def _record_cycle_error(self, exc: Exception) -> None:
         """Record a structured cycle error to EventBus and Evidence."""
+        tid = f"sv:cycle_error:{_utc_now()}"
         error_info = {
             "error_type": type(exc).__name__,
             "error_message": str(exc),
@@ -345,28 +439,38 @@ class AutonomousSupervisor:
             "consecutive_errors": self._consecutive_errors,
             "timestamp": _utc_now(),
         }
-        try:
-            self._events.emit("supervisor_cycle_error", error_info)
-        except Exception:
-            pass
+        self._events.publish(
+            event_type="supervisor_cycle_error",
+            aggregate_id="supervisor",
+            aggregate_type="supervisor",
+            actor="supervisor",
+            trace_id=tid,
+            payload=error_info,
+        )
         try:
             self._evidence.add(
                 mission_id="supervisor", kind="cycle_error",
                 title=f"Supervisor cycle error: {type(exc).__name__}",
                 content=json.dumps(error_info, default=str),
+                trace_id=tid,
             )
         except Exception:
             pass
 
     def _emit_blocked_event(self, exc: Exception) -> None:
-        try:
-            self._events.emit("supervisor_blocked", {
+        tid = f"sv:blocked:{_utc_now()}"
+        self._events.publish(
+            event_type="supervisor_blocked",
+            aggregate_id="supervisor",
+            aggregate_type="supervisor",
+            actor="supervisor",
+            trace_id=tid,
+            payload={
                 "reason": f"max consecutive errors ({self.config.max_consecutive_errors})",
                 "last_error": str(exc),
                 "timestamp": _utc_now(),
-            })
-        except Exception:
-            pass
+            },
+        )
 
     # ── status ──
 

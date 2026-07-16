@@ -100,11 +100,12 @@ class RuntimeTruthAdapter:
         )
         dirty: dict[str, str] = {}
         for line in result.stdout.splitlines():
-            stripped = line.strip()
-            if not stripped:
+            if not line.strip():
                 continue
-            # git status --short: first two chars are status flags, rest is path
-            path = stripped[3:] if len(stripped) > 3 else stripped
+            # git status --short: first two chars are status (e.g. " M", "??", "M ")
+            # Path starts at column 3.  Some statuses use a space then a letter
+            # (e.g. " M" for modified in worktree) — always take position 3 onwards.
+            path = line[3:] if len(line) > 3 else line.strip()
             file_path = REPO_ROOT / path
             if file_path.is_file():
                 try:
@@ -137,10 +138,10 @@ class RuntimeTruthAdapter:
 
         unknown_lines: list[str] = []
         for line in lines:
-            stripped = line.strip()
-            if not stripped:
+            if not line.strip():
                 continue
-            path = stripped[3:] if len(stripped) > 3 else stripped
+            # Preserve status columns: path starts at position 3
+            path = line[3:] if len(line) > 3 else line.strip()
 
             # Check if this exact path + content hash is in the baseline
             if path in baseline:
