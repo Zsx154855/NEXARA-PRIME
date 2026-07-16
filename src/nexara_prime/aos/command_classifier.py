@@ -137,23 +137,38 @@ _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
     re.IGNORECASE,
 )
 
-# Secret expansion patterns — commands that could output secrets
-# Detects variable expansions in ANY argument position:
-#   echo "$GITHUB_TOKEN"   printf "value=$SECRET"   echo token=$TOKEN
-#   "${TOKEN}"  ${SECRET}  prefix=$GITHUB_TOKEN
-# Shell variable names: [A-Za-z_][A-Za-z0-9_]* (POSIX-compatible)
+# Secret expansion patterns — commands that could output secrets.
+# Detects ALL braced shell parameter expansions (any modifier syntax):
+#   ${TOKEN} ${TOKEN:-default} ${TOKEN:=value} ${TOKEN:+alt} ${TOKEN:?err}
+#   ${TOKEN#prefix} ${TOKEN##prefix} ${TOKEN%suffix} ${TOKEN%%suffix}
+#   ${TOKEN:offset:len} ${TOKEN/pat/repl} ${!TOKEN} ${TOKEN^^} ${TOKEN,,}
+# Variable names matching sensitive keywords → immediate R4.
+#
+# Thread D (Codex V9): Comprehensive braced expansion — catch ALL modifier
+# forms by matching ${VARNAME<any non-brace content>} rather than enumerating
+# finite modifier syntaxes.  Variable names are checked against a dedicated
+# sensitive-keyword pattern to avoid false positives on ${HOME}, ${USER}, etc.
+_SENSITIVE_VAR_NAME: re.Pattern[str] = re.compile(
+    r"(?:"
+    r"TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL|AUTH|PASS|"
+    r"GITHUB_TOKEN|NPM_TOKEN|API_KEY|AWS_|AZURE_|GCLOUD_|"
+    r"DOCKER_|REGISTRY_|DATABASE_URL|REDIS_URL|MONGO_|PG_|MYSQL_"
+    r")",
+    re.IGNORECASE,
+)
+
+# Match any braced variable expansion: ${VARNAME<any content>}
+_BRACED_VAR_EXPANSION: re.Pattern[str] = re.compile(
+    r"\$\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}"
+)
+
+# Full secret expansion: echo/printf with $VAR, any braced var with
+# sensitive name, env|grep, printenv, bare env
 _SECRET_EXPANSION: re.Pattern[str] = re.compile(
     r"(?:"
     r"echo\s+.*\$[A-Za-z_][A-Za-z0-9_]*|"  # echo ... $VAR any position
     r"printf\s+.*\$[A-Za-z_][A-Za-z0-9_]*|" # printf ... $VAR any position
-    # Braced variable with parameter modifiers — all expose secret values
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*:-[^}]*\}|" # ${TOKEN:-default}
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*:=[^}]*\}|" # ${TOKEN:=default}
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*:\+[^}]*\}|" # ${TOKEN:+alt}
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*:\?[^}]*\}|" # ${TOKEN:?error}
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*#[^}]*\}|"   # ${TOKEN#prefix}
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*%[^}]*\}|"   # ${TOKEN%suffix}
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*\}|"        # ${TOKEN1} ${AWS_KEY_2}
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*[^}]*\}|"   # any braced var expansion
     r"\$[A-Z_][A-Z0-9_]{2,}\b|"             # $TOKEN bare (3+ chars)
     r"\benv\s*\|\s*grep\s+[A-Z_]+|"         # env | grep TOKEN
     r"\bprintenv\s+[A-Za-z_][A-Za-z0-9_]*|" # printenv TOKEN
@@ -193,18 +208,133 @@ def _has_mutating_option(command: str, base_cmd: str) -> bool:
 
 
 def _is_destructive_git(command: str) -> bool:
-    """True if the command is a destructive git operation that must never be auto-approved."""
-    return bool(_DESTRUCTIVE_GIT_COMMANDS.search(command))
+    """True if the command is a destructive git operation.
+
+    Thread H (Codex V9): Also catches 'git checkout <rev> <path>' without '--'
+    (e.g. 'git checkout HEAD README.md' restores a file and discards changes).
+    Uses token-based detection: if 'checkout' is followed by a revision-like
+    token and then a path-like token with no intervening '--', it's destructive.
+    """
+    if _DESTRUCTIVE_GIT_COMMANDS.search(command):
+        return True
+    # Detect checkout <revision> <path> without --
+    if _checkout_without_dashdash(command):
+        return True
+    return False
 
 
-def _reads_sensitive_path(command: str) -> bool:
-    """True if the command reads any sensitive paths (SSH keys, AWS creds, .env, etc.)."""
-    return bool(_SENSITIVE_PATH_PATTERNS.search(command))
+def _checkout_without_dashdash(command: str) -> bool:
+    """Detect 'git checkout <rev-like> <path-like>' without '--'.
+
+    Conservative: any checkout with 2+ non-flag tokens after 'checkout'
+    where '--' is not present and the first is revision-like (hex hash,
+    HEAD, tag, or remote/branch) is treated as destructive.
+    A single-token checkout (branch switch) remains R2.
+    """
+    try:
+        tokens = __import__("shlex").split(command)
+    except ValueError:
+        tokens = command.split()
+    if len(tokens) < 4:
+        return False
+    if tokens[0] != "git" or tokens[1] != "checkout":
+        return False
+    # If '--' is present, the regex already caught it
+    if "--" in tokens:
+        return False
+    # Get non-flag tokens after 'checkout'
+    args = [t for t in tokens[2:] if not t.startswith("-")]
+    if len(args) < 2:
+        return False  # single token → likely branch switch
+    # First arg is revision-like (HEAD, hex hash, tag, remote/branch with /)
+    rev = args[0]
+    rev_like = bool(
+        __import__("re").match(r"^(?:HEAD|[0-9a-fA-F]{4,40}|[^/\s]+/[^/\s]+)$", rev)
+        or rev.startswith("refs/")
+        or rev.startswith("tags/")
+    )
+    if not rev_like:
+        return False
+    # Second+ args are path-like (not revision-like)
+    return True
+
+
+def _reads_sensitive_path(command: str, cwd: str = "") -> bool:
+    """True if the command reads any sensitive paths.
+
+    Thread G (Codex V9): When cwd itself is a sensitive directory
+    (e.g. ~/.ssh, ~/.aws), relative file reads like 'cat id_rsa' or
+    'cat credentials' resolve to sensitive targets.
+    """
+    if _SENSITIVE_PATH_PATTERNS.search(command):
+        return True
+    # CWD-aware: if cwd is sensitive, any relative file read is dangerous
+    if cwd and _cwd_is_sensitive(cwd):
+        # Check for read commands with relative paths
+        if _has_relative_file_read(command):
+            return True
+    return False
+
+
+# Sensitive CWD patterns — directories where reading any file is R4
+_SENSITIVE_CWD: re.Pattern[str] = re.compile(
+    r"(?:"
+    r"/\.ssh|/\.aws|/\.config/[^/\s]*credentials|"
+    r"/Library/Keychains"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _cwd_is_sensitive(cwd: str) -> bool:
+    """True if the working directory itself is a credential directory."""
+    import os
+    resolved = os.path.expanduser(cwd)
+    return bool(_SENSITIVE_CWD.search(resolved))
+
+
+# Common read commands that take a file path as first non-flag argument
+_READ_COMMANDS: re.Pattern[str] = re.compile(
+    r"^(?:cat|head|tail|less|more|grep|rg|file|stat|ls)\s"
+)
+
+
+def _has_relative_file_read(command: str) -> bool:
+    """True if command is a read command with a relative path argument."""
+    if not _READ_COMMANDS.match(command):
+        return False
+    try:
+        tokens = __import__("shlex").split(command)
+    except ValueError:
+        tokens = command.split()
+    # Check for relative path arguments (no leading /, no ~, no $)
+    for token in tokens[1:]:
+        if token.startswith("-"):
+            continue
+        if token.startswith("/") or token.startswith("~") or "$" in token:
+            continue
+        # Looks like a relative file path → dangerous in sensitive CWD
+        return True
+    return False
 
 
 def _has_secret_expansion(command: str) -> bool:
-    """True if the command could output a secret (echo $VAR, printf, env|grep TOKEN)."""
-    return bool(_SECRET_EXPANSION.search(command))
+    """True if the command could output a secret.
+
+    Two-tier check (Thread D, Codex V9):
+    1. echo/printf with $VAR, bare $TOKEN, env|grep, printenv → always R4
+    2. Braced ${VAR...} expansions → R4 only if variable name matches
+       _SENSITIVE_VAR_NAME (TOKEN, SECRET, KEY, PASSWORD, etc.)
+       This prevents false positives on ${HOME}, ${USER}, ${PATH}.
+    """
+    if not _SECRET_EXPANSION.search(command):
+        return False
+    # Check all braced expansions — only flag if any use sensitive var names
+    braced_matches = _BRACED_VAR_EXPANSION.findall(command)
+    if braced_matches:
+        return any(_SENSITIVE_VAR_NAME.search(v) for v in braced_matches)
+    # Non-braced match (echo $X, env|grep X, printenv X) → always flag
+    return True
 
 
 # ── Interpreter snippet detection ──
@@ -454,7 +584,9 @@ class CommandClassifier:
             )
 
         # Sensitive path reads — at least R3
-        if _reads_sensitive_path(command):
+        # Thread G (Codex V9): CWD-aware — cwd from kwargs flows through
+        # to detect relative file reads in sensitive directories
+        if _reads_sensitive_path(command, cwd=kwargs.get("cwd", "")):
             return CommandClassification(
                 command=command, risk_level=RiskLevel.R4,
                 kind=CommandKind.SECRET, auto_approvable=False,

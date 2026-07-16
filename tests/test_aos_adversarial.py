@@ -2907,7 +2907,7 @@ class TestCodexV8BracedModifiers:
     def test_suffix_strip_r4(self):
         """${TOKEN%suffix} exposes secret."""
         c = CommandClassifier()
-        r = c.classify('echo "${URL%/v1}"')
+        r = c.classify('echo "${TOKEN%/v1}"')
         assert r.risk_level.value == "R4"
 
 
@@ -3060,3 +3060,184 @@ class TestCodexV8ShellProcessGroup:
         assert not result.success
         assert result.failure_class == FailureClass.WORKER_FAILURE
         assert "timeout" in str(result.output.get("error", "")).lower()
+
+# ────────────────────────────────────────────────────────────────
+# Codex V9 — 9 Thread Adversarial Tests
+# ────────────────────────────────────────────────────────────────
+
+
+class TestCodexV9IdempotentFirstWriteWins:
+    """Thread A: Idempotent enqueue — first write wins, no payload override."""
+
+    def test_same_key_diff_payload_returns_original(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        sv.submit_mission("v9_idem_x", priority=5, command="echo original",
+                                  idempotency_key="v9_key_a01")
+        item2 = sv.submit_mission("v9_idem_y", priority=3, command="echo overwrite",
+                                  idempotency_key="v9_key_a01")
+        assert item2.mission_id == "v9_idem_x"
+        assert item2.priority == 5
+
+    def test_same_key_same_payload_returns_original(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        sv.submit_mission("v9_idem_z", priority=5, command="echo same",
+                          idempotency_key="v9_key_a02")
+        item2 = sv.submit_mission("v9_idem_z2", priority=5, command="echo same",
+                                  idempotency_key="v9_key_a02")
+        assert item2.mission_id == "v9_idem_z"
+
+    def test_first_write_wins_across_restart(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from nexara_prime.models import MissionQueueItem
+        item = MissionQueueItem(
+            mission_id="v9_fww", priority=5, state=QueueItemState.QUEUED,
+            idempotency_key="v9_key_a03",
+        )
+        orch.mission_queue.enqueue(item)
+        recovered = orch.mission_queue.get("v9_fww")
+        assert recovered is not None
+        assert recovered.idempotency_key == "v9_key_a03"
+
+
+class TestCodexV9ApprovalSelection:
+    """Thread B: Approval record selection — APPROVED over PENDING."""
+
+    def test_approved_prioritized_over_pending(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+
+        sv.submit_mission("v9_approve_sel", priority=5, command="echo select")
+        old = ApprovalRequest(mission_id="v9_approve_sel", action="echo old",
+                              risk_level=RiskLevel.R3, rationale="old",
+                              status=ApprovalStatus.PENDING,
+                              created_at="2024-01-01T00:00:00Z")
+        sv.orchestrator.approvals.create(old)
+        new = ApprovalRequest(mission_id="v9_approve_sel", action="echo select",
+                              risk_level=RiskLevel.R3, rationale="new",
+                              status=ApprovalStatus.APPROVED,
+                              created_at="2025-01-01T00:00:00Z")
+        sv.orchestrator.approvals.create(new)
+        status = sv._get_approval_status("v9_approve_sel")
+        assert status == "approved"
+
+
+class TestCodexV9DurableLeaseTruth:
+    """Thread C: Durable WriterLease as sole expiry truth."""
+
+    def test_active_durable_lease_skips_recovery(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        orch.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=[], writer_capable=True,
+                             health="healthy", available=True))
+        sv.submit_mission("v9_lease_truth", priority=5, command="echo truth")
+        orch.mission_queue.transition("v9_lease_truth", QueueItemState.RUNNING,
+                                      lease_owner=worker.worker_id)
+        orch.leases.acquire("v9_lease_truth", worker.worker_id)
+        orch.leases.renew("v9_lease_truth", worker.worker_id, ttl_seconds=600)
+        sv._recover_stale_leases()
+        item = orch.mission_queue.get("v9_lease_truth")
+        assert item.state == QueueItemState.RUNNING
+
+
+class TestCodexV9BracedExpansionComplete:
+    """Thread D: All braced parameter expansions with sensitive names → R4."""
+
+    def test_double_hash_prefix_r4(self):
+        c = CommandClassifier()
+        assert c.classify('echo "${TOKEN##*/}"').risk_level.value == "R4"
+
+    def test_substring_slice_r4(self):
+        c = CommandClassifier()
+        assert c.classify('echo "${API_KEY:0:8}"').risk_level.value == "R4"
+
+    def test_pattern_replace_r4(self):
+        c = CommandClassifier()
+        assert c.classify('echo "${TOKEN/foo/bar}"').risk_level.value == "R4"
+
+    def test_uppercase_expansion_r4(self):
+        c = CommandClassifier()
+        assert c.classify('echo "${TOKEN^^}"').risk_level.value == "R4"
+
+    def test_lowercase_expansion_r4(self):
+        c = CommandClassifier()
+        assert c.classify('echo "${PASSWORD,,}"').risk_level.value == "R4"
+
+    def test_home_var_not_r4(self):
+        c = CommandClassifier()
+        assert c.classify('echo "${HOME}"').risk_level.value != "R4"
+
+
+class TestCodexV9CwdSensitivePath:
+    """Thread G: CWD-aware sensitive path classification."""
+
+    def test_cwd_ssh_relative_read_r4(self):
+        broker = PermissionBroker()
+        d = broker.evaluate("cat id_rsa", working_directory="/Users/admin/.ssh")
+        assert d.risk_level.value == "R4"
+
+    def test_cwd_aws_relative_read_r4(self):
+        broker = PermissionBroker()
+        d = broker.evaluate("head credentials", working_directory="/home/ec2-user/.aws")
+        assert d.risk_level.value == "R4"
+
+    def test_cwd_normal_relative_read_r0(self):
+        broker = PermissionBroker()
+        d = broker.evaluate("cat README.md", working_directory="/Users/admin/project")
+        assert d.risk_level.value == "R0"
+
+    def test_absolute_still_works(self):
+        broker = PermissionBroker()
+        d = broker.evaluate("cat /home/admin/.ssh/id_rsa", working_directory="/tmp")
+        assert d.risk_level.value == "R4"
+
+
+class TestCodexV9CheckoutWithoutDash:
+    """Thread H: Destructive checkout without '--' detected."""
+
+    def test_checkout_head_path_no_dash(self):
+        c = CommandClassifier()
+        r = c.classify("git checkout HEAD README.md")
+        assert r.risk_level.value in ("R3", "R4")
+
+    def test_checkout_commit_path_no_dash(self):
+        c = CommandClassifier()
+        r = c.classify("git checkout abc123def src/file.py")
+        assert r.risk_level.value in ("R3", "R4")
+
+    def test_checkout_branch_still_r2(self):
+        c = CommandClassifier()
+        r = c.classify("git checkout main")
+        assert r.risk_level.value == "R2"
+
+
+class TestCodexV9ImplicitPush:
+    """Thread I: Safe implicit work-branch push allowed."""
+
+    def test_implicit_work_push_accepted(self):
+        broker = PermissionBroker()
+        d = broker.evaluate("git push origin work/nexara-fix")
+        assert d.decision == "auto_approved"
+
+    def test_work_to_main_rejected(self):
+        broker = PermissionBroker()
+        d = broker.evaluate("git push origin work/foo:main")
+        assert d.decision in ("escalated", "denied")
+
+    def test_main_push_rejected(self):
+        broker = PermissionBroker()
+        d = broker.evaluate("git push origin main")
+        assert d.decision in ("escalated", "denied")
+
+    def test_glued_option_rejected(self):
+        broker = PermissionBroker()
+        d = broker.evaluate("git push origin work/foo -oci.skip")
+        assert d.decision in ("escalated", "denied")
