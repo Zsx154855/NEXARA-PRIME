@@ -226,6 +226,7 @@ class ExecutionGateway:
                     broker = PermissionBroker()
                 decision = broker.evaluate(
                     command, mission_id=mission_id, worker_id=worker_id,
+                    working_directory=input_data.get("cwd", ""),
                 )
                 if decision.decision in ("escalated", "denied"):
                     escalated = decision.decision == "escalated"

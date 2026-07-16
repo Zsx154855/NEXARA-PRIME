@@ -466,12 +466,15 @@ class AutonomousSupervisor:
             command = full_mission.get("command", "")
             prompt = full_mission.get("prompt", "")
 
-            # Thread E (Codex V9): Payload-aware scheduling.
-            # The scheduler filters by required_capabilities — missions with
-            # "command" in required_capabilities only match command-capable
-            # workers, "prompt" only matches prompt-capable workers.
-            # Callers set these via submit_mission(capabilities=[...]).
-            # The scheduler._payload_kind_compatible() validates the match.
+            # Thread 3 + 11 (Codex V10): Auto-derive payload kind BEFORE
+            # scheduling.  Callers don't need to pass ["command"] or ["prompt"].
+            # Command-only missions require command-capable workers;
+            # prompt-only missions require prompt-capable workers.
+            # Only injects when not already explicitly set by caller.
+            if command and not prompt and "command" not in item.required_capabilities:
+                item.required_capabilities = list(item.required_capabilities) + ["command"]
+            elif prompt and not command and "prompt" not in item.required_capabilities:
+                item.required_capabilities = list(item.required_capabilities) + ["prompt"]
 
             # ── Reject empty payloads ──
             if not command and not prompt:
@@ -550,8 +553,12 @@ class AutonomousSupervisor:
                 })
                 continue
 
-            # ── Thread V6-B: Acquire durable writer lease BEFORE dispatch ──
-            if not self.orchestrator.leases.acquire(item.mission_id, worker_id):
+            # ── Thread 9 (Codex V10): Acquire durable writer lease with
+            # configured TTL (not hardcoded HEARTBEAT_TTL_S) ──
+            if not self.orchestrator.leases.acquire(
+                item.mission_id, worker_id,
+                ttl_seconds=int(self.config.default_lease_duration_s),
+            ):
                 # Another supervisor/worker holds the lease — leave READY
                 continue
 

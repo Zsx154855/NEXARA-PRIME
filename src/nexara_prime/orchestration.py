@@ -362,8 +362,17 @@ class WorkerScheduler:
         return True
 
     def _capability_match(self, worker: WorkerDescriptor, required: list[str]) -> bool:
+        """Check worker capabilities match requirements.
+
+        Thread 11 (Codex V10): Empty worker capabilities = wildcard
+        (compatible with everything).  This allows auto-injected
+        "command"/"prompt" capabilities to work with workers that
+        don't explicitly declare them.
+        """
         if not required:
             return True
+        if not worker.capabilities:
+            return True  # wildcard: compatible with everything
         return set(required).issubset(set(worker.capabilities))
 
     def _risk_compatible(self, worker: WorkerDescriptor, risk: RiskLevel) -> bool:

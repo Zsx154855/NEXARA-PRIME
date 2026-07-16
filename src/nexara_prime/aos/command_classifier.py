@@ -70,6 +70,20 @@ _PROCESS_SUBSTITUTION: re.Pattern[str] = re.compile(
     r"[<>]\s*\([^)]+\)"
 )
 
+# Unsafe write targets — touch/cp/mv to these paths is R3/R4
+_UNSAFE_WRITE_TARGETS: re.Pattern[str] = re.compile(
+    r"(?:"
+    r"~/.bashrc|~/.zshrc|~/.profile|~/.bash_profile|"
+    r"~/.ssh/|~/.aws/|"
+    r"/etc/|"
+    r"/Library/|"
+    r"~/Library/LaunchAgents/|"
+    r"~/.config/[^/\s]*credentials|"
+    r"/\.env\b|\.env\b"
+    r")",
+    re.IGNORECASE,
+)
+
 # Mutating options on nominally-read-only commands
 _MUTATING_OPTIONS: dict[str, list[str]] = {
     "find": ["-delete", "-exec", "-execdir", "-ok", "-okdir"],
@@ -170,10 +184,11 @@ _SECRET_EXPANSION: re.Pattern[str] = re.compile(
     r"printf\s+.*\$[A-Za-z_][A-Za-z0-9_]*|" # printf ... $VAR any position
     r"\$\{[A-Za-z_][A-Za-z0-9_]*[^}]*\}|"   # any braced var expansion
     r"\$[A-Z_][A-Z0-9_]{2,}\b|"             # $TOKEN bare (3+ chars)
-    r"\benv\s*\|\s*grep\s+[A-Z_]+|"         # env | grep TOKEN
+    # Thread 10 (Codex V10): Anchor true env command, not "venv"
+    r"(?:^|[\s;&|])env(?:\s+\S|\s*$)|"       # env command (must be standalone or with args)
+    r"(?:^|[\s;&|])/usr/bin/env(?:\s+\S|\s*$)|"  # absolute env path
     r"\bprintenv\s+[A-Za-z_][A-Za-z0-9_]*|" # printenv TOKEN
-    r"\bprintenv\b|"                         # bare printenv
-    r"\benv\s*$"                             # bare env
+    r"\bprintenv\b"                          # bare printenv
     r")",
 )
 
@@ -224,11 +239,12 @@ def _is_destructive_git(command: str) -> bool:
 
 
 def _checkout_without_dashdash(command: str) -> bool:
-    """Detect 'git checkout <rev-like> <path-like>' without '--'.
+    """Detect 'git checkout <tree-ish> <path>' without '--'.
 
-    Conservative: any checkout with 2+ non-flag tokens after 'checkout'
-    where '--' is not present and the first is revision-like (hex hash,
-    HEAD, tag, or remote/branch) is treated as destructive.
+    Thread 5 (Codex V10): Covers ALL tree-ish forms:
+      HEAD  HEAD~1  HEAD^  main  origin/main  tags/v1.2.3  v1.2.3
+      abc123  abc123def...  (commit SHA 4-40 hex chars)
+    Any tree-ish followed by a path-like token without '--' is destructive.
     A single-token checkout (branch switch) remains R2.
     """
     try:
@@ -239,23 +255,25 @@ def _checkout_without_dashdash(command: str) -> bool:
         return False
     if tokens[0] != "git" or tokens[1] != "checkout":
         return False
-    # If '--' is present, the regex already caught it
     if "--" in tokens:
         return False
-    # Get non-flag tokens after 'checkout'
     args = [t for t in tokens[2:] if not t.startswith("-")]
     if len(args) < 2:
-        return False  # single token → likely branch switch
-    # First arg is revision-like (HEAD, hex hash, tag, remote/branch with /)
+        return False
     rev = args[0]
+    # Tree-ish forms: HEAD, HEAD~N, HEAD^, hex hashes, tags, remote/branch
+    import re as _re
     rev_like = bool(
-        __import__("re").match(r"^(?:HEAD|[0-9a-fA-F]{4,40}|[^/\s]+/[^/\s]+)$", rev)
-        or rev.startswith("refs/")
-        or rev.startswith("tags/")
+        _re.match(
+            r"^(?:HEAD|HEAD~[0-9]+|HEAD\^+|"
+            r"[0-9a-fA-F]{4,40}|"
+            r"[^/\s]+/[^/\s]+|"   # origin/main, remote/branch
+            r"tags?/[^/\s]+|"      # tags/v1.2.3, tag/v1.0
+            r"v?[0-9]+\.[0-9]+)"   # v1.2.3, 1.2.3
+            r"", rev)
     )
     if not rev_like:
         return False
-    # Second+ args are path-like (not revision-like)
     return True
 
 
@@ -318,23 +336,50 @@ def _has_relative_file_read(command: str) -> bool:
     return False
 
 
+def _writes_unsafe_target(command: str) -> bool:
+    """True if touch/cp/mv targets a sensitive system/user path.
+
+    Thread 6 (Codex V10): Writing to ~/.bashrc, ~/.ssh, /etc, ~/Library/...
+    must be R3/R4.  Project-workspace writes remain R2.
+    """
+    if not _UNSAFE_WRITE_TARGETS.search(command):
+        return False
+    # Check that we have a write command (touch/cp/mv), not a read
+    if not re.search(r"(?:^|\s)(?:touch|cp|mv)\s", command):
+        return False
+    return True
+
+
 def _has_secret_expansion(command: str) -> bool:
     """True if the command could output a secret.
 
-    Two-tier check (Thread D, Codex V9):
-    1. echo/printf with $VAR, bare $TOKEN, env|grep, printenv → always R4
-    2. Braced ${VAR...} expansions → R4 only if variable name matches
-       _SENSITIVE_VAR_NAME (TOKEN, SECRET, KEY, PASSWORD, etc.)
-       This prevents false positives on ${HOME}, ${USER}, ${PATH}.
+    Thread 2 (Codex V10): Scans ALL expansions (braced AND bare) together.
+    A command like 'echo foo $API_KEY ${HOME}' must still be R4 because
+    $API_KEY is a bare sensitive expansion, even though ${HOME} is safe.
+    The presence of a safe braced expansion must NOT mask a dangerous
+    bare expansion.
     """
+    # Quick pre-filter — any expansion at all?
     if not _SECRET_EXPANSION.search(command):
         return False
-    # Check all braced expansions — only flag if any use sensitive var names
+    # Scan ALL braced variable names for sensitive keywords
     braced_matches = _BRACED_VAR_EXPANSION.findall(command)
-    if braced_matches:
-        return any(_SENSITIVE_VAR_NAME.search(v) for v in braced_matches)
-    # Non-braced match (echo $X, env|grep X, printenv X) → always flag
-    return True
+    if braced_matches and any(_SENSITIVE_VAR_NAME.search(v) for v in braced_matches):
+        return True
+    # Scan bare $VAR patterns (non-braced)
+    bare_vars = _BARE_VAR_EXPANSION.findall(command)
+    if bare_vars and any(_SENSITIVE_VAR_NAME.search(v) for v in bare_vars):
+        return True
+    # echo/printf with any $VAR, env|grep, printenv, bare env → flag
+    if braced_matches or bare_vars:
+        return False  # had expansions but none sensitive
+    return True  # env|grep, printenv, bare env (no var name to check)
+
+
+# Pattern for bare $VAR expansions (non-braced)
+_BARE_VAR_EXPANSION: re.Pattern[str] = re.compile(
+    r"\$([A-Za-z_][A-Za-z0-9_]*)"
+)
 
 
 # ── Interpreter snippet detection ──
@@ -451,14 +496,16 @@ class CommandClassifier:
         r"gh\s+repo\s+delete", r"gh\s+pr\s+merge",
         r"security\s+delete-keychain", r"secrets\b",
         r"openssl\s+.*-pass", r"keychain\b",
-        r"curl.*\.com.*secret", r"env\b",
-        r"printenv\b", r"echo\s+\$",
+        r"curl.*\.com.*secret",
+        r"echo\s+\$",
         r"npm\s+publish", r"twine\s+upload",
         r"gh\s+release\s+create", r"git\s+tag",
         r"chmod\s+[0-7]*7", r"chown\b",
         r"git\s+reset\s+--hard", r"git\s+clean\b",
         r"git\s+stash\s+(?:drop|clear)\b", r"git\s+reflog\s+expire",
         r"\bchmod\s+[0-7]*7", r"\bchmod\s+[ugoa][-+=]",
+        # Thread 10 (Codex V10): Anchor standalone env/printenv, not venv
+        r"(?:^|[\s;&|])env(?:\s|$)", r"(?:^|[\s;&|])printenv(?:\s|$)",
     ]
 
     # ── R3: External or high-impact ──
@@ -686,6 +733,14 @@ class CommandClassifier:
         # ── Layer 5: R2 pattern matching ──
         for pattern in self.R2_PATTERNS:
             if re.search(pattern, command, re.IGNORECASE):
+                # Thread 6 (Codex V10): touch/cp/mv to unsafe paths → R3/R4
+                if _writes_unsafe_target(command):
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R3,
+                        kind=CommandKind.WRITE, auto_approvable=False,
+                        reversible=False,
+                        reason="write target is unsafe (~/.ssh, ~/.aws, /etc, /Library, etc.) — R3",
+                    )
                 return CommandClassification(
                     command=command, risk_level=RiskLevel.R2,
                     kind=self._infer_kind(command), auto_approvable=True,
