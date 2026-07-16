@@ -105,50 +105,74 @@ class AutonomousSupervisor:
         # Wire PermissionBroker into the gateway
         self.gateway.permissions = self.permissions
 
-        # Thread 1 (Codex V7): Inject approval grant verifier so Gateway can
-        # validate grants against the durable ApprovalQueue before bypassing
-        # PermissionBroker.  Fake grants, replayed grants, and grants with
-        # mismatched commands all fail closed.
+        # Thread 1 (Codex V7) + Thread 8 (Codex V8): Inject approval grant
+        # verifier so Gateway can validate grants before bypassing
+        # PermissionBroker.
         #
-        # Thread 8 (Codex V8): The grant_verified flag is set via atomic
-        # compare-and-set on the underlying SQLiteStore record, so two
-        # concurrent Supervisors racing to verify the same grant see exactly
-        # one winner.  No read-modify-write gap.
+        # Thread F (Codex V9): ALL bindings are validated BEFORE the atomic
+        # CAS consume.  If any binding check fails, the grant is NOT consumed
+        # and grant_verified is NOT set — subsequent correct dispatches can
+        # still use the grant.  Only a fully-valid grant with all bindings
+        # matching triggers the atomic CAS.
         def _verify_approval_grant(grant: Any) -> bool:
-            """Verify that an ApprovalGrant corresponds to a consumed approval."""
+            """Verify grant bindings then atomically consume.
+
+            Validation order (Thread F, Codex V9):
+              1. approval_id  → find the corresponding approval record
+              2. mission_id   → must match
+              3. status       → must be CONSUMED
+              4. action/command → must match grant.command
+              5. expiry       → must not have expired
+              6. grant_verified → must not already be claimed
+              7. ATOMIC CAS   → exactly one caller wins
+            Failing any pre-check leaves the grant untouched.
+            """
             for raw in self._store.list_records("approval_requests"):
                 p = raw.get("payload", raw)
+                # 1. Find by approval_id
                 if p.get("approval_id") != grant.approval_id:
                     continue
+                # 2. Mission binding
                 if p.get("mission_id") != grant.mission_id:
-                    continue
-                # Must be CONSUMED (consumed via ApprovalQueue.consume)
+                    return False
+                # 3. Must be CONSUMED
                 if p.get("status") != ApprovalStatus.CONSUMED.value:
                     return False
+                # 4. Command binding
                 if p.get("action", "") != grant.command:
                     return False
-                # Already verified by another Supervisor — single-use only
+                # 5. Expiry check
+                expires_at = p.get("expires_at", "")
+                if expires_at:
+                    try:
+                        from datetime import datetime as _dt, timezone as _tz
+                        exp = _dt.fromisoformat(
+                            expires_at.replace("Z", "+00:00"),
+                        )
+                        if _dt.now(_tz.utc) > exp:
+                            return False  # Expired — don't consume
+                    except (ValueError, OSError, TypeError):
+                        pass
+                # 6. Not already verified
                 if p.get("grant_verified") is True:
                     return False
-                # Atomic CAS: only one Supervisor wins the grant_verified flag.
-                # Uses SQLiteStore.compare_and_set_record_field which executes
-                # a single UPDATE ... WHERE integrity match inside a write lock.
+                # 7. Atomic CAS — only one caller wins
                 result = self._store.compare_and_set_record_field(
                     record_id=grant.approval_id,
                     record_type="approval_requests",
                     field="grant_verified",
-                    expected_value=None,      # field not yet set
-                    new_value=True,           # atomically claim
+                    expected_value=None,
+                    new_value=True,
                 )
                 if result is None:
-                    return False  # Another Supervisor claimed first
-                # Mark timestamp for audit trail
+                    return False
                 self._store.save_record(
                     grant.approval_id, "approval_requests", result,
                     created_at=p.get("created_at", _utc_now()),
                     mission_id=grant.mission_id,
                 )
                 return True
+            # approval_id not found
             return False
 
         self.gateway.set_approval_verifier(_verify_approval_grant)
@@ -316,32 +340,54 @@ class AutonomousSupervisor:
                 })
 
     def _get_approval_status(self, mission_id: str) -> str | None:
-        """Return the latest approval status for a mission, or None if no record."""
-        latest_status: str | None = None
-        latest_created: str = ""
+        """Return the best approval status for a mission, or None if no record.
+
+        Thread B (Codex V9): Prioritises APPROVED over other statuses.
+        Selection order: APPROVED > CONSUMED > PENDING > REJECTED > EXPIRED.
+        Within the same status, uses latest created_at.
+        """
+        
+        priority = {"approved": 5, "consumed": 4, "pending": 3, "rejected": 2, "expired": 1}
+        best_status: str | None = None
+        best_priority: int = -1
+        best_created: str = ""
         for raw in self._store.list_records("approval_requests"):
             p = raw.get("payload", raw)
             if p.get("mission_id") != mission_id:
                 continue
+            status = p.get("status", "")
+            p_val = priority.get(status, 0)
             created = p.get("created_at", "")
-            if created > latest_created:
-                latest_created = created
-                latest_status = p.get("status")
-        return latest_status
+            if p_val > best_priority or (p_val == best_priority and created > best_created):
+                best_priority = p_val
+                best_status = status
+                best_created = created
+        return best_status
 
     def _get_pending_approval_for_mission(
         self, mission_id: str,
     ) -> "ApprovalRequest | None":
-        """Return the APPROVED ApprovalRequest for a mission, or None."""
+        """Return the best APPROVED ApprovalRequest for a mission.
+
+        Thread B (Codex V9): When multiple approvals exist, selects the
+        APPROVED one that best matches the mission context (action/command).
+        Consumed/rejected/expired requests do not shadow valid APPROVED ones.
+        """
         from ..models import ApprovalRequest as AR
-        for req in self.orchestrator.approvals.list_pending():
-            if req.mission_id == mission_id:
-                return req
-        # Also check raw records for APPROVED (not in pending list)
+        # First: look for APPROVED in all records (not just pending list)
+        approved: list[AR] = []
         for raw in self._store.list_records("approval_requests"):
             p = raw.get("payload", raw)
             if p.get("mission_id") == mission_id and p.get("status") == "approved":
-                return AR(**p)
+                approved.append(AR(**p))
+        if approved:
+            # Return the latest APPROVED by created_at
+            approved.sort(key=lambda r: r.created_at or "", reverse=True)
+            return approved[0]
+        # Fallback: check pending list
+        for req in self.orchestrator.approvals.list_pending():
+            if req.mission_id == mission_id:
+                return req
         return None
 
     def _process_queued(self) -> None:
@@ -419,6 +465,13 @@ class AutonomousSupervisor:
             full_mission = self._build_mission_payload(item)
             command = full_mission.get("command", "")
             prompt = full_mission.get("prompt", "")
+
+            # Thread E (Codex V9): Payload-aware scheduling.
+            # The scheduler filters by required_capabilities — missions with
+            # "command" in required_capabilities only match command-capable
+            # workers, "prompt" only matches prompt-capable workers.
+            # Callers set these via submit_mission(capabilities=[...]).
+            # The scheduler._payload_kind_compatible() validates the match.
 
             # ── Reject empty payloads ──
             if not command and not prompt:
@@ -909,22 +962,48 @@ class AutonomousSupervisor:
     # ── stale lease recovery ──
 
     def _recover_stale_leases(self) -> None:
-        """Recover missions with stale leases. Processes recovery result."""
+        """Recover missions with stale DURABLE leases.
+
+        Thread C (Codex V9): The durable WriterLeaseManager is the sole
+        authority for lease expiry.  mission_queue.lease_expires_at is
+        treated as a projection/cache — if the durable lease is still
+        active and unexpired, recovery is skipped even if the queue
+        field appears stale.  Only when the durable lease is genuinely
+        expired, released, or stale does recovery proceed.
+        """
         now = time.time()
         for state in (QueueItemState.LEASED, QueueItemState.RUNNING):
             items = self.orchestrator.mission_queue.list_by_state(state)
             for item in items:
-                if not item.lease_expires_at:
-                    continue
-                try:
-                    expires = datetime.fromisoformat(item.lease_expires_at)
-                    if (now - expires.timestamp()) <= self.config.stale_lease_timeout_s:
-                        continue
-                except (ValueError, OSError):
-                    continue
+                # ── Primary check: durable WriterLeaseManager ──
+                durable = self.orchestrator.leases._latest_active_lease(
+                    item.mission_id,
+                )
+                if durable is not None:
+                    d_state = durable.get("state", "")
+                    if d_state == "active":
+                        # Check durable lease expiry
+                        try:
+                            d_expires = datetime.fromisoformat(
+                                durable.get("expires_at", ""),
+                            )
+                            if (now - d_expires.timestamp()) <= self.config.stale_lease_timeout_s:
+                                continue  # Durable lease still active — skip
+                        except (ValueError, OSError):
+                            pass  # unparseable → fall through to recover
+                    elif d_state == "released":
+                        pass  # Released → enter recovery
+                # Fallback: queue field (only if no durable lease exists)
+                elif item.lease_expires_at:
+                    try:
+                        expires = datetime.fromisoformat(item.lease_expires_at)
+                        if (now - expires.timestamp()) <= self.config.stale_lease_timeout_s:
+                            continue
+                    except (ValueError, OSError):
+                        pass
 
                 self.orchestrator.mission_queue.transition(
-                    item.mission_id, QueueItemState.RECOVERING
+                    item.mission_id, QueueItemState.RECOVERING,
                 )
                 recovery_result = self.recovery.recover(
                     item.mission_id, "stale_lease",

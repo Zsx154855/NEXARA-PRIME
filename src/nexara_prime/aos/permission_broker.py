@@ -67,7 +67,7 @@ class PermissionBroker:
         mission_id: str = "", worker_id: str = "",
         working_directory: str = "",
     ) -> PermissionDecision:
-        classification = self._classifier.classify(command)
+        classification = self._classifier.classify(command, cwd=working_directory)
         risk = classification.risk_level
         now = datetime.now(timezone.utc).isoformat()
 
@@ -204,7 +204,12 @@ class PermissionBroker:
             src, dst = refspec.split(":", 1)
         else:
             src = refspec
-            dst = refspec  # implicit: push src to same-named dst
+            # Thread I (Codex V9): Normalize implicit refspec.
+            # git push origin work/foo means push refs/heads/work/foo
+            # to refs/heads/work/foo on the remote.
+            if src.startswith("work/") and not src.startswith("refs/"):
+                src = f"refs/heads/{src}"
+            dst = src  # implicit: push src to same-named dst
 
         # Source must be a work branch
         if not cls._WORK_BRANCH_REFSRC.match(src):
@@ -212,6 +217,10 @@ class PermissionBroker:
 
         # Destination must be refs/heads/work/*
         if not cls._WORK_BRANCH_REFDST.match(dst):
+            return False
+
+        # Block push with no source (delete remote branch)
+        if not src or src == "refs/heads/":
             return False
 
         return True

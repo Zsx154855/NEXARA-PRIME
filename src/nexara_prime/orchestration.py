@@ -343,11 +343,15 @@ class WorkerScheduler:
 
         - command-only missions require a command-capable worker
         - prompt-only missions require a prompt-capable worker
-        - mixed-or-empty is compatible with any worker type
+        - workers with empty capabilities are wildcards (can handle anything)
+        - mixed-or-empty required is compatible with any worker type
         """
         if not required:
             return True
         worker_caps = set(worker.capabilities)
+        # Empty worker capabilities = wildcard (compatible with everything)
+        if not worker_caps:
+            return True
         required_set = set(required)
         # If mission requires command-capable, worker must have it
         if "command" in required_set and "command" not in worker_caps:
