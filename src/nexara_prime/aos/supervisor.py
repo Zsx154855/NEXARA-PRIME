@@ -166,6 +166,7 @@ class AutonomousSupervisor:
 
         if has_active_work:
             self._state = SupervisorState.DISPATCHING
+            self._reconcile_approvals()
             self._process_queued()
             self._dispatch_ready()
             self._retry_evidence_pending()
@@ -184,6 +185,64 @@ class AutonomousSupervisor:
         return False
 
     # ── dispatching ──
+
+    def _reconcile_approvals(self) -> None:
+        """Thread A: Reconcile WAITING_APPROVAL missions against ApprovalQueue.
+
+        - approved/consumed → promote to READY (preserving action context)
+        - rejected → immediate BLOCKED (don't wait for expiry timeout)
+        - expired → immediate BLOCKED
+        - still pending → unchanged
+        """
+        waiting = self.orchestrator.mission_queue.list_by_state(
+            QueueItemState.WAITING_APPROVAL,
+        )
+        for item in waiting:
+            approval_status = self._get_approval_status(item.mission_id)
+            if approval_status is None:
+                continue  # No approval record — leave as is
+
+            if approval_status == ApprovalStatus.CONSUMED.value:
+                self.orchestrator.mission_queue.transition(
+                    item.mission_id, QueueItemState.READY,
+                )
+                self._record_evidence(item.mission_id, "approval_consumed_resume", {
+                    "mission_id": item.mission_id,
+                    "action": "consumed approval → READY for dispatch",
+                })
+            elif approval_status == ApprovalStatus.REJECTED.value:
+                self.orchestrator.mission_queue.transition(
+                    item.mission_id, QueueItemState.BLOCKED,
+                )
+                self._record_evidence(item.mission_id, "approval_rejected_blocked", {
+                    "mission_id": item.mission_id,
+                    "reason": "approval explicitly rejected — immediate BLOCKED",
+                })
+                # Release any writer lease that may exist
+                self.orchestrator.leases.release(item.mission_id,
+                    item.lease_owner or "unknown")
+            elif approval_status == ApprovalStatus.EXPIRED.value:
+                self.orchestrator.mission_queue.transition(
+                    item.mission_id, QueueItemState.BLOCKED,
+                )
+                self._record_evidence(item.mission_id, "approval_expired_blocked", {
+                    "mission_id": item.mission_id,
+                    "reason": "approval expired — immediate BLOCKED",
+                })
+
+    def _get_approval_status(self, mission_id: str) -> str | None:
+        """Return the latest approval status for a mission, or None if no record."""
+        latest_status: str | None = None
+        latest_created: str = ""
+        for raw in self._store.list_records("approval_requests"):
+            p = raw.get("payload", raw)
+            if p.get("mission_id") != mission_id:
+                continue
+            created = p.get("created_at", "")
+            if created > latest_created:
+                latest_created = created
+                latest_status = p.get("status")
+        return latest_status
 
     def _process_queued(self) -> None:
         """Move queued items to ready if dependencies are met AND available_at is reached.
@@ -295,18 +354,36 @@ class AutonomousSupervisor:
                     continue  # No suitable worker — leave in READY
                 worker_id = scheduled.worker_id
 
-            # ── Thread 39: Prevent shell workers from completing prompt-only missions ──
+            # ── Thread V6-E: Symmetric worker compatibility ──
             worker = self.orchestrator.worker_scheduler.get(worker_id)
-            if worker and worker.worker_type.value == "local_tool" and not command and prompt:
-                # Prompt-only mission cannot run on shell worker — block
-                self.orchestrator.mission_queue.transition(
-                    item.mission_id, QueueItemState.BLOCKED,
-                )
-                self._record_evidence(item.mission_id, "mission_blocked", {
-                    "mission_id": item.mission_id,
-                    "reason": "prompt-only mission cannot execute on LocalShellWorker",
-                })
-                continue
+            if worker:
+                worker_type = worker.worker_type.value
+                is_llm = worker_type in ("claude", "code_reviewer")
+                is_shell = worker_type == "local_tool"
+                has_command = bool(command)
+                has_prompt = bool(prompt)
+
+                # Command-only → must go to command-capable worker (shell)
+                if has_command and not has_prompt and is_llm:
+                    self.orchestrator.mission_queue.transition(
+                        item.mission_id, QueueItemState.BLOCKED,
+                    )
+                    self._record_evidence(item.mission_id, "mission_blocked", {
+                        "mission_id": item.mission_id,
+                        "reason": f"command-only mission cannot execute on LLM worker '{worker_id}' — use a shell worker",
+                    })
+                    continue
+
+                # Prompt-only → must go to prompt-capable worker (LLM)
+                if has_prompt and not has_command and is_shell:
+                    self.orchestrator.mission_queue.transition(
+                        item.mission_id, QueueItemState.BLOCKED,
+                    )
+                    self._record_evidence(item.mission_id, "mission_blocked", {
+                        "mission_id": item.mission_id,
+                        "reason": "prompt-only mission cannot execute on LocalShellWorker",
+                    })
+                    continue
 
             # ── Thread 43: Enforce max_attempts ──
             if item.attempt_count >= item.max_attempts:
@@ -320,8 +397,16 @@ class AutonomousSupervisor:
                 })
                 continue
 
-            # ── Check for consumed approval (from previous WAITING_APPROVAL cycle) ──
-            approved_command = self._get_consumed_approval_command(item.mission_id)
+            # ── Thread V6-B: Acquire durable writer lease BEFORE dispatch ──
+            if not self.orchestrator.leases.acquire(item.mission_id, worker_id):
+                # Another supervisor/worker holds the lease — leave READY
+                continue
+
+            # ── Thread V6-H: Check for single-use consumed approval ──
+            approved_command = self._get_and_consume_approval(item.mission_id)
+
+            # Thread V6-F: attempt_count only incremented when REAL dispatch starts
+            item.attempt_count += 1
 
             # Persist lease fields BEFORE transitioning to RUNNING
             lease_expires_ts = (
@@ -331,7 +416,6 @@ class AutonomousSupervisor:
             lease_expires_str = datetime.fromtimestamp(
                 lease_expires_ts, tz=timezone.utc
             ).isoformat()
-            item.attempt_count += 1
 
             # Persist via transition with extra fields
             self.orchestrator.mission_queue.transition(
@@ -342,7 +426,6 @@ class AutonomousSupervisor:
             )
 
             # ── Dispatch through gateway (PermissionBroker enforced inside) ──
-            # Pass approved_command to bypass re-escalation after human approval
             result = self.gateway.dispatch(
                 worker_id, item.mission_id, full_mission,
                 approved_command=approved_command,
@@ -355,9 +438,15 @@ class AutonomousSupervisor:
                 and result.failure_class.value == "permission_block"
                 and result.output.get("escalated")
             ):
+                # Thread V6-F: escalation is NOT an execution attempt — revert
+                # and persist the reverted count on the WAITING_APPROVAL transition
+                reverted_attempt = item.attempt_count - 1
+                # Release the durable lease — we are not executing
+                self.orchestrator.leases.release(item.mission_id, worker_id)
                 self._create_approval_for_escalation(item, result, worker_id)
                 self.orchestrator.mission_queue.transition(
                     item.mission_id, QueueItemState.WAITING_APPROVAL,
+                    attempt_count=reverted_attempt,
                 )
                 self._record_evidence(item.mission_id, "mission_awaiting_approval", {
                     "mission_id": item.mission_id,
@@ -375,8 +464,6 @@ class AutonomousSupervisor:
                 )
                 if not completed:
                     # ── Thread 37: Evidence gate not yet passed ──
-                    # Worker succeeded but evidence is pending — persist result,
-                    # transition to EVIDENCE_PENDING, retry on next cycle
                     self._persist_worker_result(item.mission_id, result)
                     self.orchestrator.mission_queue.transition(
                         item.mission_id, QueueItemState.EVIDENCE_PENDING,
@@ -391,8 +478,10 @@ class AutonomousSupervisor:
                 and result.failure_class.value in self._RETRYABLE_FAILURES
                 and item.attempt_count < item.max_attempts
             ):
+                self.orchestrator.leases.release(item.mission_id, worker_id)
                 self._handle_retryable_failure(item, result)
             else:
+                self.orchestrator.leases.release(item.mission_id, worker_id)
                 self.orchestrator.mission_queue.transition(
                     item.mission_id, QueueItemState.BLOCKED,
                 )
@@ -466,18 +555,62 @@ class AutonomousSupervisor:
     def _retry_evidence_pending(self) -> None:
         """Retry completing EVIDENCE_PENDING missions.
 
-        When a worker succeeded but the evidence gate blocked completion,
-        the mission is in EVIDENCE_PENDING. Each cycle:
-        1. Move to RUNNING (complete_mission requires RUNNING state)
-        2. Call complete_mission() — if evidence is now ready, completes
-        3. If still blocked, move back to EVIDENCE_PENDING
+        Thread V6-J: Distinguishes between:
+        - Evidence PENDING: retry complete_mission() each cycle
+        - Evidence FAILED: route to RecoveryEngine → retryable (regenerate) or BLOCKED
+
+        Looping forever on permanently-failed evidence is not allowed.
         """
         pending = self.orchestrator.mission_queue.list_by_state(
             QueueItemState.EVIDENCE_PENDING,
         )
         for item in pending:
             worker_id = item.lease_owner or "unknown"
-            # Recover persisted WorkerResult
+
+            # ── Thread V6-J: Check for FAILED evidence jobs ──
+            failed_jobs = self.orchestrator.evidence_queue.failed_for_mission(
+                item.mission_id,
+            )
+            if failed_jobs:
+                # Permanent evidence failure — route through RecoveryEngine
+                recovery_result = self.recovery.recover(
+                    item.mission_id, "evidence_failure",
+                    attempt=item.attempt_count,
+                    last_error=f"{len(failed_jobs)} failed evidence job(s)",
+                )
+                if (
+                    recovery_result.success
+                    and recovery_result.strategy != RecoveryStrategy.ESCALATE
+                ):
+                    # Regenerate evidence then retry
+                    self.orchestrator.mission_queue.transition(
+                        item.mission_id, QueueItemState.RECOVERING,
+                    )
+                    self.orchestrator.mission_queue.transition(
+                        item.mission_id, QueueItemState.QUEUED,
+                    )
+                else:
+                    self.orchestrator.mission_queue.transition(
+                        item.mission_id, QueueItemState.BLOCKED,
+                    )
+                    self._record_evidence(item.mission_id,
+                        "evidence_gate_failed", {
+                            "mission_id": item.mission_id,
+                            "failed_jobs": len(failed_jobs),
+                            "reason": "permanent evidence failure — BLOCKED",
+                        })
+                    self._events.publish(
+                        event_type="evidence_gate_failed",
+                        aggregate_id=item.mission_id,
+                        aggregate_type="mission",
+                        actor="supervisor",
+                        trace_id=f"sv:{item.mission_id}:evidence_failed:{_utc_now()}",
+                        payload={"mission_id": item.mission_id,
+                                 "failed_jobs": len(failed_jobs)},
+                    )
+                continue
+
+            # ── Evidence still pending (no failed jobs) — retry completion ──
             try:
                 wr_raw = self._store.find_record(
                     "worker_result", "mission_id", item.mission_id,
@@ -486,14 +619,12 @@ class AutonomousSupervisor:
                     continue
                 from ..models import WorkerResult as WR
                 p = wr_raw.get("payload", wr_raw)
-                # Filter to only WR model fields (persisted record may have extras)
                 wr_fields = {"worker_id", "mission_id", "success",
                              "failure_class", "output", "artifacts",
                              "evidence_refs", "token_usage", "duration_ms",
                              "next_action", "created_at"}
                 filtered = {k: v for k, v in p.items() if k in wr_fields}
                 worker_result = WR(**filtered)
-                # complete_mission expects RUNNING state
                 item.state = QueueItemState.RUNNING
                 self.orchestrator.mission_queue.transition(
                     item.mission_id, QueueItemState.RUNNING,
@@ -507,7 +638,7 @@ class AutonomousSupervisor:
                         "from_evidence_pending": True,
                     })
                 else:
-                    # Evidence still pending — move back
+                    # Still pending — move back
                     self.orchestrator.mission_queue.transition(
                         item.mission_id, QueueItemState.EVIDENCE_PENDING,
                     )
@@ -605,14 +736,32 @@ class AutonomousSupervisor:
             mission_id=item.mission_id,
         )
 
-    def _get_consumed_approval_command(self, mission_id: str) -> str | None:
-        """Return the approved command if a consumed approval exists for this mission."""
+    def _get_and_consume_approval(self, mission_id: str) -> str | None:
+        """Return the approved command if an unused consumed approval exists.
+
+        Thread V6-H: Each consumed approval is a single-use grant. After the first
+        real execution, the grant is marked 'grant_used=true' so retries, stale
+        recoveries, and requeues cannot reuse the same approval. A changed action
+        requires a fresh ApprovalRequest.
+        """
         for raw in self._store.list_records("approval_requests"):
             p = raw.get("payload", raw)
             if p.get("mission_id") != mission_id:
                 continue
             if p.get("status") != ApprovalStatus.CONSUMED.value:
                 continue
+            if p.get("grant_used"):
+                continue  # Already used — single-use only
+            # Mark grant as used BEFORE returning — races are benign
+            # because writer lease ensures single dispatcher per mission
+            p["grant_used"] = True
+            p["grant_used_at"] = _utc_now()
+            self._store.save_record(
+                p.get("approval_id", f"approval:{mission_id}"),
+                "approval_requests", p,
+                created_at=p.get("created_at", _utc_now()),
+                mission_id=mission_id,
+            )
             return p.get("action", "")
         return None
 
@@ -660,13 +809,15 @@ class AutonomousSupervisor:
                 )
 
                 # Process recovery result — honour max_attempts
-                if item.attempt_count + 1 >= item.max_attempts:
+                # Thread V6-D: attempt_count already reflects dispatched attempts;
+                # compare directly, don't add 1 (which would block one attempt early)
+                if item.attempt_count >= item.max_attempts:
                     self.orchestrator.mission_queue.transition(
                         item.mission_id, QueueItemState.BLOCKED,
                     )
                     self._record_evidence(item.mission_id, "stale_lease_exhausted", {
                         "mission_id": item.mission_id,
-                        "attempt": item.attempt_count + 1,
+                        "attempt": item.attempt_count,
                         "reason": f"max_attempts ({item.max_attempts}) reached on stale lease",
                     })
                 elif (
@@ -684,17 +835,49 @@ class AutonomousSupervisor:
                     )
                     self._record_evidence(item.mission_id, "stale_lease_exhausted", {
                         "mission_id": item.mission_id,
-                        "attempt": item.attempt_count + 1,
+                        "attempt": item.attempt_count,
                         "strategy": recovery_result.strategy.value,
                     })
 
     def _expire_stale_approvals(self) -> None:
-        """Expire approvals that have timed out."""
+        """Expire approvals that have timed out OR been rejected/expired.
+
+        Thread V6-G: Also inspects ApprovalQueue status for rejected/expired
+        approvals, not just time-based expiry. Rejected missions are terminated
+        immediately without waiting for approval_expiry_timeout_s.
+        """
         waiting = self.orchestrator.mission_queue.list_by_state(
             QueueItemState.WAITING_APPROVAL
         )
         now = time.time()
         for item in waiting:
+            # ── Thread V6-G: Check approval status first ──
+            approval_status = self._get_approval_status(item.mission_id)
+            if approval_status in (ApprovalStatus.REJECTED.value,
+                                    ApprovalStatus.EXPIRED.value):
+                self.orchestrator.mission_queue.transition(
+                    item.mission_id, QueueItemState.BLOCKED,
+                )
+                kind = ("approval_rejected_blocked" if approval_status == "rejected"
+                       else "approval_expired_blocked")
+                self._record_evidence(item.mission_id, kind, {
+                    "mission_id": item.mission_id,
+                    "reason": f"approval {approval_status} — immediate BLOCKED",
+                })
+                self.orchestrator.leases.release(item.mission_id,
+                    item.lease_owner or "unknown")
+                self._events.publish(
+                    event_type=kind,
+                    aggregate_id=item.mission_id,
+                    aggregate_type="mission",
+                    actor="supervisor",
+                    trace_id=f"sv:{item.mission_id}:{kind}:{_utc_now()}",
+                    payload={"mission_id": item.mission_id,
+                             "approval_status": approval_status},
+                )
+                continue
+
+            # ── Time-based expiry check ──
             if not item.updated_at:
                 continue
             try:
@@ -707,6 +890,8 @@ class AutonomousSupervisor:
             self.orchestrator.mission_queue.transition(
                 item.mission_id, QueueItemState.BLOCKED
             )
+            self.orchestrator.leases.release(item.mission_id,
+                item.lease_owner or "unknown")
             self._record_evidence(item.mission_id, "approval_expired", {
                 "mission_id": item.mission_id,
                 "reason": "approval timeout",

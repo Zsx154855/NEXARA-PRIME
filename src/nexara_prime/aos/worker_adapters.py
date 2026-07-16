@@ -194,7 +194,7 @@ class ClaudeCodeWorker:
         timeout = timeout_s or self._default_timeout_s
         prompt = input_data.get("prompt", "")
         session_id = input_data.get("session_id", "")
-        cwd = input_data.get("cwd", os.getcwd())
+        cwd = input_data.get("cwd") or os.getcwd()
         model = input_data.get("model", "")
         json_schema = input_data.get("json_schema", "")
         system_prompt = input_data.get("system_prompt", "")
@@ -367,7 +367,7 @@ class CodexWorker:
     ) -> WorkerResult:
         timeout = timeout_s or self._default_timeout_s
         prompt = input_data.get("prompt", "")
-        cwd = input_data.get("cwd", os.getcwd())
+        cwd = input_data.get("cwd") or os.getcwd()
         model = input_data.get("model", "")
         output_schema_file = input_data.get("output_schema_file", "")
         sandbox_mode = input_data.get("sandbox", "workspace-write")
