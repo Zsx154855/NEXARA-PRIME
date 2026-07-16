@@ -17,6 +17,12 @@ from nexara_prime.evidence import EvidenceStore
 from nexara_prime.models import (
     QueueItemState, RiskLevel,
 )
+from nexara_prime.orchestration import (
+    WorkerScheduler,
+)
+from nexara_prime.models import (
+    WorkerDescriptor, WorkerType, MissionQueueItem,
+)
 from nexara_prime.aos.command_classifier import (
     CommandClassifier,
 )
@@ -31,7 +37,7 @@ from nexara_prime.aos.supervisor import AutonomousSupervisor, SupervisorConfig
 from nexara_prime.aos.worker_adapters import (
     DeterministicFakeWorker, ClaudeCodeWorker, CodexWorker, LocalShellWorker,
 )
-from nexara_prime.aos.recovery_engine import RecoveryEngine
+from nexara_prime.aos.recovery_engine import RecoveryEngine, RecoveryStrategy
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -795,7 +801,7 @@ class TestSupervisorV3Fixes:
         sv.orchestrator.worker_scheduler.register(
             WorkerDescriptor(
                 worker_id="auto_worker", worker_type=MWorkerType.LOCAL_TOOL,
-                capabilities=["read", "edit"], writer_capable=True,
+                capabilities=["read", "edit", "command"], writer_capable=True,
                 health="healthy", available=True,
             )
         )
@@ -1084,7 +1090,7 @@ class TestSupervisorV4Thread8FullPayload:
         sv.orchestrator.worker_scheduler.register(
             WorkerDescriptor(
                 worker_id=worker.worker_id, worker_type=MWorkerType.LOCAL_TOOL,
-                capabilities=["read", "edit"], writer_capable=True,
+                capabilities=["read", "edit", "command"], writer_capable=True,
                 health="healthy", available=True,
             )
         )
@@ -1493,7 +1499,7 @@ class TestV4ApprovalRouting:
         gw.register(worker)
         sv.orchestrator.worker_scheduler.register(
             WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
-                             capabilities=[], writer_capable=True,
+                             capabilities=["command"], writer_capable=True,
                              health="healthy", available=True))
 
         # Submit R3 command
@@ -1690,8 +1696,14 @@ class TestV4DestructiveGit:
 class TestV4TypedWorker:
     """Thread 39: Prompt-only missions rejected by LocalShellWorker."""
 
-    def test_prompt_only_blocked_on_shell(self, supervisor_env):
-        """Prompt-only mission + LocalShellWorker → BLOCKED."""
+    def test_prompt_only_not_selected_on_shell(self, supervisor_env):
+        """Prompt-only mission + LocalShellWorker → stays READY (no match).
+
+        Thread 2 (Codex V11): LOCAL_TOOL with empty capabilities is no longer
+        a wildcard — compatibility is derived from worker_type, and LOCAL_TOOL
+        can only execute commands.  A prompt-only mission stays READY until
+        a prompt-capable worker (CLAUDE/CODE_REVIEWER) registers.
+        """
         sv = supervisor_env["supervisor"]
         gw = supervisor_env["gateway"]
         from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
@@ -1702,7 +1714,7 @@ class TestV4TypedWorker:
         gw.register(worker)
         sv.orchestrator.worker_scheduler.register(
             WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
-                             capabilities=[], writer_capable=True,
+                             capabilities=["command"], writer_capable=True,
                              health="healthy", available=True))
 
         sv.submit_mission("v4_prompt_only", priority=5, risk=RiskLevel.R1,
@@ -1711,7 +1723,8 @@ class TestV4TypedWorker:
         sv._dispatch_ready()
 
         item = sv.orchestrator.mission_queue.get("v4_prompt_only")
-        assert item.state == QueueItemState.BLOCKED
+        # Stays READY — LOCAL_TOOL cannot handle prompt-only missions
+        assert item.state == QueueItemState.READY
 
     def test_empty_command_fail_closed(self, supervisor_env):
         """LocalShellWorker with empty command → fail closed."""
@@ -2346,7 +2359,8 @@ class TestCodexV7ApprovalGrant:
         sv.orchestrator.mission_queue.transition("v7_valid_grant", QueueItemState.READY)
 
         result = gw.dispatch(worker.worker_id, "v7_valid_grant",
-                             {"mission_id": "v7_valid_grant", "command": "echo valid"},
+                             {"mission_id": "v7_valid_grant", "command": "echo valid",
+                              "run_id": grant.run_id},
                              approval_grant=grant)
         # Must succeed — valid grant + command matches
         assert result.success
@@ -2382,7 +2396,8 @@ class TestCodexV7ApprovalGrant:
         )
         # Try to execute a DIFFERENT command with this grant
         result = gw.dispatch(worker.worker_id, "v7_cmd_mismatch",
-                             {"mission_id": "v7_cmd_mismatch", "command": "sudo rm -rf /"},
+                             {"mission_id": "v7_cmd_mismatch", "command": "sudo rm -rf /",
+                              "run_id": grant.run_id},
                              approval_grant=grant)
         assert not result.success
         assert "mismatch" in str(result.output.get("error", "")).lower()
@@ -2422,13 +2437,15 @@ class TestCodexV7ApprovalGrant:
 
         # First use — should succeed
         r1 = gw.dispatch(worker.worker_id, "v7_replay",
-                         {"mission_id": "v7_replay", "command": "echo once"},
+                         {"mission_id": "v7_replay", "command": "echo once",
+                          "run_id": grant.run_id},
                          approval_grant=grant)
         assert r1.success
 
         # Second use — same grant → REJECTED (replay)
         r2 = gw.dispatch(worker.worker_id, "v7_replay",
-                         {"mission_id": "v7_replay", "command": "echo once"},
+                         {"mission_id": "v7_replay", "command": "echo once",
+                          "run_id": grant.run_id},
                          approval_grant=grant)
         assert not r2.success
         assert "replay" in str(r2.output.get("error", "")).lower()
@@ -3018,13 +3035,15 @@ class TestCodexV8AtomicGrant:
 
         # First dispatch with grant → succeeds
         r1 = gw.dispatch(worker.worker_id, "v8_atomic_grant",
-                         {"mission_id": "v8_atomic_grant", "command": "echo atomic"},
+                         {"mission_id": "v8_atomic_grant", "command": "echo atomic",
+                          "run_id": grant.run_id},
                          approval_grant=grant)
         assert r1.success
 
         # Second dispatch with same grant → fails (already verified)
         r2 = gw.dispatch(worker.worker_id, "v8_atomic_grant",
-                         {"mission_id": "v8_atomic_grant", "command": "echo atomic"},
+                         {"mission_id": "v8_atomic_grant", "command": "echo atomic",
+                          "run_id": grant.run_id},
                          approval_grant=grant)
         assert not r2.success
 
@@ -3408,3 +3427,530 @@ class TestCodexV10WorkerAutoCapability:
         # Thread 11: auto-injected capabilities ensure dispatch succeeds.
         # Mission must NOT be BLOCKED (auto-injection matched command worker).
         assert item.state != QueueItemState.BLOCKED
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Codex V11 — PR #12 Final Closure (7 Threads)
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestCodexV11Thread1DestructiveCheckout:
+    """Thread 1: git checkout <branch> <path> without -- is destructive restore.
+
+    All forms of checkout that name a tree-ish AND a path are destructive.
+    Single-argument checkout (branch switch) remains R2.
+    """
+
+    def test_checkout_main_readme_is_destructive(self):
+        c = CommandClassifier()
+        r = c.classify("git checkout main README.md")
+        assert r.risk_level in (RiskLevel.R3, RiskLevel.R4), \
+            f"checkout main README.md must be R3+, got {r.risk_level.value}"
+        assert not r.auto_approvable
+
+    def test_checkout_feature_branch_path_is_destructive(self):
+        c = CommandClassifier()
+        r = c.classify("git checkout feature/foo src/a.py")
+        assert r.risk_level in (RiskLevel.R3, RiskLevel.R4), \
+            f"checkout feature/foo src/a.py must be R3+, got {r.risk_level.value}"
+        assert not r.auto_approvable
+
+    def test_checkout_head_tilde_path_is_destructive(self):
+        c = CommandClassifier()
+        r = c.classify("git checkout HEAD~1 README.md")
+        assert r.risk_level in (RiskLevel.R3, RiskLevel.R4), \
+            f"checkout HEAD~1 README.md must be R3+, got {r.risk_level.value}"
+        assert not r.auto_approvable
+
+    def test_checkout_with_dashdash_is_destructive(self):
+        c = CommandClassifier()
+        r = c.classify("git checkout HEAD -- README.md")
+        assert r.risk_level in (RiskLevel.R3, RiskLevel.R4), \
+            f"checkout HEAD -- README.md must be R3+, got {r.risk_level.value}"
+
+    def test_single_branch_checkout_remains_r2(self):
+        c = CommandClassifier()
+        r = c.classify("git checkout main")
+        assert r.risk_level == RiskLevel.R2, \
+            f"single-branch checkout should be R2, got {r.risk_level.value}"
+
+    def test_checkout_dash_b_new_branch_not_destructive(self):
+        c = CommandClassifier()
+        r = c.classify("git checkout -b new-feature")
+        assert r.risk_level == RiskLevel.R2, \
+            f"checkout -b should be R2, got {r.risk_level.value}"
+
+    def test_checkout_revision_path_no_dashdash_is_destructive(self):
+        c = CommandClassifier()
+        r = c.classify("git checkout abc123def src/main.py")
+        assert r.risk_level in (RiskLevel.R3, RiskLevel.R4), \
+            f"checkout abc123def src/main.py must be R3+, got {r.risk_level.value}"
+
+
+class TestCodexV11Thread2WorkerCapabilitiesBypass:
+    """Thread 2: Worker capabilities=[] must not bypass payload-kind checks.
+
+    Empty capabilities is NOT a wildcard.  Compatibility is derived from
+    worker_type: LOCAL_TOOL → command, CLAUDE/CODE_REVIEWER → prompt.
+    """
+
+    def test_empty_caps_prompt_only_blocked_on_local_tool(self, tmp_db):
+        events = EventBus(tmp_db)
+        scheduler = WorkerScheduler(tmp_db, events)
+        worker = WorkerDescriptor(
+            worker_id="shell_no_caps", worker_type=WorkerType.LOCAL_TOOL,
+            capabilities=[], writer_capable=True,
+            health="healthy", available=True,
+        )
+        scheduler.register(worker)
+        item = MissionQueueItem(
+            mission_id="prompt_only", state=QueueItemState.READY,
+            required_capabilities=["prompt"],
+        )
+        result = scheduler.schedule(item)
+        # Empty caps LOCAL_TOOL must NOT match prompt-only mission
+        assert result is None, \
+            "LOCAL_TOOL with empty capabilities must NOT be selected for prompt-only"
+
+    def test_empty_caps_command_only_blocked_on_llm(self, tmp_db):
+        events = EventBus(tmp_db)
+        scheduler = WorkerScheduler(tmp_db, events)
+        worker = WorkerDescriptor(
+            worker_id="llm_no_caps", worker_type=WorkerType.CLAUDE,
+            capabilities=[], writer_capable=True,
+            health="healthy", available=True,
+        )
+        scheduler.register(worker)
+        item = MissionQueueItem(
+            mission_id="cmd_only", state=QueueItemState.READY,
+            required_capabilities=["command"],
+        )
+        result = scheduler.schedule(item)
+        # Empty caps CLAUDE must NOT match command-only mission
+        assert result is None, \
+            "CLAUDE with empty capabilities must NOT be selected for command-only"
+
+    def test_explicit_caps_command_on_local_tool_allowed(self, tmp_db):
+        events = EventBus(tmp_db)
+        scheduler = WorkerScheduler(tmp_db, events)
+        worker = WorkerDescriptor(
+            worker_id="shell_cmd", worker_type=WorkerType.LOCAL_TOOL,
+            capabilities=["command"], writer_capable=True,
+            health="healthy", available=True,
+        )
+        scheduler.register(worker)
+        item = MissionQueueItem(
+            mission_id="cmd_explicit", state=QueueItemState.READY,
+            required_capabilities=["command"],
+        )
+        result = scheduler.schedule(item)
+        assert result is not None
+        assert result.worker_id == "shell_cmd"
+
+    def test_explicit_caps_prompt_on_llm_allowed(self, tmp_db):
+        events = EventBus(tmp_db)
+        scheduler = WorkerScheduler(tmp_db, events)
+        worker = WorkerDescriptor(
+            worker_id="llm_prompt", worker_type=WorkerType.CLAUDE,
+            capabilities=["prompt"], writer_capable=True,
+            health="healthy", available=True,
+        )
+        scheduler.register(worker)
+        item = MissionQueueItem(
+            mission_id="prompt_explicit", state=QueueItemState.READY,
+            required_capabilities=["prompt"],
+        )
+        result = scheduler.schedule(item)
+        assert result is not None
+        assert result.worker_id == "llm_prompt"
+
+    def test_code_reviewer_empty_caps_blocked_on_command(self, tmp_db):
+        events = EventBus(tmp_db)
+        scheduler = WorkerScheduler(tmp_db, events)
+        worker = WorkerDescriptor(
+            worker_id="codex_no_caps", worker_type=WorkerType.CODE_REVIEWER,
+            capabilities=[], writer_capable=True,
+            health="healthy", available=True,
+        )
+        scheduler.register(worker)
+        item = MissionQueueItem(
+            mission_id="cmd_on_codex", state=QueueItemState.READY,
+            required_capabilities=["command"],
+        )
+        result = scheduler.schedule(item)
+        # CODE_REVIEWER with empty caps must NOT match command-only
+        assert result is None, \
+            "CODE_REVIEWER with empty capabilities must NOT be selected for command-only"
+
+
+class TestCodexV11Thread3GrantConsumptionOrder:
+    """Thread 3: Validate command/mission_id/run_id BEFORE CAS consume.
+
+    A mismatched command must never burn a valid grant.  The verifier's
+    atomic CAS must only be called after all binding pre-checks pass.
+    """
+
+    def test_wrong_command_does_not_consume_grant(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        gw.register(DeterministicFakeWorker(succeed=True))
+        from nexara_prime.aos.execution_gateway import ApprovalGrant
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+        import hashlib
+
+        # Set up an approval record
+        approval_id = "apr_test_v11_t3"
+        sv.orchestrator.approvals.create(ApprovalRequest(
+            approval_id=approval_id, mission_id="m_t3",
+            action="echo correct", risk_level=RiskLevel.R3,
+            rationale="test", reason="test",
+            status=ApprovalStatus.CONSUMED,
+        ))
+
+        # Create a grant for "echo correct"
+        grant = ApprovalGrant(
+            mission_id="m_t3", command="echo correct",
+            run_id="run:m_t3:1", approval_id=approval_id,
+        )
+
+        # Track whether verifier was called (CAS consumed)
+        verifier_called = []
+
+        def tracking_verifier(g):
+            verifier_called.append(True)
+            return True
+
+        gw.set_approval_verifier(tracking_verifier)
+
+        # Dispatch with WRONG command — should fail BEFORE calling verifier
+        result = gw.dispatch(
+            "fake_e2e_worker", "m_t3",
+            {"command": "echo WRONG", "run_id": "run:m_t3:1"},
+            approval_grant=grant,
+        )
+        assert not result.success
+        assert result.failure_class.value == "permission_block"
+        assert "command mismatch" in result.output.get("error", "")
+        # VERIFIER MUST NOT HAVE BEEN CALLED — wrong command never burns grant
+        assert len(verifier_called) == 0, \
+            "verifier (CAS consume) must NOT be called when command mismatches"
+
+    def test_wrong_mission_id_does_not_consume_grant(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        gw.register(DeterministicFakeWorker(succeed=True))
+        from nexara_prime.aos.execution_gateway import ApprovalGrant
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+
+        approval_id = "apr_test_v11_t3b"
+        sv.orchestrator.approvals.create(ApprovalRequest(
+            approval_id=approval_id, mission_id="m_t3b",
+            action="echo ok", risk_level=RiskLevel.R3,
+            rationale="test", reason="test",
+            status=ApprovalStatus.CONSUMED,
+        ))
+
+        grant = ApprovalGrant(
+            mission_id="m_t3b", command="echo ok",
+            run_id="run:m_t3b:1", approval_id=approval_id,
+        )
+
+        verifier_called = []
+        gw.set_approval_verifier(lambda g: verifier_called.append(True) or True)
+
+        # Dispatch with WRONG mission_id
+        result = gw.dispatch(
+            "fake_e2e_worker", "WRONG_MISSION",
+            {"command": "echo ok", "run_id": "run:m_t3b:1"},
+            approval_grant=grant,
+        )
+        assert not result.success
+        assert "mission mismatch" in result.output.get("error", "")
+        assert len(verifier_called) == 0
+
+    def test_tampered_grant_different_signature_not_replayed(self, supervisor_env):
+        """Tampering with grant fields creates a different HMAC signature.
+
+        The HMAC signature is an anti-replay mechanism — same signature can't
+        be used twice.  Tampering with run_id creates a DIFFERENT signature,
+        so it passes the replay check.  The verifier callback validates the
+        actual fields against the store (command, mission, status, expiry).
+        Field-level tampering is caught by the pre-CAS binding checks.
+        """
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        gw.register(DeterministicFakeWorker(succeed=True))
+        from nexara_prime.aos.execution_gateway import ApprovalGrant
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+
+        approval_id = "apr_test_v11_t3c"
+        sv.orchestrator.approvals.create(ApprovalRequest(
+            approval_id=approval_id, mission_id="m_t3c",
+            action="echo ok", risk_level=RiskLevel.R3,
+            rationale="test", reason="test",
+            status=ApprovalStatus.CONSUMED,
+        ))
+
+        # Create grant with one run_id
+        grant = ApprovalGrant(
+            mission_id="m_t3c", command="echo ok",
+            run_id="run:m_t3c:1", approval_id=approval_id,
+        )
+        # Tamper with the COMMAND — pre-CAS check catches this
+        tampered = ApprovalGrant(
+            mission_id=grant.mission_id, command="echo TAMPERED",
+            run_id=grant.run_id, approval_id=grant.approval_id,
+            nonce=grant.nonce,
+        )
+
+        verifier_called = []
+        gw.set_approval_verifier(lambda g: verifier_called.append(True) or True)
+
+        # Dispatch with tampered command — should fail BEFORE verifier
+        result = gw.dispatch(
+            "fake_e2e_worker", "m_t3c",
+            {"command": "echo ok", "run_id": "run:m_t3c:1"},
+            approval_grant=tampered,
+        )
+        # Grant command ("echo TAMPERED") doesn't match actual command ("echo ok")
+        assert not result.success
+        assert "mismatch" in str(result.output.get("error", "")).lower()
+        assert len(verifier_called) == 0, \
+            "verifier must not be called when command mismatches"
+
+    def test_all_correct_dispatch_consumes_grant(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        gw.register(DeterministicFakeWorker(succeed=True))
+        from nexara_prime.aos.execution_gateway import ApprovalGrant
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+
+        approval_id = "apr_test_v11_t3d"
+        sv.orchestrator.approvals.create(ApprovalRequest(
+            approval_id=approval_id, mission_id="m_t3d",
+            action="echo correct", risk_level=RiskLevel.R3,
+            rationale="test", reason="test",
+            status=ApprovalStatus.CONSUMED,
+        ))
+
+        grant = ApprovalGrant(
+            mission_id="m_t3d", command="echo correct",
+            run_id="run:m_t3d:1", approval_id=approval_id,
+        )
+
+        verifier_called = []
+        gw.set_approval_verifier(lambda g: verifier_called.append(True) or True)
+
+        result = gw.dispatch(
+            "fake_e2e_worker", "m_t3d",
+            {"command": "echo correct", "run_id": "run:m_t3d:1"},
+            approval_grant=grant,
+        )
+        assert result.success
+        assert len(verifier_called) == 1, \
+            "verifier must be called when ALL pre-checks pass"
+
+
+class TestCodexV11Thread4IdempotentFirstWriteWins:
+    """Thread 4: Idempotent enqueue must not overwrite payload on duplicate.
+
+    First-write-wins: when submit_mission hits an existing idempotency_key,
+    the payload (command/prompt) must NOT be overwritten.
+    """
+
+    def test_duplicate_submit_does_not_overwrite_payload(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        store = supervisor_env["store"]
+
+        # First submission
+        item1 = sv.submit_mission(
+            "m_v11_t4", priority=5,
+            command="echo original", prompt="",
+            idempotency_key="ik_v11_t4",
+        )
+
+        # Second submission — same key, different command
+        item2 = sv.submit_mission(
+            "m_v11_t4_duplicate", priority=5,
+            command="echo OVERWRITTEN", prompt="",
+            idempotency_key="ik_v11_t4",
+        )
+
+        # Must return the ORIGINAL mission_id
+        assert item2.mission_id == item1.mission_id
+
+        # The payload must still be the original
+        mp_raw = store.find_record("mission_payload", "mission_id", item1.mission_id)
+        if mp_raw:
+            p = mp_raw.get("payload", mp_raw)
+            assert p.get("command") == "echo original", \
+                f"payload must be first-write, got {p.get('command')}"
+
+    def test_new_submission_creates_fresh_payload(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        store = supervisor_env["store"]
+
+        item = sv.submit_mission(
+            "m_v11_t4_new", priority=5,
+            command="echo fresh", prompt="",
+            idempotency_key="ik_v11_t4_fresh",
+        )
+        assert item.mission_id == "m_v11_t4_new"
+
+        mp_raw = store.find_record("mission_payload", "mission_id", "m_v11_t4_new")
+        if mp_raw:
+            p = mp_raw.get("payload", mp_raw)
+            assert p.get("command") == "echo fresh"
+
+
+class TestCodexV11Thread5RecoveryBlockTerminal:
+    """Thread 5: RecoveryStrategy.BLOCK must return success=False.
+
+    Supervisor must treat BLOCK as terminal failure — never requeue,
+    never retry.  BLOCK means the mission is dead.
+    """
+
+    def test_block_strategy_returns_success_false(self):
+        engine = RecoveryEngine(max_retries=3)
+        # Attempt 7 → strategy_idx = min(6, 7) = 7 → BLOCK
+        result = engine.recover("m_t5", "test_failure", attempt=7,
+                                last_error="persistent failure")
+        assert result.strategy == RecoveryStrategy.BLOCK
+        assert not result.success, \
+            "RecoveryStrategy.BLOCK must return success=False (terminal)"
+
+    def test_block_strategy_is_not_retryable(self):
+        engine = RecoveryEngine(max_retries=3)
+        result = engine.recover("m_t5b", "worker_failure", attempt=7,
+                                last_error="exhausted")
+        assert result.strategy == RecoveryStrategy.BLOCK
+        assert not result.success
+        # A caller checking success=True for requeue must NOT requeue BLOCK
+        assert not (result.success and result.strategy != RecoveryStrategy.ESCALATE), \
+            "BLOCK must NOT pass the success→requeue guard"
+
+    def test_retry_still_returns_success_true(self):
+        engine = RecoveryEngine(max_retries=3)
+        result = engine.recover("m_t5c", "worker_failure", attempt=1,
+                                last_error="first failure")
+        assert result.strategy == RecoveryStrategy.RETRY
+        assert result.success, "RETRY (attempt 1) must return success=True"
+
+
+class TestCodexV11Thread6SensitivePaths:
+    """Thread 6: /root/.ssh/** and /root/.aws/** must be R4.
+
+    Reading, writing, or cwd-relative access to root credential directories
+    must escalate to R4.
+    """
+
+    def test_read_root_ssh_is_r4(self):
+        c = CommandClassifier()
+        r = c.classify("cat /root/.ssh/id_rsa")
+        assert r.risk_level == RiskLevel.R4, \
+            f"reading /root/.ssh/ must be R4, got {r.risk_level.value}"
+
+    def test_read_root_aws_is_r4(self):
+        c = CommandClassifier()
+        r = c.classify("cat /root/.aws/credentials")
+        assert r.risk_level == RiskLevel.R4, \
+            f"reading /root/.aws/ must be R4, got {r.risk_level.value}"
+
+    def test_write_root_ssh_is_unsafe(self):
+        c = CommandClassifier()
+        r = c.classify("touch /root/.ssh/authorized_keys")
+        assert r.risk_level in (RiskLevel.R3, RiskLevel.R4), \
+            f"writing to /root/.ssh/ must be R3+, got {r.risk_level.value}"
+
+    def test_write_root_aws_is_unsafe(self):
+        c = CommandClassifier()
+        r = c.classify("cp /tmp/x /root/.aws/config")
+        assert r.risk_level in (RiskLevel.R3, RiskLevel.R4), \
+            f"writing to /root/.aws/ must be R3+, got {r.risk_level.value}"
+
+    def test_cwd_root_ssh_relative_read_is_r4(self):
+        c = CommandClassifier()
+        r = c.classify("cat id_rsa", cwd="/root/.ssh")
+        assert r.risk_level == RiskLevel.R4, \
+            f"relative read in /root/.ssh must be R4, got {r.risk_level.value}"
+
+    def test_cwd_root_aws_relative_read_is_r4(self):
+        c = CommandClassifier()
+        r = c.classify("cat credentials", cwd="/root/.aws")
+        assert r.risk_level == RiskLevel.R4, \
+            f"relative read in /root/.aws must be R4, got {r.risk_level.value}"
+
+    def test_normal_ssh_read_still_r4(self):
+        c = CommandClassifier()
+        r = c.classify("cat ~/.ssh/id_rsa")
+        assert r.risk_level == RiskLevel.R4, \
+            f"reading ~/.ssh/ must still be R4, got {r.risk_level.value}"
+
+
+class TestCodexV11Thread7ApprovalBinding:
+    """Thread 7: New rejected/expired must supersede old consumed/approved.
+
+    Most-recent-wins: the LATEST approval record (by created_at) determines
+    the mission's fate.  An old consumed grant must NOT push a mission to
+    READY when a newer rejected/expired record exists.
+    """
+
+    def test_new_rejected_beats_old_consumed(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        store = supervisor_env["store"]
+
+        # Old CONSUMED approval
+        store.save_record("apr_old", "approval_requests", {
+            "approval_id": "apr_old", "mission_id": "m_t7",
+            "action": "echo old", "status": "consumed",
+            "created_at": "2026-01-01T00:00:00Z",
+        }, created_at="2026-01-01T00:00:00Z", mission_id="m_t7")
+
+        # New REJECTED approval (same mission)
+        store.save_record("apr_new", "approval_requests", {
+            "approval_id": "apr_new", "mission_id": "m_t7",
+            "action": "echo new", "status": "rejected",
+            "created_at": "2026-07-17T00:00:00Z",
+        }, created_at="2026-07-17T00:00:00Z", mission_id="m_t7")
+
+        status = sv._get_approval_status("m_t7")
+        assert status == "rejected", \
+            f"new rejected must beat old consumed, got {status}"
+
+    def test_new_expired_beats_old_approved(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        store = supervisor_env["store"]
+
+        store.save_record("apr_old2", "approval_requests", {
+            "approval_id": "apr_old2", "mission_id": "m_t7b",
+            "action": "echo old", "status": "approved",
+            "created_at": "2026-01-01T00:00:00Z",
+        }, created_at="2026-01-01T00:00:00Z", mission_id="m_t7b")
+
+        store.save_record("apr_new2", "approval_requests", {
+            "approval_id": "apr_new2", "mission_id": "m_t7b",
+            "action": "echo new", "status": "expired",
+            "created_at": "2026-07-17T00:00:00Z",
+        }, created_at="2026-07-17T00:00:00Z", mission_id="m_t7b")
+
+        status = sv._get_approval_status("m_t7b")
+        assert status == "expired", \
+            f"new expired must beat old approved, got {status}"
+
+    def test_single_record_returns_directly(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        store = supervisor_env["store"]
+
+        store.save_record("apr_single", "approval_requests", {
+            "approval_id": "apr_single", "mission_id": "m_t7c",
+            "action": "echo solo", "status": "approved",
+            "created_at": "2026-07-01T00:00:00Z",
+        }, created_at="2026-07-01T00:00:00Z", mission_id="m_t7c")
+
+        status = sv._get_approval_status("m_t7c")
+        assert status == "approved"
+
+    def test_no_record_returns_none(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        status = sv._get_approval_status("nonexistent")
+        assert status is None

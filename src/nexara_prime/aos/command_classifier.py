@@ -75,6 +75,7 @@ _UNSAFE_WRITE_TARGETS: re.Pattern[str] = re.compile(
     r"(?:"
     r"~/.bashrc|~/.zshrc|~/.profile|~/.bash_profile|"
     r"~/.ssh/|~/.aws/|"
+    r"/root/\.ssh/|/root/\.aws/|"
     r"/etc/|"
     r"/Library/|"
     r"~/Library/LaunchAgents/|"
@@ -128,6 +129,9 @@ _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
     r"/home/[^/\s]+/\.aws/|"
     r"/Users/[^/\s]+/\.ssh/|"
     r"/Users/[^/\s]+/\.aws/|"
+    # Thread 6 (Codex V11): /root credential directories
+    r"/root/\.ssh/|"
+    r"/root/\.aws/|"
     r"/\.env\b|"
     r"\.env\b|"
     r"\.pem\b|"
@@ -241,11 +245,16 @@ def _is_destructive_git(command: str) -> bool:
 def _checkout_without_dashdash(command: str) -> bool:
     """Detect 'git checkout <tree-ish> <path>' without '--'.
 
-    Thread 5 (Codex V10): Covers ALL tree-ish forms:
-      HEAD  HEAD~1  HEAD^  main  origin/main  tags/v1.2.3  v1.2.3
-      abc123  abc123def...  (commit SHA 4-40 hex chars)
-    Any tree-ish followed by a path-like token without '--' is destructive.
-    A single-token checkout (branch switch) remains R2.
+    Thread 5 (Codex V10) + Thread 1 (Codex V11): ANY git checkout with 2+
+    non-flag, non-option arguments where '--' is absent is a destructive
+    restore.  Single-argument checkout (branch switch) remains R2.
+
+    Covers:
+      git checkout main README.md          → destructive
+      git checkout feature/foo src/a.py    → destructive
+      git checkout HEAD~1 README.md        → destructive
+      git checkout main                    → branch switch (R2, not caught)
+      git checkout -b new-branch           → create branch (not caught)
     """
     try:
         tokens = __import__("shlex").split(command)
@@ -257,23 +266,12 @@ def _checkout_without_dashdash(command: str) -> bool:
         return False
     if "--" in tokens:
         return False
+    # Any non-flag arg after checkout that isn't an option is a tree-ish
     args = [t for t in tokens[2:] if not t.startswith("-")]
     if len(args) < 2:
         return False
-    rev = args[0]
-    # Tree-ish forms: HEAD, HEAD~N, HEAD^, hex hashes, tags, remote/branch
-    import re as _re
-    rev_like = bool(
-        _re.match(
-            r"^(?:HEAD|HEAD~[0-9]+|HEAD\^+|"
-            r"[0-9a-fA-F]{4,40}|"
-            r"[^/\s]+/[^/\s]+|"   # origin/main, remote/branch
-            r"tags?/[^/\s]+|"      # tags/v1.2.3, tag/v1.0
-            r"v?[0-9]+\.[0-9]+)"   # v1.2.3, 1.2.3
-            r"", rev)
-    )
-    if not rev_like:
-        return False
+    # Two or more non-flag arguments with no '--' → destructive restore.
+    # Every branch name, tag, commit SHA, or ref is a valid tree-ish.
     return True
 
 
@@ -298,7 +296,8 @@ def _reads_sensitive_path(command: str, cwd: str = "") -> bool:
 _SENSITIVE_CWD: re.Pattern[str] = re.compile(
     r"(?:"
     r"/\.ssh|/\.aws|/\.config/[^/\s]*credentials|"
-    r"/Library/Keychains"
+    r"/Library/Keychains|"
+    r"/root/\.ssh|/root/\.aws"
     r")",
     re.IGNORECASE,
 )

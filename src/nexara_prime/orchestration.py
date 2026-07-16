@@ -341,39 +341,55 @@ class WorkerScheduler:
     ) -> bool:
         """Ensure the worker can handle the payload kind.
 
-        - command-only missions require a command-capable worker
-        - prompt-only missions require a prompt-capable worker
-        - workers with empty capabilities are wildcards (can handle anything)
+        - command-only missions require a command-capable worker (LOCAL_TOOL)
+        - prompt-only missions require a prompt-capable worker (CLAUDE, CODE_REVIEWER)
+        - empty worker capabilities are NOT wildcards — compatibility is
+          derived from worker_type to prevent prompt-only→LOCAL_TOOL and
+          command-only→LLM mismatches
         - mixed-or-empty required is compatible with any worker type
         """
         if not required:
             return True
-        worker_caps = set(worker.capabilities)
-        # Empty worker capabilities = wildcard (compatible with everything)
-        if not worker_caps:
-            return True
         required_set = set(required)
-        # If mission requires command-capable, worker must have it
-        if "command" in required_set and "command" not in worker_caps:
+        worker_caps = set(worker.capabilities)
+        # If worker has explicit capabilities, use them
+        if worker_caps:
+            if "command" in required_set and "command" not in worker_caps:
+                return False
+            if "prompt" in required_set and "prompt" not in worker_caps:
+                return False
+            return True
+        # Thread 2 (Codex V11): Empty capabilities → derive from worker_type.
+        # LOCAL_TOOL workers can only execute commands, not prompts.
+        # CLAUDE / CODE_REVIEWER workers can only process prompts, not commands.
+        wt = worker.worker_type.value
+        if "command" in required_set and wt != "local_tool":
             return False
-        # If mission requires prompt-capable, worker must have it
-        if "prompt" in required_set and "prompt" not in worker_caps:
+        if "prompt" in required_set and wt not in ("claude", "code_reviewer"):
             return False
         return True
 
     def _capability_match(self, worker: WorkerDescriptor, required: list[str]) -> bool:
         """Check worker capabilities match requirements.
 
-        Thread 11 (Codex V10): Empty worker capabilities = wildcard
-        (compatible with everything).  This allows auto-injected
-        "command"/"prompt" capabilities to work with workers that
-        don't explicitly declare them.
+        Thread 11 (Codex V10) + Thread 2 (Codex V11): Empty worker capabilities
+        are NOT a wildcard.  Compatibility is derived from worker_type —
+        LOCAL_TOOL for commands, CLAUDE/CODE_REVIEWER for prompts.
         """
         if not required:
             return True
-        if not worker.capabilities:
-            return True  # wildcard: compatible with everything
-        return set(required).issubset(set(worker.capabilities))
+        if worker.capabilities:
+            return set(required).issubset(set(worker.capabilities))
+        # Empty capabilities → derive from worker_type (same logic as
+        # _payload_kind_compatible for consistent scheduling).
+        wt = worker.worker_type.value
+        required_set = set(required)
+        for cap in required_set:
+            if cap == "command" and wt != "local_tool":
+                return False
+            if cap == "prompt" and wt not in ("claude", "code_reviewer"):
+                return False
+        return True
 
     def _risk_compatible(self, worker: WorkerDescriptor, risk: RiskLevel) -> bool:
         if risk in (RiskLevel.R3, RiskLevel.R4):
