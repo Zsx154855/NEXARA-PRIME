@@ -340,29 +340,27 @@ class AutonomousSupervisor:
                 })
 
     def _get_approval_status(self, mission_id: str) -> str | None:
-        """Return the best approval status for a mission, or None if no record.
+        """Return the authoritative approval status for a mission, or None.
 
-        Thread B (Codex V9): Prioritises APPROVED over other statuses.
-        Selection order: APPROVED > CONSUMED > PENDING > REJECTED > EXPIRED.
-        Within the same status, uses latest created_at.
+        Thread B (Codex V9) + Thread 7 (Codex V11): Most-recent-wins.
+        When multiple approval records exist for the same mission, the
+        LATEST (by created_at) takes precedence regardless of status.
+        A new REJECTED/EXPIRED supersedes an old CONSUMED/APPROVED —
+        old authorisations must never push a mission to READY.
         """
-        
-        priority = {"approved": 5, "consumed": 4, "pending": 3, "rejected": 2, "expired": 1}
-        best_status: str | None = None
-        best_priority: int = -1
-        best_created: str = ""
+        latest_raw: dict | None = None
+        latest_created: str = ""
         for raw in self._store.list_records("approval_requests"):
             p = raw.get("payload", raw)
             if p.get("mission_id") != mission_id:
                 continue
-            status = p.get("status", "")
-            p_val = priority.get(status, 0)
             created = p.get("created_at", "")
-            if p_val > best_priority or (p_val == best_priority and created > best_created):
-                best_priority = p_val
-                best_status = status
-                best_created = created
-        return best_status
+            if created > latest_created:
+                latest_created = created
+                latest_raw = p
+        if latest_raw is None:
+            return None
+        return latest_raw.get("status", "")
 
     def _get_pending_approval_for_mission(
         self, mission_id: str,
@@ -1188,9 +1186,14 @@ class AutonomousSupervisor:
         enqueued = self.orchestrator.mission_queue.enqueue(item)
         self._current_mission_id = enqueued.mission_id
 
-        # Persist mission metadata under the ACTUAL mission_id
+        # Thread 4 (Codex V11): First-write-wins — never overwrite payload
+        # for an existing idempotent mission.  Only persist payload for
+        # brand-new missions (where the returned mission_id matches the
+        # requested one).  A repeated submit with a different command/prompt
+        # must NOT replace the original.
         actual_id = enqueued.mission_id
-        if command or prompt:
+        is_new = (actual_id == mission_id)
+        if is_new and (command or prompt):
             self._store.save_record(
                 f"payload:{actual_id}", "mission_payload",
                 {"mission_id": actual_id, "command": command,

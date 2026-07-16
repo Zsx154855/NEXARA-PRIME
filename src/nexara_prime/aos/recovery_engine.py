@@ -69,7 +69,12 @@ class RecoveryEngine:
         self, mission_id: str, failure_type: str,
         attempt: int, last_error: str = "",
     ) -> RecoveryResult:
-        """Determine next recovery action based on attempt count and failure type."""
+        """Determine next recovery action based on attempt count and failure type.
+
+        Thread 5 (Codex V11): RecoveryStrategy.BLOCK returns success=False
+        so callers treat it as a terminal failure.  BLOCK is never retryable
+        — missions that reach BLOCK must transition to BLOCKED, not requeue.
+        """
         key = f"{mission_id}:{failure_type}"
         self._failure_counts[key] = self._failure_counts.get(key, 0) + 1
 
@@ -90,6 +95,15 @@ class RecoveryEngine:
                 strategy=strategy, success=True, attempt=attempt,
                 max_attempts=self.max_retries,
                 reason=f"Retry {attempt}/{self.max_retries}: {last_error}",
+            )
+
+        # Thread 5 (Codex V11): BLOCK is a terminal strategy — it means
+        # the mission is dead and must NOT be retried or requeued.
+        if strategy == RecoveryStrategy.BLOCK:
+            return RecoveryResult(
+                strategy=strategy, success=False, attempt=attempt,
+                max_attempts=self.max_retries,
+                reason=f"Recovery BLOCK — terminal failure after {attempt} attempts",
             )
 
         if strategy == RecoveryStrategy.ESCALATE:

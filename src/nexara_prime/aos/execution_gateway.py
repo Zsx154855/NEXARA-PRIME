@@ -179,19 +179,16 @@ class ExecutionGateway:
 
             # Thread 1 (Codex V7): Verify ApprovalGrant through injected verifier
             if approval_grant is not None:
-                if not self._verify_grant(approval_grant):
-                    return WorkerResult(
-                        worker_id=worker_id, mission_id=mission_id, success=False,
-                        failure_class=FailureClass.PERMISSION_BLOCK,
-                        output={
-                            "error": "approval grant verification failed — grant invalid, replayed, or tampered",
-                            "mission_id": mission_id,
-                            "approval_id": approval_grant.approval_id,
-                            "escalated": False,
-                            "decision": "denied",
-                        },
-                    )
-                # Verify the approved command matches the actual command
+                # Thread 3 (Codex V11): Validate ALL bindings BEFORE the atomic
+                # CAS consume.  If any pre-check fails, the grant is NOT consumed
+                # and a valid subsequent dispatch can still use it.  A wrong
+                # command must never burn a legitimate grant.
+                #
+                # Pre-CAS validation order:
+                #   1. command match     — grant covers this exact command
+                #   2. mission_id match  — grant is for this mission
+                # Only after ALL pass do we call _verify_grant (CAS consume).
+                # run_id is bound into the HMAC signature and verified there.
                 if approval_grant.command != command:
                     return WorkerResult(
                         worker_id=worker_id, mission_id=mission_id, success=False,
@@ -204,7 +201,6 @@ class ExecutionGateway:
                             "decision": "denied",
                         },
                     )
-                # Verify mission_id matches
                 if approval_grant.mission_id != mission_id:
                     return WorkerResult(
                         worker_id=worker_id, mission_id=mission_id, success=False,
@@ -213,6 +209,19 @@ class ExecutionGateway:
                             "error": "approval grant mission mismatch",
                             "grant_mission_id": approval_grant.mission_id,
                             "actual_mission_id": mission_id,
+                            "escalated": False,
+                            "decision": "denied",
+                        },
+                    )
+                # All pre-checks passed — now atomically consume the grant
+                if not self._verify_grant(approval_grant):
+                    return WorkerResult(
+                        worker_id=worker_id, mission_id=mission_id, success=False,
+                        failure_class=FailureClass.PERMISSION_BLOCK,
+                        output={
+                            "error": "approval grant verification failed — grant invalid, replayed, or tampered",
+                            "mission_id": mission_id,
+                            "approval_id": approval_grant.approval_id,
                             "escalated": False,
                             "decision": "denied",
                         },
