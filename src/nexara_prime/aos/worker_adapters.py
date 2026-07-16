@@ -107,9 +107,21 @@ class LocalShellWorker:
         **kwargs: Any,
     ) -> WorkerResult:
         command = input_data.get("command", "")
-        cwd = input_data.get("cwd", os.getcwd())
+        cwd = input_data.get("cwd", "") or os.getcwd()
         timeout_s = float(input_data.get("timeout_s", kwargs.get("timeout_s", 300.0)))
         started = time.time()
+
+        # ── Thread 39: Fail closed on empty or whitespace-only command ──
+        if not command or not command.strip():
+            return WorkerResult(
+                worker_id=self.worker_id, mission_id=mission_id,
+                success=False, failure_class=FailureClass.CODE_FAILURE,
+                output={
+                    "error": "empty command — cannot execute on LocalShellWorker",
+                    "hint": "prompt-only missions must use an LLM worker (Claude, Codex), not a shell worker",
+                },
+                duration_ms=0,
+            )
 
         try:
             result = subprocess.run(

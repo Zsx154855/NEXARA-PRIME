@@ -865,12 +865,19 @@ class RuntimeOrchestrator:
         return True
 
     def _lease_held_by(self, mission_id: str, worker_id: str) -> bool:
-        """Check if worker_id holds the lease — via writer lease OR mission queue record."""
-        # Primary: check writer lease manager
+        """Check if worker_id holds the lease.
+
+        Thread 40: writer_leases is the sole authority when an active lease
+        exists. The mission_queue.lease_owner fallback is ONLY used when no
+        active writer lease is found — it must never override an active lease
+        held by a different worker.
+        """
+        # Primary: check writer lease manager (durable, sole authority)
         lease = self.leases._latest_active_lease(mission_id)
-        if lease is not None and lease.get("state") == "active" and lease.get("worker_id") == worker_id:
-            return True
-        # Fallback: check mission queue item's lease_owner (set by Supervisor dispatch)
+        if lease is not None and lease.get("state") == "active":
+            # Active writer lease exists — ONLY the lease holder can complete
+            return lease.get("worker_id") == worker_id
+        # Fallback: no active writer lease exists → check queue lease_owner
         item = self.mission_queue.get(mission_id)
         if item is not None and item.lease_owner == worker_id:
             return True

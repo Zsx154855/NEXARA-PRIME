@@ -17,6 +17,7 @@ from .command_classifier import (
     _has_control_operators,
     _has_redirection,
     _has_command_substitution,
+    _has_process_substitution,
 )
 
 
@@ -120,12 +121,13 @@ class PermissionBroker:
     def _is_r3_whitelisted(self, command: str) -> bool:
         """Check if command is in the R3 whitelist, with mandatory shell re-validation.
 
-        BEFORE appoval, the whitelist re-validates for:
+        BEFORE approval, the whitelist re-validates for:
         - pipe (|)
         - semicolon (;)
         - && / ||
         - redirection (> , >>, &>)
         - command substitution ($(...) or backticks)
+        - process substitution (<(...) or >(...))
         - multiple commands (via shlex split)
         - shell injection metacharacters
 
@@ -138,8 +140,9 @@ class PermissionBroker:
             return False
         if _has_command_substitution(command):
             return False
+        if _has_process_substitution(command):
+            return False
         # Multiple commands via whitespace-separated tokens beyond the prefix
-        # (catches "gh pr view 1 | sh" style which shlex wouldn't catch)
         if "|" in command or ";" in command:
             return False
 
