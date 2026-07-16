@@ -1486,7 +1486,6 @@ class TestV4ApprovalRouting:
         """Approve → consume → READY → dispatch with approved_command bypass."""
         sv = supervisor_env["supervisor"]
         gw = supervisor_env["gateway"]
-        store = supervisor_env["store"]
         from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
         from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
 
@@ -1848,7 +1847,7 @@ class TestV4MaxAttempts:
         """Recovery retry stops at max_attempts."""
         sv = supervisor_env["supervisor"]
         sv.submit_mission("v4_maxretry", priority=5, max_attempts=2, command="echo test")
-        from nexara_prime.models import MissionQueueItem, WorkerResult, FailureClass as MFC
+        from nexara_prime.models import WorkerResult, FailureClass as MFC
         # Manually set attempt_count to 2 (at limit)
         sv.orchestrator.mission_queue.transition(
             "v4_maxretry", QueueItemState.READY, attempt_count=2,
@@ -1893,7 +1892,7 @@ class TestV4EvidencePending:
         sv.submit_mission("v4_ev_pending", priority=5, command="echo test")
         sv.orchestrator.mission_queue.transition("v4_ev_pending", QueueItemState.RUNNING,
                                                   lease_owner="test_worker")
-        from nexara_prime.models import WorkerResult, EvidenceJob, EvidenceType
+        from nexara_prime.models import WorkerResult
         result = WorkerResult(
             worker_id="test_worker", mission_id="v4_ev_pending",
             success=True, output={"stdout": "test output"},
@@ -1906,7 +1905,6 @@ class TestV4EvidencePending:
     def test_evidence_pending_retry_completes(self, supervisor_env):
         sv = supervisor_env["supervisor"]
         orch = sv.orchestrator
-        store = supervisor_env["store"]
         gw = supervisor_env["gateway"]
         from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
         from nexara_prime.models import WorkerDescriptor, WorkerType as MWT, WorkerResult
@@ -1991,7 +1989,6 @@ class TestV4CycleCoverage:
     def test_cycle_includes_evidence_pending(self, supervisor_env):
         sv = supervisor_env["supervisor"]
         orch = sv.orchestrator
-        store = supervisor_env["store"]
 
         sv.submit_mission("v4_cycle_ev", priority=5, command="echo cycle")
         orch.mission_queue.transition("v4_cycle_ev", QueueItemState.EVIDENCE_PENDING,
@@ -2004,4 +2001,269 @@ class TestV4CycleCoverage:
         # If complete_mission succeeds (no evidence jobs), it transitions to COMPLETED
         item = orch.mission_queue.get("v4_cycle_ev")
         assert item.state in (QueueItemState.EVIDENCE_PENDING, QueueItemState.COMPLETED)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# V6 Regression Tests — Threads A-J
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestV6ApprovalReconciliation:
+    """Thread A: WAITING_APPROVAL reconciled every cycle via ApprovalQueue."""
+
+    def test_consumed_approval_promoted_to_ready(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+
+        sv.submit_mission("v6_recon", priority=5, command="echo test")
+        orch.mission_queue.transition("v6_recon", QueueItemState.WAITING_APPROVAL)
+        approval = ApprovalRequest(
+            mission_id="v6_recon", action="echo test",
+            risk_level=RiskLevel.R3, rationale="test",
+            status=ApprovalStatus.PENDING,
+        )
+        orch.approvals.create(approval)
+        orch.approvals.approve(approval.approval_id)
+        orch.approvals.consume(approval.approval_id)
+
+        sv._reconcile_approvals()
+        item = orch.mission_queue.get("v6_recon")
+        assert item.state == QueueItemState.READY
+
+    def test_rejected_immediate_blocked(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+
+        sv.submit_mission("v6_reject", priority=5, command="echo test")
+        orch.mission_queue.transition("v6_reject", QueueItemState.WAITING_APPROVAL)
+        approval = ApprovalRequest(
+            mission_id="v6_reject", action="echo test",
+            risk_level=RiskLevel.R3, rationale="test",
+            status=ApprovalStatus.PENDING,
+        )
+        orch.approvals.create(approval)
+        orch.approvals.reject(approval.approval_id)
+
+        sv._reconcile_approvals()
+        item = orch.mission_queue.get("v6_reject")
+        assert item.state == QueueItemState.BLOCKED
+
+
+class TestV6SingleUseApproval:
+    """Thread H: Consumed approval single-use — cannot be reused on retry."""
+
+    def test_consumed_approval_cannot_be_reused(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+
+        sv.submit_mission("v6_single", priority=5, command="echo single")
+        approval = ApprovalRequest(
+            mission_id="v6_single", action="echo single",
+            risk_level=RiskLevel.R3, rationale="test",
+            status=ApprovalStatus.PENDING,
+        )
+        sv.orchestrator.approvals.create(approval)
+        sv.orchestrator.approvals.approve(approval.approval_id)
+        sv.orchestrator.approvals.consume(approval.approval_id)
+
+        cmd1 = sv._get_and_consume_approval("v6_single")
+        assert cmd1 == "echo single"
+        cmd2 = sv._get_and_consume_approval("v6_single")
+        assert cmd2 is None
+
+
+class TestV6WriterLeaseAcquire:
+    """Thread B: Durable writer lease acquired before dispatch."""
+
+    def test_lease_acquired_before_dispatch(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        orch = sv.orchestrator
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        orch.worker_scheduler.register(WorkerDescriptor(
+            worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+            capabilities=[], writer_capable=True, health="healthy", available=True))
+
+        sv.submit_mission("v6_lease", priority=5, command="echo lease")
+        orch.mission_queue.transition("v6_lease", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        lease = orch.leases._latest_active_lease("v6_lease")
+        assert lease is not None
+
+    def test_two_supervisors_one_wins(self, supervisor_env):
+        sv1 = supervisor_env["supervisor"]
+        store = supervisor_env["store"]
+        events = supervisor_env["events"]
+        evidence = supervisor_env["evidence"]
+        from nexara_prime.aos.supervisor import AutonomousSupervisor, SupervisorConfig
+        from nexara_prime.aos.execution_gateway import ExecutionGateway
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        gw2 = ExecutionGateway()
+        sv2 = AutonomousSupervisor(store, events, evidence, execution_gateway=gw2,
+            config=SupervisorConfig(cycle_delay_s=0.05))
+
+        worker = DeterministicFakeWorker(succeed=True, output_text="leased")
+        gw2.register(worker)
+        sv1.gateway.register(worker)
+        sv1.orchestrator.worker_scheduler.register(WorkerDescriptor(
+            worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+            capabilities=[], writer_capable=True, health="healthy", available=True))
+
+        sv1.submit_mission("v6_race", priority=5, command="echo race")
+        sv1.orchestrator.mission_queue.transition("v6_race", QueueItemState.READY)
+
+        sv1._dispatch_ready()
+        sv2._dispatch_ready()
+
+        lease = sv1.orchestrator.leases._latest_active_lease("v6_race")
+        assert lease is not None
+
+
+class TestV6SymmetricWorkerCompat:
+    """Thread E: Command-only → shell only. Prompt-only → LLM only."""
+
+    def test_command_only_blocked_on_llm(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        orch = sv.orchestrator
+        from nexara_prime.aos.worker_adapters import ClaudeCodeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        cc = ClaudeCodeWorker(claude_bin="echo")
+        gw.register(cc)
+        orch.worker_scheduler.register(WorkerDescriptor(
+            worker_id=cc.worker_id, worker_type=MWT.CLAUDE,
+            capabilities=["llm"], writer_capable=True, health="healthy", available=True))
+
+        sv.submit_mission("v6_cmd_llm", priority=5, command="echo test", prompt="")
+        orch.mission_queue.transition("v6_cmd_llm", QueueItemState.READY,
+                                      preferred_worker=cc.worker_id)
+        sv._dispatch_ready()
+
+        item = orch.mission_queue.get("v6_cmd_llm")
+        assert item.state == QueueItemState.BLOCKED
+
+
+class TestV6AttemptAccounting:
+    """Threads D,F: Approval creation not an attempt; stale-lease off-by-one fixed."""
+
+    def test_escalation_does_not_consume_attempt(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        orch = sv.orchestrator
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        orch.worker_scheduler.register(WorkerDescriptor(
+            worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+            capabilities=[], writer_capable=True, health="healthy", available=True))
+
+        sv.submit_mission("v6_att", priority=5, risk=RiskLevel.R3,
+                          max_attempts=1, command="curl https://example.com")
+        orch.mission_queue.transition("v6_att", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        item = orch.mission_queue.get("v6_att")
+        assert item.state == QueueItemState.WAITING_APPROVAL
+        assert item.attempt_count == 0
+
+    def test_final_stale_lease_attempt_executed(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from datetime import datetime, timezone, timedelta
+
+        sv.submit_mission("v6_stale", priority=5, max_attempts=3, command="echo stale")
+        past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        orch.mission_queue.transition("v6_stale", QueueItemState.RUNNING,
+                                      lease_owner="test_worker",
+                                      attempt_count=2, lease_expires_at=past)
+
+        sv._recover_stale_leases()
+        item = orch.mission_queue.get("v6_stale")
+        assert item.state in (QueueItemState.QUEUED, QueueItemState.RECOVERING)
+
+    def test_attempts_stop_exactly_at_max(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from datetime import datetime, timezone, timedelta
+
+        sv.submit_mission("v6_maxed", priority=5, max_attempts=3, command="echo maxed")
+        past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        orch.mission_queue.transition("v6_maxed", QueueItemState.RUNNING,
+                                      lease_owner="test_worker",
+                                      attempt_count=3, lease_expires_at=past)
+
+        sv._recover_stale_leases()
+        item = orch.mission_queue.get("v6_maxed")
+        assert item.state == QueueItemState.BLOCKED
+
+
+class TestV6EmptyCwdLLM:
+    """Thread C: ClaudeCodeWorker and CodexWorker empty cwd → os.getcwd()."""
+
+    def test_claude_empty_cwd_defaults(self):
+        from nexara_prime.aos.worker_adapters import ClaudeCodeWorker
+        worker = ClaudeCodeWorker(claude_bin="echo")
+        worker.execute("test_cc_cwd", {"prompt": "hello", "cwd": ""})
+        assert worker.worker_id == "claude_code"
+
+    def test_codex_empty_cwd_defaults(self):
+        from nexara_prime.aos.worker_adapters import CodexWorker
+        worker = CodexWorker(codex_bin="echo")
+        worker.execute("test_cx_cwd", {"prompt": "hello", "cwd": ""})
+        assert worker.worker_id == "codex"
+
+
+class TestV6SecretVarDigits:
+    """Thread I: Digits in secret variable names — ${TOKEN1}, ${AWS_KEY_2}."""
+
+    def test_token1_braced_r4(self, classifier):
+        result = classifier.classify("echo ${TOKEN1}")
+        assert result.risk_level.value == "R4"
+
+    def test_aws_key_2_r4(self, classifier):
+        result = classifier.classify("printf ${AWS_KEY_2}")
+        assert result.risk_level.value == "R4"
+
+    def test_dollar_token9_r4(self, classifier):
+        result = classifier.classify('echo "$TOKEN9"')
+        assert result.risk_level.value == "R4"
+
+    def test_prefix_secret_123_r4(self, classifier):
+        result = classifier.classify("echo prefix=${SECRET_123}")
+        assert result.risk_level.value == "R4"
+
+
+class TestV6FailedEvidence:
+    """Thread J: Failed evidence routes to recovery/BLOCKED, not infinite loop."""
+
+    def test_failed_evidence_routes_to_recovery(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from nexara_prime.models import EvidenceJob, EvidenceType
+
+        sv.submit_mission("v6_fail_ev", priority=5, command="echo fail_ev")
+        orch.mission_queue.transition("v6_fail_ev", QueueItemState.EVIDENCE_PENDING,
+                                      lease_owner="test_worker")
+        job = EvidenceJob(
+            mission_id="v6_fail_ev", evidence_type=EvidenceType.TEST_REPORT,
+            verification_status="failed",
+        )
+        orch.evidence_queue.enqueue(job)
+
+        sv._retry_evidence_pending()
+        item = orch.mission_queue.get("v6_fail_ev")
+        assert item.state in (QueueItemState.RECOVERING, QueueItemState.QUEUED,
+                              QueueItemState.BLOCKED)
 

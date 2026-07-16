@@ -121,16 +121,17 @@ _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
 # Detects variable expansions in ANY argument position:
 #   echo "$GITHUB_TOKEN"   printf "value=$SECRET"   echo token=$TOKEN
 #   "${TOKEN}"  ${SECRET}  prefix=$GITHUB_TOKEN
+# Shell variable names: [A-Za-z_][A-Za-z0-9_]* (POSIX-compatible)
 _SECRET_EXPANSION: re.Pattern[str] = re.compile(
     r"(?:"
-    r"echo\s+.*\$[A-Z_]{2,}|"               # echo ... $VAR any position (incl. token=$VAR)
-    r"printf\s+.*\$[A-Z_]{2,}|"             # printf ... $VAR any position
-    r"\$\{[A-Z_]{2,}\}|"                   # ${TOKEN} bare/quoted
-    r"\$[A-Z_]{3,}\b|"                     # $TOKEN bare (3+ chars to avoid $PWD/$HOME)
-    r"\benv\s*\|\s*grep\s+[A-Z_]+|"        # env | grep TOKEN
-    r"\bprintenv\s+[A-Z_]+|"               # printenv TOKEN
-    r"\bprintenv\b|"                        # bare printenv
-    r"\benv\s*$"                            # bare env
+    r"echo\s+.*\$[A-Za-z_][A-Za-z0-9_]*|"  # echo ... $VAR any position
+    r"printf\s+.*\$[A-Za-z_][A-Za-z0-9_]*|" # printf ... $VAR any position
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*\}|"        # ${TOKEN1} ${AWS_KEY_2}
+    r"\$[A-Z_][A-Z0-9_]{2,}\b|"             # $TOKEN bare (3+ chars)
+    r"\benv\s*\|\s*grep\s+[A-Z_]+|"         # env | grep TOKEN
+    r"\bprintenv\s+[A-Za-z_][A-Za-z0-9_]*|" # printenv TOKEN
+    r"\bprintenv\b|"                         # bare printenv
+    r"\benv\s*$"                             # bare env
     r")",
 )
 
