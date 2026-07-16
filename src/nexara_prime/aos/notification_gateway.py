@@ -63,11 +63,16 @@ class NotificationGateway:
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
         if level in self.USER_FACING_LEVELS:
+            delivered = False
+            channel_results: dict[str, bool] = {}
             for channel in self._channels:
                 try:
-                    notification.delivered = channel.send(notification)
+                    channel_ok = channel.send(notification)
+                    channel_results[channel.__class__.__name__] = channel_ok
+                    delivered = delivered or channel_ok
                 except Exception:
-                    pass
+                    channel_results[channel.__class__.__name__] = False
+            notification.delivered = delivered
         self._history.append(notification)
         return notification
 
