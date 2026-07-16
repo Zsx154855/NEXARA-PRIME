@@ -1179,28 +1179,49 @@ class AutonomousSupervisor:
             dependencies=dependencies or [],
             max_attempts=max_attempts,
         )
+        # Thread 4 (Codex V12): Compute payload hash for idempotency conflict
+        # detection BEFORE enqueue.  This lets MissionQueue detect conflicting
+        # retries where the same idempotency_key carries a different payload.
+        payload_hash = ""
+        if idempotency_key and (command or prompt):
+            payload_hash = hashlib.sha256(
+                f"{command}|{prompt}|{cwd}".encode()
+            ).hexdigest()
+
         # Thread 9 (Codex V7): Use the ACTUAL returned item from enqueue().
         # When an idempotency_key matches an existing active mission,
         # enqueue() returns the existing item (different mission_id).
         # We must use that item so callers get the real mission_id.
-        enqueued = self.orchestrator.mission_queue.enqueue(item)
+        result = self.orchestrator.mission_queue.enqueue(item, new_payload_hash=payload_hash)
+        enqueued = result.item
         self._current_mission_id = enqueued.mission_id
 
-        # Thread 4 (Codex V11): First-write-wins — never overwrite payload
+        # Thread 4 (Codex V11 + V12): First-write-wins — never overwrite payload
         # for an existing idempotent mission.  Only persist payload for
-        # brand-new missions (where the returned mission_id matches the
-        # requested one).  A repeated submit with a different command/prompt
-        # must NOT replace the original.
-        actual_id = enqueued.mission_id
-        is_new = (actual_id == mission_id)
-        if is_new and (command or prompt):
+        # brand-new missions (status=created_new).  existing_item returns the
+        # original; idempotency_conflict fails closed.
+        #
+        # A repeated submit with a different command/prompt MUST NOT replace
+        # the original.  We use EnqueueResult.status instead of comparing
+        # mission_ids — mission_id equality is not a reliable signal.
+        if result.status.value == "created_new" and (command or prompt):
             self._store.save_record(
-                f"payload:{actual_id}", "mission_payload",
-                {"mission_id": actual_id, "command": command,
+                f"payload:{enqueued.mission_id}", "mission_payload",
+                {"mission_id": enqueued.mission_id, "command": command,
                  "prompt": prompt, "cwd": cwd,
                  "capabilities": capabilities or []},
-                created_at=_utc_now(), mission_id=actual_id,
+                created_at=_utc_now(), mission_id=enqueued.mission_id,
             )
+
+        # Thread 4 (Codex V12): On idempotency_conflict, log evidence and
+        # return the existing item WITHOUT overwriting.  The caller receives
+        # the original mission — NOT the conflicting one.
+        if result.status.value == "idempotency_conflict":
+            self._record_evidence(enqueued.mission_id, "idempotency_conflict", {
+                "mission_id": enqueued.mission_id,
+                "idempotency_key": idempotency_key,
+                "detail": result.conflict_detail,
+            })
 
         return enqueued
 

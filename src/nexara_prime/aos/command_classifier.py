@@ -70,12 +70,28 @@ _PROCESS_SUBSTITUTION: re.Pattern[str] = re.compile(
     r"[<>]\s*\([^)]+\)"
 )
 
-# Unsafe write targets — touch/cp/mv to these paths is R3/R4
+# Unsafe write targets — touch/cp/mv to these paths is R3/R4.
+# Thread 2 (Codex V12): Extended to cover .npmrc, .docker/config.json,
+# .config/gh/hosts.yml, .netrc, .pypirc, .git-credentials.
 _UNSAFE_WRITE_TARGETS: re.Pattern[str] = re.compile(
     r"(?:"
     r"~/.bashrc|~/.zshrc|~/.profile|~/.bash_profile|"
     r"~/.ssh/|~/.aws/|"
+    r"~/.npmrc\b|"
+    r"~/.docker/config\.json|"
+    r"~/.config/gh/hosts\.yml|"
+    r"~/.netrc\b|"
+    r"~/.pypirc\b|"
+    r"~/.git-credentials\b|"
+    r"\$HOME/\.ssh/|\$HOME/\.aws/|"
+    r"\$HOME/\.npmrc\b|"
+    r"\$HOME/\.docker/config\.json|"
+    r"\$\{HOME\}/\.ssh/|\$\{HOME\}/\.aws/|"
+    r"\$\{HOME\}/\.npmrc\b|"
+    r"\$\{HOME\}/\.docker/config\.json|"
     r"/root/\.ssh/|/root/\.aws/|"
+    r"/root/\.npmrc\b|"
+    r"/root/\.docker/config\.json|"
     r"/etc/|"
     r"/Library/|"
     r"~/Library/LaunchAgents/|"
@@ -118,20 +134,50 @@ _DESTRUCTIVE_GIT_COMMANDS: re.Pattern[str] = re.compile(
     r")"
 )
 
-# Sensitive paths — reading these must never be R0
+# Sensitive paths — reading these must never be R0.
+#
+# Thread 2 (Codex V12): Comprehensive credential path coverage.
+# Every path form (tilde, $HOME, ${HOME}, /root, /home/*, /Users/*)
+# must be covered for .aws, .ssh, .npmrc, .docker/config.json,
+# .config/gh/hosts.yml, .netrc, .pypirc, .git-credentials.
 _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
     r"(?:"
+    # ── ~/ tilde forms ──
     r"~/.ssh/|"
     r"~/.aws/|"
+    r"~/.npmrc\b|"
+    r"~/.docker/config\.json|"
+    r"~/.config/gh/hosts\.yml|"
     r"~/.config/[^/\s]*credentials|"
-    # Absolute paths to user credential directories (macOS + Linux)
+    r"~/.netrc\b|"
+    r"~/.pypirc\b|"
+    r"~/.git-credentials\b|"
+    r"~/Library/Keychains/|"
+    # ── $HOME / ${HOME} forms ──
+    r"\$HOME/\.ssh/|"
+    r"\$HOME/\.aws/|"
+    r"\$HOME/\.npmrc\b|"
+    r"\$HOME/\.docker/config\.json|"
+    r"\$\{HOME\}/\.ssh/|"
+    r"\$\{HOME\}/\.aws/|"
+    r"\$\{HOME\}/\.npmrc\b|"
+    r"\$\{HOME\}/\.docker/config\.json|"
+    # ── Absolute paths to user credential directories (macOS + Linux) ──
     r"/home/[^/\s]+/\.ssh/|"
     r"/home/[^/\s]+/\.aws/|"
+    r"/home/[^/\s]+/\.npmrc\b|"
+    r"/home/[^/\s]+/\.docker/config\.json|"
     r"/Users/[^/\s]+/\.ssh/|"
     r"/Users/[^/\s]+/\.aws/|"
-    # Thread 6 (Codex V11): /root credential directories
+    r"/Users/[^/\s]+/\.npmrc\b|"
+    r"/Users/[^/\s]+/\.docker/config\.json|"
+    r"/Users/[^/\s]+/Library/Keychains/|"
+    # ── Thread 6 (Codex V11) + Thread 2 (Codex V12): /root credential dirs ──
     r"/root/\.ssh/|"
     r"/root/\.aws/|"
+    r"/root/\.npmrc\b|"
+    r"/root/\.docker/config\.json|"
+    # ── Dotfiles / credential files ──
     r"/\.env\b|"
     r"\.env\b|"
     r"\.pem\b|"
@@ -144,10 +190,7 @@ _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
     r"\.git-credentials\b|"
     r"Keychain\b|"
     r"keychain\b|"
-    # macOS Keychain paths
-    r"/Users/[^/\s]+/Library/Keychains/|"
-    r"~/Library/Keychains/|"
-    # /proc/*/environ — reading process environment exposes secrets
+    # ── /proc/*/environ — reading process environment exposes secrets ──
     r"/proc/self/environ\b|"
     r"/proc/\d+/environ\b|"
     r"/proc/[^/\s]*/environ\b"
@@ -218,7 +261,20 @@ def _has_process_substitution(command: str) -> bool:
 
 
 def _has_mutating_option(command: str, base_cmd: str) -> bool:
-    """True if *base_cmd* is used with a known mutating option."""
+    """True if *base_cmd* is used with a known mutating option.
+
+    Thread 6 (Codex V12): For git commands, checks the ACTUAL subcommand
+    (token-parsed) rather than substring-matching the full command string.
+    This prevents false positives like:
+      git branch --list feature/merge-ui  → 'merge' in branch name
+      git log --grep=commit               → 'commit' in grep pattern
+    """
+    if base_cmd == "git":
+        sub = _parse_git_subcommand(command)
+        if sub is None:
+            return False
+        options = _MUTATING_OPTIONS.get(base_cmd, [])
+        return sub in options
     options = _MUTATING_OPTIONS.get(base_cmd, [])
     for opt in options:
         if opt in command:
@@ -233,11 +289,17 @@ def _is_destructive_git(command: str) -> bool:
     (e.g. 'git checkout HEAD README.md' restores a file and discards changes).
     Uses token-based detection: if 'checkout' is followed by a revision-like
     token and then a path-like token with no intervening '--', it's destructive.
+
+    Thread 3 (Codex V12): Also catches single-arg path-only checkout
+    (e.g. 'git checkout README.md', 'git checkout .', 'git checkout ./src/a.py').
     """
     if _DESTRUCTIVE_GIT_COMMANDS.search(command):
         return True
     # Detect checkout <revision> <path> without --
     if _checkout_without_dashdash(command):
+        return True
+    # Detect single-arg path-only checkout
+    if _is_path_like_checkout(command):
         return True
     return False
 
@@ -275,6 +337,92 @@ def _checkout_without_dashdash(command: str) -> bool:
     return True
 
 
+def _is_path_like_checkout(command: str, cwd: str = "") -> bool:
+    """Detect 'git checkout <single-path-arg>' (path-only restore, not branch switch).
+
+    Thread 3 (Codex V12): Single-argument 'git checkout' with a path-like
+    argument is a destructive file restore, not a branch switch.  Must be R3/R4.
+
+    Covers:
+      git checkout README.md       → destructive (file exists in worktree)
+      git checkout .               → destructive (discards all changes)
+      git checkout src/file.py     → destructive (path contains /)
+      git checkout ./path           → destructive (starts with ./)
+      git checkout ../path          → destructive (starts with ../)
+      git checkout -- README.md     → destructive (explicit -- separator)
+      git checkout main             → branch switch (doesn't look path-like)
+
+    When the argument could be either a branch name or a path (e.g. 'src/main'),
+    fail closed → treat as destructive.
+    """
+    import os as _os
+    import re as _re
+
+    try:
+        tokens = __import__("shlex").split(command)
+    except ValueError:
+        tokens = command.split()
+    if len(tokens) < 3:
+        return False
+    if tokens[0] != "git" or tokens[1] != "checkout":
+        return False
+
+    # 'git checkout -- <path>' → always destructive
+    if "--" in tokens:
+        return True
+
+    # Collect non-flag arguments after 'checkout'
+    args = [t for t in tokens[2:] if not t.startswith("-")]
+    if len(args) != 1:
+        return False  # 0 args or 2+ args handled elsewhere
+
+    arg = args[0]
+
+    # Explicit path indicators → always destructive
+    if arg in (".", ".."):
+        return True
+    if arg.startswith("./") or arg.startswith("../"):
+        return True
+
+    # Contains a path separator → likely a path, not a branch
+    if "/" in arg:
+        # Branch names can also contain '/', so check if it exists in worktree
+        if cwd:
+            candidate = _os.path.join(cwd, arg)
+            if _os.path.lexists(candidate):
+                return True
+            # Also check relative to repo root
+            if _os.path.lexists(arg):
+                return True
+        # Path-like with '/' → fail closed as destructive
+        return True
+
+    # File extension that's clearly not a branch → likely a path
+    # (branches rarely have extensions like .md, .py, .js, etc.)
+    if _os.path.splitext(arg)[1] in (
+        ".md", ".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".yaml", ".yml",
+        ".toml", ".cfg", ".ini", ".txt", ".css", ".html", ".rs", ".go",
+        ".java", ".c", ".cpp", ".h", ".hpp", ".rb", ".php", ".swift",
+    ):
+        return True
+
+    # Check if it exists as a file/directory in the filesystem
+    if cwd:
+        candidate = _os.path.join(cwd, arg)
+        if _os.path.lexists(candidate):
+            return True
+    if _os.path.lexists(arg):
+        return True
+
+    # Unknown single arg — could be branch or path.  Fail closed.
+    # If it looks like a valid branch name pattern (no spaces, no wildcards,
+    # starts with letter/_), treat as branch switch.  Otherwise destructive.
+    if _re.match(r'^[a-zA-Z_][a-zA-Z0-9_./-]*$', arg) and "/" not in arg:
+        return False  # simple branch name like 'main', 'develop'
+
+    return True  # fail closed — ambiguous single arg
+
+
 def _reads_sensitive_path(command: str, cwd: str = "") -> bool:
     """True if the command reads any sensitive paths.
 
@@ -292,22 +440,45 @@ def _reads_sensitive_path(command: str, cwd: str = "") -> bool:
     return False
 
 
-# Sensitive CWD patterns — directories where reading any file is R4
+# Sensitive CWD patterns — directories where reading any file is R4.
+# Thread 2 (Codex V12): Extended to cover .npmrc, .docker, .config/gh, .netrc, .pypirc.
 _SENSITIVE_CWD: re.Pattern[str] = re.compile(
     r"(?:"
-    r"/\.ssh|/\.aws|/\.config/[^/\s]*credentials|"
+    r"/\.ssh|/\.aws|/\.npmrc|/\.docker|"
+    r"/\.config/gh|/\.netrc|/\.pypirc|"
+    r"/\.config/[^/\s]*credentials|"
     r"/Library/Keychains|"
-    r"/root/\.ssh|/root/\.aws"
+    r"/root/\.ssh|/root/\.aws|/root/\.npmrc|/root/\.docker"
     r")",
     re.IGNORECASE,
 )
 
 
 def _cwd_is_sensitive(cwd: str) -> bool:
-    """True if the working directory itself is a credential directory."""
+    """True if the working directory itself is a credential directory.
+
+    Thread 2 (Codex V12): Normalises $HOME and ${HOME} before checking
+    so cwd-relative access through environment variables is also caught.
+    """
     import os
     resolved = os.path.expanduser(cwd)
+    # Expand $HOME and ${HOME} env var references
+    resolved = _expand_home_env_vars(resolved)
     return bool(_SENSITIVE_CWD.search(resolved))
+
+
+def _expand_home_env_vars(path: str) -> str:
+    """Expand $HOME and ${HOME} references in a path string.
+
+    Thread 2 (Codex V12): Commands like 'cat $HOME/.aws/credentials' must be
+    detected even when the literal $HOME appears in the path string.
+    """
+    import os as _os
+    home = _os.environ.get("HOME", "")
+    if not home:
+        return path
+    result = path.replace("${HOME}", home).replace("$HOME", home)
+    return result
 
 
 # Common read commands that take a file path as first non-flag argument
@@ -477,6 +648,105 @@ def _git_push_refspec_dangerous(command: str) -> bool:
     return False
 
 
+# ── Git subcommand token parsing ──
+
+# Thread 6 (Codex V12): Mutating git subcommands — classified by TOKEN POSITION,
+# NOT by substring match.  This prevents false positives on:
+#   git log --grep=commit   (commit is in grep pattern, not a subcommand)
+#   git diff origin/push-fix (push is in a ref name, not a subcommand)
+#   git show commit123       (commit123 is a revision, not a subcommand)
+_GIT_MUTATING_SUBCOMMANDS: set[str] = {
+    "commit", "push", "merge", "rebase", "reset",
+    "checkout", "switch", "tag",
+    "clean", "restore", "cherry-pick", "revert",
+    "add", "rm", "mv",
+}
+
+# Git subcommands that can be either read or write depending on arguments.
+# branch --list / stash list → read; branch -d / stash drop → destructive.
+# The destructive variants are caught by higher-priority R4/R3 patterns.
+_GIT_AMBIGUOUS_SUBCOMMANDS: set[str] = {"branch", "stash"}
+
+
+def _parse_git_subcommand(command: str) -> str | None:
+    """Extract the git subcommand by token position.
+
+    Parses:  git [global-options] <subcommand> [args]
+
+    Skips global options (tokens starting with '-' that appear BEFORE the
+    subcommand), including options that consume a following value:
+      -C <path>       (run as if git was started in <path>)
+      -c <name=value> (pass config parameter)
+      --exec-path[=<path>]
+
+    Returns the FIRST non-option positional token after 'git',
+    or None if the command string is not a git invocation.
+    """
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    if len(tokens) < 2:
+        return None
+    if tokens[0] != "git":
+        return None
+    # Options that consume their next token as a value
+    _VALUE_OPTIONS = {"-C", "-c", "--exec-path"}
+    i = 1
+    while i < len(tokens):
+        token = tokens[i]
+        # Handle --opt=value form (already one token, skip it)
+        if token.startswith("-") and "=" in token:
+            i += 1
+            continue
+        # Handle -C <path>, -c <name=value> (skip option + value)
+        if token in _VALUE_OPTIONS:
+            i += 2  # skip the option and its value
+            continue
+        # Handle --exec-path <path> (skip option + value)
+        if token == "--exec-path":
+            i += 2
+            continue
+        # Handle --long-opt (no value) — skip
+        if token.startswith("-"):
+            i += 1
+            continue
+        # First non-option token — this is the subcommand
+        return token
+    return None
+
+
+def _git_has_output_flag(command: str) -> bool:
+    """True if a git command uses --output to write to a file.
+
+    Thread 5 (Codex V12): git diff/show/log --output=<file> is NOT read-only.
+    Detects both --output=<file> and --output <file> forms.
+    Must be evaluated BEFORE R0 git read patterns.
+    """
+    # --output=<file> (equals form)
+    if re.search(r"--output[=\s]\S", command):
+        return True
+    return False
+
+
+def _git_output_target_is_sensitive(command: str, cwd: str = "") -> bool:
+    """True if the --output target is a sensitive/credential path.
+
+    Thread 5 (Codex V12): Writing git output to /etc, ~/.ssh, ~/.aws, etc.
+    must be R4 regardless of the git subcommand being nominally read-only.
+    """
+    m = re.search(r"--output[=\s](\S+)", command)
+    if not m:
+        return False
+    target = m.group(1)
+    # Expand any env vars in the target path
+    target = _expand_home_env_vars(target)
+    if cwd and not target.startswith("/") and not target.startswith("~"):
+        target = cwd.rstrip("/") + "/" + target
+    # Use the same sensitive path detection
+    return bool(_SENSITIVE_PATH_PATTERNS.search(target))
+
+
 class CommandClassifier:
     """Maps command strings to risk levels via layered analysis.
 
@@ -640,6 +910,39 @@ class CommandClassifier:
                 reason="sensitive path read detected (~/.ssh, ~/.aws, credentials, .env, private keys) — R4",
             )
 
+        # ── Layer 0.5: Git --output detection (before R0 classification) ──
+        # Thread 5 (Codex V12): git diff/show/log --output=<file> is NOT
+        # read-only.  Must be detected BEFORE the R0 git read patterns fire.
+        # Sensitive targets → R4; project-internal → R2; external → R3.
+        if tokens and tokens[0] == "git" and _git_has_output_flag(command):
+            sub = _parse_git_subcommand(command)
+            if sub in ("diff", "show", "log"):
+                cwd = kwargs.get("cwd", "")
+                if _git_output_target_is_sensitive(command, cwd=cwd):
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R4,
+                        kind=CommandKind.WRITE, auto_approvable=False,
+                        reversible=False,
+                        reason="git output to sensitive/credential path — R4",
+                    )
+                # Check if output goes outside repo
+                m = re.search(r"--output[=\s](\S+)", command)
+                if m:
+                    target = m.group(1)
+                    if target.startswith("/etc/") or target.startswith("/tmp/") or target.startswith("/var/"):
+                        return CommandClassification(
+                            command=command, risk_level=RiskLevel.R3,
+                            kind=CommandKind.WRITE, auto_approvable=False,
+                            reversible=False,
+                            reason="git output to system/external path — R3",
+                        )
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R2,
+                    kind=CommandKind.WRITE, auto_approvable=False,
+                    reversible=True,
+                    reason="git output to file — R2 write, not read-only",
+                )
+
         # ── Layer 1: Interpreter snippets (python -c, heredocs) ──
         if _INTERPRETER_SNIPPET.search(command):
             if _python_snippet_is_dangerous(command):
@@ -728,6 +1031,82 @@ class CommandClassifier:
                 reversible=False,
                 reason=f"mutating option on '{base_cmd}' detected — fail-closed to R3",
             )
+
+        # ── Layer 4.5: Git subcommand token-based classification ──
+        # Thread 6 (Codex V12): Parse git subcommand by TOKEN POSITION, not
+        # by substring match.  This correctly handles:
+        #   git -C /tmp status              → R0 (global option before subcommand)
+        #   git --no-pager diff             → R0
+        #   git log --grep=commit           → R0 (commit is grep pattern, not subcommand)
+        #   git diff origin/push-fix        → R0 (push in ref name, not subcommand)
+        #   git show commit123              → R0 (commit123 is revision, not subcommand)
+        #   git branch --list feature/merge-ui → R0 (branch --list is read-only)
+        if base_cmd == "git":
+            git_sub = _parse_git_subcommand(command)
+            if git_sub in _GIT_MUTATING_SUBCOMMANDS:
+                # Known mutating subcommand → at least R2
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R2,
+                    kind=CommandKind.GIT, auto_approvable=False,
+                    reversible=True,
+                    reason=f"git {git_sub} — mutating subcommand (token-parsed) → R2",
+                )
+            elif git_sub in _GIT_AMBIGUOUS_SUBCOMMANDS:
+                # branch/stash: read-only variants get R0, mutating → R2+
+                if git_sub == "branch":
+                    if re.search(r"branch\s+(-d|--delete|-D|-m|--move|-c|--copy)", command):
+                        return CommandClassification(
+                            command=command, risk_level=RiskLevel.R3,
+                            kind=CommandKind.GIT, auto_approvable=False,
+                            reversible=False,
+                            reason="git branch delete/move — destructive → R3",
+                        )
+                    if re.search(r"branch\s+(--list|-l|--show-current|--remote|-r|--all|-a|--merged|--no-merged|--contains)", command):
+                        return CommandClassification(
+                            command=command, risk_level=RiskLevel.R0,
+                            kind=CommandKind.GIT, auto_approvable=True,
+                            reversible=True,
+                            reason="git branch --list (token-parsed) — read-only → R0",
+                        )
+                    # Plain 'git branch' → list (R0); 'git branch new-name' → create (R2)
+                    non_flag = [t for t in tokens[2:] if not t.startswith("-")]
+                    if not non_flag:
+                        return CommandClassification(
+                            command=command, risk_level=RiskLevel.R0,
+                            kind=CommandKind.GIT, auto_approvable=True,
+                            reversible=True,
+                            reason="git branch (list mode, token-parsed) — read-only → R0",
+                        )
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R2,
+                        kind=CommandKind.GIT, auto_approvable=False,
+                        reversible=True,
+                        reason="git branch create — mutating → R2",
+                    )
+                elif git_sub == "stash":
+                    if re.search(r"stash\s+(list|show)", command):
+                        return CommandClassification(
+                            command=command, risk_level=RiskLevel.R0,
+                            kind=CommandKind.GIT, auto_approvable=True,
+                            reversible=True,
+                            reason="git stash list/show — read-only → R0",
+                        )
+                    # stash push/pop/apply/drop/clear → already caught by R4/R3 patterns above
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R2,
+                        kind=CommandKind.GIT, auto_approvable=False,
+                        reversible=True,
+                        reason="git stash — mutating → R2",
+                    )
+            elif git_sub in ("status", "log", "diff", "show", "rev-parse",
+                             "ls-remote", "ls-files", "cat-file", "describe",
+                             "fetch", "remote", "config", "blame", "grep"):
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R0,
+                    kind=CommandKind.GIT, auto_approvable=True,
+                    reversible=True,
+                    reason=f"git {git_sub} — read-only subcommand (token-parsed) → R0",
+                )
 
         # ── Layer 5: R2 pattern matching ──
         for pattern in self.R2_PATTERNS:
