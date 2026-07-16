@@ -11,9 +11,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "governance"))
 sys.path.insert(0, str(ROOT / "scripts" / "security"))
 
-from detect_state_drift import check_consistency, check_git_consistency
+from detect_state_drift import check_consistency
 from scan_hardcoded_secrets import is_allowed, scan_file
-import hashlib, os
+import hashlib
+import os
 
 
 class G10DriftDetectionTests(unittest.TestCase):

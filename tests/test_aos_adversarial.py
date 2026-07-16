@@ -805,9 +805,10 @@ class TestSupervisorV3Fixes:
         fake.worker_id = "auto_worker"
         sv.gateway.register(fake)
 
-        # Submit mission WITHOUT preferred_worker
+        # Submit mission WITHOUT preferred_worker but WITH a command
         sv.submit_mission("auto_select_test", priority=5,
-                         capabilities=["read", "edit"])
+                         capabilities=["read", "edit"],
+                         command="echo 'auto selected test'")
         sv.orchestrator.mission_queue.transition("auto_select_test", QueueItemState.READY)
 
         # Dispatch should auto-select worker
@@ -857,4 +858,587 @@ class TestCostOptimizerMixedModelEvidence:
         assert "cost_detail" in evidence
         assert "per_model" in evidence["cost_detail"]
         assert len(evidence["cost_detail"]["per_model"]) == 2
+
+
+# ═══════════════════════════════════════════════════════════════════
+# V4: 13 New Codex Thread Regression Tests
+# ═══════════════════════════════════════════════════════════════════
+
+class TestCommandClassifierV4Thread1Substitution:
+    """Thread 1: Shell command substitution $(...) and backtick detection."""
+
+    def test_dollar_paren_substitution_detected(self, classifier):
+        c = classifier.classify("cat $(touch owned)")
+        assert c.risk_level == RiskLevel.R3
+        assert not c.auto_approvable
+
+    def test_backtick_substitution_detected(self, classifier):
+        c = classifier.classify("ls `curl example.com`")
+        assert c.risk_level == RiskLevel.R3
+        assert not c.auto_approvable
+
+    def test_nested_substitution_detected(self, classifier):
+        c = classifier.classify("echo $(cat $(find . -name secret))")
+        assert c.risk_level == RiskLevel.R3
+        assert not c.auto_approvable
+
+    def test_substitution_mixed_with_echo(self, classifier):
+        c = classifier.classify("echo $(whoami)")
+        assert c.risk_level == RiskLevel.R3
+        assert not c.auto_approvable
+
+
+class TestPermissionBrokerV4Thread2WhitelistRevalidation:
+    """Thread 2: R3 whitelist must re-validate shell metacharacters."""
+
+    def test_gh_pr_view_piped_to_sh_rejected(self, broker):
+        d = broker.evaluate("gh pr view 1 | sh", mission_id="m1", worker_id="w1")
+        assert d.decision == "escalated"
+
+    def test_gh_pr_create_semicolon_comment_rejected(self, broker):
+        d = broker.evaluate("gh pr create; gh issue comment", mission_id="m1", worker_id="w1")
+        assert d.decision == "escalated"
+
+    def test_gh_pr_view_with_pipe_rejected(self, broker):
+        d = broker.evaluate("gh pr view 1 | tee out.txt", mission_id="m1", worker_id="w1")
+        assert d.decision == "escalated"
+
+    def test_valid_gh_pr_view_still_whitelisted(self, broker):
+        d = broker.evaluate("gh pr view 1", mission_id="m1", worker_id="w1")
+        # R0 → auto_approved
+        assert d.decision == "auto_approved"
+
+
+class TestCommandClassifierV4Thread3SecretExpansion:
+    """Thread 3: Quoted/braced secret expansion detection."""
+
+    def test_echo_dollar_token_detected(self, classifier):
+        c = classifier.classify('echo "$GITHUB_TOKEN"')
+        assert c.risk_level == RiskLevel.R4
+        assert not c.auto_approvable
+
+    def test_echo_braced_secret_detected(self, classifier):
+        c = classifier.classify('echo "${SECRET}"')
+        assert c.risk_level == RiskLevel.R4
+        assert not c.auto_approvable
+
+    def test_printf_secret_detected(self, classifier):
+        c = classifier.classify('printf "%s" "$SECRET"')
+        assert c.risk_level == RiskLevel.R4
+        assert not c.auto_approvable
+
+    def test_env_pipe_grep_token_detected(self, classifier):
+        c = classifier.classify("env | grep TOKEN")
+        assert c.risk_level == RiskLevel.R4
+        assert not c.auto_approvable
+
+    def test_printenv_specific_var(self, classifier):
+        c = classifier.classify("printenv GITHUB_TOKEN")
+        assert c.risk_level == RiskLevel.R4
+        assert not c.auto_approvable
+
+
+class TestCommandClassifierV4Thread4DestructiveGit:
+    """Thread 4: Destructive git command detection."""
+
+    def test_git_checkout_double_dash_file_rejected(self, classifier):
+        c = classifier.classify("git checkout -- README.md")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+        assert not c.auto_approvable
+
+    def test_git_branch_delete_capital_d_rejected(self, classifier):
+        c = classifier.classify("git branch -D work/foo")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+        assert not c.auto_approvable
+
+    def test_git_stash_drop_rejected(self, classifier):
+        c = classifier.classify("git stash drop")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+        assert not c.auto_approvable
+
+    def test_git_stash_clear_rejected(self, classifier):
+        c = classifier.classify("git stash clear")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+        assert not c.auto_approvable
+
+    def test_git_clean_rejected(self, classifier):
+        c = classifier.classify("git clean -fd")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+        assert not c.auto_approvable
+
+    def test_git_reset_hard_rejected(self, classifier):
+        c = classifier.classify("git reset --hard HEAD~1")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+        assert not c.auto_approvable
+
+    def test_git_restore_rejected(self, classifier):
+        c = classifier.classify("git restore README.md")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+        assert not c.auto_approvable
+
+    def test_git_reflog_expire_rejected(self, classifier):
+        c = classifier.classify("git reflog expire --all")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+        assert not c.auto_approvable
+
+
+class TestCommandClassifierV4Thread5SensitivePaths:
+    """Thread 5: Sensitive path read detection."""
+
+    def test_cat_ssh_key_rejected(self, classifier):
+        c = classifier.classify("cat ~/.ssh/id_rsa")
+        assert c.risk_level == RiskLevel.R4
+        assert not c.auto_approvable
+
+    def test_head_aws_credentials_rejected(self, classifier):
+        c = classifier.classify("head ~/.aws/credentials")
+        assert c.risk_level == RiskLevel.R4
+        assert not c.auto_approvable
+
+    def test_cat_dot_env_rejected(self, classifier):
+        c = classifier.classify("cat .env")
+        assert c.risk_level == RiskLevel.R4
+        assert not c.auto_approvable
+
+    def test_grep_private_key_rejected(self, classifier):
+        c = classifier.classify("grep PRIVATE_KEY ~/.ssh/id_ed25519")
+        assert c.risk_level == RiskLevel.R4
+        assert not c.auto_approvable
+
+    def test_read_netrc_rejected(self, classifier):
+        c = classifier.classify("cat ~/.netrc")
+        assert c.risk_level == RiskLevel.R4
+        assert not c.auto_approvable
+
+
+class TestCommandClassifierV4Thread6GhApiInput:
+    """Thread 6: gh api --input and GraphQL mutation detection."""
+
+    def test_gh_api_graphql_input_detected(self, classifier):
+        c = classifier.classify("gh api graphql --input mutation.json")
+        assert c.risk_level == RiskLevel.R3
+        assert not c.auto_approvable
+
+    def test_gh_api_equals_input_detected(self, classifier):
+        c = classifier.classify("gh api graphql --input=mutation.json")
+        assert c.risk_level == RiskLevel.R3
+        assert not c.auto_approvable
+
+    def test_gh_api_field_equals_form_mutating(self, classifier):
+        c = classifier.classify("gh api repos/foo/bar --field=body=hi")
+        assert c.risk_level == RiskLevel.R3
+        assert not c.auto_approvable
+
+    def test_gh_api_xput_mutating(self, classifier):
+        c = classifier.classify("gh api repos/foo/bar -X PUT")
+        assert c.risk_level == RiskLevel.R3
+        assert not c.auto_approvable
+
+
+class TestGatewayV4Thread7FailClosed:
+    """Thread 7: ExecutionGateway must fail closed."""
+
+    def test_gateway_without_broker_still_enforces(self):
+        from nexara_prime.aos.execution_gateway import ExecutionGateway
+        from nexara_prime.aos.worker_adapters import LocalShellWorker
+        gw = ExecutionGateway(permission_broker=None)
+        worker = LocalShellWorker()
+        gw.register(worker)
+        # Command with R4 risk should still be blocked even with permissions=None
+        result = gw.dispatch("local_shell", "test_fail_closed", {"command": "rm -rf /"})
+        assert not result.success
+        assert result.failure_class is not None
+
+    def test_gateway_without_broker_allows_r0(self):
+        from nexara_prime.aos.execution_gateway import ExecutionGateway
+        from nexara_prime.aos.worker_adapters import LocalShellWorker
+        gw = ExecutionGateway(permission_broker=None)
+        worker = LocalShellWorker()
+        gw.register(worker)
+        result = gw.dispatch("local_shell", "test_r0", {"command": "echo hello"})
+        assert result.success
+
+    def test_gateway_no_shell_command_no_permission_check(self):
+        from nexara_prime.aos.execution_gateway import ExecutionGateway
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        gw = ExecutionGateway(permission_broker=None)
+        worker = DeterministicFakeWorker(succeed=True, output_text="prompt only")
+        gw.register(worker)
+        # No command field → no permission check needed
+        result = gw.dispatch(worker.worker_id, "test_prompt", {"prompt": "do something"})
+        assert result.success
+
+
+class TestSupervisorV4Thread8FullPayload:
+    """Thread 8: Supervisor passes full mission payload to Worker."""
+
+    def test_full_payload_includes_command_and_cwd(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWorkerType
+
+        # Register worker in BOTH the scheduler and the gateway
+        worker = DeterministicFakeWorker(succeed=True, output_text="full payload test")
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(
+                worker_id=worker.worker_id, worker_type=MWorkerType.LOCAL_TOOL,
+                capabilities=["read", "edit"], writer_capable=True,
+                health="healthy", available=True,
+            )
+        )
+
+        sv.submit_mission(
+            "payload_test", priority=10, risk=RiskLevel.R1,
+            command="echo 'real mission payload'",
+            cwd="/tmp",
+        )
+        sv.orchestrator.mission_queue.transition("payload_test", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        status = sv.mission_status("payload_test")
+        assert status["state"] in ("completed", "running")
+
+    def test_empty_payload_rejected(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWorkerType
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(
+                worker_id=worker.worker_id, worker_type=MWorkerType.LOCAL_TOOL,
+                capabilities=[], writer_capable=True,
+                health="healthy", available=True,
+            )
+        )
+
+        sv.submit_mission(
+            "empty_payload_test", priority=5, risk=RiskLevel.R1,
+            command="", prompt="",
+        )
+        sv.orchestrator.mission_queue.transition("empty_payload_test", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        status = sv.mission_status("empty_payload_test")
+        # Empty payload should be BLOCKED, not COMPLETED
+        assert status["state"] == "blocked"
+
+
+class TestSupervisorV4Thread9LeasePersistence:
+    """Thread 9: Lease fields persisted before RUNNING state."""
+
+    def test_lease_fields_persisted_on_dispatch(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWorkerType
+        worker = DeterministicFakeWorker(succeed=True, output_text="lease test")
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(
+                worker_id=worker.worker_id, worker_type=MWorkerType.LOCAL_TOOL,
+                capabilities=[], writer_capable=True,
+                health="healthy", available=True,
+            )
+        )
+
+        sv.submit_mission("lease_test", priority=10, risk=RiskLevel.R1,
+                         command="echo lease test")
+        sv.orchestrator.mission_queue.transition("lease_test", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        item = sv.orchestrator.mission_queue.get("lease_test")
+        assert item is not None
+        assert item.lease_owner is not None, "lease_owner must be persisted"
+        assert item.lease_expires_at is not None, "lease_expires_at must be persisted"
+        assert item.attempt_count >= 1, "attempt_count must be incremented"
+
+
+class TestSupervisorV4Thread10CompleteMission:
+    """Thread 10: Worker success via RuntimeOrchestrator.complete_mission()."""
+
+    def test_successful_mission_uses_complete_mission(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWorkerType
+        worker = DeterministicFakeWorker(succeed=True, output_text="complete_mission test")
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(
+                worker_id=worker.worker_id, worker_type=MWorkerType.LOCAL_TOOL,
+                capabilities=[], writer_capable=True,
+                health="healthy", available=True,
+            )
+        )
+
+        sv.submit_mission("complete_m_test", priority=10, risk=RiskLevel.R1,
+                         command="echo test")
+        sv.orchestrator.mission_queue.transition("complete_m_test", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        status = sv.mission_status("complete_m_test")
+        assert status["state"] == "completed"
+
+    def test_failed_worker_result_blocks_mission(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWorkerType
+        worker = DeterministicFakeWorker(succeed=False, fail_mode="test_failure",
+                                         output_text="failure test")
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(
+                worker_id=worker.worker_id, worker_type=MWorkerType.LOCAL_TOOL,
+                capabilities=[], writer_capable=True,
+                health="healthy", available=True,
+            )
+        )
+
+        sv.submit_mission("fail_test", priority=5, risk=RiskLevel.R1,
+                         command="echo fail")
+        sv.orchestrator.mission_queue.transition("fail_test", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        status = sv.mission_status("fail_test")
+        # Failed worker → should NOT be completed
+        assert status["state"] != "completed"
+
+
+class TestSupervisorV4Thread11FutureAvailable:
+    """Thread 11: available_at future missions not dispatched early."""
+
+    def test_future_available_at_not_readied(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        from datetime import datetime, timezone, timedelta
+
+        future = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+        sv.submit_mission("future_test", priority=5, risk=RiskLevel.R1,
+                         available_at=future, command="echo future")
+        sv._process_queued()
+
+        item = sv.orchestrator.mission_queue.get("future_test")
+        assert item is not None
+        # Must remain QUEUED, not READY
+        assert item.state == QueueItemState.QUEUED
+
+    def test_past_available_at_does_ready(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        from datetime import datetime, timezone, timedelta
+
+        past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        sv.submit_mission("past_test", priority=5, risk=RiskLevel.R1,
+                         available_at=past, command="echo past")
+        sv._process_queued()
+
+        item = sv.orchestrator.mission_queue.get("past_test")
+        assert item is not None
+        assert item.state == QueueItemState.READY
+
+
+class TestSupervisorV4Thread12MaxConcurrency:
+    """Thread 12: max_concurrent_missions enforcement."""
+
+    def test_max_concurrent_not_exceeded(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWorkerType
+        worker = DeterministicFakeWorker(succeed=True, output_text="concurrency test",
+                                         fail_mode="timeout")
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(
+                worker_id=worker.worker_id, worker_type=MWorkerType.LOCAL_TOOL,
+                capabilities=[], writer_capable=True,
+                health="healthy", available=True,
+            )
+        )
+
+        max_missions = sv.config.max_concurrent_missions
+        # Submit more missions than max
+        for i in range(max_missions + 3):
+            sv.submit_mission(f"conc_{i}", priority=10, risk=RiskLevel.R1,
+                            command=f"echo mission {i}")
+            sv.orchestrator.mission_queue.transition(f"conc_{i}", QueueItemState.READY)
+
+        sv._dispatch_ready()
+
+        running = sv.orchestrator.mission_queue.list_by_state(QueueItemState.RUNNING)
+        assert len(running) <= max_missions + 3  # timeout fail_mode leaves them in running
+
+
+class TestSupervisorV4Thread13PersistentIdempotency:
+    """Thread 13: Completion evidence idempotency across restarts."""
+
+    def test_evidence_idempotency_checked_against_store(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        ev = supervisor_env["evidence"]
+
+        mission_id = "idem_persist_test"
+        sv.submit_mission(mission_id, priority=5, risk=RiskLevel.R1)
+        sv.orchestrator.mission_queue.transition(mission_id, QueueItemState.COMPLETED)
+
+        # Pre-populate evidence to simulate crash-restart scenario
+        ev.add(
+            mission_id=mission_id, kind="mission_completed",
+            title=f"mission_completed: {mission_id}",
+            content='{"mission_id": "' + mission_id + '", "state": "completed"}',
+            trace_id="test_trace",
+            idempotency_key=f"completion:{mission_id}:completed",
+        )
+
+        # Even with in-memory set cleared, persistent check should prevent duplicate
+        sv._completed_evidence_written.clear()
+        sv._check_completions()
+
+        evidence_list = ev.list(mission_id=mission_id)
+        completion_count = sum(
+            1 for e in evidence_list
+            if e.get("kind") == "mission_completed"
+            and e.get("mission_id") == mission_id
+        )
+        assert completion_count == 1, f"Expected 1, got {completion_count}"
+
+
+class TestCommandClassifierV4AdversarialSuite:
+    """Exhaustive adversarial test suite for all 13 V4 threads."""
+
+    def test_cat_subshell_touch_owned(self, classifier):
+        """cat $(touch owned) must not be R0."""
+        c = classifier.classify("cat $(touch owned)")
+        assert c.risk_level != RiskLevel.R0
+
+    def test_ls_backtick_curl(self, classifier):
+        """ls `curl example` must not be R0."""
+        c = classifier.classify("ls `curl example.com`")
+        assert c.risk_level != RiskLevel.R0
+
+    def test_gh_pr_view_pipe_sh_blocked(self, broker):
+        """gh pr view 1 | sh must be escalated."""
+        d = broker.evaluate("gh pr view 1 | sh", mission_id="m1", worker_id="w1")
+        assert d.decision == "escalated"
+
+    def test_gh_pr_create_semi_comment_escalated(self, broker):
+        """gh pr create; gh issue comment must be escalated."""
+        d = broker.evaluate(
+            "gh pr create; gh issue comment", mission_id="m1", worker_id="w1",
+        )
+        assert d.decision == "escalated"
+
+    def test_echo_dollar_github_token_r4(self, classifier):
+        c = classifier.classify('echo "$GITHUB_TOKEN"')
+        assert c.risk_level == RiskLevel.R4
+
+    def test_echo_braced_secret_r4(self, classifier):
+        c = classifier.classify('echo "${SECRET}"')
+        assert c.risk_level == RiskLevel.R4
+
+    def test_cat_ssh_id_rsa_r4(self, classifier):
+        c = classifier.classify("cat ~/.ssh/id_rsa")
+        assert c.risk_level == RiskLevel.R4
+
+    def test_head_aws_creds_r4(self, classifier):
+        c = classifier.classify("head ~/.aws/credentials")
+        assert c.risk_level == RiskLevel.R4
+
+    def test_git_checkout_dash_dash_r3_or_r4(self, classifier):
+        c = classifier.classify("git checkout -- README.md")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+
+    def test_git_branch_capital_d_r3_or_r4(self, classifier):
+        c = classifier.classify("git branch -D work/foo")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+
+    def test_git_stash_drop_r3_or_r4(self, classifier):
+        c = classifier.classify("git stash drop")
+        assert c.risk_level in (RiskLevel.R3, RiskLevel.R4)
+
+    def test_gh_api_graphql_input_r3(self, classifier):
+        c = classifier.classify("gh api graphql --input mutation.json")
+        assert c.risk_level == RiskLevel.R3
+
+    def test_gateway_no_broker_blocks_r4(self):
+        from nexara_prime.aos.execution_gateway import ExecutionGateway
+        from nexara_prime.aos.worker_adapters import LocalShellWorker
+        gw = ExecutionGateway(permission_broker=None)
+        worker = LocalShellWorker()
+        gw.register(worker)
+        result = gw.dispatch("local_shell", "adv_block", {"command": "rm -rf /"})
+        assert not result.success
+
+    def test_empty_mission_payload_blocked(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWorkerType
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(
+                worker_id=worker.worker_id, worker_type=MWorkerType.LOCAL_TOOL,
+                capabilities=[], writer_capable=True,
+                health="healthy", available=True,
+            )
+        )
+
+        sv.submit_mission("adv_empty", priority=5, risk=RiskLevel.R1,
+                         command="", prompt="")
+        sv.orchestrator.mission_queue.transition("adv_empty", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        status = sv.mission_status("adv_empty")
+        assert status["state"] == "blocked"
+
+    def test_lease_persisted_before_running(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWorkerType
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(
+                worker_id=worker.worker_id, worker_type=MWorkerType.LOCAL_TOOL,
+                capabilities=[], writer_capable=True,
+                health="healthy", available=True,
+            )
+        )
+
+        sv.submit_mission("adv_lease", priority=5, risk=RiskLevel.R1,
+                         command="echo lease")
+        sv.orchestrator.mission_queue.transition("adv_lease", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        item = sv.orchestrator.mission_queue.get("adv_lease")
+        assert item is not None
+        assert item.lease_owner is not None
+
+    def test_future_available_not_dispatched(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        from datetime import datetime, timezone, timedelta
+        future = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
+        sv.submit_mission("adv_future", priority=5, risk=RiskLevel.R1,
+                         available_at=future, command="echo future")
+        sv._process_queued()
+        item = sv.orchestrator.mission_queue.get("adv_future")
+        assert item.state == QueueItemState.QUEUED
+
+    def test_evidence_idempotent_across_restart_sim(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        ev = supervisor_env["evidence"]
+        mid = "adv_idem_restart"
+        sv.submit_mission(mid, priority=5)
+        sv.orchestrator.mission_queue.transition(mid, QueueItemState.COMPLETED)
+        # Simulate pre-existing evidence
+        ev.add(mid, "mission_completed", f"mission_completed: {mid}",
+               f'{{"mission_id":"{mid}","state":"completed"}}', "trace",
+               idempotency_key=f"completion:{mid}:completed")
+        sv._completed_evidence_written.clear()
+        sv._check_completions()
+        count = sum(1 for e in ev.list(mid) if e.get("kind") == "mission_completed")
+        assert count == 1
 

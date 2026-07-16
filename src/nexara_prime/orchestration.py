@@ -865,10 +865,16 @@ class RuntimeOrchestrator:
         return True
 
     def _lease_held_by(self, mission_id: str, worker_id: str) -> bool:
+        """Check if worker_id holds the lease — via writer lease OR mission queue record."""
+        # Primary: check writer lease manager
         lease = self.leases._latest_active_lease(mission_id)
-        if lease is None:
-            return False
-        return lease.get("state") == "active" and lease.get("worker_id") == worker_id
+        if lease is not None and lease.get("state") == "active" and lease.get("worker_id") == worker_id:
+            return True
+        # Fallback: check mission queue item's lease_owner (set by Supervisor dispatch)
+        item = self.mission_queue.get(mission_id)
+        if item is not None and item.lease_owner == worker_id:
+            return True
+        return False
 
     def _crash_resume(self) -> None:
         recovered_count = 0

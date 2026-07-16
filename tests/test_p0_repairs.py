@@ -2,7 +2,12 @@
 NEXARA_PRIME_SECURITY_ENFORCEMENT_AND_RUNTIME_TRUTH_REPAIR_V2_2."""
 from __future__ import annotations
 
-import json, os, platform, sys, tempfile, time, unittest
+import os
+import platform
+import sys
+import tempfile
+import time
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -126,7 +131,7 @@ class SandboxEscapeTests(unittest.TestCase):
         self.tmpdir = tempfile.mkdtemp()
 
     def test_write_outside_workspace_rejected(self):
-        from nexara_prime.sandbox_v2 import ProcessConstrainedBackend, SandboxInvocation, _validate_path
+        from nexara_prime.sandbox_v2 import _validate_path
         ws = os.path.join(self.tmpdir, "ws")
         os.makedirs(ws, exist_ok=True)
         # Test path validation rejects absolute outside paths

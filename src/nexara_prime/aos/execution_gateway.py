@@ -6,6 +6,8 @@ from typing import Any, Protocol
 
 from ..models import WorkerResult, WorkerType, FailureClass
 
+from .permission_broker import PermissionBroker
+
 
 class WorkerAdapter(Protocol):
     """Protocol for worker adapters (Claude Code, Codex, Loop, Shell, etc.)."""
@@ -31,6 +33,10 @@ class ExecutionGateway:
 
     PermissionBroker is enforced INSIDE dispatch() so every execution path
     is covered regardless of caller.
+
+    FAIL-CLOSED: If no PermissionBroker is configured, the gateway
+    auto-creates one — shell commands are NEVER executed without permission
+    enforcement. This is a hard security boundary.
     """
 
     def __init__(
@@ -65,6 +71,10 @@ class ExecutionGateway:
         The command in input_data is evaluated by PermissionBroker before
         execution. If the broker escalates or denies, the dispatch is
         blocked and a PERMISSION_BLOCK result is returned.
+
+        FAIL-CLOSED: If no PermissionBroker is configured and a shell
+        command is detected, the gateway auto-creates a PermissionBroker
+        so that NO shell command executes un-checked.
         """
         adapter = self._adapters.get(worker_id)
         if adapter is None:
@@ -76,8 +86,15 @@ class ExecutionGateway:
 
         # ── Permission enforcement (shell commands only, not LLM prompts) ──
         command = input_data.get("command", "")
-        if command and self.permissions is not None:
-            decision = self.permissions.evaluate(
+        if command:
+            # FAIL-CLOSED: auto-create broker if none configured
+            broker = self.permissions
+            if broker is None:
+                broker = PermissionBroker()
+                # Do NOT store as self.permissions — only Supervisor
+                # should set the canonical broker. We create a temporary
+                # broker for this call only to enforce the boundary.
+            decision = broker.evaluate(
                 command, mission_id=mission_id, worker_id=worker_id,
             )
             if decision.decision in ("escalated", "denied"):
