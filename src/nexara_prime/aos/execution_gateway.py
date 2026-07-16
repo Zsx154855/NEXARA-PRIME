@@ -64,13 +64,20 @@ class ExecutionGateway:
             for a in self._adapters.values()
         ]
 
-    def dispatch(self, worker_id: str, mission_id: str,
-                 input_data: dict[str, Any]) -> WorkerResult:
+    def dispatch(
+        self, worker_id: str, mission_id: str,
+        input_data: dict[str, Any],
+        approved_command: str | None = None,
+    ) -> WorkerResult:
         """Dispatch a mission to a worker, enforcing PermissionBroker.
 
         The command in input_data is evaluated by PermissionBroker before
         execution. If the broker escalates or denies, the dispatch is
-        blocked and a PERMISSION_BLOCK result is returned.
+        blocked and a PERMISSION_BLOCK result is returned (with escalated=True
+        if the decision was "escalated", so the caller can route to approval).
+
+        If approved_command is provided and matches the command, the permission
+        check is SKIPPED — this is used after human approval consumption.
 
         FAIL-CLOSED: If no PermissionBroker is configured and a shell
         command is detected, the gateway auto-creates a PermissionBroker
@@ -87,26 +94,33 @@ class ExecutionGateway:
         # ── Permission enforcement (shell commands only, not LLM prompts) ──
         command = input_data.get("command", "")
         if command:
-            # FAIL-CLOSED: auto-create broker if none configured
-            broker = self.permissions
-            if broker is None:
-                broker = PermissionBroker()
-                # Do NOT store as self.permissions — only Supervisor
-                # should set the canonical broker. We create a temporary
-                # broker for this call only to enforce the boundary.
-            decision = broker.evaluate(
-                command, mission_id=mission_id, worker_id=worker_id,
-            )
-            if decision.decision in ("escalated", "denied"):
-                return WorkerResult(
-                    worker_id=worker_id, mission_id=mission_id, success=False,
-                    failure_class=FailureClass.PERMISSION_BLOCK,
-                    output={
-                        "error": f"permission {decision.decision}: {decision.reason}",
-                        "risk_level": decision.risk_level.value,
-                        "decision_id": decision.decision_id,
-                    },
+            # Pre-approved via consumed ApprovalRequest — skip permission check
+            if approved_command is not None and command == approved_command:
+                pass  # bypass permission check → execute directly
+            else:
+                # FAIL-CLOSED: auto-create broker if none configured
+                broker = self.permissions
+                if broker is None:
+                    broker = PermissionBroker()
+                decision = broker.evaluate(
+                    command, mission_id=mission_id, worker_id=worker_id,
                 )
+                if decision.decision in ("escalated", "denied"):
+                    # Mark whether this is an escalation (requires approval) vs a hard deny
+                    escalated = decision.decision == "escalated"
+                    return WorkerResult(
+                        worker_id=worker_id, mission_id=mission_id, success=False,
+                        failure_class=FailureClass.PERMISSION_BLOCK,
+                        output={
+                            "error": f"permission {decision.decision}: {decision.reason}",
+                            "risk_level": decision.risk_level.value,
+                            "decision_id": decision.decision_id,
+                            "escalated": escalated,
+                            "command": command,
+                            "decision": decision.decision,
+                            "reason": decision.reason,
+                        },
+                    )
 
         result = adapter.execute(mission_id, input_data)
         self._results.append(result)

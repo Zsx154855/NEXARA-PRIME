@@ -65,6 +65,11 @@ _COMMAND_SUBSTITUTION: re.Pattern[str] = re.compile(
     r"\$\([^)]*\)|`[^`]+`"
 )
 
+# Shell process substitution: <(cmd) and >(cmd) — always dangerous
+_PROCESS_SUBSTITUTION: re.Pattern[str] = re.compile(
+    r"[<>]\s*\([^)]+\)"
+)
+
 # Mutating options on nominally-read-only commands
 _MUTATING_OPTIONS: dict[str, list[str]] = {
     "find": ["-delete", "-exec", "-execdir", "-ok", "-okdir"],
@@ -75,6 +80,11 @@ _MUTATING_OPTIONS: dict[str, list[str]] = {
 _DESTRUCTIVE_GIT_COMMANDS: re.Pattern[str] = re.compile(
     r"git\s+(?:"
     r"checkout\s+--|"
+    r"checkout\s+-f\b|"
+    r"checkout\s+--force\b|"
+    r"switch\s+-C\b|"
+    r"switch\s+--force-create\b|"
+    r"switch\s+--discard-changes\b|"
     r"restore\b|"
     r"branch\s+-D\b|"
     r"stash\s+drop\b|"
@@ -108,18 +118,19 @@ _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
 )
 
 # Secret expansion patterns — commands that could output secrets
+# Detects variable expansions in ANY argument position:
+#   echo "$GITHUB_TOKEN"   printf "value=$SECRET"   echo token=$TOKEN
+#   "${TOKEN}"  ${SECRET}  prefix=$GITHUB_TOKEN
 _SECRET_EXPANSION: re.Pattern[str] = re.compile(
     r"(?:"
-    r"echo\s+\"\$[A-Z_]+\"|"              # echo "$TOKEN"
-    r"echo\s+\"\$\{[A-Z_]+\}\"|"          # echo "${TOKEN}"
-    r'echo\s+\'\$[A-Z_]+\'|'              # echo '$TOKEN'
-    r"printf\s+.*\$[A-Z_]+|"              # printf "%s" "$SECRET"
-    r"env\s*\|\s*grep\s+[A-Z_]+|"         # env | grep TOKEN
-    r"printenv\s+[A-Z_]+|"                # printenv TOKEN
-    r"cat\s+\$[A-Z_]+|"                   # cat $TOKEN (variable as filename)
-    r"grep\s+.*\$[A-Z_]+|"                # grep pattern $SECRET_FILE
-    r"\bprintenv\b|"                      # bare printenv
-    r"\benv\s*$"                          # bare env
+    r"echo\s+.*\$[A-Z_]{2,}|"               # echo ... $VAR any position (incl. token=$VAR)
+    r"printf\s+.*\$[A-Z_]{2,}|"             # printf ... $VAR any position
+    r"\$\{[A-Z_]{2,}\}|"                   # ${TOKEN} bare/quoted
+    r"\$[A-Z_]{3,}\b|"                     # $TOKEN bare (3+ chars to avoid $PWD/$HOME)
+    r"\benv\s*\|\s*grep\s+[A-Z_]+|"        # env | grep TOKEN
+    r"\bprintenv\s+[A-Z_]+|"               # printenv TOKEN
+    r"\bprintenv\b|"                        # bare printenv
+    r"\benv\s*$"                            # bare env
     r")",
 )
 
@@ -137,6 +148,11 @@ def _has_redirection(command: str) -> bool:
 def _has_command_substitution(command: str) -> bool:
     """True if the command contains $(...) or backtick command substitution."""
     return bool(_COMMAND_SUBSTITUTION.search(command))
+
+
+def _has_process_substitution(command: str) -> bool:
+    """True if the command contains <(cmd) or >(cmd) process substitution."""
+    return bool(_PROCESS_SUBSTITUTION.search(command))
 
 
 def _has_mutating_option(command: str, base_cmd: str) -> bool:
@@ -296,6 +312,12 @@ class CommandClassifier:
         r"brew\s+install", r"brew\s+uninstall",
         r"launchctl\s+load", r"launchctl\s+unload",
         r"codesign\b", r"notarytool\b",
+        # Package installation = external code execution → R3
+        r"\bpip\s+install\b", r"\bpipx\s+install\b",
+        r"\bnpm\s+install\b", r"\bpnpm\s+install\b",
+        r"\byarn\s+add\b",
+        r"\bcargo\s+install\b",
+        r"\bscp\b", r"\brsync\s+.*:", r"\bssh\b",
     ]
 
     # ── R2: Reversible write ──
@@ -303,11 +325,10 @@ class CommandClassifier:
         r"git\s+add\b", r"git\s+commit\b", r"git\s+checkout\b",
         r"git\s+switch\b", r"git\s+branch\b", r"git\s+stash\b",
         r"git\s+worktree\b", r"git\s+rebase\b",
-        r"pip\s+install\b", r"npm\s+install\b",
         r"pip\s+uninstall\b", r"npm\s+uninstall\b",
         r"mkdir\b", r"touch\b",
         r"Write\b", r"Edit\b",
-        r"cp\b", r"mv\b",
+        r"(?:^|\s)cp\s", r"(?:^|\s)mv\s",
         r">\s*/", r">>\s*/",
         r"swift\s+build\b", r"xcodebuild\b",
         r"python\s+-m\s+pip\s+install",
@@ -374,6 +395,15 @@ class CommandClassifier:
                 kind=CommandKind.SYSTEM, auto_approvable=False,
                 reversible=False,
                 reason="shell command substitution detected ($(...) or backticks) — fail-closed to R3",
+            )
+
+        # Process substitution (<(cmd) or >(cmd)) — always at least R3
+        if _has_process_substitution(command):
+            return CommandClassification(
+                command=command, risk_level=RiskLevel.R3,
+                kind=CommandKind.SYSTEM, auto_approvable=False,
+                reversible=False,
+                reason="shell process substitution detected (<(...) or >(...)) — fail-closed to R3",
             )
 
         # Secret expansion (echo "$VAR", printf, env|grep TOKEN) — always R4

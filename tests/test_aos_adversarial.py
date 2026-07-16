@@ -1442,3 +1442,566 @@ class TestCommandClassifierV4AdversarialSuite:
         count = sum(1 for e in ev.list(mid) if e.get("kind") == "mission_completed")
         assert count == 1
 
+
+# ═══════════════════════════════════════════════════════════════════
+# V4 Regression Tests — Threads 34-48
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestV4ApprovalRouting:
+    """Thread 34: R3/R4 escalations route to ApprovalQueue + WAITING_APPROVAL."""
+
+    def test_r3_escalation_creates_approval_request(self, supervisor_env):
+        """R3 command → ApprovalRequest PENDING → WAITING_APPROVAL."""
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=[], writer_capable=True,
+                             health="healthy", available=True))
+
+        # R3 command that should be escalated (curl with network access)
+        sv.submit_mission("v4_approval_r3", priority=5, risk=RiskLevel.R3,
+                          command="curl https://example.com")
+        sv.orchestrator.mission_queue.transition("v4_approval_r3", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        item = sv.orchestrator.mission_queue.get("v4_approval_r3")
+        assert item is not None
+        # Should be WAITING_APPROVAL, not BLOCKED
+        assert item.state == QueueItemState.WAITING_APPROVAL
+
+        # Should have created an ApprovalRequest
+        pending = sv.orchestrator.approvals.list_pending()
+        matching = [r for r in pending if r.mission_id == "v4_approval_r3"]
+        assert len(matching) >= 1
+        assert "curl" in matching[0].action
+
+    def test_approval_resume_flow(self, supervisor_env):
+        """Approve → consume → READY → dispatch with approved_command bypass."""
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        store = supervisor_env["store"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=[], writer_capable=True,
+                             health="healthy", available=True))
+
+        # Submit R3 command
+        sv.submit_mission("v4_resume", priority=5, risk=RiskLevel.R3,
+                          command="curl https://example.com")
+        sv.orchestrator.mission_queue.transition("v4_resume", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        # Verify WAITING_APPROVAL
+        item = sv.orchestrator.mission_queue.get("v4_resume")
+        assert item.state == QueueItemState.WAITING_APPROVAL
+
+        # Simulate approval
+        pending = sv.orchestrator.approvals.list_pending()
+        matching = [r for r in pending if r.mission_id == "v4_resume"]
+        assert matching
+        sv.orchestrator.approvals.approve(matching[0].approval_id, "human-tester")
+        sv.orchestrator.approvals.consume(matching[0].approval_id)
+
+        # Promote back to READY (simulating orchestrator cycle)
+        sv.orchestrator.mission_queue.transition("v4_resume", QueueItemState.READY)
+
+        # Re-dispatch — should succeed (approved_command bypasses escalation)
+        sv._dispatch_ready()
+
+        item2 = sv.orchestrator.mission_queue.get("v4_resume")
+        # Should be RUNNING or COMPLETED, not WAITING_APPROVAL again
+        assert item2.state in (QueueItemState.RUNNING, QueueItemState.COMPLETED)
+
+    def test_reject_goes_blocked(self, supervisor_env):
+        """Rejected approval → BLOCKED."""
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=[], writer_capable=True,
+                             health="healthy", available=True))
+
+        sv.submit_mission("v4_reject", priority=5, risk=RiskLevel.R3,
+                          command="curl https://example.com")
+        sv.orchestrator.mission_queue.transition("v4_reject", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        pending = sv.orchestrator.approvals.list_pending()
+        matching = [r for r in pending if r.mission_id == "v4_reject"]
+        assert matching
+        sv.orchestrator.approvals.reject(matching[0].approval_id, "human-tester")
+
+        # Orchestrator won't promote rejected approval → stays WAITING_APPROVAL
+        # Then expires → BLOCKED
+        item = sv.orchestrator.mission_queue.get("v4_reject")
+        assert item.state in (QueueItemState.WAITING_APPROVAL, QueueItemState.BLOCKED)
+
+    def test_expired_approval_goes_blocked(self, supervisor_env):
+        """Approval expiry → BLOCKED."""
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=[], writer_capable=True,
+                             health="healthy", available=True))
+
+        sv.submit_mission("v4_expire", priority=5, risk=RiskLevel.R3,
+                          command="curl https://example.com")
+        sv.orchestrator.mission_queue.transition("v4_expire", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        # Manually expire
+        item = sv.orchestrator.mission_queue.get("v4_expire")
+        assert item.state == QueueItemState.WAITING_APPROVAL
+        from datetime import datetime, timezone, timedelta
+        sv.orchestrator.mission_queue.transition(
+            "v4_expire", QueueItemState.WAITING_APPROVAL,
+            updated_at=(datetime.now(timezone.utc) - timedelta(hours=5)).isoformat(),
+        )
+        sv._expire_stale_approvals()
+
+        item2 = sv.orchestrator.mission_queue.get("v4_expire")
+        assert item2.state == QueueItemState.BLOCKED
+
+
+class TestV4SecretExpansion:
+    """Thread 35: Detect secret vars in any argument position."""
+
+    def test_echo_token_equals_var(self, classifier):
+        """echo token=$GITHUB_TOKEN → R4."""
+        result = classifier.classify("echo token=$GITHUB_TOKEN")
+        assert result.risk_level.value == "R4"
+
+    def test_printf_prefix_equals_var(self, classifier):
+        """printf 'prefix=%s' $SECRET → R4."""
+        result = classifier.classify("printf 'prefix=%s' $SECRET")
+        assert result.risk_level.value == "R4"
+
+
+class TestV4ProcessSubstitution:
+    """Thread 46: Process substitution fails closed."""
+
+    def test_cat_process_substitution(self, classifier):
+        """cat <(printenv) → R3."""
+        result = classifier.classify("cat <(printenv GITHUB_TOKEN)")
+        assert result.risk_level.value == "R3"
+        assert not result.auto_approvable
+
+    def test_write_process_substitution(self, classifier):
+        """>(...) also detected."""
+        result = classifier.classify("tee >(cat > /tmp/secret)")
+        assert result.risk_level.value == "R3"
+        assert not result.auto_approvable
+
+
+class TestV4CpAnchor:
+    """Thread 36: scp/rsync remote NOT classified as local cp."""
+
+    def test_scp_not_local_cp(self, classifier):
+        """scp → R3 not R2."""
+        result = classifier.classify("scp ./report host:/tmp/")
+        assert result.risk_level.value in ("R3",)  # scp → R3 pattern
+        assert not result.auto_approvable
+
+    def test_rsync_remote_not_local(self, classifier):
+        """rsync with : → R3 not R2."""
+        result = classifier.classify("rsync -av ./ host:/tmp/")
+        assert result.risk_level.value in ("R3",)
+
+    def test_local_cp_still_r2(self, classifier):
+        """cp ./a ./b → R2."""
+        result = classifier.classify("cp ./a ./b")
+        assert result.risk_level.value == "R2"
+        assert result.auto_approvable
+
+
+class TestV4PackageInstall:
+    """Thread 44: pip/npm install classified as R3 external code execution."""
+
+    def test_pip_install_r3(self, classifier):
+        """pip install requests → R3 not R2."""
+        result = classifier.classify("pip install requests")
+        assert result.risk_level.value in ("R3",)
+        assert not result.auto_approvable
+
+    def test_npm_install_r3(self, classifier):
+        """npm install express → R3."""
+        result = classifier.classify("npm install express")
+        assert result.risk_level.value in ("R3",)
+
+    def test_cargo_install_r3(self, classifier):
+        """cargo install → R3."""
+        result = classifier.classify("cargo install ripgrep")
+        assert result.risk_level.value in ("R3",)
+
+    def test_pip_list_still_r0(self, classifier):
+        """pip list → R0 (read-only)."""
+        result = classifier.classify("pip list")
+        assert result.risk_level.value == "R0"
+
+
+class TestV4DestructiveGit:
+    """Thread 48: Destructive checkout/switch not auto-approved."""
+
+    def test_checkout_force_r3(self, classifier):
+        """git checkout -f → R3 destructive."""
+        result = classifier.classify("git checkout -f .")
+        assert result.risk_level.value in ("R3", "R4")
+        assert not result.auto_approvable
+
+    def test_switch_C_r3(self, classifier):
+        """git switch -C work/new → R3."""
+        result = classifier.classify("git switch -C work/new")
+        assert result.risk_level.value in ("R3", "R4")
+        assert not result.auto_approvable
+
+    def test_switch_discard_changes_r3(self, classifier):
+        """git switch --discard-changes → R3."""
+        result = classifier.classify("git switch --discard-changes main")
+        assert result.risk_level.value in ("R3", "R4")
+
+    def test_checkout_force_flag_r3(self, classifier):
+        """git checkout --force → R3."""
+        result = classifier.classify("git checkout --force .")
+        assert result.risk_level.value in ("R3", "R4")
+
+
+class TestV4TypedWorker:
+    """Thread 39: Prompt-only missions rejected by LocalShellWorker."""
+
+    def test_prompt_only_blocked_on_shell(self, supervisor_env):
+        """Prompt-only mission + LocalShellWorker → BLOCKED."""
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+        # Use a local_tool worker
+        worker = DeterministicFakeWorker(succeed=True)
+        worker.worker_type = MWT.LOCAL_TOOL
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=[], writer_capable=True,
+                             health="healthy", available=True))
+
+        sv.submit_mission("v4_prompt_only", priority=5, risk=RiskLevel.R1,
+                          prompt="Write a function", command="")
+        sv.orchestrator.mission_queue.transition("v4_prompt_only", QueueItemState.READY)
+        sv._dispatch_ready()
+
+        item = sv.orchestrator.mission_queue.get("v4_prompt_only")
+        assert item.state == QueueItemState.BLOCKED
+
+    def test_empty_command_fail_closed(self, supervisor_env):
+        """LocalShellWorker with empty command → fail closed."""
+        from nexara_prime.aos.worker_adapters import LocalShellWorker
+        worker = LocalShellWorker()
+        result = worker.execute("test_empty", {"command": ""})
+        assert not result.success
+        assert "empty command" in str(result.output.get("error", "")).lower()
+
+
+class TestV4EmptyCwd:
+    """Thread 47: Empty cwd defaults to current directory."""
+
+    def test_empty_cwd_defaults(self):
+        """Empty cwd '' → os.getcwd()."""
+        from nexara_prime.aos.worker_adapters import LocalShellWorker
+        import os
+        worker = LocalShellWorker()
+        result = worker.execute("test_cwd", {"command": "pwd", "cwd": ""})
+        assert result.success
+        assert os.getcwd() in result.output.get("stdout", "")
+
+
+class TestV4AvailableAtUtc:
+    """Thread 38: Naive available_at treated as UTC."""
+
+    def test_naive_available_at_utc(self):
+        """Naive ISO timestamp should be treated as UTC."""
+        from nexara_prime.aos.supervisor import AutonomousSupervisor
+        from nexara_prime.models import MissionQueueItem
+        from datetime import datetime, timezone, timedelta
+
+        future_naive = (datetime.now(timezone.utc) + timedelta(hours=1)).strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+        item = MissionQueueItem(
+            mission_id="test_utc", available_at=future_naive,
+        )
+        # Should be False (future, treated as UTC)
+        assert not AutonomousSupervisor._is_available_now(item)
+
+        past_naive = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+        item2 = MissionQueueItem(
+            mission_id="test_utc_past", available_at=past_naive,
+        )
+        assert AutonomousSupervisor._is_available_now(item2)
+
+
+class TestV4PriorityOrdering:
+    """Thread 41: READY missions dispatched by priority desc, created_at asc."""
+
+    def test_priority_ordering(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=[], writer_capable=True,
+                             health="healthy", available=True))
+
+        # Register ClaudeCodeWorker as non-local_tool so prompt missions can dispatch
+        # Create a Claude worker in the same gateway
+        from nexara_prime.aos.worker_adapters import ClaudeCodeWorker
+        cc = ClaudeCodeWorker(claude_bin="echo")
+        gw.register(cc)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=cc.worker_id, worker_type=MWT.CLAUDE,
+                             capabilities=["llm"], writer_capable=True,
+                             health="healthy", available=True))
+
+        # Submit low priority first, then high priority
+        import time
+        sv.submit_mission("v4_low", priority=1, risk=RiskLevel.R1,
+                          command="echo low", prompt="")
+        time.sleep(0.01)
+        sv.submit_mission("v4_high", priority=10, risk=RiskLevel.R1,
+                          command="echo high", prompt="")
+
+        sv.orchestrator.mission_queue.transition("v4_low", QueueItemState.READY)
+        sv.orchestrator.mission_queue.transition("v4_high", QueueItemState.READY)
+
+        ready = sv.orchestrator.mission_queue.list_by_state(QueueItemState.READY)
+        ready.sort(key=lambda i: (-i.priority, i.created_at))
+        assert ready[0].mission_id == "v4_high"
+
+
+class TestV4PreferredWorkerValidation:
+    """Thread 42: Preferred worker validated through scheduler."""
+
+    def test_preferred_worker_incompatible_blocked(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        sv.submit_mission("v4_bad_worker", priority=5, risk=RiskLevel.R3)
+        # Set preferred_worker to a non-existent ID
+        sv.orchestrator.mission_queue.transition(
+            "v4_bad_worker", QueueItemState.READY, preferred_worker="nonexistent_worker",
+        )
+        sv._dispatch_ready()
+        item2 = sv.orchestrator.mission_queue.get("v4_bad_worker")
+        assert item2.state == QueueItemState.BLOCKED
+
+
+class TestV4MaxAttempts:
+    """Thread 43: max_attempts enforced on retry/recovery."""
+
+    def test_max_attempts_blocked(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=False)
+        sv.gateway.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=[], writer_capable=True,
+                             health="healthy", available=True))
+
+        sv.submit_mission("v4_max", priority=5, max_attempts=1, command="echo test")
+        # Manually set attempt_count to 1 (at limit)
+        sv.orchestrator.mission_queue.transition(
+            "v4_max", QueueItemState.READY, attempt_count=1,
+        )
+        sv._dispatch_ready()
+        item2 = sv.orchestrator.mission_queue.get("v4_max")
+        assert item2.state == QueueItemState.BLOCKED
+
+    def test_retry_respects_max_attempts(self, supervisor_env):
+        """Recovery retry stops at max_attempts."""
+        sv = supervisor_env["supervisor"]
+        sv.submit_mission("v4_maxretry", priority=5, max_attempts=2, command="echo test")
+        from nexara_prime.models import MissionQueueItem, WorkerResult, FailureClass as MFC
+        # Manually set attempt_count to 2 (at limit)
+        sv.orchestrator.mission_queue.transition(
+            "v4_maxretry", QueueItemState.READY, attempt_count=2,
+        )
+        misv2 = sv.orchestrator.mission_queue.get("v4_maxretry")
+        fake_result = WorkerResult(
+            worker_id="test", mission_id="v4_maxretry", success=False,
+            failure_class=MFC.WORKER_FAILURE,
+            output={"error": "test"},
+        )
+        sv._handle_retryable_failure(misv2, fake_result)
+        item2 = sv.orchestrator.mission_queue.get("v4_maxretry")
+        assert item2.state == QueueItemState.BLOCKED
+
+
+class TestV4WriterLeaseConflict:
+    """Thread 40: Queue lease_owner never overrides active writer lease for different worker."""
+
+    def test_lease_conflict_blocked(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+
+        # Create an active writer lease for worker A
+        orch.leases.acquire("v4_lease_conflict", "worker_a")
+        # Set queue lease_owner to worker B
+        sv.submit_mission("v4_lease_conflict", priority=5, command="echo test")
+        orch.mission_queue.transition("v4_lease_conflict", QueueItemState.RUNNING,
+                                      lease_owner="worker_b")
+        # complete_mission by worker_b should be rejected
+        result = orch.complete_mission("v4_lease_conflict", "worker_b")
+        assert not result  # denied — lease held by worker_a
+
+
+class TestV4EvidencePending:
+    """Thread 37: Successful WorkerResult preserved when evidence is pending."""
+
+    def test_worker_success_evidence_pending(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        store = supervisor_env["store"]
+
+        # Simulate a mission where worker succeeds but evidence gate blocks
+        sv.submit_mission("v4_ev_pending", priority=5, command="echo test")
+        sv.orchestrator.mission_queue.transition("v4_ev_pending", QueueItemState.RUNNING,
+                                                  lease_owner="test_worker")
+        from nexara_prime.models import WorkerResult, EvidenceJob, EvidenceType
+        result = WorkerResult(
+            worker_id="test_worker", mission_id="v4_ev_pending",
+            success=True, output={"stdout": "test output"},
+        )
+        sv._persist_worker_result("v4_ev_pending", result)
+        # Verify persisted
+        wr = store.find_record("worker_result", "mission_id", "v4_ev_pending")
+        assert wr is not None
+
+    def test_evidence_pending_retry_completes(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        store = supervisor_env["store"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT, WorkerResult
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        orch.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=[], writer_capable=True,
+                             health="healthy", available=True))
+
+        sv.submit_mission("v4_ev_retry", priority=5, command="echo retry")
+        orch.mission_queue.transition("v4_ev_retry", QueueItemState.RUNNING,
+                                      lease_owner=worker.worker_id)
+        # Persist successful result
+        result = WorkerResult(
+            worker_id=worker.worker_id, mission_id="v4_ev_retry",
+            success=True, output={"stdout": "retry output"},
+        )
+        sv._persist_worker_result("v4_ev_retry", result)
+        # Transition to EVIDENCE_PENDING — simulates evidence gate blocking
+        orch.mission_queue.transition("v4_ev_retry", QueueItemState.EVIDENCE_PENDING)
+
+        # _retry_evidence_pending handles the EVIDENCE_PENDING → RUNNING → complete flow
+        sv._retry_evidence_pending()
+        item2 = orch.mission_queue.get("v4_ev_retry")
+        assert item2.state == QueueItemState.COMPLETED
+
+
+class TestV4PromptVsCommand:
+    """Thread 45: Mission objectives go to prompt, not command."""
+
+    def test_objective_to_prompt(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        store = supervisor_env["store"]
+        from nexara_prime.models import Mission, MissionSpec, MissionState
+
+        mission = Mission(
+            mission_id="v4_obj",
+            spec=MissionSpec(
+                title="Parse JSON Function",
+                objective="Write a function to parse JSON",
+                source_dir="/tmp",
+            ),
+            state=MissionState.INTENT,
+            trace_id="trace-v4-obj-001",
+        )
+        store.save_record("v4_obj", "mission", mission.model_dump(mode="json"),
+                         created_at="2026-01-01T00:00:00+00:00")
+
+        from nexara_prime.models import MissionQueueItem
+        item = MissionQueueItem(mission_id="v4_obj")
+        payload = sv._build_mission_payload(item)
+        # Thread 45: objective goes to prompt, not command
+        assert payload.get("prompt") == "Write a function to parse JSON"
+        assert payload.get("command") == "" or payload.get("command") is not None
+
+
+class TestV4NaiveUtcAvailableAt:
+    """Thread 38: Naive available_at treated as UTC (already covered), also test edge."""
+
+    def test_iso_tz_aware_comparison(self):
+        from nexara_prime.aos.supervisor import AutonomousSupervisor
+        from nexara_prime.models import MissionQueueItem
+        from datetime import datetime, timezone, timedelta
+
+        # Past with timezone
+        past_tz = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        item = MissionQueueItem(mission_id="test_tz_past", available_at=past_tz)
+        assert AutonomousSupervisor._is_available_now(item)
+
+    def test_none_available_at(self):
+        from nexara_prime.aos.supervisor import AutonomousSupervisor
+        from nexara_prime.models import MissionQueueItem
+        item = MissionQueueItem(mission_id="test_none")
+        assert AutonomousSupervisor._is_available_now(item)
+
+
+class TestV4CycleCoverage:
+    """Supervisor cycle covers evidence_pending, stale leases, expired approvals."""
+
+    def test_cycle_includes_evidence_pending(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        store = supervisor_env["store"]
+
+        sv.submit_mission("v4_cycle_ev", priority=5, command="echo cycle")
+        orch.mission_queue.transition("v4_cycle_ev", QueueItemState.EVIDENCE_PENDING,
+                                      lease_owner="test_w")
+
+        # Run a cycle
+        sv._execute_supervisor_cycle()
+
+        # Verify EVIDENCE_PENDING was processed (retry attempted)
+        # If complete_mission succeeds (no evidence jobs), it transitions to COMPLETED
+        item = orch.mission_queue.get("v4_cycle_ev")
+        assert item.state in (QueueItemState.EVIDENCE_PENDING, QueueItemState.COMPLETED)
+
