@@ -243,7 +243,21 @@ class ExecutionGateway:
                         },
                     )
 
-        result = adapter.execute(mission_id, input_data)
+        # Thread 6 (Codex V8): Catch adapter exceptions and convert to
+        # structured WORKER_FAILURE.  Exceptions must never escape dispatch()
+        # — they must route into Recovery instead.
+        try:
+            result = adapter.execute(mission_id, input_data)
+        except Exception as exc:
+            result = WorkerResult(
+                worker_id=worker_id, mission_id=mission_id, success=False,
+                failure_class=FailureClass.WORKER_FAILURE,
+                output={
+                    "error": f"worker adapter exception: {type(exc).__name__}: {exc}",
+                    "exception_type": type(exc).__name__,
+                    "exception_message": str(exc),
+                },
+            )
         self._results.append(result)
         return result
 

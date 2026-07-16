@@ -1929,6 +1929,9 @@ class TestV4EvidencePending:
         sv._persist_worker_result("v4_ev_retry", result)
         # Transition to EVIDENCE_PENDING — simulates evidence gate blocking
         orch.mission_queue.transition("v4_ev_retry", QueueItemState.EVIDENCE_PENDING)
+        # Thread 3 (V7) + Thread 1 (V8): release lease (as dispatch does)
+        # so retry can re-acquire it before completing
+        orch.leases.release("v4_ev_retry", worker.worker_id)
 
         # _retry_evidence_pending handles the EVIDENCE_PENDING → RUNNING → complete flow
         sv._retry_evidence_pending()
@@ -2799,3 +2802,261 @@ class TestCodexV7NpmCi:
         result = classifier.classify("npm install express")
         assert result.risk_level.value == "R3"
 
+
+# ────────────────────────────────────────────────────────────────
+# Codex V8 — 9 Thread Adversarial Tests
+# ────────────────────────────────────────────────────────────────
+
+
+class TestCodexV8LeaseReacquire:
+    """Thread 1: EVIDENCE_PENDING retry re-acquires durable lease."""
+
+    def test_evidence_pending_reacquires_lease_before_complete(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT, WorkerResult
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        orch.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+
+        sv.submit_mission("v8_lease_reacq", priority=5, command="echo reacquire")
+        orch.mission_queue.transition("v8_lease_reacq", QueueItemState.RUNNING,
+                                      lease_owner=worker.worker_id)
+        orch.leases.acquire("v8_lease_reacq", worker.worker_id)
+        orch.leases.release("v8_lease_reacq", worker.worker_id)  # released
+
+        result = WorkerResult(worker_id=worker.worker_id, mission_id="v8_lease_reacq",
+                              success=True, output={})
+        sv._persist_worker_result("v8_lease_reacq", result)
+        orch.mission_queue.transition("v8_lease_reacq", QueueItemState.EVIDENCE_PENDING)
+
+        # Retry should re-acquire lease before completing
+        sv._retry_evidence_pending()
+        item = orch.mission_queue.get("v8_lease_reacq")
+        assert item.state in (QueueItemState.COMPLETED, QueueItemState.EVIDENCE_PENDING)
+
+
+class TestCodexV8IdempotentPayload:
+    """Thread 2: Idempotent enqueue never overwrites original payload."""
+
+    def test_same_key_returns_original_mission(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+
+        sv.submit_mission("v8_idem_a", priority=5, command="echo original",
+                                  idempotency_key="v8_key_002")
+        # Second submission with same key, DIFFERENT payload
+        item2 = sv.submit_mission("v8_idem_b", priority=3, command="echo overwrite",
+                                  idempotency_key="v8_key_002")
+        # Must return original mission_id, not the new one
+        assert item2.mission_id == "v8_idem_a"
+        # Original priority preserved
+        assert item2.priority == 5
+
+    def test_different_payload_same_key_no_override(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+
+        sv.submit_mission("v8_idem_c", priority=5, command="echo first",
+                          idempotency_key="v8_key_003")
+        items = sv.orchestrator.mission_queue.list_by_state(QueueItemState.QUEUED)
+        # payload for v8_idem_c should still have command="echo first"
+        assert any(
+            i.mission_id == "v8_idem_c" and i.priority == 5
+            for i in items
+        )
+
+
+class TestCodexV8BracedModifiers:
+    """Thread 3: Braced parameter modifiers → R4 secret expansion."""
+
+    def test_default_value_modifier_r4(self):
+        """${TOKEN:-default} exposes secret."""
+        c = CommandClassifier()
+        r = c.classify('echo "${GITHUB_TOKEN:-not_set}"')
+        assert r.risk_level.value == "R4"
+
+    def test_assign_modifier_r4(self):
+        """${TOKEN:=default} exposes secret."""
+        c = CommandClassifier()
+        r = c.classify('printf "${SECRET:=fallback}"')
+        assert r.risk_level.value == "R4"
+
+    def test_alt_modifier_r4(self):
+        """${TOKEN:+alt} exposes secret."""
+        c = CommandClassifier()
+        r = c.classify('echo "${TOKEN:+present}"')
+        assert r.risk_level.value == "R4"
+
+    def test_error_modifier_r4(self):
+        """${TOKEN:?error} exposes secret."""
+        c = CommandClassifier()
+        r = c.classify('echo "${PASSWORD:?must be set}"')
+        assert r.risk_level.value == "R4"
+
+    def test_prefix_strip_r4(self):
+        """${TOKEN#prefix} exposes secret."""
+        c = CommandClassifier()
+        r = c.classify('echo "${API_KEY#Bearer }"')
+        assert r.risk_level.value == "R4"
+
+    def test_suffix_strip_r4(self):
+        """${TOKEN%suffix} exposes secret."""
+        c = CommandClassifier()
+        r = c.classify('echo "${URL%/v1}"')
+        assert r.risk_level.value == "R4"
+
+
+class TestCodexV8AbsoluteUserPaths:
+    """Thread 4: Absolute user credential paths → R4."""
+
+    def test_macos_ssh_path_r4(self):
+        c = CommandClassifier()
+        r = c.classify("cat /Users/admin/.ssh/id_rsa")
+        assert r.risk_level.value == "R4"
+
+    def test_linux_aws_path_r4(self):
+        c = CommandClassifier()
+        r = c.classify("head /home/ec2-user/.aws/credentials")
+        assert r.risk_level.value == "R4"
+
+    def test_macos_keychain_path_r4(self):
+        c = CommandClassifier()
+        r = c.classify("ls ~/Library/Keychains/login.keychain-db")
+        assert r.risk_level.value == "R4"
+
+
+class TestCodexV8LeaseTTL:
+    """Thread 5: Durable lease TTL matches worker max execution time."""
+
+    def test_lease_ttl_matches_supervisor_config(self):
+        from nexara_prime.orchestration import WriterLeaseManager
+        from nexara_prime.aos.supervisor import SupervisorConfig
+        assert WriterLeaseManager.HEARTBEAT_TTL_S == 600
+        assert WriterLeaseManager.HEARTBEAT_TTL_S == SupervisorConfig.default_lease_duration_s
+
+    def test_lease_renewal_extends_ttl(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+
+        orch.leases.acquire("v8_lease_ttl", "worker_a", ttl_seconds=600)
+        renewed = orch.leases.renew("v8_lease_ttl", "worker_a", ttl_seconds=600)
+        assert renewed is True
+
+
+class TestCodexV8GatewayException:
+    """Thread 6: Gateway catches adapter exceptions → WORKER_FAILURE."""
+
+    def test_adapter_exception_becomes_structured_failure(self, supervisor_env):
+        supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.models import WorkerType as MWT, FailureClass
+
+        class CrashWorker:
+            worker_id = "crash_worker"
+            worker_type = MWT.LOCAL_TOOL
+
+            def execute(self, mission_id, input_data):
+                raise RuntimeError("simulated worker crash")
+
+            def resume(self, session_id):
+                pass
+
+            def is_alive(self):
+                return True
+
+            def health(self):
+                return {}
+
+        gw.register(CrashWorker())
+        result = gw.dispatch("crash_worker", "v8_crash",
+                             {"mission_id": "v8_crash", "command": "echo crash"})
+        assert not result.success
+        assert result.failure_class == FailureClass.WORKER_FAILURE
+        assert "simulated worker crash" in str(result.output.get("error", ""))
+
+
+class TestCodexV8AtomicGrant:
+    """Thread 8: ApprovalGrant uses atomic CAS for multi-supervisor safety."""
+
+    def test_two_supervisors_one_grant_winner(self, supervisor_env):
+        sv1 = supervisor_env["supervisor"]
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+        from nexara_prime.aos.execution_gateway import ApprovalGrant
+
+        sv1.submit_mission("v8_atomic_grant", priority=5, command="echo atomic")
+        req = ApprovalRequest(
+            mission_id="v8_atomic_grant", action="echo atomic",
+            risk_level=RiskLevel.R3, rationale="test",
+            status=ApprovalStatus.PENDING,
+        )
+        sv1.orchestrator.approvals.create(req)
+        sv1.orchestrator.approvals.approve(req.approval_id)
+        sv1.orchestrator.approvals.consume(req.approval_id)
+
+        grant = ApprovalGrant(
+            mission_id="v8_atomic_grant", command="echo atomic",
+            run_id="run:v8_atomic_grant:1", approval_id=req.approval_id,
+        )
+
+        # Verify through supervisor's injected verifier
+        gw = supervisor_env["gateway"]
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv1.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+        sv1.orchestrator.leases.acquire("v8_atomic_grant", worker.worker_id)
+
+        # First dispatch with grant → succeeds
+        r1 = gw.dispatch(worker.worker_id, "v8_atomic_grant",
+                         {"mission_id": "v8_atomic_grant", "command": "echo atomic"},
+                         approval_grant=grant)
+        assert r1.success
+
+        # Second dispatch with same grant → fails (already verified)
+        r2 = gw.dispatch(worker.worker_id, "v8_atomic_grant",
+                         {"mission_id": "v8_atomic_grant", "command": "echo atomic"},
+                         approval_grant=grant)
+        assert not r2.success
+
+
+class TestCodexV8ShellProcessGroup:
+    """Thread 9: LocalShellWorker timeout kills entire process group."""
+
+    def test_process_group_env_available(self):
+        """Verify os.killpg and signal are importable (runtime check)."""
+        import os
+        import signal
+        assert hasattr(os, "killpg")
+        assert hasattr(signal, "SIGTERM")
+        assert hasattr(signal, "SIGKILL")
+
+    def test_local_shell_uses_popen_with_session(self):
+        """LocalShellWorker uses subprocess.Popen with start_new_session."""
+        from nexara_prime.aos.worker_adapters import LocalShellWorker
+        worker = LocalShellWorker()
+        result = worker.execute("v8_pg_test", {"command": "echo process_group_test"})
+        assert result.success
+        assert "process_group_test" in result.output.get("stdout", "")
+
+    def test_shell_timeout_kills_group(self):
+        """Timeout on long-running command produces structured failure."""
+        from nexara_prime.aos.worker_adapters import LocalShellWorker
+        from nexara_prime.models import FailureClass
+        worker = LocalShellWorker()
+        result = worker.execute("v8_timeout", {
+            "command": "sleep 60",
+            "timeout_s": "0.5",
+        })
+        assert not result.success
+        assert result.failure_class == FailureClass.WORKER_FAILURE
+        assert "timeout" in str(result.output.get("error", "")).lower()

@@ -109,6 +109,11 @@ _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
     r"~/.ssh/|"
     r"~/.aws/|"
     r"~/.config/[^/\s]*credentials|"
+    # Absolute paths to user credential directories (macOS + Linux)
+    r"/home/[^/\s]+/\.ssh/|"
+    r"/home/[^/\s]+/\.aws/|"
+    r"/Users/[^/\s]+/\.ssh/|"
+    r"/Users/[^/\s]+/\.aws/|"
     r"/\.env\b|"
     r"\.env\b|"
     r"\.pem\b|"
@@ -121,6 +126,9 @@ _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
     r"\.git-credentials\b|"
     r"Keychain\b|"
     r"keychain\b|"
+    # macOS Keychain paths
+    r"/Users/[^/\s]+/Library/Keychains/|"
+    r"~/Library/Keychains/|"
     # /proc/*/environ — reading process environment exposes secrets
     r"/proc/self/environ\b|"
     r"/proc/\d+/environ\b|"
@@ -138,6 +146,13 @@ _SECRET_EXPANSION: re.Pattern[str] = re.compile(
     r"(?:"
     r"echo\s+.*\$[A-Za-z_][A-Za-z0-9_]*|"  # echo ... $VAR any position
     r"printf\s+.*\$[A-Za-z_][A-Za-z0-9_]*|" # printf ... $VAR any position
+    # Braced variable with parameter modifiers — all expose secret values
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*:-[^}]*\}|" # ${TOKEN:-default}
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*:=[^}]*\}|" # ${TOKEN:=default}
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*:\+[^}]*\}|" # ${TOKEN:+alt}
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*:\?[^}]*\}|" # ${TOKEN:?error}
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*#[^}]*\}|"   # ${TOKEN#prefix}
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*%[^}]*\}|"   # ${TOKEN%suffix}
     r"\$\{[A-Za-z_][A-Za-z0-9_]*\}|"        # ${TOKEN1} ${AWS_KEY_2}
     r"\$[A-Z_][A-Z0-9_]{2,}\b|"             # $TOKEN bare (3+ chars)
     r"\benv\s*\|\s*grep\s+[A-Z_]+|"         # env | grep TOKEN
