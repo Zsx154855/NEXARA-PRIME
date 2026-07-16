@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import time
 from dataclasses import dataclass
@@ -123,33 +124,62 @@ class LocalShellWorker:
                 duration_ms=0,
             )
 
+        # Thread 9 (Codex V8): Use process group to ensure complete cleanup
+        # on timeout.  start_new_session=True puts the process in its own
+        # session with PGID == PID.  On timeout we kill the entire group
+        # with os.killpg() so children and grandchildren cannot escape.
+        proc = None
         try:
-            result = subprocess.run(
-                command, shell=True, capture_output=True, text=True,
-                timeout=timeout_s, cwd=str(cwd),
+            proc = subprocess.Popen(
+                command, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, cwd=str(cwd),
+                start_new_session=True,  # own process group
             )
+            stdout, stderr = proc.communicate(timeout=timeout_s)
             duration_ms = int((time.time() - started) * 1000)
-            success = result.returncode == 0
-            failure = _classify_failure(
-                result.returncode, result.stderr, result.stdout,
-            )
+            exit_code = proc.returncode
+            success = exit_code == 0
+            failure = _classify_failure(exit_code, stderr, stdout)
 
             return WorkerResult(
                 worker_id=self.worker_id, mission_id=mission_id,
                 success=success,
                 failure_class=failure,
                 output={
-                    "stdout": result.stdout[-5000:],
-                    "stderr": result.stderr[-2000:],
-                    "exit_code": result.returncode,
+                    "stdout": (stdout or "")[-5000:],
+                    "stderr": (stderr or "")[-2000:],
+                    "exit_code": exit_code,
                 },
                 duration_ms=duration_ms,
             )
-        except subprocess.TimeoutExpired as e:
+        except subprocess.TimeoutExpired:
+            # Kill the entire process group — children and grandchildren
+            # cannot survive the timeout.
+            if proc is not None:
+                try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGTERM)
+                    # Brief grace period then SIGKILL
+                    try:
+                        proc.wait(timeout=3.0)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(pgid, signal.SIGKILL)
+                        proc.wait(timeout=2.0)
+                except (OSError, ProcessLookupError):
+                    pass  # Process already gone
+            # Collect any remaining output
+            try:
+                out, err = proc.communicate(timeout=2.0) if proc else ("", "")
+            except Exception:
+                out, _err = "", ""
             return WorkerResult(
                 worker_id=self.worker_id, mission_id=mission_id,
                 success=False, failure_class=FailureClass.WORKER_FAILURE,
-                output={"error": f"timeout after {timeout_s}s", "stdout": e.stdout or ""},
+                output={
+                    "error": f"timeout after {timeout_s}s — process group killed",
+                    "stdout": (out or "")[-2000:] if out else "",
+                },
                 duration_ms=int(timeout_s * 1000),
             )
 

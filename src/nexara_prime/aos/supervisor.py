@@ -109,6 +109,11 @@ class AutonomousSupervisor:
         # validate grants against the durable ApprovalQueue before bypassing
         # PermissionBroker.  Fake grants, replayed grants, and grants with
         # mismatched commands all fail closed.
+        #
+        # Thread 8 (Codex V8): The grant_verified flag is set via atomic
+        # compare-and-set on the underlying SQLiteStore record, so two
+        # concurrent Supervisors racing to verify the same grant see exactly
+        # one winner.  No read-modify-write gap.
         def _verify_approval_grant(grant: Any) -> bool:
             """Verify that an ApprovalGrant corresponds to a consumed approval."""
             for raw in self._store.list_records("approval_requests"):
@@ -122,13 +127,24 @@ class AutonomousSupervisor:
                     return False
                 if p.get("action", "") != grant.command:
                     return False
-                # Grant is valid — prevent second use by marking verified
-                if p.get("grant_verified"):
-                    return False  # already verified/used
-                p["grant_verified"] = True
-                p["grant_verified_at"] = _utc_now()
+                # Already verified by another Supervisor — single-use only
+                if p.get("grant_verified") is True:
+                    return False
+                # Atomic CAS: only one Supervisor wins the grant_verified flag.
+                # Uses SQLiteStore.compare_and_set_record_field which executes
+                # a single UPDATE ... WHERE integrity match inside a write lock.
+                result = self._store.compare_and_set_record_field(
+                    record_id=grant.approval_id,
+                    record_type="approval_requests",
+                    field="grant_verified",
+                    expected_value=None,      # field not yet set
+                    new_value=True,           # atomically claim
+                )
+                if result is None:
+                    return False  # Another Supervisor claimed first
+                # Mark timestamp for audit trail
                 self._store.save_record(
-                    grant.approval_id, "approval_requests", p,
+                    grant.approval_id, "approval_requests", result,
                     created_at=p.get("created_at", _utc_now()),
                     mission_id=grant.mission_id,
                 )
@@ -712,7 +728,18 @@ class AutonomousSupervisor:
                              "next_action", "created_at"}
                 filtered = {k: v for k, v in p.items() if k in wr_fields}
                 worker_result = WR(**filtered)
-                item.state = QueueItemState.RUNNING
+                worker_id = worker_result.worker_id
+
+                # Thread 1 (Codex V8): Re-acquire durable Writer Lease
+                # before retrying completion.  Without an active lease,
+                # complete_mission rejects the attempt.  If re-acquire
+                # fails, stay in EVIDENCE_PENDING and retry next cycle.
+                if not self.orchestrator.leases.acquire(
+                    item.mission_id, worker_id,
+                    ttl_seconds=int(self.config.default_lease_duration_s),
+                ):
+                    continue  # lease conflict — retry next cycle
+
                 self.orchestrator.mission_queue.transition(
                     item.mission_id, QueueItemState.RUNNING,
                 )
@@ -725,7 +752,8 @@ class AutonomousSupervisor:
                         "from_evidence_pending": True,
                     })
                 else:
-                    # Still pending — move back
+                    # Still pending — release lease and move back
+                    self.orchestrator.leases.release(item.mission_id, worker_id)
                     self.orchestrator.mission_queue.transition(
                         item.mission_id, QueueItemState.EVIDENCE_PENDING,
                     )

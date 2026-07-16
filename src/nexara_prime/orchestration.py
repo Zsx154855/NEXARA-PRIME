@@ -144,12 +144,21 @@ class MissionQueue:
         self._lock = threading.Lock()
 
     def enqueue(self, item: MissionQueueItem) -> MissionQueueItem:
+        """Enqueue a mission, respecting idempotency.
+
+        Thread 2 (Codex V8): When an idempotency_key matches an existing
+        active mission, return the ORIGINAL item without overwriting its
+        payload.  The original mission_id, priority, and state are preserved.
+        A different payload (command/prompt) with the same key does NOT
+        override — the first write wins.
+        """
         if item.idempotency_key:
             all_records = self._store.list_records("mission_queue")
             terminal = {QueueItemState.COMPLETED.value, QueueItemState.CANCELLED.value}
             for raw in all_records:
                 p = raw.get("payload", raw)
                 if p.get("idempotency_key") == item.idempotency_key and p.get("state") not in terminal:
+                    # Return original — never overwrite payload
                     return MissionQueueItem(**p)
         payload = item.model_dump(mode="json")
         _sr(self._store, item.mission_id, "mission_queue", payload)
@@ -381,7 +390,9 @@ class WorkerScheduler:
 
 
 class WriterLeaseManager:
-    HEARTBEAT_TTL_S = 120
+    # Thread 5 (Codex V8): Match supervisor default_lease_duration_s (600s)
+    # so the durable lease TTL covers the full worker execution window.
+    HEARTBEAT_TTL_S = 600
 
     def __init__(self, store: SQLiteStore, events: EventBus) -> None:
         self._store = store
