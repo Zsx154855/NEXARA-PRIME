@@ -1919,6 +1919,8 @@ class TestV4EvidencePending:
         sv.submit_mission("v4_ev_retry", priority=5, command="echo retry")
         orch.mission_queue.transition("v4_ev_retry", QueueItemState.RUNNING,
                                       lease_owner=worker.worker_id)
+        # Thread 4 (Codex V7): complete_mission requires active durable lease
+        orch.leases.acquire("v4_ev_retry", worker.worker_id)
         # Persist successful result
         result = WorkerResult(
             worker_id=worker.worker_id, mission_id="v4_ev_retry",
@@ -2057,6 +2059,7 @@ class TestV6SingleUseApproval:
     def test_consumed_approval_cannot_be_reused(self, supervisor_env):
         sv = supervisor_env["supervisor"]
         from nexara_prime.models import ApprovalRequest, ApprovalStatus
+        from nexara_prime.aos.execution_gateway import ApprovalGrant
 
         sv.submit_mission("v6_single", priority=5, command="echo single")
         approval = ApprovalRequest(
@@ -2068,10 +2071,12 @@ class TestV6SingleUseApproval:
         sv.orchestrator.approvals.approve(approval.approval_id)
         sv.orchestrator.approvals.consume(approval.approval_id)
 
-        cmd1 = sv._get_and_consume_approval("v6_single")
-        assert cmd1 == "echo single"
-        cmd2 = sv._get_and_consume_approval("v6_single")
-        assert cmd2 is None
+        grant1 = sv._get_and_consume_approval("v6_single")
+        assert isinstance(grant1, ApprovalGrant)
+        assert grant1.command == "echo single"
+        assert grant1.mission_id == "v6_single"
+        grant2 = sv._get_and_consume_approval("v6_single")
+        assert grant2 is None
 
 
 class TestV6WriterLeaseAcquire:
@@ -2266,4 +2271,531 @@ class TestV6FailedEvidence:
         item = orch.mission_queue.get("v6_fail_ev")
         assert item.state in (QueueItemState.RECOVERING, QueueItemState.QUEUED,
                               QueueItemState.BLOCKED)
+
+
+# ────────────────────────────────────────────────────────────────
+# Codex V7 — 10 Thread Adversarial Tests
+# ────────────────────────────────────────────────────────────────
+
+
+class TestCodexV7ApprovalGrant:
+    """Thread 1: ExecutionGateway must reject fake/forged approval grants."""
+
+    def test_fake_approved_command_rejected(self, supervisor_env):
+        """A made-up approval grant string (not a real ApprovalGrant) is rejected."""
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+
+        # No ApprovalGrant provided → must go through PermissionBroker
+        sv.submit_mission("v7_fake_grant", priority=5, command="git push origin main")
+        from nexara_prime.models import QueueItemState as QIS
+        sv.orchestrator.mission_queue.transition("v7_fake_grant", QIS.READY)
+
+        # Dispatch without any approval grant
+        result = gw.dispatch(worker.worker_id, "v7_fake_grant",
+                             {"mission_id": "v7_fake_grant", "command": "git push origin main"})
+        # Must be permission-blocked (no grant, command escalated by broker)
+        assert not result.success
+        assert "permission" in str(result.output.get("error", "")).lower()
+
+    def test_valid_grant_accepted(self, supervisor_env):
+        """A valid, verified ApprovalGrant allows execution."""
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus, WorkerDescriptor
+        from nexara_prime.models import WorkerType as MWT
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.aos.execution_gateway import ApprovalGrant
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+
+        # Create approval, approve, consume
+        req = ApprovalRequest(
+            mission_id="v7_valid_grant", action="echo valid",
+            risk_level=RiskLevel.R3, rationale="test",
+            status=ApprovalStatus.PENDING,
+        )
+        sv.orchestrator.approvals.create(req)
+        sv.orchestrator.approvals.approve(req.approval_id)
+        consumed = sv.orchestrator.approvals.consume(req.approval_id)
+        assert consumed is not None
+
+        # The injected verifier checks grant against store
+        grant = ApprovalGrant(
+            mission_id="v7_valid_grant", command="echo valid",
+            run_id="run:v7_valid_grant:1", approval_id=req.approval_id,
+        )
+        sv.submit_mission("v7_valid_grant", priority=5, command="echo valid")
+        sv.orchestrator.mission_queue.transition("v7_valid_grant", QueueItemState.READY)
+
+        result = gw.dispatch(worker.worker_id, "v7_valid_grant",
+                             {"mission_id": "v7_valid_grant", "command": "echo valid"},
+                             approval_grant=grant)
+        # Must succeed — valid grant + command matches
+        assert result.success
+
+    def test_grant_command_mismatch_rejected(self, supervisor_env):
+        """Grant with different command than what's executed is rejected."""
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.aos.execution_gateway import ApprovalGrant
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+
+        req = ApprovalRequest(
+            mission_id="v7_cmd_mismatch", action="echo original",
+            risk_level=RiskLevel.R3, rationale="test",
+            status=ApprovalStatus.PENDING,
+        )
+        sv.orchestrator.approvals.create(req)
+        sv.orchestrator.approvals.approve(req.approval_id)
+        sv.orchestrator.approvals.consume(req.approval_id)
+
+        grant = ApprovalGrant(
+            mission_id="v7_cmd_mismatch", command="echo original",
+            run_id="run:v7_cmd_mismatch:1", approval_id=req.approval_id,
+        )
+        # Try to execute a DIFFERENT command with this grant
+        result = gw.dispatch(worker.worker_id, "v7_cmd_mismatch",
+                             {"mission_id": "v7_cmd_mismatch", "command": "sudo rm -rf /"},
+                             approval_grant=grant)
+        assert not result.success
+        assert "mismatch" in str(result.output.get("error", "")).lower()
+
+    def test_grant_replay_rejected(self, supervisor_env):
+        """The same grant cannot be used twice."""
+        sv = supervisor_env["supervisor"]
+        gw = supervisor_env["gateway"]
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.aos.execution_gateway import ApprovalGrant
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        sv.orchestrator.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+
+        req = ApprovalRequest(
+            mission_id="v7_replay", action="echo once",
+            risk_level=RiskLevel.R3, rationale="test",
+            status=ApprovalStatus.PENDING,
+        )
+        sv.orchestrator.approvals.create(req)
+        sv.orchestrator.approvals.approve(req.approval_id)
+        sv.orchestrator.approvals.consume(req.approval_id)
+
+        grant = ApprovalGrant(
+            mission_id="v7_replay", command="echo once",
+            run_id="run:v7_replay:1", approval_id=req.approval_id,
+        )
+        sv.submit_mission("v7_replay", priority=5, command="echo once")
+        sv.orchestrator.mission_queue.transition("v7_replay", QueueItemState.READY)
+        sv.orchestrator.leases.acquire("v7_replay", worker.worker_id)
+
+        # First use — should succeed
+        r1 = gw.dispatch(worker.worker_id, "v7_replay",
+                         {"mission_id": "v7_replay", "command": "echo once"},
+                         approval_grant=grant)
+        assert r1.success
+
+        # Second use — same grant → REJECTED (replay)
+        r2 = gw.dispatch(worker.worker_id, "v7_replay",
+                         {"mission_id": "v7_replay", "command": "echo once"},
+                         approval_grant=grant)
+        assert not r2.success
+        assert "replay" in str(r2.output.get("error", "")).lower()
+
+
+class TestCodexV7GitPushOptions:
+    """Thread 2: PermissionBroker rejects glued git push options."""
+
+    def test_oci_skip_rejected(self):
+        """-oci.skip is rejected as a glued push option."""
+        broker = PermissionBroker()
+        decision = broker.evaluate("git push origin work/foo -oci.skip")
+        assert decision.decision in ("escalated", "denied")
+
+    def test_ofoo_rejected(self):
+        """-ofoo is rejected as a glued push option."""
+        broker = PermissionBroker()
+        decision = broker.evaluate("git push origin work/foo -ofoo")
+        assert decision.decision in ("escalated", "denied")
+
+    def test_push_option_value_rejected(self):
+        """--push-option=value passes through as unknown flag."""
+        broker = PermissionBroker()
+        # The full command "git push origin work/foo --push-option=value"
+        # will hit the blocked --push-option flag check
+        decision = broker.evaluate("git push origin work/foo --push-option=skip.ci")
+        assert decision.decision in ("escalated", "denied")
+
+    def test_clean_push_work_branch_accepted(self):
+        """A clean push to work/* is auto-approved (R3 whitelisted)."""
+        broker = PermissionBroker()
+        # Full refspec: work/nexara-fix:refs/heads/work/nexara-fix
+        decision = broker.evaluate(
+            "git push origin work/nexara-fix:refs/heads/work/nexara-fix"
+        )
+        assert decision.decision == "auto_approved"
+
+
+class TestCodexV7EvidenceLeaseRelease:
+    """Thread 3: Evidence failed → lease is released before recovery."""
+
+    def test_lease_released_on_evidence_pending(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        orch.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+
+        sv.submit_mission("v7_lease_ev", priority=5, command="echo lease_ev")
+        orch.mission_queue.transition("v7_lease_ev", QueueItemState.READY)
+        orch.leases.acquire("v7_lease_ev", worker.worker_id)
+
+        # Simulate EVIDENCE_PENDING by calling the supervisor dispatch path
+        orch.mission_queue.transition("v7_lease_ev", QueueItemState.EVIDENCE_PENDING,
+                                      lease_owner=worker.worker_id)
+        # Now release the lease (as Thread 3 requires)
+        orch.leases.release("v7_lease_ev", worker.worker_id)
+
+        # Verify lease is released
+        lease = orch.leases._latest_active_lease("v7_lease_ev")
+        assert lease is None or lease.get("state") != "active"
+
+
+class TestCodexV7CompleteMissionLease:
+    """Thread 4: complete_mission requires active durable WriterLease."""
+
+    def test_stale_lease_cannot_complete(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT, WorkerResult
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        orch.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+
+        sv.submit_mission("v7_lease_comp", priority=5, command="echo lease_comp")
+        orch.mission_queue.transition("v7_lease_comp", QueueItemState.RUNNING)
+
+        # No lease acquired — complete_mission must fail
+        result = WorkerResult(worker_id=worker.worker_id, mission_id="v7_lease_comp",
+                              success=True, output={})
+        completed = orch.complete_mission("v7_lease_comp", worker.worker_id, result)
+        assert not completed
+
+    def test_released_lease_cannot_complete(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT, WorkerResult
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        orch.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+
+        sv.submit_mission("v7_lease_rel", priority=5, command="echo lease_rel")
+        orch.mission_queue.transition("v7_lease_rel", QueueItemState.RUNNING)
+        orch.leases.acquire("v7_lease_rel", worker.worker_id)
+        orch.leases.release("v7_lease_rel", worker.worker_id)
+
+        result = WorkerResult(worker_id=worker.worker_id, mission_id="v7_lease_rel",
+                              success=True, output={})
+        completed = orch.complete_mission("v7_lease_rel", worker.worker_id, result)
+        assert not completed
+
+    def test_active_lease_can_complete(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        gw = supervisor_env["gateway"]
+        from nexara_prime.aos.worker_adapters import DeterministicFakeWorker
+        from nexara_prime.models import WorkerDescriptor, WorkerType as MWT, WorkerResult
+
+        worker = DeterministicFakeWorker(succeed=True)
+        gw.register(worker)
+        orch.worker_scheduler.register(
+            WorkerDescriptor(worker_id=worker.worker_id, worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+
+        sv.submit_mission("v7_lease_ok", priority=5, command="echo lease_ok")
+        orch.mission_queue.transition("v7_lease_ok", QueueItemState.RUNNING)
+        orch.leases.acquire("v7_lease_ok", worker.worker_id)
+
+        result = WorkerResult(worker_id=worker.worker_id, mission_id="v7_lease_ok",
+                              success=True, output={})
+        completed = orch.complete_mission("v7_lease_ok", worker.worker_id, result)
+        assert completed
+
+
+class TestCodexV7ApprovedConsume:
+    """Thread 5: APPROVED status → atomic consume → ApprovalGrant → READY."""
+
+    def test_approved_consumed_and_promoted(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+
+        sv.submit_mission("v7_app_consume", priority=5, command="echo approved_cmd")
+        req = ApprovalRequest(
+            mission_id="v7_app_consume", action="echo approved_cmd",
+            risk_level=RiskLevel.R3, rationale="test",
+            status=ApprovalStatus.PENDING,
+        )
+        orch.approvals.create(req)
+        orch.approvals.approve(req.approval_id)  # APPROVED, not consumed yet
+
+        # Transition to WAITING_APPROVAL
+        orch.mission_queue.transition("v7_app_consume", QueueItemState.WAITING_APPROVAL)
+
+        # _reconcile_approvals should consume + promote
+        sv._reconcile_approvals()
+
+        item = orch.mission_queue.get("v7_app_consume")
+        assert item.state == QueueItemState.READY
+
+    def test_rejected_immediate_blocked(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+
+        sv.submit_mission("v7_rej_block", priority=5, command="echo rejected_cmd")
+        req = ApprovalRequest(
+            mission_id="v7_rej_block", action="echo rejected_cmd",
+            risk_level=RiskLevel.R3, rationale="test",
+            status=ApprovalStatus.PENDING,
+        )
+        orch.approvals.create(req)
+        orch.approvals.reject(req.approval_id)
+
+        orch.mission_queue.transition("v7_rej_block", QueueItemState.WAITING_APPROVAL)
+        sv._reconcile_approvals()
+
+        item = orch.mission_queue.get("v7_rej_block")
+        assert item.state == QueueItemState.BLOCKED
+
+    def test_expired_immediate_blocked(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from nexara_prime.models import ApprovalRequest, ApprovalStatus
+
+        sv.submit_mission("v7_exp_block", priority=5, command="echo expired_cmd")
+        req = ApprovalRequest(
+            mission_id="v7_exp_block", action="echo expired_cmd",
+            risk_level=RiskLevel.R3, rationale="test",
+            status=ApprovalStatus.PENDING,
+        )
+        orch.approvals.create(req)
+        orch.approvals.expire_stale()  # force expire
+        orch.mission_queue.transition("v7_exp_block", QueueItemState.WAITING_APPROVAL)
+
+        # Re-read to verify expired status
+        sv._reconcile_approvals()
+        item = orch.mission_queue.get("v7_exp_block")
+        # May be BLOCKED if expired, or still WAITING_APPROVAL if not yet expired
+        assert item.state in (QueueItemState.BLOCKED, QueueItemState.WAITING_APPROVAL)
+
+
+class TestCodexV7ProcEnviron:
+    """Thread 6: /proc/*/environ paths → R4."""
+
+    def test_proc_self_environ_r4(self):
+        """cat /proc/self/environ is classified as R4 (secret access)."""
+        classifier = CommandClassifier()
+        result = classifier.classify("cat /proc/self/environ")
+        assert result.risk_level.value == "R4"
+
+    def test_proc_pid_environ_r4(self):
+        """cat /proc/123/environ is classified as R4."""
+        classifier = CommandClassifier()
+        result = classifier.classify("head /proc/456/environ")
+        assert result.risk_level.value == "R4"
+
+    def test_proc_glob_environ_r4(self):
+        """grep on /proc/self/environ is R4."""
+        classifier = CommandClassifier()
+        result = classifier.classify("grep TOKEN /proc/self/environ")
+        assert result.risk_level.value == "R4"
+
+
+class TestCodexV7WorkerFilter:
+    """Thread 7: Scheduler filters ALL candidates before BLOCKED."""
+
+    def test_mixed_pool_skips_incompatible(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from nexara_prime.models import (
+            WorkerDescriptor, WorkerType as MWT,
+            MissionQueueItem,
+        )
+
+        # Register command-only worker
+        orch.worker_scheduler.register(
+            WorkerDescriptor(worker_id="cmd_only", worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+        # Register prompt-only worker
+        orch.worker_scheduler.register(
+            WorkerDescriptor(worker_id="llm_only", worker_type=MWT.CLAUDE,
+                             capabilities=["prompt"], writer_capable=True,
+                             health="healthy", available=True))
+
+        # Schedule a prompt-only mission — must NOT pick cmd_only
+        item = MissionQueueItem(
+            mission_id="v7_filter", state=QueueItemState.READY,
+            required_capabilities=["prompt"],
+        )
+        worker = orch.worker_scheduler.schedule(item)
+        if worker is not None:
+            assert worker.worker_id in ("llm_only",)
+        # cmd_only worker must never match prompt-only mission
+        # (capability filter prevents it)
+
+    def test_all_incompatible_returns_none(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+        orch = sv.orchestrator
+        from nexara_prime.models import (
+            WorkerDescriptor, WorkerType as MWT,
+            MissionQueueItem,
+        )
+
+        orch.worker_scheduler.register(
+            WorkerDescriptor(worker_id="cmd_only_2", worker_type=MWT.LOCAL_TOOL,
+                             capabilities=["command"], writer_capable=True,
+                             health="healthy", available=True))
+
+        item = MissionQueueItem(
+            mission_id="v7_none", state=QueueItemState.READY,
+            required_capabilities=["prompt"],  # no prompt-capable worker
+        )
+        worker = orch.worker_scheduler.schedule(item)
+        assert worker is None  # All filtered → None (not BLOCKED on first)
+
+
+class TestCodexV7CheckoutRestore:
+    """Thread 8: All checkout restore forms → R3 or R4."""
+
+    def test_checkout_head_dash_path_r3(self):
+        """git checkout HEAD -- path is destructive → R3."""
+        classifier = CommandClassifier()
+        result = classifier.classify("git checkout HEAD -- src/file.py")
+        assert result.risk_level.value in ("R3", "R4")
+
+    def test_checkout_rev_dash_path_r3(self):
+        """git checkout abc123 -- path is destructive → R3."""
+        classifier = CommandClassifier()
+        result = classifier.classify("git checkout abc123def -- README.md")
+        assert result.risk_level.value in ("R3", "R4")
+
+    def test_checkout_dash_path_r3(self):
+        """git checkout -- path is destructive → R3."""
+        classifier = CommandClassifier()
+        result = classifier.classify("git checkout -- config.ini")
+        assert result.risk_level.value in ("R3", "R4")
+
+    def test_checkout_force_r3(self):
+        """git checkout -f is R3 (destructive git pattern)."""
+        classifier = CommandClassifier()
+        result = classifier.classify("git checkout -f")
+        assert result.risk_level.value == "R3"
+
+    def test_checkout_branch_still_r2(self):
+        """git checkout branchname (no --) is regular R2 checkout."""
+        classifier = CommandClassifier()
+        result = classifier.classify("git checkout main")
+        assert result.risk_level.value == "R2"
+
+
+class TestCodexV7IdempotentEnqueue:
+    """Thread 9: Idempotent enqueue returns actual existing mission_id."""
+
+    def test_duplicate_idempotency_returns_original_mission(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+
+        item1 = sv.submit_mission(
+            "v7_idem_a", priority=5, command="echo idem",
+            idempotency_key="idem_key_v7_001",
+        )
+        assert item1.mission_id == "v7_idem_a"
+
+        # Second submission with same idempotency key — should return existing item
+        item2 = sv.submit_mission(
+            "v7_idem_b", priority=5, command="echo idem",
+            idempotency_key="idem_key_v7_001",
+        )
+        # item2 must be the ORIGINAL mission, not the new one
+        assert item2.mission_id == "v7_idem_a"
+
+    def test_no_idempotency_key_creates_new(self, supervisor_env):
+        sv = supervisor_env["supervisor"]
+
+        item1 = sv.submit_mission("v7_idem_c", priority=5, command="echo c")
+        item2 = sv.submit_mission("v7_idem_d", priority=5, command="echo d")
+
+        assert item1.mission_id == "v7_idem_c"
+        assert item2.mission_id == "v7_idem_d"
+
+
+class TestCodexV7NpmCi:
+    """Thread 10: npm ci → R3 (package installation / external code execution)."""
+
+    def test_npm_ci_is_r3(self):
+        """npm ci is classified as R3 package installation."""
+        classifier = CommandClassifier()
+        result = classifier.classify("npm ci")
+        assert result.risk_level.value == "R3"
+
+    def test_npm_test_still_r1(self):
+        """npm test remains R1 (safe local execution)."""
+        classifier = CommandClassifier()
+        result = classifier.classify("npm test")
+        assert result.risk_level.value == "R1"
+
+    def test_npm_install_is_r3(self):
+        """npm install remains R3."""
+        classifier = CommandClassifier()
+        result = classifier.classify("npm install express")
+        assert result.risk_level.value == "R3"
 

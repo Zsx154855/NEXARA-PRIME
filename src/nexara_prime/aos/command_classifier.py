@@ -76,10 +76,18 @@ _MUTATING_OPTIONS: dict[str, list[str]] = {
     "git": ["push", "merge", "rebase", "tag", "add", "commit", "stash", "clean"],
 }
 
-# Destructive git commands that must never be auto-approved
+# Destructive git commands that must never be auto-approved.
+# All forms of checkout that restore/discard working-tree content are covered:
+#   git checkout -- path          → discards local changes to path
+#   git checkout HEAD -- path     → restores path from HEAD
+#   git checkout <rev> -- path    → restores path from any revision
+#   git checkout -f               → force checkout, discards changes
+#   git checkout --force          → same
+#   git restore path              → discards local changes
+#   git restore --staged path     → unstages (still destructive in context)
 _DESTRUCTIVE_GIT_COMMANDS: re.Pattern[str] = re.compile(
     r"git\s+(?:"
-    r"checkout\s+--|"
+    r"checkout\s+.*--|"           # checkout <anything> -- path  (discards changes)
     r"checkout\s+-f\b|"
     r"checkout\s+--force\b|"
     r"switch\s+-C\b|"
@@ -112,7 +120,11 @@ _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
     r"\.netrc\b|"
     r"\.git-credentials\b|"
     r"Keychain\b|"
-    r"keychain\b"
+    r"keychain\b|"
+    # /proc/*/environ — reading process environment exposes secrets
+    r"/proc/self/environ\b|"
+    r"/proc/\d+/environ\b|"
+    r"/proc/[^/\s]*/environ\b"
     r")",
     re.IGNORECASE,
 )
@@ -316,6 +328,7 @@ class CommandClassifier:
         # Package installation = external code execution → R3
         r"\bpip\s+install\b", r"\bpipx\s+install\b",
         r"\bnpm\s+install\b", r"\bpnpm\s+install\b",
+        r"\bnpm\s+ci\b",  # installs deps from lockfile, runs lifecycle scripts
         r"\byarn\s+add\b",
         r"\bcargo\s+install\b",
         r"\bscp\b", r"\brsync\s+.*:", r"\bssh\b",
@@ -341,7 +354,7 @@ class CommandClassifier:
         r"ruff\s+check\b", r"ruff\s+format\b",
         r"mypy\b", r"pyright\b",
         r"npx\s+tsc\b", r"npm\s+run\s+build\b",
-        r"npm\s+ci\b", r"npm\s+test\b",
+        r"npm\s+test\b",
         r"swift\s+test\b",
         r"python\s+\S+\.py\b",
         r"node\s+\S+\.js\b",

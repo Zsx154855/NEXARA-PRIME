@@ -165,6 +165,8 @@ class PermissionBroker:
         - --force, --delete, --force-with-lease
         - +work/foo:anything (force push prefix)
         - multiple refspecs
+        - glued options: -oci.skip, -ofoo (git interprets -o as --push-option)
+        - --push-option=value, --push-option value
         """
         # Block flags that appear in the refspec position
         blocked_flags = {"--force", "--force-with-lease", "--delete", "-f", "-d"}
@@ -173,6 +175,13 @@ class PermissionBroker:
             if token in blocked_flags:
                 return False
             if token.startswith("--"):
+                return False
+            # Block all -o* glued options (git interprets -o as --push-option)
+            # -oci.skip, -ofoo, -oanything → all rejected
+            if token.startswith("-o") and token != "-o":
+                return False
+            # Block standalone -o followed by a value
+            if token == "-o":
                 return False
 
         # Only allow a single refspec
