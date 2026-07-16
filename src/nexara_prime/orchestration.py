@@ -296,6 +296,13 @@ class WorkerScheduler:
         return available
 
     def schedule(self, item: MissionQueueItem) -> WorkerDescriptor | None:
+        """Select the best worker for a mission.
+
+        Thread 7 (Codex V7): Filters ALL available workers by capability,
+        risk, health, availability, and payload-kind compatibility before
+        returning None.  A mission is only BLOCKED when zero candidates
+        match across the entire pool — never on the first incompatible worker.
+        """
         available = self.list_available()
         if not available:
             return None
@@ -303,6 +310,7 @@ class WorkerScheduler:
             w for w in available
             if self._capability_match(w, item.required_capabilities)
             and self._risk_compatible(w, item.risk_level)
+            and self._payload_kind_compatible(w, item.required_capabilities)
         ]
         if not candidates:
             return None
@@ -317,6 +325,28 @@ class WorkerScheduler:
             )
         )
         return candidates[0]
+
+    @staticmethod
+    def _payload_kind_compatible(
+        worker: WorkerDescriptor, required: list[str],
+    ) -> bool:
+        """Ensure the worker can handle the payload kind.
+
+        - command-only missions require a command-capable worker
+        - prompt-only missions require a prompt-capable worker
+        - mixed-or-empty is compatible with any worker type
+        """
+        if not required:
+            return True
+        worker_caps = set(worker.capabilities)
+        required_set = set(required)
+        # If mission requires command-capable, worker must have it
+        if "command" in required_set and "command" not in worker_caps:
+            return False
+        # If mission requires prompt-capable, worker must have it
+        if "prompt" in required_set and "prompt" not in worker_caps:
+            return False
+        return True
 
     def _capability_match(self, worker: WorkerDescriptor, required: list[str]) -> bool:
         if not required:
@@ -865,23 +895,23 @@ class RuntimeOrchestrator:
         return True
 
     def _lease_held_by(self, mission_id: str, worker_id: str) -> bool:
-        """Check if worker_id holds the lease.
+        """Check if worker_id holds an active durable Writer Lease.
 
-        Thread 40: writer_leases is the sole authority when an active lease
-        exists. The mission_queue.lease_owner fallback is ONLY used when no
-        active writer lease is found — it must never override an active lease
-        held by a different worker.
+        Thread 4 (Codex V7): Only an active, non-expired durable WriterLease
+        authorises completion.  The mission_queue.lease_owner field is NOT a
+        fallback — expired, released, or stale leases, and the raw field,
+        cannot authorise completion.  A mission without an active lease must
+        re-acquire before completing.
         """
-        # Primary: check writer lease manager (durable, sole authority)
         lease = self.leases._latest_active_lease(mission_id)
-        if lease is not None and lease.get("state") == "active":
-            # Active writer lease exists — ONLY the lease holder can complete
-            return lease.get("worker_id") == worker_id
-        # Fallback: no active writer lease exists → check queue lease_owner
-        item = self.mission_queue.get(mission_id)
-        if item is not None and item.lease_owner == worker_id:
-            return True
-        return False
+        if lease is None:
+            return False
+        if lease.get("state") != "active":
+            return False
+        # Verify lease has not expired
+        if not _instant_before(now_iso(), lease.get("expires_at", "")):
+            return False
+        return lease.get("worker_id") == worker_id
 
     def _crash_resume(self) -> None:
         recovered_count = 0

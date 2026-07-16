@@ -18,7 +18,7 @@ from ..models import MissionQueueItem, QueueItemState, RiskLevel
 from ..models import ApprovalRequest, ApprovalStatus
 from ..orchestration import RuntimeOrchestrator
 
-from .execution_gateway import ExecutionGateway
+from .execution_gateway import ExecutionGateway, ApprovalGrant
 from .permission_broker import PermissionBroker
 from .recovery_engine import RecoveryEngine, RecoveryStrategy
 from .cost_optimizer import CostOptimizer
@@ -104,6 +104,38 @@ class AutonomousSupervisor:
 
         # Wire PermissionBroker into the gateway
         self.gateway.permissions = self.permissions
+
+        # Thread 1 (Codex V7): Inject approval grant verifier so Gateway can
+        # validate grants against the durable ApprovalQueue before bypassing
+        # PermissionBroker.  Fake grants, replayed grants, and grants with
+        # mismatched commands all fail closed.
+        def _verify_approval_grant(grant: Any) -> bool:
+            """Verify that an ApprovalGrant corresponds to a consumed approval."""
+            for raw in self._store.list_records("approval_requests"):
+                p = raw.get("payload", raw)
+                if p.get("approval_id") != grant.approval_id:
+                    continue
+                if p.get("mission_id") != grant.mission_id:
+                    continue
+                # Must be CONSUMED (consumed via ApprovalQueue.consume)
+                if p.get("status") != ApprovalStatus.CONSUMED.value:
+                    return False
+                if p.get("action", "") != grant.command:
+                    return False
+                # Grant is valid — prevent second use by marking verified
+                if p.get("grant_verified"):
+                    return False  # already verified/used
+                p["grant_verified"] = True
+                p["grant_verified_at"] = _utc_now()
+                self._store.save_record(
+                    grant.approval_id, "approval_requests", p,
+                    created_at=p.get("created_at", _utc_now()),
+                    mission_id=grant.mission_id,
+                )
+                return True
+            return False
+
+        self.gateway.set_approval_verifier(_verify_approval_grant)
 
         self._state = SupervisorState.IDLE
         self._current_mission_id: str | None = None
@@ -202,7 +234,44 @@ class AutonomousSupervisor:
             if approval_status is None:
                 continue  # No approval record — leave as is
 
-            if approval_status == ApprovalStatus.CONSUMED.value:
+            if approval_status == ApprovalStatus.APPROVED.value:
+                # Thread 5 (Codex V7): Atomically consume APPROVED approval,
+                # create one-time ApprovalGrant, restore mission to READY.
+                approval = self._get_pending_approval_for_mission(item.mission_id)
+                if approval is None:
+                    continue
+                consumed = self.orchestrator.approvals.consume(approval.approval_id)
+                if consumed is None:
+                    # CAS failed — another consumer beat us, leave as-is
+                    continue
+                # Build one-time grant bound to this mission/command/run
+                grant = ApprovalGrant(
+                    mission_id=item.mission_id,
+                    command=consumed.action,
+                    run_id=f"run:{item.mission_id}:{item.attempt_count + 1}",
+                    approval_id=consumed.approval_id,
+                )
+                # Persist grant in mission_payload for dispatch
+                self._store.save_record(
+                    f"grant:{consumed.approval_id}", "approval_grant",
+                    {
+                        "mission_id": item.mission_id,
+                        "command": consumed.action,
+                        "run_id": grant.run_id,
+                        "approval_id": consumed.approval_id,
+                        "nonce": grant.nonce,
+                    },
+                    created_at=_utc_now(), mission_id=item.mission_id,
+                )
+                self.orchestrator.mission_queue.transition(
+                    item.mission_id, QueueItemState.READY,
+                )
+                self._record_evidence(item.mission_id, "approval_consumed_resume", {
+                    "mission_id": item.mission_id,
+                    "approval_id": consumed.approval_id,
+                    "action": "consumed APPROVED → ApprovalGrant → READY for dispatch",
+                })
+            elif approval_status == ApprovalStatus.CONSUMED.value:
                 self.orchestrator.mission_queue.transition(
                     item.mission_id, QueueItemState.READY,
                 )
@@ -243,6 +312,21 @@ class AutonomousSupervisor:
                 latest_created = created
                 latest_status = p.get("status")
         return latest_status
+
+    def _get_pending_approval_for_mission(
+        self, mission_id: str,
+    ) -> "ApprovalRequest | None":
+        """Return the APPROVED ApprovalRequest for a mission, or None."""
+        from ..models import ApprovalRequest as AR
+        for req in self.orchestrator.approvals.list_pending():
+            if req.mission_id == mission_id:
+                return req
+        # Also check raw records for APPROVED (not in pending list)
+        for raw in self._store.list_records("approval_requests"):
+            p = raw.get("payload", raw)
+            if p.get("mission_id") == mission_id and p.get("status") == "approved":
+                return AR(**p)
+        return None
 
     def _process_queued(self) -> None:
         """Move queued items to ready if dependencies are met AND available_at is reached.
@@ -402,8 +486,8 @@ class AutonomousSupervisor:
                 # Another supervisor/worker holds the lease — leave READY
                 continue
 
-            # ── Thread V6-H: Check for single-use consumed approval ──
-            approved_command = self._get_and_consume_approval(item.mission_id)
+            # ── Thread 1 (Codex V7): Check for single-use consumed approval ──
+            approval_grant = self._get_and_consume_approval(item.mission_id)
 
             # Thread V6-F: attempt_count only incremented when REAL dispatch starts
             item.attempt_count += 1
@@ -428,7 +512,7 @@ class AutonomousSupervisor:
             # ── Dispatch through gateway (PermissionBroker enforced inside) ──
             result = self.gateway.dispatch(
                 worker_id, item.mission_id, full_mission,
-                approved_command=approved_command,
+                approval_grant=approval_grant,
             )
 
             # ── Thread 34: Route escalations into ApprovalQueue ──
@@ -464,6 +548,9 @@ class AutonomousSupervisor:
                 )
                 if not completed:
                     # ── Thread 37: Evidence gate not yet passed ──
+                    # Thread 3 (Codex V7): Release durable Writer Lease before
+                    # entering EVIDENCE_PENDING so the lease is not left dangling.
+                    self.orchestrator.leases.release(item.mission_id, worker_id)
                     self._persist_worker_result(item.mission_id, result)
                     self.orchestrator.mission_queue.transition(
                         item.mission_id, QueueItemState.EVIDENCE_PENDING,
@@ -736,13 +823,17 @@ class AutonomousSupervisor:
             mission_id=item.mission_id,
         )
 
-    def _get_and_consume_approval(self, mission_id: str) -> str | None:
-        """Return the approved command if an unused consumed approval exists.
+    def _get_and_consume_approval(self, mission_id: str) -> "ApprovalGrant | None":
+        """Return an ApprovalGrant if an unused consumed approval exists.
 
-        Thread V6-H: Each consumed approval is a single-use grant. After the first
-        real execution, the grant is marked 'grant_used=true' so retries, stale
-        recoveries, and requeues cannot reuse the same approval. A changed action
-        requires a fresh ApprovalRequest.
+        Thread 1 (Codex V7): Each consumed approval is a single-use grant
+        bound to mission_id, command, run_id, approval_id, and nonce.
+        After the first real execution, the grant is marked 'grant_used=true'
+        so retries, stale recoveries, and requeues cannot reuse the same
+        approval.  A changed action requires a fresh ApprovalRequest.
+
+        Returns an ApprovalGrant (not a raw string) so the Gateway can
+        cryptographically verify the grant before bypassing PermissionBroker.
         """
         for raw in self._store.list_records("approval_requests"):
             p = raw.get("payload", raw)
@@ -762,7 +853,12 @@ class AutonomousSupervisor:
                 created_at=p.get("created_at", _utc_now()),
                 mission_id=mission_id,
             )
-            return p.get("action", "")
+            return ApprovalGrant(
+                mission_id=mission_id,
+                command=p.get("action", ""),
+                run_id=f"run:{mission_id}:{p.get('attempt_count', 0) + 1}",
+                approval_id=p.get("approval_id", ""),
+            )
         return None
 
     def _persist_worker_result(self, mission_id: str, result: Any) -> None:
@@ -971,21 +1067,25 @@ class AutonomousSupervisor:
             dependencies=dependencies or [],
             max_attempts=max_attempts,
         )
-        self.orchestrator.mission_queue.enqueue(item)
-        self._current_mission_id = mission_id
+        # Thread 9 (Codex V7): Use the ACTUAL returned item from enqueue().
+        # When an idempotency_key matches an existing active mission,
+        # enqueue() returns the existing item (different mission_id).
+        # We must use that item so callers get the real mission_id.
+        enqueued = self.orchestrator.mission_queue.enqueue(item)
+        self._current_mission_id = enqueued.mission_id
 
-        # Persist mission metadata (command, prompt, cwd) as a record so
-        # _build_mission_payload can retrieve it even without a full Mission
+        # Persist mission metadata under the ACTUAL mission_id
+        actual_id = enqueued.mission_id
         if command or prompt:
             self._store.save_record(
-                f"payload:{mission_id}", "mission_payload",
-                {"mission_id": mission_id, "command": command,
+                f"payload:{actual_id}", "mission_payload",
+                {"mission_id": actual_id, "command": command,
                  "prompt": prompt, "cwd": cwd,
                  "capabilities": capabilities or []},
-                created_at=_utc_now(), mission_id=mission_id,
+                created_at=_utc_now(), mission_id=actual_id,
             )
 
-        return item
+        return enqueued
 
     def mission_status(self, mission_id: str) -> dict[str, Any]:
         item = self.orchestrator.mission_queue.get(mission_id)
