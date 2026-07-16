@@ -73,6 +73,8 @@ _PROCESS_SUBSTITUTION: re.Pattern[str] = re.compile(
 # Unsafe write targets — touch/cp/mv to these paths is R3/R4.
 # Thread 2 (Codex V12): Extended to cover .npmrc, .docker/config.json,
 # .config/gh/hosts.yml, .netrc, .pypirc, .git-credentials.
+# Thread 2 (Codex V13): Added $HOME/${HOME} forms for .config/gh, .netrc,
+# .pypirc, .git-credentials.  Added /root forms for same.
 _UNSAFE_WRITE_TARGETS: re.Pattern[str] = re.compile(
     r"(?:"
     r"~/.bashrc|~/.zshrc|~/.profile|~/.bash_profile|"
@@ -86,12 +88,24 @@ _UNSAFE_WRITE_TARGETS: re.Pattern[str] = re.compile(
     r"\$HOME/\.ssh/|\$HOME/\.aws/|"
     r"\$HOME/\.npmrc\b|"
     r"\$HOME/\.docker/config\.json|"
+    r"\$HOME/\.config/gh/hosts\.yml|"
+    r"\$HOME/\.netrc\b|"
+    r"\$HOME/\.pypirc\b|"
+    r"\$HOME/\.git-credentials\b|"
     r"\$\{HOME\}/\.ssh/|\$\{HOME\}/\.aws/|"
     r"\$\{HOME\}/\.npmrc\b|"
     r"\$\{HOME\}/\.docker/config\.json|"
+    r"\$\{HOME\}/\.config/gh/hosts\.yml|"
+    r"\$\{HOME\}/\.netrc\b|"
+    r"\$\{HOME\}/\.pypirc\b|"
+    r"\$\{HOME\}/\.git-credentials\b|"
     r"/root/\.ssh/|/root/\.aws/|"
     r"/root/\.npmrc\b|"
     r"/root/\.docker/config\.json|"
+    r"/root/\.config/gh/hosts\.yml|"
+    r"/root/\.netrc\b|"
+    r"/root/\.pypirc\b|"
+    r"/root/\.git-credentials\b|"
     r"/etc/|"
     r"/Library/|"
     r"~/Library/LaunchAgents/|"
@@ -102,8 +116,11 @@ _UNSAFE_WRITE_TARGETS: re.Pattern[str] = re.compile(
 )
 
 # Mutating options on nominally-read-only commands
+# Thread 7 (Codex V13): find now includes file-output actions
+# (-fprint, -fprint0, -fprintf, -fls) which create/overwrite files.
 _MUTATING_OPTIONS: dict[str, list[str]] = {
-    "find": ["-delete", "-exec", "-execdir", "-ok", "-okdir"],
+    "find": ["-delete", "-exec", "-execdir", "-ok", "-okdir",
+             "-fprint", "-fprint0", "-fprintf", "-fls"],
     "git": ["push", "merge", "rebase", "tag", "add", "commit", "stash", "clean"],
 }
 
@@ -116,11 +133,17 @@ _MUTATING_OPTIONS: dict[str, list[str]] = {
 #   git checkout --force          → same
 #   git restore path              → discards local changes
 #   git restore --staged path     → unstages (still destructive in context)
+#   git switch -f main            → force switch, discards changes
+#   git switch --force main       → same
+# Thread 3 (Codex V13): Added switch -f/--force (previously only -C/--force-create
+# and --discard-changes were covered; -f/--force discards local changes).
 _DESTRUCTIVE_GIT_COMMANDS: re.Pattern[str] = re.compile(
     r"git\s+(?:"
     r"checkout\s+.*--|"           # checkout <anything> -- path  (discards changes)
     r"checkout\s+-f\b|"
     r"checkout\s+--force\b|"
+    r"switch\s+-f\b|"             # Thread 3 (Codex V13): switch -f
+    r"switch\s+--force\b|"        # Thread 3 (Codex V13): switch --force
     r"switch\s+-C\b|"
     r"switch\s+--force-create\b|"
     r"switch\s+--discard-changes\b|"
@@ -140,6 +163,10 @@ _DESTRUCTIVE_GIT_COMMANDS: re.Pattern[str] = re.compile(
 # Every path form (tilde, $HOME, ${HOME}, /root, /home/*, /Users/*)
 # must be covered for .aws, .ssh, .npmrc, .docker/config.json,
 # .config/gh/hosts.yml, .netrc, .pypirc, .git-credentials.
+#
+# Thread 2 (Codex V13): Added $HOME and ${HOME} forms for:
+# .config/gh/hosts.yml, .netrc, .pypirc, .git-credentials.
+# Also added /root forms for these same credential files.
 _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
     r"(?:"
     # ── ~/ tilde forms ──
@@ -153,30 +180,51 @@ _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
     r"~/.pypirc\b|"
     r"~/.git-credentials\b|"
     r"~/Library/Keychains/|"
-    # ── $HOME / ${HOME} forms ──
+    # ── $HOME forms ──
     r"\$HOME/\.ssh/|"
     r"\$HOME/\.aws/|"
     r"\$HOME/\.npmrc\b|"
     r"\$HOME/\.docker/config\.json|"
+    r"\$HOME/\.config/gh/hosts\.yml|"
+    r"\$HOME/\.netrc\b|"
+    r"\$HOME/\.pypirc\b|"
+    r"\$HOME/\.git-credentials\b|"
+    # ── ${HOME} forms ──
     r"\$\{HOME\}/\.ssh/|"
     r"\$\{HOME\}/\.aws/|"
     r"\$\{HOME\}/\.npmrc\b|"
     r"\$\{HOME\}/\.docker/config\.json|"
+    r"\$\{HOME\}/\.config/gh/hosts\.yml|"
+    r"\$\{HOME\}/\.netrc\b|"
+    r"\$\{HOME\}/\.pypirc\b|"
+    r"\$\{HOME\}/\.git-credentials\b|"
     # ── Absolute paths to user credential directories (macOS + Linux) ──
     r"/home/[^/\s]+/\.ssh/|"
     r"/home/[^/\s]+/\.aws/|"
     r"/home/[^/\s]+/\.npmrc\b|"
     r"/home/[^/\s]+/\.docker/config\.json|"
+    r"/home/[^/\s]+/\.config/gh/hosts\.yml|"
+    r"/home/[^/\s]+/\.netrc\b|"
+    r"/home/[^/\s]+/\.pypirc\b|"
+    r"/home/[^/\s]+/\.git-credentials\b|"
     r"/Users/[^/\s]+/\.ssh/|"
     r"/Users/[^/\s]+/\.aws/|"
     r"/Users/[^/\s]+/\.npmrc\b|"
     r"/Users/[^/\s]+/\.docker/config\.json|"
+    r"/Users/[^/\s]+/\.config/gh/hosts\.yml|"
+    r"/Users/[^/\s]+/\.netrc\b|"
+    r"/Users/[^/\s]+/\.pypirc\b|"
+    r"/Users/[^/\s]+/\.git-credentials\b|"
     r"/Users/[^/\s]+/Library/Keychains/|"
-    # ── Thread 6 (Codex V11) + Thread 2 (Codex V12): /root credential dirs ──
+    # ── Thread 6 (Codex V11) + Thread 2 (Codex V12/V13): /root credential files ──
     r"/root/\.ssh/|"
     r"/root/\.aws/|"
     r"/root/\.npmrc\b|"
     r"/root/\.docker/config\.json|"
+    r"/root/\.config/gh/hosts\.yml|"
+    r"/root/\.netrc\b|"
+    r"/root/\.pypirc\b|"
+    r"/root/\.git-credentials\b|"
     # ── Dotfiles / credential files ──
     r"/\.env\b|"
     r"\.env\b|"
@@ -209,6 +257,11 @@ _SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
 # forms by matching ${VARNAME<any non-brace content>} rather than enumerating
 # finite modifier syntaxes.  Variable names are checked against a dedicated
 # sensitive-keyword pattern to avoid false positives on ${HOME}, ${USER}, etc.
+#
+# Thread 1 (Codex V13): Also detect INDIRECT variable expansions:
+#   ${!TOKEN} ${!API_KEY}  →  indirect reference to a sensitive variable
+# The '!' prefix bypasses the standard braced-var regex because the first
+# char after '${' is '!' which doesn't match [A-Za-z_].
 _SENSITIVE_VAR_NAME: re.Pattern[str] = re.compile(
     r"(?:"
     r"TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL|AUTH|PASS|"
@@ -223,13 +276,18 @@ _BRACED_VAR_EXPANSION: re.Pattern[str] = re.compile(
     r"\$\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}"
 )
 
+# Thread 1 (Codex V13): Match indirect variable expansion: ${!VARNAME}
+_INDIRECT_VAR_EXPANSION: re.Pattern[str] = re.compile(
+    r"\$\{!([A-Za-z_][A-Za-z0-9_]*)(?:[^}]*)\}"
+)
+
 # Full secret expansion: echo/printf with $VAR, any braced var with
-# sensitive name, env|grep, printenv, bare env
+# sensitive name, indirect expansion, env|grep, printenv, bare env
 _SECRET_EXPANSION: re.Pattern[str] = re.compile(
     r"(?:"
     r"echo\s+.*\$[A-Za-z_][A-Za-z0-9_]*|"  # echo ... $VAR any position
     r"printf\s+.*\$[A-Za-z_][A-Za-z0-9_]*|" # printf ... $VAR any position
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*[^}]*\}|"   # any braced var expansion
+    r"\$\{[!]?[A-Za-z_][A-Za-z0-9_]*[^}]*\}|"  # any braced/indirect var expansion
     r"\$[A-Z_][A-Z0-9_]{2,}\b|"             # $TOKEN bare (3+ chars)
     # Thread 10 (Codex V10): Anchor true env command, not "venv"
     r"(?:^|[\s;&|])env(?:\s+\S|\s*$)|"       # env command (must be standalone or with args)
@@ -536,12 +594,16 @@ def _has_secret_expansion(command: str) -> bool:
     braced_matches = _BRACED_VAR_EXPANSION.findall(command)
     if braced_matches and any(_SENSITIVE_VAR_NAME.search(v) for v in braced_matches):
         return True
+    # Thread 1 (Codex V13): Scan indirect expansions ${!VARNAME}
+    indirect_matches = _INDIRECT_VAR_EXPANSION.findall(command)
+    if indirect_matches and any(_SENSITIVE_VAR_NAME.search(v) for v in indirect_matches):
+        return True
     # Scan bare $VAR patterns (non-braced)
     bare_vars = _BARE_VAR_EXPANSION.findall(command)
     if bare_vars and any(_SENSITIVE_VAR_NAME.search(v) for v in bare_vars):
         return True
     # echo/printf with any $VAR, env|grep, printenv, bare env → flag
-    if braced_matches or bare_vars:
+    if braced_matches or indirect_matches or bare_vars:
         return False  # had expansions but none sensitive
     return True  # env|grep, printenv, bare env (no var name to check)
 
@@ -584,6 +646,53 @@ def _python_snippet_is_dangerous(command: str) -> bool:
         if re.search(pattern, command, re.IGNORECASE):
             return True
     return False
+
+
+# Thread 5 (Codex V13): Interpreter script file execution detection.
+# python script.py, node script.js, ruby script.rb, bash script.sh, sh script.sh
+# — any interpreter executing an arbitrary file without content analysis,
+# controlled-path verification, content-hash validation, or declared capability
+# constraints must be at least R3.
+_INTERPRETER_SCRIPT_EXECUTION: re.Pattern[str] = re.compile(
+    r"^(?:python3?|node|ruby|bash|sh|zsh)\s+\S+\.(?:py|js|ts|rb|sh|bash|zsh)\b"
+)
+
+# Known-safe interpreter invocations that are pre-vetted project tooling.
+# These remain R1 via the R1_PATTERNS list (pytest, ruff, mypy, etc.).
+# Everything else matching _INTERPRETER_SCRIPT_EXECUTION → R3+.
+_KNOWN_SAFE_INTERPRETER_INVOCATIONS: re.Pattern[str] = re.compile(
+    r"(?:"
+    r"python3?\s+-m\s+pytest\b|"
+    r"pytest\b|"
+    r"python3?\s+-m\s+ruff\b|"
+    r"ruff\s+(?:check|format)\b|"
+    r"python3?\s+-m\s+mypy\b|"
+    r"mypy\b|"
+    r"python3?\s+-m\s+pyright\b|"
+    r"pyright\b"
+    r")"
+)
+
+
+def _is_interpreter_script_execution(command: str, base_cmd: str) -> bool:
+    """True if this is an interpreter executing a script file (not a snippet).
+
+    Thread 5 (Codex V13): python script.py / node script.js / etc.
+    without content analysis or capability declaration → R3+.
+    Known-safe project tooling (pytest, ruff, mypy, etc.) is excluded.
+    """
+    if base_cmd not in ("python", "python3", "node", "ruby", "bash", "sh", "zsh"):
+        return False
+    # Exclude -c, -m (handled elsewhere), heredocs
+    if re.search(r"\s+-c\b|\s+-\s*<<", command):
+        return False
+    if re.search(r"\s+-m\b", command):
+        return False  # python -m <module> is handled separately
+    # If it matches known-safe patterns, let R1 handle it
+    if _KNOWN_SAFE_INTERPRETER_INVOCATIONS.match(command):
+        return False
+    # Check if there's a script file argument
+    return bool(_INTERPRETER_SCRIPT_EXECUTION.match(command))
 
 
 # ── gh api detection ──
@@ -747,6 +856,37 @@ def _git_output_target_is_sensitive(command: str, cwd: str = "") -> bool:
     return bool(_SENSITIVE_PATH_PATTERNS.search(target))
 
 
+# ── find file-output action detection ──
+
+# Thread 7 (Codex V13): find actions that create or overwrite files:
+#   -fprint <file>       write output to <file>
+#   -fprint0 <file>      write NUL-terminated output to <file>
+#   -fprintf <file> <fmt> write formatted output to <file>
+#   -fls <file>          write ls -l style listing to <file>
+_FIND_OUTPUT_ACTIONS: re.Pattern[str] = re.compile(
+    r"(?:-fprint|-fprint0|-fprintf|-fls)\s+\S+"
+)
+
+
+def _find_has_output_action(command: str) -> bool:
+    """True if find command uses a file-output action (-fprint, -fprintf, -fls)."""
+    return bool(_FIND_OUTPUT_ACTIONS.search(command))
+
+
+def _find_output_target(command: str) -> str | None:
+    """Extract the output file path from a find file-output action.
+
+    Thread 7 (Codex V13): Handles all four output actions:
+      -fprint <file>, -fprint0 <file>, -fprintf <file> <fmt>, -fls <file>
+    For -fprintf, the target is the first argument (the file path), not the format.
+    """
+    for action in ("-fprint0", "-fprintf", "-fprint", "-fls"):
+        m = re.search(rf"{action}\s+(\S+)", command)
+        if m:
+            return m.group(1)
+    return None
+
+
 class CommandClassifier:
     """Maps command strings to risk levels via layered analysis.
 
@@ -810,6 +950,10 @@ class CommandClassifier:
     ]
 
     # ── R1: Safe local execution ──
+    # Thread 5 (Codex V13): Removed broad python *.py / node *.js patterns.
+    # Arbitrary script execution without content analysis, controlled paths,
+    # content hashes, and capability constraints is at least R3.
+    # Only KNOWN-SAFE project tooling and test runners get R1.
     R1_PATTERNS: ClassVar[list[str]] = [
         r"python\s+-m\s+pytest\b", r"pytest\b",
         r"ruff\s+check\b", r"ruff\s+format\b",
@@ -817,8 +961,6 @@ class CommandClassifier:
         r"npx\s+tsc\b", r"npm\s+run\s+build\b",
         r"npm\s+test\b",
         r"swift\s+test\b",
-        r"python\s+\S+\.py\b",
-        r"node\s+\S+\.js\b",
     ]
 
     # ── R0: Pure read (validated) ──
@@ -827,8 +969,11 @@ class CommandClassifier:
         r"^find\b", r"^grep\b", r"^rg\b",
         r"^wc\b", r"^du\b", r"^df\b",
         r"^which\b", r"^where\b", r"^type\b",
-        r"^echo\b", r"^pwd\b", r"^date\b",
-        r"^uname\b", r"^hostname\b",
+        r"^echo\b", r"^pwd\b",
+        r"^uname\b",
+        # Thread 6 (Codex V13): date and hostname are NOT unconditionally R0.
+        # date -s/--set mutates system time; hostname <new-name> mutates hostname.
+        # These are handled in the dedicated pre-R1/R0 parameter-aware block below.
         r"^git\s+status\b", r"^git\s+log\b",
         r"^git\s+diff\b", r"^git\s+show\b",
         r"^git\s+rev-parse\b", r"^git\s+ls-\w",
@@ -944,6 +1089,16 @@ class CommandClassifier:
                 )
 
         # ── Layer 1: Interpreter snippets (python -c, heredocs) ──
+        # Thread 5 (Codex V13): Also detect arbitrary script FILE execution.
+        # python script.py, node script.js, ruby script.rb, bash script.sh, sh script.sh
+        # without content analysis, controlled paths, and capability constraints → R3+.
+        if _is_interpreter_script_execution(command, base_cmd):
+            return CommandClassification(
+                command=command, risk_level=RiskLevel.R3,
+                kind=CommandKind.SYSTEM, auto_approvable=False,
+                reversible=False,
+                reason="interpreter script file execution without verification — R3, cannot prove safe",
+            )
         if _INTERPRETER_SNIPPET.search(command):
             if _python_snippet_is_dangerous(command):
                 return CommandClassification(
@@ -1100,13 +1255,190 @@ class CommandClassifier:
                     )
             elif git_sub in ("status", "log", "diff", "show", "rev-parse",
                              "ls-remote", "ls-files", "cat-file", "describe",
-                             "fetch", "remote", "config", "blame", "grep"):
+                             "blame", "grep"):
                 return CommandClassification(
                     command=command, risk_level=RiskLevel.R0,
                     kind=CommandKind.GIT, auto_approvable=True,
                     reversible=True,
                     reason=f"git {git_sub} — read-only subcommand (token-parsed) → R0",
                 )
+            # Thread 4 (Codex V13): fetch/remote/config are NOT unconditionally R0.
+            # - git fetch updates FETCH_HEAD and pulls objects → R2
+            # - git fetch --prune deletes remote-tracking refs → R3
+            # - git fetch --dry-run, git fetch --all (listing) → R0
+            # - git remote -v/show → R0; add/remove/set-url → R2+
+            # - git config --get/--list → R0; --add/--unset/--replace-all → R2
+            # - git config --global/--system with write args → R3
+            elif git_sub == "fetch":
+                if re.search(r"--prune\b", command):
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R3,
+                        kind=CommandKind.GIT, auto_approvable=False,
+                        reversible=False,
+                        reason="git fetch --prune — deletes remote-tracking refs → R3",
+                    )
+                if re.search(r"--dry-run\b", command):
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R0,
+                        kind=CommandKind.GIT, auto_approvable=True,
+                        reversible=True,
+                        reason="git fetch --dry-run — read-only simulation → R0",
+                    )
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R2,
+                    kind=CommandKind.GIT, auto_approvable=False,
+                    reversible=True,
+                    reason="git fetch — updates FETCH_HEAD, pulls objects → R2",
+                )
+            elif git_sub == "remote":
+                if re.search(r"remote\s+(?:add|remove|rm|set-url|rename)\b", command):
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R2,
+                        kind=CommandKind.GIT, auto_approvable=False,
+                        reversible=True,
+                        reason="git remote add/remove/set-url — mutating repository config → R2",
+                    )
+                # remote -v, remote show, remote get-url, remote list → R0
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R0,
+                    kind=CommandKind.GIT, auto_approvable=True,
+                    reversible=True,
+                    reason="git remote query — read-only → R0",
+                )
+            elif git_sub == "config":
+                # --global/--system write operations → R3 (affects user/system config)
+                if re.search(r"config\s+(?:--global|--system)\b", command):
+                    # If it also has --get/--list, it's still a read
+                    if re.search(r"config\s+.*(?:--get\b|--list\b)", command):
+                        return CommandClassification(
+                            command=command, risk_level=RiskLevel.R0,
+                            kind=CommandKind.GIT, auto_approvable=True,
+                            reversible=True,
+                            reason="git config --global/--system --get/--list → read-only → R0",
+                        )
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R3,
+                        kind=CommandKind.GIT, auto_approvable=False,
+                        reversible=False,
+                        reason="git config --global/--system write — affects user/system config → R3",
+                    )
+                # Mutating operations: --add, --unset, --replace-all, --remove-section, --rename-section
+                if re.search(r"config\s+.*(?:--add\b|--unset\b|--replace-all\b|--remove-section\b|--rename-section\b)", command):
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R2,
+                        kind=CommandKind.GIT, auto_approvable=False,
+                        reversible=True,
+                        reason="git config mutating operation → R2",
+                    )
+                # Bare 'git config key value' → write
+                # Check for key=value or key value pattern outside of --get/--list
+                non_flag = [t for t in tokens[2:] if not t.startswith("-")]
+                # After removing flags, if we have args and no --get/--list → it's a write
+                if non_flag and not re.search(r"config\s+.*(?:--get\b|--list\b|--get-regexp\b)", command):
+                    # First non-flag is the key; second one is the value → write
+                    if len(non_flag) >= 2:
+                        return CommandClassification(
+                            command=command, risk_level=RiskLevel.R2,
+                            kind=CommandKind.GIT, auto_approvable=False,
+                            reversible=True,
+                            reason="git config set value → mutating repository config → R2",
+                        )
+                # --get, --list, --get-regexp, --get-all, --get-urlmatch → read-only
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R0,
+                    kind=CommandKind.GIT, auto_approvable=True,
+                    reversible=True,
+                    reason="git config read query — read-only → R0",
+                )
+
+        # ── Layer 4.6: date/hostname parameter-aware classification ──
+        # Thread 6 (Codex V13): date/hostname are NOT unconditionally R0.
+        # date -s/--set mutates system time → R4
+        # hostname <new-name> mutates hostname → R4
+        # hostnamectl set-hostname → R4
+        # Read-only variants: date, date +%F, date -u, hostname, hostname -f → R0
+        if base_cmd == "date":
+            if re.search(r"\bdate\s+.*(?:-s\b|--set\b)", command):
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R4,
+                    kind=CommandKind.SYSTEM, auto_approvable=False,
+                    reversible=False,
+                    reason="date -s/--set — mutates system time → R4",
+                )
+            return CommandClassification(
+                command=command, risk_level=RiskLevel.R0,
+                kind=CommandKind.READ, auto_approvable=True,
+                reversible=True,
+                reason="date (read-only) → R0",
+            )
+        if base_cmd == "hostname":
+            # hostname with non-flag arguments → setting hostname
+            non_flag = [t for t in tokens[1:] if not t.startswith("-")]
+            if non_flag and not all(
+                t in ("-f", "--fqdn", "-s", "--short", "-d", "--domain",
+                      "-i", "--ip-address", "-I", "--all-ip-addresses",
+                      "-A", "--all-fqdns")
+                for t in non_flag
+            ):
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R4,
+                    kind=CommandKind.SYSTEM, auto_approvable=False,
+                    reversible=False,
+                    reason="hostname <new-name> — mutates system hostname → R4",
+                )
+            return CommandClassification(
+                command=command, risk_level=RiskLevel.R0,
+                kind=CommandKind.READ, auto_approvable=True,
+                reversible=True,
+                reason="hostname (read-only) → R0",
+            )
+        if base_cmd == "hostnamectl":
+            if re.search(r"hostnamectl\s+set-hostname\b", command):
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R4,
+                    kind=CommandKind.SYSTEM, auto_approvable=False,
+                    reversible=False,
+                    reason="hostnamectl set-hostname → R4",
+                )
+            # hostnamectl status is read-only
+            return CommandClassification(
+                command=command, risk_level=RiskLevel.R0,
+                kind=CommandKind.READ, auto_approvable=True,
+                reversible=True,
+                reason="hostnamectl (read-only) → R0",
+            )
+
+        # ── Layer 4.7: find file-output action detection ──
+        # Thread 7 (Codex V13): find -fprint/-fprint0/-fprintf/-fls create or
+        # overwrite files.  Must be detected BEFORE the R0 find pattern matches.
+        # Sensitive targets → R4; system path → R3; internal → R2.
+        if base_cmd == "find" and _find_has_output_action(command):
+            target = _find_output_target(command)
+            cwd = kwargs.get("cwd", "")
+            if target:
+                resolved = _expand_home_env_vars(target)
+                if cwd and not resolved.startswith("/") and not resolved.startswith("~"):
+                    resolved = cwd.rstrip("/") + "/" + resolved
+                if _SENSITIVE_PATH_PATTERNS.search(resolved):
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R4,
+                        kind=CommandKind.WRITE, auto_approvable=False,
+                        reversible=False,
+                        reason=f"find output to sensitive path {target} → R4",
+                    )
+                if resolved.startswith("/etc/") or resolved.startswith("/tmp/") or resolved.startswith("/var/"):
+                    return CommandClassification(
+                        command=command, risk_level=RiskLevel.R3,
+                        kind=CommandKind.WRITE, auto_approvable=False,
+                        reversible=False,
+                        reason=f"find output to system path {target} → R3",
+                    )
+            return CommandClassification(
+                command=command, risk_level=RiskLevel.R2,
+                kind=CommandKind.WRITE, auto_approvable=False,
+                reversible=True,
+                reason="find file output action (-fprint, -fprintf, -fls) — R2 write",
+            )
 
         # ── Layer 5: R2 pattern matching ──
         for pattern in self.R2_PATTERNS:
