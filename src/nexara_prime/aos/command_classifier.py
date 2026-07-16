@@ -49,8 +49,9 @@ class CommandClassification:
 # ── Shell structure detection (tokens, control operators, redirections) ──
 
 # Shell control operators that allow multi-command execution
+# | (pipe) is included — it spawns a second process with its own side effects
 _CONTROL_OPERATORS: re.Pattern[str] = re.compile(
-    r"(?<!\\)(?:&&|\|\||;|&|\\\n|\n)"
+    r"(?<!\\)(?:&&|\|\||\||;|&|\\\n|\n)"
 )
 
 # Redirections that create/overwrite files
@@ -121,22 +122,47 @@ def _python_snippet_is_dangerous(command: str) -> bool:
 # ── gh api detection ──
 
 def _gh_api_has_mutating_params(command: str) -> bool:
-    """True if gh api has field/method params that make it mutating."""
+    """True if gh api has field/method params that make it mutating.
+
+    Detects both space-separated and equals-form flags:
+    - -f body=hi, --field body=hi, --field=body=hi
+    - -F body=hi, --raw-field key=val, --raw-field=key=val
+    - -X POST, -XPOST, --method POST, --method=POST, --method=DELETE
+    """
+    # Space-separated: -f value, --field value, -F value, --raw-field value
     if re.search(r"(?:-f|--field|--raw-field)\s", command):
         return True
     if re.search(r"(?:-F)\s", command):
         return True
-    if re.search(r"(?:-X|--method)\s+(?:POST|PUT|PATCH|DELETE)", command, re.IGNORECASE):
+    # Equals-form: --field=value, --raw-field=value
+    if re.search(r"(?:--field|--raw-field)=", command):
+        return True
+    # -X method (space or glued): -X POST, -XPOST, -XDELETE
+    if re.search(r"-X\s*(?:POST|PUT|PATCH|DELETE)", command, re.IGNORECASE):
+        return True
+    # --method with space or equals: --method POST, --method=POST, --method=DELETE
+    if re.search(r"--method[\s=](?:POST|PUT|PATCH|DELETE)", command, re.IGNORECASE):
         return True
     return False
 
 
 def _gh_api_has_non_get_method(command: str) -> bool:
-    """Detect if gh api specifies a non-GET HTTP method."""
-    m = re.search(r"(?:-X|--method)\s+(\S+)", command, re.IGNORECASE)
+    """Detect if gh api specifies a non-GET HTTP method.
+
+    Handles: -X POST, -XPOST, --method POST, --method=POST, --method=DELETE, etc.
+    """
+    # -X (space or glued)
+    m = re.search(r"-X\s*(\S+)", command, re.IGNORECASE)
     if m:
         method = m.group(1).upper()
-        return method != "GET"
+        if method in ("POST", "PUT", "PATCH", "DELETE"):
+            return True
+    # --method (space or equals)
+    m = re.search(r"--method[\s=](\S+)", command, re.IGNORECASE)
+    if m:
+        method = m.group(1).upper()
+        if method in ("POST", "PUT", "PATCH", "DELETE"):
+            return True
     return False
 
 
@@ -272,6 +298,22 @@ class CommandClassifier:
 
         # ── Layer 2: gh api parameter scan ──
         if re.match(r"^gh\s+api\b", command):
+            # Check shell side effects FIRST before any R0 classification
+            if _has_control_operators(command):
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R3,
+                    kind=CommandKind.NETWORK, auto_approvable=False,
+                    reversible=False,
+                    reason="gh api with shell control operators (;, &&, ||, |) — fail-closed to R3",
+                )
+            if _has_redirection(command):
+                return CommandClassification(
+                    command=command, risk_level=RiskLevel.R3,
+                    kind=CommandKind.NETWORK, auto_approvable=False,
+                    reversible=False,
+                    reason="gh api with output redirection — fail-closed to R3",
+                )
+            # Check for mutating API params
             if _gh_api_has_mutating_params(command) or _gh_api_has_non_get_method(command):
                 return CommandClassification(
                     command=command, risk_level=RiskLevel.R3,
@@ -279,7 +321,7 @@ class CommandClassifier:
                     reversible=False,
                     reason="gh api with field/method/write params — R3, external side effect",
                 )
-            # Explicitly GET with no field/method params → R0
+            # Explicitly GET with no mutating params AND no shell side effects → R0
             return CommandClassification(
                 command=command, risk_level=RiskLevel.R0,
                 kind=CommandKind.NETWORK, auto_approvable=True,
