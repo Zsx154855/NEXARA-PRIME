@@ -1,8 +1,9 @@
 """Command risk classification — maps shell/tool invocations to risk levels (R0-R4).
 
 Uses shell tokenisation, control-operator detection, redirection detection,
-and mutating-option detection to prevent prefix-only matching from
-auto-approving dangerous commands.
+command substitution detection, secret expansion detection, destructive git
+detection, sensitive path detection, and mutating-option detection to prevent
+prefix-only matching from auto-approving dangerous commands.
 """
 from __future__ import annotations
 
@@ -46,7 +47,7 @@ class CommandClassification:
     working_directory: str = ""
 
 
-# ── Shell structure detection (tokens, control operators, redirections) ──
+# ── Shell structure detection (tokens, control operators, redirections, substitution) ──
 
 # Shell control operators that allow multi-command execution
 # | (pipe) is included — it spawns a second process with its own side effects
@@ -59,21 +60,83 @@ _REDIRECTION_PATTERN: re.Pattern[str] = re.compile(
     r"\d*>>?\s*\S|\d*>\s*\S|\d*&>\s*\S|\d*>>\s*\S"
 )
 
+# Shell command substitution: $(...) and backticks
+_COMMAND_SUBSTITUTION: re.Pattern[str] = re.compile(
+    r"\$\([^)]*\)|`[^`]+`"
+)
+
 # Mutating options on nominally-read-only commands
 _MUTATING_OPTIONS: dict[str, list[str]] = {
     "find": ["-delete", "-exec", "-execdir", "-ok", "-okdir"],
     "git": ["push", "merge", "rebase", "tag", "add", "commit", "stash", "clean"],
 }
 
+# Destructive git commands that must never be auto-approved
+_DESTRUCTIVE_GIT_COMMANDS: re.Pattern[str] = re.compile(
+    r"git\s+(?:"
+    r"checkout\s+--|"
+    r"restore\b|"
+    r"branch\s+-D\b|"
+    r"stash\s+drop\b|"
+    r"stash\s+clear\b|"
+    r"clean\b|"
+    r"reset\s+--hard|"
+    r"reflog\s+expire"
+    r")"
+)
+
+# Sensitive paths — reading these must never be R0
+_SENSITIVE_PATH_PATTERNS: re.Pattern[str] = re.compile(
+    r"(?:"
+    r"~/.ssh/|"
+    r"~/.aws/|"
+    r"~/.config/[^/\s]*credentials|"
+    r"/\.env\b|"
+    r"\.env\b|"
+    r"\.pem\b|"
+    r"\.key\b|"
+    r"id_rsa|"
+    r"id_ed25519|"
+    r"id_ecdsa|"
+    r"private_key|"
+    r"\.netrc\b|"
+    r"\.git-credentials\b|"
+    r"Keychain\b|"
+    r"keychain\b"
+    r")",
+    re.IGNORECASE,
+)
+
+# Secret expansion patterns — commands that could output secrets
+_SECRET_EXPANSION: re.Pattern[str] = re.compile(
+    r"(?:"
+    r"echo\s+\"\$[A-Z_]+\"|"              # echo "$TOKEN"
+    r"echo\s+\"\$\{[A-Z_]+\}\"|"          # echo "${TOKEN}"
+    r'echo\s+\'\$[A-Z_]+\'|'              # echo '$TOKEN'
+    r"printf\s+.*\$[A-Z_]+|"              # printf "%s" "$SECRET"
+    r"env\s*\|\s*grep\s+[A-Z_]+|"         # env | grep TOKEN
+    r"printenv\s+[A-Z_]+|"                # printenv TOKEN
+    r"cat\s+\$[A-Z_]+|"                   # cat $TOKEN (variable as filename)
+    r"grep\s+.*\$[A-Z_]+|"                # grep pattern $SECRET_FILE
+    r"\bprintenv\b|"                      # bare printenv
+    r"\benv\s*$"                          # bare env
+    r")",
+)
+
 
 def _has_control_operators(command: str) -> bool:
-    """True if the command contains shell control operators (;, &&, ||, &, \\n)."""
+    """True if the command contains shell control operators (;, &&, ||, |, &, \\n)."""
     return bool(_CONTROL_OPERATORS.search(command))
 
 
 def _has_redirection(command: str) -> bool:
     """True if the command contains output redirection (> , >>, &>, 2>)."""
     return bool(_REDIRECTION_PATTERN.search(command))
+
+
+def _has_command_substitution(command: str) -> bool:
+    """True if the command contains $(...) or backtick command substitution."""
+    return bool(_COMMAND_SUBSTITUTION.search(command))
 
 
 def _has_mutating_option(command: str, base_cmd: str) -> bool:
@@ -83,6 +146,21 @@ def _has_mutating_option(command: str, base_cmd: str) -> bool:
         if opt in command:
             return True
     return False
+
+
+def _is_destructive_git(command: str) -> bool:
+    """True if the command is a destructive git operation that must never be auto-approved."""
+    return bool(_DESTRUCTIVE_GIT_COMMANDS.search(command))
+
+
+def _reads_sensitive_path(command: str) -> bool:
+    """True if the command reads any sensitive paths (SSH keys, AWS creds, .env, etc.)."""
+    return bool(_SENSITIVE_PATH_PATTERNS.search(command))
+
+
+def _has_secret_expansion(command: str) -> bool:
+    """True if the command could output a secret (echo $VAR, printf, env|grep TOKEN)."""
+    return bool(_SECRET_EXPANSION.search(command))
 
 
 # ── Interpreter snippet detection ──
@@ -122,12 +200,13 @@ def _python_snippet_is_dangerous(command: str) -> bool:
 # ── gh api detection ──
 
 def _gh_api_has_mutating_params(command: str) -> bool:
-    """True if gh api has field/method params that make it mutating.
+    """True if gh api has field/method/input params that make it mutating.
 
     Detects both space-separated and equals-form flags:
     - -f body=hi, --field body=hi, --field=body=hi
     - -F body=hi, --raw-field key=val, --raw-field=key=val
     - -X POST, -XPOST, --method POST, --method=POST, --method=DELETE
+    - --input file.json, --input=file.json (GraphQL mutation bodies)
     """
     # Space-separated: -f value, --field value, -F value, --raw-field value
     if re.search(r"(?:-f|--field|--raw-field)\s", command):
@@ -136,6 +215,9 @@ def _gh_api_has_mutating_params(command: str) -> bool:
         return True
     # Equals-form: --field=value, --raw-field=value
     if re.search(r"(?:--field|--raw-field)=", command):
+        return True
+    # --input (space or equals): GraphQL mutation file input
+    if re.search(r"--input[\s=]", command):
         return True
     # -X method (space or glued): -X POST, -XPOST, -XDELETE
     if re.search(r"-X\s*(?:POST|PUT|PATCH|DELETE)", command, re.IGNORECASE):
@@ -200,6 +282,9 @@ class CommandClassifier:
         r"npm\s+publish", r"twine\s+upload",
         r"gh\s+release\s+create", r"git\s+tag",
         r"chmod\s+[0-7]*7", r"chown\b",
+        r"git\s+reset\s+--hard", r"git\s+clean\b",
+        r"git\s+stash\s+(?:drop|clear)\b", r"git\s+reflog\s+expire",
+        r"\bchmod\s+[0-7]*7", r"\bchmod\s+[ugoa][-+=]",
     ]
 
     # ── R3: External or high-impact ──
@@ -266,19 +351,57 @@ class CommandClassifier:
         """Classify a command string into a risk level.
 
         Layered analysis:
-        1. High-risk patterns (R4, R3, R2) — checked first
-        2. Interpreter snippets (python -c, heredocs)
-        3. gh api parameter scan
-        4. Shell structure scan (applied to R0/R1 candidates only)
-        5. R1/R0 pattern matching
+        0. Tokenize and scan for shell injection primitives (substitution, expansion, etc.)
+        1. Interpreter snippets (python -c, heredocs)
+        2. gh api parameter scan
+        3. High-risk patterns (R4, R3, R2)
+        4. Shell structure scan (control ops, redirections, mutating opts, substitution)
+        5. Destructive git + sensitive path detection
+        6. R2/R1/R0 pattern matching
         """
 
-        # ── Layer 0: Tokenize for structure analysis ──
+        # ── Layer 0: Tokenize + scan for shell injection primitives ──
         try:
             tokens = shlex.split(command)
         except ValueError:
             tokens = command.split()
         base_cmd = tokens[0] if tokens else ""
+
+        # Command substitution ($(...) or backticks) — always at least R3
+        if _has_command_substitution(command):
+            return CommandClassification(
+                command=command, risk_level=RiskLevel.R3,
+                kind=CommandKind.SYSTEM, auto_approvable=False,
+                reversible=False,
+                reason="shell command substitution detected ($(...) or backticks) — fail-closed to R3",
+            )
+
+        # Secret expansion (echo "$VAR", printf, env|grep TOKEN) — always R4
+        if _has_secret_expansion(command):
+            return CommandClassification(
+                command=command, risk_level=RiskLevel.R4,
+                kind=CommandKind.SECRET, auto_approvable=False,
+                reversible=False,
+                reason="potential secret expansion detected (echo $VAR, printf, env|grep) — R4",
+            )
+
+        # Destructive git commands — always at least R3
+        if _is_destructive_git(command):
+            return CommandClassification(
+                command=command, risk_level=RiskLevel.R3,
+                kind=CommandKind.GIT, auto_approvable=False,
+                reversible=False,
+                reason="destructive git operation — fail-closed to R3",
+            )
+
+        # Sensitive path reads — at least R3
+        if _reads_sensitive_path(command):
+            return CommandClassification(
+                command=command, risk_level=RiskLevel.R4,
+                kind=CommandKind.SECRET, auto_approvable=False,
+                reversible=False,
+                reason="sensitive path read detected (~/.ssh, ~/.aws, credentials, .env, private keys) — R4",
+            )
 
         # ── Layer 1: Interpreter snippets (python -c, heredocs) ──
         if _INTERPRETER_SNIPPET.search(command):
@@ -313,13 +436,13 @@ class CommandClassifier:
                     reversible=False,
                     reason="gh api with output redirection — fail-closed to R3",
                 )
-            # Check for mutating API params
+            # Check for mutating API params (includes --input for GraphQL mutations)
             if _gh_api_has_mutating_params(command) or _gh_api_has_non_get_method(command):
                 return CommandClassification(
                     command=command, risk_level=RiskLevel.R3,
                     kind=CommandKind.NETWORK, auto_approvable=False,
                     reversible=False,
-                    reason="gh api with field/method/write params — R3, external side effect",
+                    reason="gh api with field/method/write/input params — R3, external side effect",
                 )
             # Explicitly GET with no mutating params AND no shell side effects → R0
             return CommandClassification(
@@ -352,7 +475,7 @@ class CommandClassifier:
                 command=command, risk_level=RiskLevel.R3,
                 kind=CommandKind.UNKNOWN, auto_approvable=False,
                 reversible=False,
-                reason="shell control operators detected (;, &&, ||, &) — fail-closed to R3",
+                reason="shell control operators detected (;, &&, ||, |, &) — fail-closed to R3",
             )
         if _has_redirection(command):
             return CommandClassification(

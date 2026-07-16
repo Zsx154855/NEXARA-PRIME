@@ -184,26 +184,64 @@ class AutonomousSupervisor:
     # ── dispatching ──
 
     def _process_queued(self) -> None:
-        """Move queued items to ready if dependencies are met.
+        """Move queued items to ready if dependencies are met AND available_at is reached.
 
         Errors propagate to _run() for structured handling.
         """
         queued = self.orchestrator.mission_queue.list_by_state(QueueItemState.QUEUED)
         for item in queued:
+            # Respect available_at scheduling — future missions stay QUEUED
+            if not self._is_available_now(item):
+                continue
             if self._dependencies_satisfied(item):
                 self.orchestrator.mission_queue.transition(
                     item.mission_id, QueueItemState.READY
                 )
 
+    @staticmethod
+    def _is_available_now(item: MissionQueueItem) -> bool:
+        """True if available_at is None or has passed."""
+        if item.available_at is None:
+            return True
+        now = datetime.now(timezone.utc)
+        try:
+            avail = datetime.fromisoformat(item.available_at)
+            return avail <= now
+        except (ValueError, TypeError):
+            return True  # unparseable → assume available
+
     def _dispatch_ready(self) -> None:
         """Dispatch ready missions through the execution gateway.
 
+        - Respects max_concurrent_missions: started + new <= configured max
         - Auto-selects worker if preferred_worker is None
-        - Sets lease_expires_at on transition to RUNNING
-        - Handles WorkerResult: success→COMPLETED, retryable→recover, fatal→BLOCKED
+        - Persists lease fields BEFORE transitioning to RUNNING
+        - Passes full mission payload (command, prompt, cwd, capabilities,
+          run_id, trace_id) to the worker — NOT just mission_id + priority
+        - Rejects missions with empty command AND empty prompt
+        - Hands off to Worker for execution; completion goes through
+          RuntimeOrchestrator.complete_mission() with Evidence completion gate
+        - Handles WorkerResult: success→complete_mission, retryable→recover,
+          fatal→BLOCKED
         """
         ready = self.orchestrator.mission_queue.list_by_state(QueueItemState.READY)
+        if not ready:
+            return
+
+        # Count currently running missions for max_concurrent enforcement
+        running = self.orchestrator.mission_queue.list_by_state(QueueItemState.RUNNING)
+        leased = self.orchestrator.mission_queue.list_by_state(QueueItemState.LEASED)
+        current_running = len(running) + len(leased)
+
         for item in ready:
+            # ── Thread 12: max_concurrent_missions enforcement ──
+            if current_running >= self.config.max_concurrent_missions:
+                break  # Leave remaining items in READY; will retry next cycle
+
+            # ── Thread 11: Respect available_at (double-check after promotion) ──
+            if not self._is_available_now(item):
+                continue
+
             # Auto-select worker if none pinned
             worker_id = item.preferred_worker
             if not worker_id:
@@ -213,48 +251,116 @@ class AutonomousSupervisor:
                     continue
                 worker_id = scheduled.worker_id
 
-            # Set lease and transition to RUNNING
-            self.orchestrator.mission_queue.transition(
-                item.mission_id, QueueItemState.RUNNING
-            )
-            # Update lease fields on the item
-            item.lease_owner = worker_id
-            item.lease_expires_at = (
+            # ── Thread 8: Build full mission payload ──
+            full_mission = self._build_mission_payload(item)
+            command = full_mission.get("command", "")
+            prompt = full_mission.get("prompt", "")
+
+            # Reject empty payloads — cannot produce fake completion
+            if not command and not prompt:
+                self.orchestrator.mission_queue.transition(
+                    item.mission_id, QueueItemState.BLOCKED,
+                )
+                self._record_evidence(item.mission_id, "mission_blocked", {
+                    "mission_id": item.mission_id,
+                    "reason": "empty command and prompt — cannot execute",
+                })
+                continue
+
+            # ── Thread 9: Persist lease fields BEFORE RUNNING transition ──
+            lease_expires_ts = (
                 datetime.now(timezone.utc).timestamp()
                 + self.config.default_lease_duration_s
             )
-            try:
-                item.lease_expires_at = datetime.fromtimestamp(
-                    item.lease_expires_at, tz=timezone.utc
-                ).isoformat()
-            except (TypeError, OSError):
-                item.lease_expires_at = datetime.now(timezone.utc).isoformat()
-
-            # Increment attempt counter
+            lease_expires_str = datetime.fromtimestamp(
+                lease_expires_ts, tz=timezone.utc
+            ).isoformat()
             item.attempt_count += 1
 
-            # Dispatch through gateway (PermissionBroker enforced inside)
-            result = self.gateway.dispatch(
-                worker_id, item.mission_id,
-                {"mission_id": item.mission_id, "priority": item.priority},
+            # Persist via transition with extra fields
+            self.orchestrator.mission_queue.transition(
+                item.mission_id, QueueItemState.RUNNING,
+                lease_owner=worker_id,
+                lease_expires_at=lease_expires_str,
+                attempt_count=item.attempt_count,
             )
 
-            # Handle result
+            # ── Dispatch through gateway (PermissionBroker enforced inside) ──
+            result = self.gateway.dispatch(
+                worker_id, item.mission_id, full_mission,
+            )
+
+            # ── Thread 10: Handle result through complete_mission / recovery ──
             if result.success:
-                self.orchestrator.mission_queue.transition(
-                    item.mission_id, QueueItemState.COMPLETED
+                self.orchestrator.complete_mission(
+                    item.mission_id, worker_id, worker_result=result,
                 )
             elif result.failure_class and result.failure_class.value in self._RETRYABLE_FAILURES:
                 self._handle_retryable_failure(item, result)
             else:
                 self.orchestrator.mission_queue.transition(
-                    item.mission_id, QueueItemState.BLOCKED
+                    item.mission_id, QueueItemState.BLOCKED,
                 )
                 self._record_evidence(item.mission_id, "mission_blocked", {
                     "mission_id": item.mission_id,
                     "reason": str(result.output.get("error", "non-retryable failure")),
                     "failure_class": result.failure_class.value if result.failure_class else "unknown",
                 })
+
+            current_running += 1
+
+    def _build_mission_payload(self, item: MissionQueueItem) -> dict[str, Any]:
+        """Build the full mission payload from a queue item.
+
+        Includes command, prompt, cwd, capabilities, run_id, trace_id.
+        This is the REAL mission payload passed to the Worker — not just
+        mission_id and priority.
+        """
+        from ..models import Mission
+
+        payload: dict[str, Any] = {
+            "mission_id": item.mission_id,
+            "priority": item.priority,
+            "trace_id": f"sv:{item.mission_id}:{_utc_now()}",
+            "run_id": f"run:{item.mission_id}:{item.attempt_count}",
+        }
+
+        # Try mission_payload record first (set by submit_mission with command/prompt)
+        try:
+            mp_raw = self._store.find_record(
+                "mission_payload", "mission_id", item.mission_id,
+            )
+            if mp_raw:
+                p = mp_raw.get("payload", mp_raw)
+                payload["command"] = p.get("command", "")
+                payload["prompt"] = p.get("prompt", "")
+                payload["cwd"] = p.get("cwd", "")
+                payload["capabilities"] = p.get("capabilities", [])
+                return payload
+        except Exception:
+            pass
+
+        # Fall back to full Mission record
+        try:
+            raw = self._store.get_record(item.mission_id)
+            if raw:
+                mission = Mission.model_validate(raw)
+                payload["command"] = mission.spec.objective or ""
+                payload["cwd"] = mission.spec.source_dir or ""
+                payload["capabilities"] = [
+                    a.loaded_capabilities for a in (mission.assignments or [])
+                ]
+                payload["trace_id"] = mission.trace_id
+        except (KeyError, Exception):
+            pass
+
+        # Ensure required fields are populated
+        payload.setdefault("command", "")
+        payload.setdefault("prompt", "")
+        payload.setdefault("cwd", "")
+        payload.setdefault("capabilities", item.required_capabilities or [])
+
+        return payload
 
     def _handle_retryable_failure(
         self, item: MissionQueueItem, result: Any,
@@ -363,33 +469,77 @@ class AutonomousSupervisor:
             self._on_mission_complete(item)
 
     def _on_mission_complete(self, item: MissionQueueItem) -> None:
-        """Record completion evidence — idempotent per mission_id + state."""
+        """Record completion evidence — idempotent per mission_id + state.
+
+        Uses BOTH an in-memory set AND a persistent EvidenceStore query
+        to guarantee idempotency across restarts. The in-memory set is
+        a fast-path optimization; the persistent store is the source of
+        truth for crash-restart scenarios.
+        """
         evidence_key = f"{item.mission_id}:{item.state.value}:completed"
         if evidence_key in self._completed_evidence_written:
             return
+
+        # ── Thread 13: Persistent idempotency check ──
+        existing = self._evidence.list(mission_id=item.mission_id)
+        for e in existing:
+            if (
+                e.get("kind") == "mission_completed"
+                and e.get("mission_id") == item.mission_id
+            ):
+                # Already persisted — skip but cache the fact in memory
+                self._completed_evidence_written.add(evidence_key)
+                return
 
         self._mission_history.append({
             "mission_id": item.mission_id, "completed_at": _utc_now(),
             "state": item.state.value,
         })
         if self.config.evidence_on_completion:
-            self._record_evidence(item.mission_id, "mission_completed", {
-                "mission_id": item.mission_id, "state": item.state.value,
-            })
+            self._record_evidence(
+                item.mission_id, "mission_completed",
+                {
+                    "mission_id": item.mission_id,
+                    "state": item.state.value,
+                },
+                idempotency_key=f"completion:{item.mission_id}:{item.state.value}",
+            )
         self._completed_evidence_written.add(evidence_key)
 
     # ── mission management ──
 
     def submit_mission(self, mission_id: str, priority: int = 0,
                        capabilities: list[str] | None = None,
-                       risk: RiskLevel = RiskLevel.R1) -> MissionQueueItem:
+                       risk: RiskLevel = RiskLevel.R1,
+                       command: str = "", prompt: str = "",
+                       cwd: str = "",
+                       available_at: str | None = None,
+                       idempotency_key: str | None = None,
+                       dependencies: list[str] | None = None,
+                       max_attempts: int = 3) -> MissionQueueItem:
         item = MissionQueueItem(
             mission_id=mission_id, priority=priority,
             state=QueueItemState.QUEUED, risk_level=risk,
             required_capabilities=capabilities or [],
+            available_at=available_at,
+            idempotency_key=idempotency_key,
+            dependencies=dependencies or [],
+            max_attempts=max_attempts,
         )
         self.orchestrator.mission_queue.enqueue(item)
         self._current_mission_id = mission_id
+
+        # Persist mission metadata (command, prompt, cwd) as a record so
+        # _build_mission_payload can retrieve it even without a full Mission
+        if command or prompt:
+            self._store.save_record(
+                f"payload:{mission_id}", "mission_payload",
+                {"mission_id": mission_id, "command": command,
+                 "prompt": prompt, "cwd": cwd,
+                 "capabilities": capabilities or []},
+                created_at=_utc_now(), mission_id=mission_id,
+            )
+
         return item
 
     def mission_status(self, mission_id: str) -> dict[str, Any]:
@@ -407,6 +557,7 @@ class AutonomousSupervisor:
     def _record_evidence(
         self, mission_id: str, kind: str, content: dict[str, Any],
         trace_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> None:
         tid = trace_id or f"sv:{mission_id}:{kind}:{_utc_now()}"
         try:
@@ -415,6 +566,7 @@ class AutonomousSupervisor:
                 title=f"{kind}: {mission_id}",
                 content=json.dumps(content, default=str),
                 trace_id=tid,
+                idempotency_key=idempotency_key,
             )
         except Exception as exc:
             self._events.publish(

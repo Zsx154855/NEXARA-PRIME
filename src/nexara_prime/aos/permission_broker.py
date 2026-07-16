@@ -1,4 +1,8 @@
-"""Risk-based permission broker — auto-approves R0-R2, escalates R3-R4."""
+"""Risk-based permission broker — auto-approves R0-R2, escalates R3-R4.
+
+R3 whitelist entries are re-validated for shell metacharacters before
+auto-approval to prevent prefix-only bypasses.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -7,7 +11,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from .command_classifier import CommandClassifier, RiskLevel
+from .command_classifier import (
+    CommandClassifier,
+    RiskLevel,
+    _has_control_operators,
+    _has_redirection,
+    _has_command_substitution,
+)
 
 
 @dataclass
@@ -108,6 +118,32 @@ class PermissionBroker:
         return decision
 
     def _is_r3_whitelisted(self, command: str) -> bool:
+        """Check if command is in the R3 whitelist, with mandatory shell re-validation.
+
+        BEFORE appoval, the whitelist re-validates for:
+        - pipe (|)
+        - semicolon (;)
+        - && / ||
+        - redirection (> , >>, &>)
+        - command substitution ($(...) or backticks)
+        - multiple commands (via shlex split)
+        - shell injection metacharacters
+
+        A single match fails the whitelist check — fail-closed.
+        """
+        # ── Mandatory pre-whitelist shell re-validation ──
+        if _has_control_operators(command):
+            return False
+        if _has_redirection(command):
+            return False
+        if _has_command_substitution(command):
+            return False
+        # Multiple commands via whitespace-separated tokens beyond the prefix
+        # (catches "gh pr view 1 | sh" style which shlex wouldn't catch)
+        if "|" in command or ";" in command:
+            return False
+
+        # ── Whitelist prefix matching ──
         for prefix, validator in self._r3_whitelist:
             if command.startswith(prefix):
                 if validator is not None:

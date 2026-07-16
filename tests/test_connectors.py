@@ -7,7 +7,7 @@ import time
 import unittest
 
 from nexara_prime.connectors.base import (
-    BaseConnector, ConnectorHealth, ConnectorLifecycleState,
+    BaseConnector, ConnectorLifecycleState,
     ConnectorManifest, ConnectorPermission,
 )
 from nexara_prime.connectors.registry import ConnectorRegistry
