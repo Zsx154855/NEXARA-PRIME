@@ -45,16 +45,19 @@ tiers:
       - must be unambiguous
 
   - tier: 2
-    label: "NSEC (NEXARA Sovereign Engineering Constitution)"
+    label: "NSEC V2.0 (NEXARA Sovereign Engineering Constitution)"
     description: >
-      The single highest engineering governance document. All other documents,
-      contracts, policies, skills, and agent behaviors derive from and are
-      subordinate to NSEC.
+      The single highest engineering governance document — NSEC V2.0 (2026-07-18).
+      All other documents, contracts, policies, skills, and agent behaviors
+      derive from and are subordinate to NSEC V2.0. NSEC V1 is SUPERSEDED.
     sources:
-      - governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md
-      - governance/nsec.yaml (machine-readable declaration)
+      - governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md
+      - governance/nsec.yaml (machine-readable declaration — V2.0)
     overrides: [3, 4, 5, 6, 7, 8]
     amendment: "R4 — requires ADR, program lead, maintainer, release manager, security review"
+    history:
+      - "V1 (2026-07-18, SUPERSEDED): 17 Articles, English"
+      - "V2.0 (2026-07-18, ACTIVE): 19 Chapters 55 Articles, Chinese (authoritative)"
 
   - tier: 3
     label: "Program Constitution"
