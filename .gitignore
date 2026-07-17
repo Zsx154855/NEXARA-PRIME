@@ -83,3 +83,6 @@ platform/sdk/typescript/node_modules/
 # ── Session artifacts ──
 Chats/
 platform/sdk/typescript/node_modules/
+
+# NEXARA CI Authority runtime evidence (local only, never committed)
+.runtime/ci/
