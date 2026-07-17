@@ -9,7 +9,7 @@ version: "2.0.0"
 status: ACTIVE
 authority_level: supreme
 canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md
-canonical_hash: "sha256:$(sha256sum governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md | cut -d' ' -f1)"
+canonical_hash: "sha256:e3ed168fee070b1aec68227f696f0f6fb92e3d9f87ded59a927169d46e8c7e94"
 ratified: "2026-07-18"
 supersedes:
   - id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1

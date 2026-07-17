@@ -36,7 +36,7 @@ AgentsOS 是历史资产或人类控制产品层，不是 NEXARA-PRIME 的 Runti
 执行前按以下优先级读取真实约束：
 
 1. 用户当前明确指令
-2. `governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md` (NSEC — 最高工程治理源)
+2. `governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md` (NSEC — 最高工程治理源)
 3. `governance/authority_index.yaml` (Authority Index)
 4. `NEXARA_PROGRAM_CONSTITUTION_V1.md`
 5. `NEXARA_PRIME_SOVEREIGN_AGENT_MASTER_BLUEPRINT_V1.md`
