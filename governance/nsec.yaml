@@ -1,0 +1,55 @@
+# NEXARA Sovereign Engineering Constitution — Machine-Readable Declaration
+# This file is derived from the canonical document. The canonical document is authoritative.
+# Any discrepancy between this file and the canonical document MUST be resolved in favor of the canonical document.
+
+id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1
+short_name: NSEC
+version: "1.0.0"
+status: ACTIVE
+authority_level: supreme
+canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md
+canonical_hash: "sha256:184368c6101bc20c63af5dbfac0871e5ad344909a9bfa53dd92c883c0daf60f6"
+ratified: "2026-07-18"
+
+scope:
+  repository: NEXARA-PRIME
+  remote: Zsx154855/NEXARA-PRIME
+  applies_to:
+    - all_source_code
+    - all_tests
+    - all_ci_cd_pipelines
+    - all_agent_configurations
+    - all_skills
+    - all_governance_documents
+    - all_contracts
+    - all_state_files
+    - all_evidence
+    - all_receipts
+    - all_development_workflows
+
+interpretation_order:
+  1: literal_text
+  2: article_headings
+  3: preamble_intent
+  4: appendix_reference
+
+authority_relationship:
+  supersedes:
+    - all_prior_uncodified_principles
+    - all_implicit_conventions
+    - any_conflicting_governance_document
+  superseded_by: []
+  equals: []
+
+binding_requirements:
+  program_constitution_must_declare_subordination: true
+  onepass_skill_must_reference_canonical: true
+  all_agent_entries_must_reference_nsec: true
+  ci_must_validate_nsec_integrity: true
+  no_second_supreme_authority_permitted: true
+
+verification:
+  validator: scripts/governance/validate_nsec.py
+  drift_detector: scripts/governance/detect_nsec_drift.py
+  ci_job: NSEC Governance Integrity
+  fail_on: ANY_VIOLATION

@@ -1,5 +1,12 @@
 # NEXARA PROGRAM CONSTITUTION V1
 
+> **Authority Declaration:** This Program Constitution is subordinate to the
+> [NEXARA Sovereign Engineering Constitution (NSEC) V1](governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md),
+> the single highest engineering governance source for this project.
+> On any conflict, NSEC prevails. This declaration is machine-verified by
+> `scripts/governance/validate_nsec.py` and must not be removed or altered
+> without an NSEC-compliant amendment.
+
 ## 最高目标
 构建完全第一方、非 Hermes 运行依赖、建立在 NEXARA PRIME 上的主权智能体。
 

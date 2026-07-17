@@ -146,7 +146,7 @@ roles:
     required_gates: [G0, G1, G2, G3, G4, G5, G6]
 
   program_lead:
-    description: "Program lead with ultimate authority"
+    description: "Program lead with release approval authority — subordinate to NSEC governance"
     authority: "required for R4 approvals; can block any release"
     appointment: "defined in .nexara/PROGRAM_STATE.json"
 

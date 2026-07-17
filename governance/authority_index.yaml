@@ -1,0 +1,171 @@
+# NEXARA PRIME — Authority Index V1
+# Defines the absolute precedence of all authority sources within the project.
+# When sources conflict, higher-numbered tiers prevail over lower-numbered tiers.
+# EXCEPTION: Reality Override (Tier 0) — verified facts override ALL tiers including this index.
+
+version: 1
+index_name: NEXARA_AUTHORITY_INDEX_V1
+ratified: "2026-07-18"
+canonical_location: governance/authority_index.yaml
+
+# ── Authority Tiers (higher number = higher authority) ─────────────────────────
+# Tier 0 is a meta-tier: it overrides everything when triggered.
+# Tiers 1-8 are the normal precedence chain.
+
+tiers:
+  - tier: 0
+    label: "Reality Override"
+    description: >
+      Verified, reproducible facts (measured test results, git state, file
+      contents, runtime behavior, checksums) override ALL lower tiers when a
+      documented claim contradicts reality. The document must be corrected;
+      reality is not adjusted to match the document.
+    sources:
+      - git HEAD and working tree state
+      - test execution results (exit codes, assertions)
+      - file checksums (SHA256)
+      - runtime logs and measurements
+      - CI pipeline actual outputs
+    overrides: [1, 2, 3, 4, 5, 6, 7, 8]
+    trigger: "Documented claim contradicts verified measurement"
+
+  - tier: 1
+    label: "Human Explicit Directive"
+    description: >
+      A current, specific, unambiguous instruction from the human owner.
+      General preferences and prior approvals do not carry forward.
+      Ambiguous instructions do not qualify.
+    sources:
+      - current conversation turn explicit instruction
+      - ratified ADR with human approval
+    overrides: [2, 3, 4, 5, 6, 7, 8]
+    constraints:
+      - must be current (not stale)
+      - must be specific (not general preference)
+      - must be unambiguous
+
+  - tier: 2
+    label: "NSEC (NEXARA Sovereign Engineering Constitution)"
+    description: >
+      The single highest engineering governance document. All other documents,
+      contracts, policies, skills, and agent behaviors derive from and are
+      subordinate to NSEC.
+    sources:
+      - governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md
+      - governance/nsec.yaml (machine-readable declaration)
+    overrides: [3, 4, 5, 6, 7, 8]
+    amendment: "R4 — requires ADR, program lead, maintainer, release manager, security review"
+
+  - tier: 3
+    label: "Program Constitution"
+    description: >
+      Program-level constitution defining product boundaries, execution model,
+      and human intervention conditions. Subordinate to NSEC.
+    sources:
+      - NEXARA_PROGRAM_CONSTITUTION_V1.md
+    overrides: [4, 5, 6, 7, 8]
+    subordination: "Explicitly declares subordination to NSEC. NSEC prevails on conflict."
+
+  - tier: 4
+    label: "Governance Contracts"
+    description: >
+      Formal contracts governing merge, release, approval, rollback, and state
+      management processes.
+    sources:
+      - governance/contracts/MERGE_CONTRACT_V1.yaml
+      - governance/releases/RELEASE_APPROVAL_MATRIX_V1.yaml
+      - governance/releases/RELEASE_FLOW_V1.md
+      - governance/recovery/ROLLBACK_POLICY_V1.md
+      - governance/authority_index.yaml (this file)
+    overrides: [5, 6, 7, 8]
+    constraints:
+      - must be consistent with NSEC and Program Constitution
+      - must be machine-validatable
+
+  - tier: 5
+    label: "Program State"
+    description: >
+      Current authoritative state of the program: gate status, program state,
+      baseline, facts.
+    sources:
+      - .nexara/GATE_STATUS.json
+      - .nexara/PROGRAM_STATE.json
+      - .nexara/BASELINE.json
+      - .nexara/PROJECT_FACTS.json
+    overrides: [6, 7, 8]
+    constraints:
+      - must be mutually consistent
+      - drift from reality is a HIGH severity incident
+      - derived from reality, not a substitute for it
+
+  - tier: 6
+    label: "Evidence"
+    description: >
+      Immutable records of what actually happened: test results, build logs,
+      review findings, approval decisions.
+    sources:
+      - .nexara/evidence/*
+      - reports/**/*evidence*.md
+      - reports/**/evidence_chain.json
+    overrides: [7, 8]
+    constraints:
+      - must be append-only
+      - must be independently verifiable
+      - mock/dry-run must be labeled
+
+  - tier: 7
+    label: "Implementation"
+    description: >
+      The actual code, tests, configurations, and scripts in the repository.
+      The implementation is the ground truth of what the system does.
+    sources:
+      - src/**/*.py
+      - tests/**/*.py
+      - scripts/**/*.py
+      - .github/workflows/*.yml
+      - config/**/*.yaml
+    overrides: [8]
+    constraints:
+      - must pass all tests and checks
+      - must conform to contracts at Tier 4 and above
+
+  - tier: 8
+    label: "Model Judgment"
+    description: >
+      LLM/agent reasoning, suggestions, and outputs. Lowest authority —
+      advisory only. Must be verified against higher tiers before action.
+    sources:
+      - Claude/Codex/Hermes/DeepSeek model outputs
+      - agent reasoning and suggestions
+      - AI-generated plans, reviews, and analyses
+    overrides: []
+    constraints:
+      - never authoritative on its own
+      - must be verified against Tier 7 (implementation) or higher
+      - model confidence does not increase authority
+
+# ── Cross-Tier Rules ──────────────────────────────────────────────────────────
+
+cross_tier_rules:
+  - rule: "No circular authority"
+    description: "No tier may claim authority over a higher tier."
+  - rule: "Specific overrides general"
+    description: "Within the same tier, a more specific source overrides a more general one."
+  - rule: "Newer ratification overrides older"
+    description: "Within the same tier and specificity, a later ratification date prevails."
+  - rule: "Reality is non-negotiable"
+    description: "When Tier 0 triggers, the conflicting claim at any tier is invalid regardless of authority level."
+
+# ── Binding Verification ──────────────────────────────────────────────────────
+
+binding_verification:
+  required_bindings:
+    - target: NEXARA_PROGRAM_CONSTITUTION_V1.md
+      must_declare: "subordination to NSEC"
+      verified_by: "scripts/governance/validate_nsec.py"
+    - target: ".qoder/skills/nexara-sovereign-onepass-program/SKILL.md"
+      must_reference: "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+      verified_by: "scripts/governance/validate_nsec.py"
+    - target: ".github/workflows/ci.yml"
+      must_include: "NSEC Governance Integrity job"
+      verified_by: "scripts/governance/validate_nsec.py"

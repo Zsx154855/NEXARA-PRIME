@@ -36,17 +36,21 @@ AgentsOS 是历史资产或人类控制产品层，不是 NEXARA-PRIME 的 Runti
 执行前按以下优先级读取真实约束：
 
 1. 用户当前明确指令
-2. `NEXARA_PROGRAM_CONSTITUTION_V1.md`
-3. `NEXARA_PRIME_SOVEREIGN_AGENT_MASTER_BLUEPRINT_V1.md`
-4. `NEXARA_DEVELOPMENT_GATES_V1.yaml`
-5. 当前 `PROGRAM_STATE` / `GATE_STATUS` / Evidence
-6. 当前代码、测试、Git 状态和真实运行结果
+2. `governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md` (NSEC — 最高工程治理源)
+3. `governance/authority_index.yaml` (Authority Index)
+4. `NEXARA_PROGRAM_CONSTITUTION_V1.md`
+5. `NEXARA_PRIME_SOVEREIGN_AGENT_MASTER_BLUEPRINT_V1.md`
+6. `NEXARA_DEVELOPMENT_GATES_V1.yaml`
+7. 当前 `PROGRAM_STATE` / `GATE_STATUS` / Evidence
+8. 当前代码、测试、Git 状态和真实运行结果
 
 禁止创建与这些文件竞争的第二套宪章、Gate 系统、状态系统或治理平台。
 
 Gate 仅作为内部验收标准，不作为频繁停止和向用户反复申请确认的理由。
 
 当通用 Skill 规范、执行器默认习惯与用户明确要求冲突时，以本节优先级为准。
+
+NSEC 是唯一最高工程治理源。所有 Agent 入口、Skill、Contract 和 CI 必须绑定 NSEC canonical 路径与版本。禁止将 NSEC 全文复制到多个入口——只能引用 canonical source 并验证版本。
 
 ---
 
