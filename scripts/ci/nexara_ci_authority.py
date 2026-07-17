@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 RUNTIME_DIR = REPO_ROOT / ".runtime" / "ci"
 RUNS_DIR = RUNTIME_DIR / "runs"
 LOG_DIR_NAME = "logs"
@@ -582,10 +583,7 @@ class NexaraCiAuthority:
             "local_pass_claimed_as_github_pass": False,
         }
 
-        payload_json = json.dumps(payload, indent=2, sort_keys=True)
-        payload["receipt_payload_sha256"] = sha256_text(payload_json)
-
-        # Check for previous receipt
+        # Check for previous receipt MUST happen before hash computation
         latest = RUNTIME_DIR / "latest.json"
         previous_hash = ""
         if latest.exists():
@@ -600,16 +598,15 @@ class NexaraCiAuthority:
             "CONTINUOUS" if previous_hash else "FIRST_RECEIPT"
         )
 
-        # Finalize with chain hash
-        final_json = json.dumps(payload, indent=2, sort_keys=True)
+        # Compute canonical payload hash LAST — after ALL content fields
+        from scripts.ci.receipt_hash import compute_payload_sha256, compute_file_sha256  # noqa: E402
+        payload["receipt_payload_sha256"] = compute_payload_sha256(payload)
 
+        # Write receipt, compute file hash, finalize
         receipt_path = self.receipt_dir / "authority-receipt.json"
-        receipt_path.write_text(final_json)
-        payload["receipt_file_sha256"] = sha256_file(receipt_path)
-
-        # Update with final hash
-        final_json = json.dumps(payload, indent=2, sort_keys=True)
-        receipt_path.write_text(final_json)
+        receipt_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+        payload["receipt_file_sha256"] = compute_file_sha256(receipt_path)
+        receipt_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
 
         # Write latest pointer
         latest.write_text(json.dumps({

@@ -1,40 +1,41 @@
 #!/usr/bin/env python3
-"""Verify a NEXARA CI Authority receipt — all logs, hashes, and chain integrity."""
-import hashlib
+"""Verify a NEXARA CI Authority receipt — all logs, hashes, and chain integrity.
+
+Uses scripts/ci/receipt_hash.py as the single source of truth for
+canonical payload hashing. Both the Authority generator and this
+verifier use the same function — eliminating hash drift.
+"""
 import json
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
-
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    h.update(path.read_bytes())
-    return h.hexdigest()
+# Shared canonical hash contract
+from scripts.ci.receipt_hash import (  # noqa: E402
+    verify_payload_integrity,
+    compute_file_sha256,
+)
 
 
 def verify(receipt_path: Path) -> dict:
     if not receipt_path.exists():
         return {"status": "ERROR", "reason": f"receipt not found: {receipt_path}"}
 
+    # Parse
     try:
-        json.loads(receipt_path.read_text())
+        content = receipt_path.read_text()
+        payload = json.loads(content)
     except json.JSONDecodeError as e:
         return {"status": "ERROR", "reason": f"invalid JSON: {e}"}
 
     errors = []
 
-    # 1. Verify receipt file hash
-    content = receipt_path.read_text()
-    payload = json.loads(content)
-    payload.pop("receipt_file_sha256", "")
-    payload_minus_hash = json.dumps(payload, indent=2, sort_keys=True)
-    claimed_payload_hash = payload.get("receipt_payload_sha256", "")
-
-    actual_payload_hash = hashlib.sha256(payload_minus_hash.encode()).hexdigest()
-    if actual_payload_hash != claimed_payload_hash:
-        errors.append(f"payload hash mismatch: claimed={claimed_payload_hash[:16]} actual={actual_payload_hash[:16]}")
+    # 1. Canonical payload hash integrity (shared contract)
+    result = verify_payload_integrity(payload)
+    if result["status"] != "PASS":
+        errors.extend(result.get("errors", ["payload hash verification failed"]))
 
     # 2. Verify HEAD
     import subprocess
@@ -54,7 +55,7 @@ def verify(receipt_path: Path) -> dict:
             if not log_file.exists():
                 errors.append(f"missing log: {log_path}")
             else:
-                actual_log_hash = sha256_file(log_file)
+                actual_log_hash = compute_file_sha256(log_file)
                 claimed_log_hash = check.get("log_sha256", "")
                 if actual_log_hash != claimed_log_hash:
                     errors.append(f"log hash mismatch: {log_path}")

@@ -12,7 +12,8 @@ import pytest
 
 # Add repo root to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from scripts.ci.verify_receipt import verify, sha256_file
+from scripts.ci.receipt_hash import compute_file_sha256
+from scripts.ci.verify_receipt import verify
 
 
 def _actual_head():
@@ -132,7 +133,7 @@ class TestReceiptVerification:
             td_path = Path(td)
             log_file = td_path / "test.log"
             log_file.write_text("original content")
-            log_hash = sha256_file(log_file)
+            log_hash = compute_file_sha256(log_file)
             receipt = td_path / "receipt.json"
             payload = {
                 "receipt_payload_sha256": "",
