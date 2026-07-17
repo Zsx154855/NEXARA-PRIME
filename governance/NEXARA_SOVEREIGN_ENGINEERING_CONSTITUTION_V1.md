@@ -1,11 +1,13 @@
-# NEXARA Sovereign Engineering Constitution (NSEC) V1
+# NEXARA Sovereign Engineering Constitution (NSEC) V1 — SUPERSEDED
 
 **Canonical ID:** `NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1`
-**Status:** ACTIVE
-**Authority Level:** SUPREME
+**Status:** SUPERSEDED by [NSEC V2.0](NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md) as of 2026-07-18
+**Authority Level:** SUPREME (historical — NEXARA authority transferred to NSEC V2.0 per 2026-07-18 upgrade; this document is immutable and retained for audit trail only)
 **Ratified:** 2026-07-18
-**Scope:** NEXARA-PRIME repository and all associated development, runtime, CI/CD, agent, and governance artifacts
-**Supersedes:** All prior uncodified engineering principles, implicit conventions, and conflicting governance documents
+**Superseded:** 2026-07-18
+**Reason:** Per human directive: V2.0 expands V1 from 17 English Articles to 19 Chinese Chapters (55 Articles). Full migration table in V2.0 Appendix A.
+**Preserved For:** Complete audit trail. This file remains immutable — no further edits permitted.
+**Successor:** governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md
 
 ---
 

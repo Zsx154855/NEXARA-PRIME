@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = REPO_ROOT / "scripts" / "governance"
 VALIDATOR = SCRIPTS / "validate_nsec.py"
 DRIFT_DETECTOR = SCRIPTS / "detect_nsec_drift.py"
-NSEC_CANONICAL = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+NSEC_CANONICAL = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
 NSEC_YAML = REPO_ROOT / "governance" / "nsec.yaml"
 AUTHORITY_INDEX = REPO_ROOT / "governance" / "authority_index.yaml"
 PROGRAM_CONSTITUTION = REPO_ROOT / "NEXARA_PROGRAM_CONSTITUTION_V1.md"
@@ -57,7 +57,7 @@ class TestNSECCanonicalExists:
     def test_canonical_document_readable(self):
         text = NSEC_CANONICAL.read_text(encoding="utf-8")
         assert len(text) > 1000, "Canonical NSEC is too short — may be incomplete"
-        assert "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1" in text
+        assert "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2" in text
 
     def test_machine_declaration_exists(self):
         assert NSEC_YAML.exists(), f"nsec.yaml not found at {NSEC_YAML}"
@@ -102,13 +102,13 @@ class TestProgramConstitutionSubordination:
 
     def test_references_nsec_canonical(self):
         text = PROGRAM_CONSTITUTION.read_text(encoding="utf-8")
-        assert "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md" in text
+        assert "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md" in text
 
     def test_validate_nsec_reference_in_preamble(self):
         text = PROGRAM_CONSTITUTION.read_text(encoding="utf-8")
         lines = text.split("\n")
         first_30 = "\n".join(lines[:30])
-        assert "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1" in first_30
+        assert "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2" in first_30
 
 
 class TestOnePassSkillBinding:
@@ -116,7 +116,7 @@ class TestOnePassSkillBinding:
 
     def test_references_nsec(self):
         text = ONEPASS_SKILL.read_text(encoding="utf-8")
-        assert "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md" in text
+        assert "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md" in text
 
     def test_nsec_in_authority_section(self):
         text = ONEPASS_SKILL.read_text(encoding="utf-8")
@@ -194,7 +194,7 @@ class TestNSECMachineDeclaration:
 
     def test_canonical_document_path_correct(self):
         text = NSEC_YAML.read_text(encoding="utf-8")
-        expected_path = "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+        expected_path = "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
         assert expected_path in text
 
 
@@ -223,10 +223,10 @@ class TestNSECFailureCanonicalMissing:
             gov_dir.mkdir(parents=True)
             # Create nsec.yaml (which references canonical) but NOT the canonical document
             (gov_dir / "nsec.yaml").write_text(
-                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1\n"
+                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2\n"
                 "short_name: NSEC\nversion: '1.0.0'\nstatus: ACTIVE\n"
                 "authority_level: supreme\n"
-                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md\n"
+                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md\n"
                 "canonical_hash: 'sha256:abc'\n",
                 encoding="utf-8",
             )
@@ -246,16 +246,16 @@ class TestNSECFailureHashMismatch:
             gov_dir.mkdir(parents=True)
 
             # Create canonical with known content
-            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
             canon.write_text("Modified NSEC content — not the real one", encoding="utf-8")
 
             # Create nsec.yaml with a DIFFERENT hash than the canon above
             wrong_hash = "a" * 64  # deliberately wrong
             (gov_dir / "nsec.yaml").write_text(
-                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1\n"
+                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2\n"
                 "short_name: NSEC\nversion: '1.0.0'\nstatus: ACTIVE\n"
                 "authority_level: supreme\n"
-                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md\n"
+                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md\n"
                 f"canonical_hash: 'sha256:{wrong_hash}'\n",
                 encoding="utf-8",
             )
@@ -275,7 +275,7 @@ class TestNSECFailureVersionMismatch:
             gov_dir.mkdir(parents=True)
 
             # Create canonical claiming V2
-            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
             canon.write_text(
                 "**Canonical ID:** `NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2`\n\n"
                 "# NEXARA Sovereign Engineering Constitution V2\n\n"
@@ -283,7 +283,7 @@ class TestNSECFailureVersionMismatch:
                 encoding="utf-8",
             )
 
-            # nsec.yaml says V1
+            # nsec.yaml says V1 (old — should trigger version drift against V2 canonical)
             (gov_dir / "nsec.yaml").write_text(
                 "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1\n"
                 "short_name: NSEC\nversion: '1.0.0'\nstatus: ACTIVE\n"
@@ -308,7 +308,7 @@ class TestNSECFailureMultipleSupreme:
             gov_dir.mkdir(parents=True)
 
             # Create legit NSEC canonical
-            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
             canon.write_text(
                 "# NEXARA Sovereign Engineering Constitution V1\n\n"
                 "This is the single highest engineering governance source.\n",
@@ -317,10 +317,10 @@ class TestNSECFailureMultipleSupreme:
 
             # Create nsec.yaml
             (gov_dir / "nsec.yaml").write_text(
-                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1\n"
+                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2\n"
                 "short_name: NSEC\nversion: '1.0.0'\nstatus: ACTIVE\n"
                 "authority_level: supreme\n"
-                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md\n"
+                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md\n"
                 "canonical_hash: 'sha256:abc123'\n",
                 encoding="utf-8",
             )
@@ -350,19 +350,19 @@ class TestNSECFailureAgentNotBound:
             gov_dir.mkdir(parents=True)
 
             # Copy real canonical and declaration for structural validity
-            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
             canon.write_text(
                 "# NEXARA Sovereign Engineering Constitution V1\n\n"
-                "**Canonical ID:** `NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1`\n\n"
+                "**Canonical ID:** `NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2`\n\n"
                 "This is the single highest engineering governance source.\n",
                 encoding="utf-8",
             )
             canon_hash = hashlib.sha256(canon.read_bytes()).hexdigest()
             (gov_dir / "nsec.yaml").write_text(
-                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1\n"
+                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2\n"
                 "short_name: NSEC\nversion: '1.0.0'\nstatus: ACTIVE\n"
                 "authority_level: supreme\n"
-                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md\n"
+                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md\n"
                 f"canonical_hash: 'sha256:{canon_hash}'\n",
                 encoding="utf-8",
             )
@@ -409,19 +409,19 @@ class TestNSECFailureProgramConstitutionUnsubordinated:
             gov_dir = root / "governance"
             gov_dir.mkdir(parents=True)
 
-            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
             canon.write_text(
                 "# NEXARA Sovereign Engineering Constitution V1\n\n"
-                "**Canonical ID:** `NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1`\n\n"
+                "**Canonical ID:** `NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2`\n\n"
                 "This is the single highest engineering governance source.\n",
                 encoding="utf-8",
             )
             canon_hash = hashlib.sha256(canon.read_bytes()).hexdigest()
             (gov_dir / "nsec.yaml").write_text(
-                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1\n"
+                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2\n"
                 "short_name: NSEC\nversion: '1.0.0'\nstatus: ACTIVE\n"
                 "authority_level: supreme\n"
-                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md\n"
+                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md\n"
                 f"canonical_hash: 'sha256:{canon_hash}'\n",
                 encoding="utf-8",
             )
@@ -444,7 +444,7 @@ class TestNSECFailureProgramConstitutionUnsubordinated:
             skill_dir = root / ".qoder" / "skills" / "nexara-sovereign-onepass-program"
             skill_dir.mkdir(parents=True)
             (skill_dir / "SKILL.md").write_text(
-                "# Skill\n\nReferences NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md\n",
+                "# Skill\n\nReferences NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md\n",
                 encoding="utf-8",
             )
 
@@ -471,7 +471,7 @@ class TestNSECFailureBodyCopyDrift:
             gov_dir = root / "governance"
             gov_dir.mkdir(parents=True)
 
-            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
             canon.write_text(
                 "# NSEC V1\n\n"
                 "## Article I — Fixed Engineering Mainline\n\n"
@@ -481,10 +481,10 @@ class TestNSECFailureBodyCopyDrift:
                 encoding="utf-8",
             )
             (gov_dir / "nsec.yaml").write_text(
-                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1\n"
+                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2\n"
                 "short_name: NSEC\nversion: '1.0.0'\nstatus: ACTIVE\n"
                 "authority_level: supreme\n"
-                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md\n"
+                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md\n"
                 "canonical_hash: 'sha256:abc'\n",
                 encoding="utf-8",
             )
@@ -519,13 +519,13 @@ class TestNSECFailureStaleReferences:
             gov_dir = root / "governance"
             gov_dir.mkdir(parents=True)
 
-            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+            canon = gov_dir / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
             canon.write_text("# NSEC V1\n\nValid content.\n", encoding="utf-8")
             (gov_dir / "nsec.yaml").write_text(
-                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1\n"
+                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2\n"
                 "short_name: NSEC\nversion: '1.0.0'\nstatus: ACTIVE\n"
                 "authority_level: supreme\n"
-                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md\n"
+                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md\n"
                 "canonical_hash: 'sha256:abc'\n",
                 encoding="utf-8",
             )
@@ -556,10 +556,10 @@ class TestNSECFailureBrokenLinks:
 
             # Create nsec.yaml but NOT the canonical document
             (gov_dir / "nsec.yaml").write_text(
-                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1\n"
+                "id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2\n"
                 "short_name: NSEC\nversion: '1.0.0'\nstatus: ACTIVE\n"
                 "authority_level: supreme\n"
-                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md\n"
+                "canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md\n"
                 "canonical_hash: 'sha256:abc'\n",
                 encoding="utf-8",
             )

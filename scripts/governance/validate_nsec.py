@@ -23,7 +23,8 @@ from typing import Any
 REPO_ROOT = Path(os.environ.get("NEXARA_ROOT", Path(__file__).resolve().parent.parent.parent))
 
 # ── Canonical paths ───────────────────────────────────────────────────────────
-NSEC_CANONICAL = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+NSEC_CANONICAL = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
+NSEC_CANONICAL_V1_SUPERSEDED = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
 NSEC_YAML = REPO_ROOT / "governance" / "nsec.yaml"
 AUTHORITY_INDEX = REPO_ROOT / "governance" / "authority_index.yaml"
 PROGRAM_CONSTITUTION = REPO_ROOT / "NEXARA_PROGRAM_CONSTITUTION_V1.md"
@@ -35,12 +36,12 @@ REQUIRED_AGENT_BINDINGS: list[dict[str, Any]] = [
     {
         "path": ".qoder/skills/nexara-sovereign-onepass-program/SKILL.md",
         "description": "One-pass Program Skill",
-        "must_contain": "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md",
+        "must_contain": "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md",
     },
 ]
 
 REQUIRED_PROGRAM_CONSTITUTION_DECLARATION = "subordinate to the"
-REQUIRED_PROGRAM_CONSTITUTION_NSEC_REF = "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+REQUIRED_PROGRAM_CONSTITUTION_NSEC_REF = "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
 
 # ── Forbidden patterns ────────────────────────────────────────────────────────
 FORBIDDEN_SUPREME_MARKERS = [
@@ -192,8 +193,8 @@ def check_machine_declaration() -> list[str]:
 
     # ID consistency
     decl_id = declaration.get("id", "")
-    if decl_id != "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1":
-        issues.append(f"nsec.yaml id mismatch: got '{decl_id}', expected 'NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1'")
+    if decl_id != "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2":
+        issues.append(f"nsec.yaml id mismatch: got '{decl_id}', expected 'NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2'")
 
     # Authority level
     authority = declaration.get("authority_level", "")
@@ -207,7 +208,7 @@ def check_machine_declaration() -> list[str]:
 
     # Canonical document path
     canon_path = declaration.get("canonical_document", "")
-    if canon_path != "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md":
+    if canon_path != "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md":
         issues.append(f"nsec.yaml canonical_document path mismatch: '{canon_path}'")
 
     # Hash verification
@@ -353,6 +354,8 @@ def check_no_duplicate_supreme_authority() -> list[str]:
         # Skip the canonical NSEC itself and its machine declaration
         if file_path.resolve() == NSEC_CANONICAL.resolve():
             continue
+        if file_path.resolve() == NSEC_CANONICAL_V1_SUPERSEDED.resolve():
+            continue
         if file_path.resolve() == NSEC_YAML.resolve():
             continue
         if file_path.resolve() == AUTHORITY_INDEX.resolve():
@@ -452,6 +455,8 @@ def check_copy_drift() -> list[str]:
             continue
         for md_file in scan_dir.rglob("*.md"):
             if md_file.resolve() == NSEC_CANONICAL.resolve():
+                continue
+            if md_file.resolve() == NSEC_CANONICAL_V1_SUPERSEDED.resolve():
                 continue
             if md_file.resolve() == PROGRAM_CONSTITUTION.resolve():
                 continue

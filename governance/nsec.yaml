@@ -1,15 +1,25 @@
 # NEXARA Sovereign Engineering Constitution — Machine-Readable Declaration
-# This file is derived from the canonical document. The canonical document is authoritative.
+# NSEC V2.0 — This file is derived from the canonical document.
+# The canonical document is authoritative.
 # Any discrepancy between this file and the canonical document MUST be resolved in favor of the canonical document.
 
-id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1
+id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2
 short_name: NSEC
-version: "1.0.0"
+version: "2.0.0"
 status: ACTIVE
 authority_level: supreme
-canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md
-canonical_hash: "sha256:184368c6101bc20c63af5dbfac0871e5ad344909a9bfa53dd92c883c0daf60f6"
+canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md
+canonical_hash: "sha256:e3ed168fee070b1aec68227f696f0f6fb92e3d9f87ded59a927169d46e8c7e94"
 ratified: "2026-07-18"
+supersedes:
+  - id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1
+    document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md
+    status: SUPERSEDED
+    ratified: "2026-07-18"
+    reason: "V1 → V2.0 upgrade per human directive: expanded from 17 English Articles to 19 Chinese Chapters (55 Articles) with formal commitment framework, NEXARA-PRIME binding constraints, and explicit prohibition matrix."
+language:
+  authoritative: zh-CN
+  reference: en
 
 scope:
   repository: NEXARA-PRIME
@@ -35,6 +45,7 @@ interpretation_order:
 
 authority_relationship:
   supersedes:
+    - NSEC_V1
     - all_prior_uncodified_principles
     - all_implicit_conventions
     - any_conflicting_governance_document
@@ -44,7 +55,7 @@ authority_relationship:
 binding_requirements:
   program_constitution_must_declare_subordination: true
   onepass_skill_must_reference_canonical: true
-  all_agent_entries_must_reference_nsec: true
+  all_agent_entries_must_reference_nsec_v2: true
   ci_must_validate_nsec_integrity: true
   no_second_supreme_authority_permitted: true
 
