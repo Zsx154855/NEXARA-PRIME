@@ -1,0 +1,135 @@
+# NEXARA PRIME Portfolio Seed — V1
+# Initial portfolio of programs.  These are NOT hardcoded in Python;
+# they are loaded from this configuration/migration file.
+
+portfolio_id: nexara_prime_portfolio_v1
+version: 1
+owner_goal: "将 NEXARA PRIME 推进到可长期运行和交付状态"
+
+programs:
+  - program_id: prog_aos_security_closure
+    name: "PR #12 AOS Security Closure"
+    purpose: "Close all Codex review threads on the AOS execution gateway PR"
+    status: wait_external
+    priority: 9
+    value_score: 9.0
+    urgency_score: 8.0
+    risk_score: 2.0
+    effort_score: 4.0
+    confidence: 0.9
+    worker_requirements: ["prompt"]
+    wait_conditions:
+      - condition_type: codex_review
+        external_ref: "12"
+        description: "Waiting for Codex V14 review on PR #12"
+    metadata:
+      branch: "work/nexara-aos-autonomous-execution-gateway-v1"
+      head: "e7634a7"
+      unresolved_threads: 0
+
+  - program_id: prog_agent_embodiment
+    name: "Agent Embodiment & Portfolio Runtime"
+    purpose: "Assemble existing modules into a single persistent agent subject with portfolio operating system"
+    status: running
+    priority: 10
+    value_score: 10.0
+    urgency_score: 9.0
+    risk_score: 3.0
+    effort_score: 7.0
+    confidence: 0.8
+    worker_requirements: ["prompt", "command"]
+    metadata:
+      branch: "work/nexara-agent-embodiment-portfolio-runtime-v1"
+      stage: "embodiment_v1"
+
+  - program_id: prog_integration_train
+    name: "Continuous Integration Train"
+    purpose: "Establish CI/CD pipeline with automated testing, linting, and governance checks"
+    status: ready
+    priority: 7
+    value_score: 8.0
+    urgency_score: 6.0
+    risk_score: 2.0
+    effort_score: 5.0
+    confidence: 0.85
+    worker_requirements: ["prompt", "command"]
+
+  - program_id: prog_worker_hypervisor
+    name: "Worker Hypervisor & Swarm"
+    purpose: "Multi-worker orchestration with health monitoring, failover, and capability routing"
+    status: planned
+    priority: 6
+    value_score: 7.0
+    urgency_score: 4.0
+    risk_score: 4.0
+    effort_score: 8.0
+    confidence: 0.6
+    worker_requirements: ["prompt", "command"]
+
+  - program_id: prog_skills_plugins
+    name: "Skill / Plugin / MCP Integration"
+    purpose: "Standardize skill, plugin, and MCP tool integration patterns"
+    status: planned
+    priority: 5
+    value_score: 6.0
+    urgency_score: 3.0
+    risk_score: 3.0
+    effort_score: 6.0
+    confidence: 0.65
+    worker_requirements: ["prompt", "command"]
+
+  - program_id: prog_research_evolution
+    name: "Research / Instinct / Evolution"
+    purpose: "Build research pipeline, instinct detection, and product evolution engine"
+    status: planned
+    priority: 4
+    value_score: 5.0
+    urgency_score: 2.0
+    risk_score: 5.0
+    effort_score: 9.0
+    confidence: 0.5
+    worker_requirements: ["prompt", "research"]
+
+  - program_id: prog_product_runtime
+    name: "Product Runtime / Operation Deck"
+    purpose: "Build the end-user product runtime and operational dashboard"
+    status: planned
+    priority: 3
+    value_score: 4.0
+    urgency_score: 1.0
+    risk_score: 3.0
+    effort_score: 8.0
+    confidence: 0.5
+    worker_requirements: ["prompt", "command"]
+
+roles:
+  cto_agent:
+    name: "CTO Agent"
+    responsibilities: ["goal_convergence", "program_prioritization"]
+  chief_architect:
+    name: "Chief Architect"
+    responsibilities: ["architecture_review", "reuse_enforcement"]
+  security_lead:
+    name: "Security Lead"
+    responsibilities: ["security_review", "secret_management"]
+  runtime_lead:
+    name: "Runtime Lead"
+    responsibilities: ["lifecycle", "recovery", "daemon_health"]
+  product_lead:
+    name: "Product Lead"
+    responsibilities: ["owner_alignment", "ux_review", "product_quality"]
+  qa_lead:
+    name: "QA Lead"
+    responsibilities: ["test_coverage", "regression_prevention"]
+  review_manager:
+    name: "Review Manager"
+    responsibilities: ["codex_coordination", "review_budget"]
+  release_manager:
+    name: "Release Manager"
+    responsibilities: ["merge_readiness", "release_governance"]
+  research_lead:
+    name: "Research Lead"
+    responsibilities: ["architecture_research", "technology_evaluation"]
+  archivist:
+    name: "Archivist"
+    responsibilities: ["evidence_integrity", "memory_quality"]
