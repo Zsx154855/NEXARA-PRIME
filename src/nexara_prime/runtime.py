@@ -275,19 +275,26 @@ class NexaraRuntime:
         if self.settings.mock_model or provider_name == "mock":
             return ModelGateway(MockProvider(), fallback=None)
         if provider_name in {"openai", "openai_compatible"}:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                self._provider_unavailable = True
+                return ModelGateway(UnavailableProvider())
             provider = OpenAICompatibleProvider(
                 os.getenv("NEXARA_MODEL_ENDPOINT", "https://api.openai.com/v1"),
                 model=os.getenv("NEXARA_MODEL_NAME", "gpt-4o-mini"),
-                api_key=os.getenv("OPENAI_API_KEY"),
+                api_key=api_key,
             )
         elif provider_name == "local":
-            provider = LocalModelProvider(os.getenv("NEXARA_LOCAL_MODEL_ENDPOINT"), os.getenv("NEXARA_MODEL_NAME", "local-model"))
+            endpoint = os.getenv("NEXARA_LOCAL_MODEL_ENDPOINT")
+            if not endpoint:
+                self._provider_unavailable = True
+                return ModelGateway(UnavailableProvider())
+            provider = LocalModelProvider(endpoint, os.getenv("NEXARA_MODEL_NAME", "local-model"))
         else:
-            # No mock fallback — provider unavailable is a recoverable state
             provider = None
         if provider is None:
             self._provider_unavailable = True
-            return ModelGateway(UnavailableProvider())  # raises ProviderUnavailable on every call
+            return ModelGateway(UnavailableProvider())
         self._provider_unavailable = False
         return ModelGateway(provider, fallback=None)
 
@@ -526,7 +533,7 @@ class NexaraRuntime:
 
     def resume(self, mission_id: str) -> Mission:
         """Resume a paused mission. Also handles crash recovery: if the mission
-        is in an incomplete state (EXECUTION, VERIFICATION, etc.), it will resume
+        is in an incomplete state, it advances to the next runnable stage
         from the last checkpoint without re-executing completed steps."""
         mission = self._load_mission(mission_id)
         if mission.paused:
@@ -534,16 +541,23 @@ class NexaraRuntime:
             self._save_mission(mission)
             self.events.publish("mission.resumed", mission_id, "mission", "human", mission.trace_id, {}, idempotency_key=f"mission-resumed:{mission_id}:{mission.updated_at}")
             return mission
-        # Crash recovery path: mission is in an incomplete state
-        incomplete_states = {"Execution", "Verification", "Evidence", "MemoryPatch", "Evaluation", "Running", "Verifying", "Degraded"}
-        if mission.state in incomplete_states:
-            recovery_result = self.recovery.recover()
-            for entry in recovery_result.missions:
-                if entry.get("mission_id") == mission_id and entry.get("resumable"):
-                    mission.result["recovery"] = {"recovered_at": now_iso(), "from_state": mission.state, "idempotent_resume": True}
-                    self._save_mission(mission)
-                    self.events.publish("mission.recovered", mission_id, "mission", "runtime", mission.trace_id, {"from_state": mission.state}, idempotency_key=f"mission-recovered:{mission_id}")
-                    return mission
+        # Crash recovery path: advance mission to a runnable state from checkpoint
+        _CRASH_RECOVERY_NEXT = {
+            "Verification": MissionState.VERIFICATION,
+            "Evidence": MissionState.EVIDENCE,
+            "MemoryPatch": MissionState.MEMORY_PATCH,
+            "Evaluation": MissionState.EVALUATION,
+            "Running": MissionState.EXECUTION,
+            "Verifying": MissionState.VERIFICATION,
+            "Degraded": MissionState.EXECUTION,
+        }
+        if mission.state in _CRASH_RECOVERY_NEXT:
+            # Set the mission state to what run_mission expects
+            target = _CRASH_RECOVERY_NEXT[mission.state]
+            mission.result["recovery"] = {"recovered_at": now_iso(), "from_state": mission.state, "idempotent_resume": True}
+            self._advance(mission, target, "recovery")
+            self.events.publish("mission.recovered", mission_id, "mission", "runtime", mission.trace_id, {"from_state": mission.state, "target": target.value}, idempotency_key=f"mission-recovered:{mission_id}")
+            return mission
         mission.paused = False
         self._save_mission(mission)
         self.events.publish("mission.resumed", mission_id, "mission", "human", mission.trace_id, {}, idempotency_key=f"mission-resumed:{mission_id}:{mission.updated_at}")
@@ -555,6 +569,26 @@ class NexaraRuntime:
         API, CLI, and UI must read from this, not infer state from partial data."""
         mission = self._load_mission(mission_id)
         evidence_list = self.evidence.list(mission_id)
+        # Resolve real approval status from ApprovalEngine (not just pending_approval_id)
+        approval_status = None
+        if mission.pending_approval_id:
+            try:
+                approvals = self.approvals.list(mission_id)
+                for a in approvals:
+                    if a.get("approval_id") == mission.pending_approval_id:
+                        approval_status = a.get("status", "pending")
+                        break
+            except Exception:
+                approval_status = "pending"
+        if approval_status is None and mission.state == "Completed":
+            approvals = self.approvals.list(mission_id)
+            for a in approvals:
+                if a.get("action") == "file_write_report":
+                    approval_status = a.get("status", "consumed")
+                    break
+        # receipt_status uses EvidenceArtifact 'kind' field (e.g. 'execution_receipt')
+        receipt_kinds = {"execution_receipt", "receipt", "file_write_receipt", "report_receipt", "verification_receipt"}
+        receipt_present = any(e.get("kind") in receipt_kinds for e in evidence_list)
         return {
             "mission_id": mission.mission_id,
             "current_state": mission.state,
@@ -562,7 +596,7 @@ class NexaraRuntime:
             "risk_level": mission.spec.risk_level.value if mission.spec.risk_level else "R0",
             "provider": self.models.provider.name if hasattr(self.models, 'provider') else "mock",
             "provider_unavailable": getattr(self, '_provider_unavailable', False),
-            "approval_status": mission.pending_approval_id or None,
+            "approval_status": approval_status,
             "pending_action": mission.pending_approval_id or None,
             "plan": mission.plan.model_dump(mode="json") if mission.plan else None,
             "scheduled_tasks": len(mission.assignments) if mission.assignments else 0,
@@ -571,7 +605,7 @@ class NexaraRuntime:
             "failed_tasks": mission.result.get("failed", []) if isinstance(mission.result, dict) else [],
             "evidence_count": len(evidence_list),
             "latest_evidence": evidence_list[-1] if evidence_list else None,
-            "receipt_status": "present" if any(e.get("evidence_type") == "receipt" for e in evidence_list) else "missing",
+            "receipt_status": "present" if receipt_present else "missing",
             "memory_patch_status": "patched" if mission.result.get("memory_patch_id") else "not_patched",
             "evaluation_status": "passed" if mission.result.get("evaluation_passed") else ("failed" if "evaluation_id" in (mission.result or {}) else "not_evaluated"),
             "retry_count": mission.result.get("retry_count", 0) if isinstance(mission.result, dict) else 0,

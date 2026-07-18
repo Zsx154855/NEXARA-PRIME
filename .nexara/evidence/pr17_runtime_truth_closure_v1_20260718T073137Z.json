@@ -1,0 +1,70 @@
+{
+  "mission": "NEXARA_PR17_RUNTIME_TRUTH_ONEPASS_CLOSURE_V1",
+  "branch": "work/nexara-chief-brain-runtime-convergence-v1",
+  "pr": 17,
+  "base_sha": "b37d0f31bbc1fd9162aa28f04ca195afe766d501",
+  "head_sha": "a59a525b2ed44f6193b696343704c1a2f15f9c0c",
+  "commits": [
+    {
+      "sha": "a59a525b2ed44f6193b696343704c1a2f15f9c0c",
+      "msg": "fix(runtime): enforce truthful recovery and provider unavailability"
+    },
+    {
+      "sha": "fcd1cda1bcc9974856994738593d63b804d227f8",
+      "msg": "docs(runtime): finalize convergence proof chain with full evidence"
+    },
+    {
+      "sha": "53785f35f83c408a9089adf4da17391e6f726c35",
+      "msg": "docs(runtime): finalize convergence proof chain"
+    },
+    {
+      "sha": "d6ce8d7f91b32d25ff011c752f8ef522ac493870",
+      "msg": "docs(runtime): add runtime convergence evidence and verification"
+    },
+    {
+      "sha": "6432096e9747647395b85599d9ba61f28fa4bc69",
+      "msg": "refactor(runtime): strengthen NexaraRuntime as sole runtime authority"
+    }
+  ],
+  "tests": {
+    "original_baseline": 742,
+    "previous_branch_total": 769,
+    "new_this_closure": 31,
+    "total_branch_additions": 58,
+    "final_total": 800,
+    "result": "800/800 PASS"
+  },
+  "crash_recovery": {
+    "A_restart_before_execution": "PASS (persistent DB re-instantiation; mission_id unchanged)",
+    "B_before_evidence_no_duplicate": "PASS (evidence count identical after restart; 0 duplicate side-effects)",
+    "C_approval_survives_restart": "PASS (pending_action_id preserved; approve->complete after recovery)"
+  },
+  "provider_unavailable": {
+    "mockprovider_not_called": "PASS (UnavailableProvider raises on every call)",
+    "cannot_reach_completed": "PASS (mission stays in FAILED, never Completed)",
+    "snapshot_reports_unavailable": "PASS",
+    "mock_only_when_explicit": "PASS"
+  },
+  "entry_convergence": {
+    "api_calls_runtime": "PASS (TestClient + runtime.list_missions verification)",
+    "cli_parser_routes": "PASS",
+    "scheduler_single_authority": "PASS (no other file imports AdaptiveScheduler directly)",
+    "no_entry_advances_state": "PASS (AST audit confirms _advance() only in runtime.py)"
+  },
+  "invariants": {
+    "mission_id_unchanged": "PASS",
+    "pending_action_id_unchanged": "PASS",
+    "duplicate_side_effects_prevented": "PASS",
+    "evidence_before_complete": "PASS",
+    "receipt_required_for_complete": "PASS",
+    "memory_after_evidence": "PASS",
+    "evaluation_references_evidence": "PASS"
+  },
+  "nsec_validator": "PASS",
+  "drift_detector": "NO DRIFT",
+  "ruff": "CLEAN on new files (0 unused imports); pre-existing E501 baseline only",
+  "secret_scan": "CLEAN",
+  "import_cycles": "NONE",
+  "timestamp": "2026-07-18T07:31:37.531591+00:00",
+  "evidence_sha256": "da148ce1792377ea6e8b526b445922570d91a86b15105aefff695441048e0afc"
+}

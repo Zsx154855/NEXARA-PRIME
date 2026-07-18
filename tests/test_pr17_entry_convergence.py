@@ -55,7 +55,7 @@ class TestAPIConvergence:
         response = client.get(f"/api/missions/{m.mission_id}")
         assert response.status_code == 200
         data = response.json()
-        assert data["state"] == "Intent"
+        assert data["current_state"] == "Intent"
 
     def test_api_resume_calls_runtime(self, client: TestClient, runtime: NexaraRuntime) -> None:
         m = runtime.create_mission("API resume test")
@@ -85,13 +85,12 @@ class TestAPIConvergence:
         data = response.json()
         missions = data["missions"]
         assert len(missions) >= 1
-        # The mission in overview should have fields consistent with inspect_mission
+        # Overview missions now use inspect_mission snapshot fields
         overview_mission = next((x for x in missions if x["mission_id"] == m.mission_id), None)
         assert overview_mission is not None, "Mission must appear in overview data"
-        # Overview missions come from list_missions (raw dicts), while inspect_mission
-        # returns a structured snapshot — both should agree on state
-        assert overview_mission["state"] == snap["current_state"], (
-            f"Overview state {overview_mission['state']} must match "
+        # Both overview and inspect_mission use the same snapshot structure
+        assert overview_mission["current_state"] == snap["current_state"], (
+            f"Overview state {overview_mission['current_state']} must match "
             f"inspect_mission state {snap['current_state']}"
         )
 

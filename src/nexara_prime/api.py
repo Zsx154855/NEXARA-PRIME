@@ -52,7 +52,18 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     @app.get("/api/runtime/overview")
     def overview() -> dict[str, Any]:
-        return runtime.overview()
+        data = runtime.overview()
+        # Enrich overview with inspect_mission snapshots for recent missions
+        missions_raw = runtime.list_missions()[-20:]
+        enriched = []
+        for m in missions_raw:
+            mid = m.get("mission_id", "")
+            try:
+                enriched.append(runtime.inspect_mission(mid))
+            except KeyError:
+                enriched.append(m)
+        data["missions"] = enriched
+        return data
 
     @app.get("/api/missions")
     def list_missions() -> list[dict[str, Any]]:
@@ -67,7 +78,7 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     @app.get("/api/missions/{mission_id}")
     def status(mission_id: str) -> dict[str, Any]:
-        return get_mission(mission_id).model_dump(mode="json")
+        return runtime.inspect_mission(mission_id)
 
     @app.post("/api/missions/{mission_id}/plan")
     def plan(mission_id: str) -> dict[str, Any]:
