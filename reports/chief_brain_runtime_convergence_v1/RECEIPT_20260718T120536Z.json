@@ -1,0 +1,9 @@
+{
+  "receipt_type": "NEXARA_PR17_CODEX_REVIEW_ONEPASS_CLOSURE_V2",
+  "evidence_path": ".nexara/evidence/pr17_runtime_truth_closure_v1_20260718T073137Z.json",
+  "evidence_sha256": "0d4a1abe0680e0e32e69ac8ca68030b5bfeb110771412a3ddf69f4f77fb6392c",
+  "branch": "work/nexara-chief-brain-runtime-convergence-v1",
+  "status": "PASS",
+  "timestamp": "2026-07-18T12:05:46.484552+00:00",
+  "receipt_sha256": "1e8e603d0b48a3bb681dee9acb2e2ca9d8f3dea60c2b3357e112e36a69062146"
+}
