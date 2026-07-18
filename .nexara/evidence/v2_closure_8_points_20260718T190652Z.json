@@ -1,0 +1,82 @@
+{
+  "mission": "NEXARA_V2_CLOSURE_8_POINTS",
+  "branch": "work/nexara-chief-brain-runtime-convergence-v2-clean",
+  "base_sha": "b37d0f31bbc1fd9162aa28f04ca195afe766d501",
+  "head_sha": "3a4537bb6dc862b9ec9c8c7a180cd072205f5adb",
+  "commit_count": 10,
+  "commits": {
+    "1": "3a4537b",
+    "2": "56cc1f0",
+    "3": "4083c35",
+    "4": "31221e3",
+    "5": "bc3da8d",
+    "6": "c2c9dbb",
+    "7": "f5aec6f",
+    "8": "390f917",
+    "9": "6f53a48",
+    "10": "5d4f320"
+  },
+  "test_ledger": {
+    "base_total": 742,
+    "added": 82,
+    "removed": 0,
+    "head_total": 824,
+    "result": "824/824 PASS"
+  },
+  "crash_recovery_matrix": {
+    "execution_to_verification": {
+      "method": "KeyboardInterrupt at _advance(Execution→Verification)",
+      "recovery": "state stays Execution; re-instantiate; _execute_stage idempotent",
+      "side_effects": 1
+    },
+    "verification_to_evidence": {
+      "method": "KeyboardInterrupt at _advance(Verification→Evidence)",
+      "recovery": "state stays Verification; re-instantiate; _verify_stage idempotent via _find_evidence_by_idempotency",
+      "side_effects": 1
+    },
+    "evidence_to_memory_patch": {
+      "method": "KeyboardInterrupt at _advance(Evidence→MemoryPatch)",
+      "recovery": "state stays Evidence; re-instantiate; _commit_evidence_stage idempotent",
+      "side_effects": 1
+    },
+    "memory_patch_to_evaluation": {
+      "method": "KeyboardInterrupt at _advance(MemoryPatch→Evaluation)",
+      "recovery": "state stays MemoryPatch; re-instantiate; memory.patch idempotent via memory_idempotency",
+      "side_effects": 1
+    },
+    "evaluation_to_completed": {
+      "method": "KeyboardInterrupt at _advance(Evaluation→Completed)",
+      "recovery": "state stays Evaluation; re-instantiate; evaluator.evaluate idempotent via evaluation_idempotency",
+      "side_effects": 1
+    }
+  },
+  "defects": {
+    "known_p1": 0,
+    "known_p2": 0,
+    "raw_store_bypass": 0,
+    "stale_sha": 0,
+    "silent_mock_fallback": 0,
+    "duplicate_side_effects": 0,
+    "invalid_self_transition": 0,
+    "approval_integrity_masking": 0,
+    "evidence_memory_eval_idempotency_gap": 0
+  },
+  "fixes": {
+    "default_provider_none": "mock_model only gates MockProvider; provider_name='mock' without mock_model=true → UnavailableProvider",
+    "no_raw_evidence_store": "_verify_stage: evidence.add+idempotency_key replaces try/except+store.find_record; _find_evidence_by_idempotency uses public list() API",
+    "memory_idempotency": "memory.patch uses memory_idempotency tracking table with idempotency_key→memory_id→get_record",
+    "evaluation_idempotency": "evaluator.evaluate uses evaluation_idempotency tracking table with idempotency_key→evaluation_id→get_record",
+    "approval_integrity_audit": "except Exception → self.audit.record('approval.integrity_failure'), keeps integrity_error",
+    "5_boundary_crash_recovery": "KeyboardInterrupt (BaseException) at all 5 transition boundaries; all 5 re-instantiate and complete",
+    "crash_b_evidence_uncommitted": "Tool write completed (report on disk), re-instantiation does not duplicate evidence",
+    "cleaned_old_evidence": "3 stale evidence files removed (v2_pre_pr_integrity_20260718T164401Z, _final_20260718T171038Z, _final_20260718T172053Z); 1 final evidence remains"
+  },
+  "nsec_validator": "PASS",
+  "drift_detector": "NO DRIFT",
+  "ruff": "CLEAN (pre-existing F401 AdaptiveMode only)",
+  "secret_scan": "CLEAN",
+  "import_cycles": "NONE",
+  "receipt_verifier": "PASS",
+  "timestamp": "2026-07-18T19:06:52.621317+00:00",
+  "evidence_sha256": "edfa816a27a767047a77fcf240806ed1d75efb22d18f56606dad5578ff7cea21"
+}

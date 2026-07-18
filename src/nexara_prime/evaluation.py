@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .db import SQLiteStore
 from .events import EventBus
-from .models import EvaluationResult, Mission, MissionState
+from .models import EvaluationResult, Mission, MissionState, new_id
 
 
 class EvaluationEngine:
@@ -10,7 +10,13 @@ class EvaluationEngine:
         self.store = store
         self.events = events
 
-    def evaluate(self, mission: Mission, evidence_count: int, tool_count: int, input_tokens: int, output_tokens: int) -> EvaluationResult:
+    def evaluate(self, mission: Mission, evidence_count: int, tool_count: int, input_tokens: int, output_tokens: int, *, idempotency_key: str | None = None) -> EvaluationResult:
+        if idempotency_key:
+            existing = self.store.find_record("evaluation_idempotency", "idempotency_key", idempotency_key)
+            if existing and existing.get("evaluation_id"):
+                record = self.store.get_record(existing["evaluation_id"])
+                if record:
+                    return EvaluationResult.model_validate(record)
         has_report = bool(mission.result.get("report_path"))
         evidence_coverage = 1.0 if evidence_count >= 4 else min(1.0, evidence_count / 4)
         correctness = 1.0 if has_report and mission.state in {MissionState.EVALUATION.value, MissionState.COMPLETED.value} else 0.5
@@ -27,6 +33,8 @@ class EvaluationEngine:
             notes=["Deterministic MVP evaluation; replace with domain evaluators per mission type."],
         )
         self.store.save_record(result.evaluation_id, "evaluation", result.model_dump(mode="json"), result.created_at, mission.mission_id)
+        if idempotency_key:
+            self.store.save_record(new_id("evidem"), "evaluation_idempotency", {"idempotency_key": idempotency_key, "evaluation_id": result.evaluation_id}, result.created_at, mission.mission_id)
         self.events.publish("mission.evaluated", mission.mission_id, "mission", "evaluation_engine", mission.trace_id, result.model_dump(mode="json"))
         return result
 

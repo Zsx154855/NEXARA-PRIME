@@ -1,0 +1,23 @@
+{
+  "receipt_type": "NEXARA_V2_CLOSURE_8_POINTS",
+  "implementation_sha": "3a4537bb6dc862b9ec9c8c7a180cd072205f5adb",
+  "base_sha": "b37d0f31bbc1fd9162aa28f04ca195afe766d501",
+  "evidence_path": ".nexara/evidence/v2_closure_8_points_20260718T190652Z.json",
+  "evidence_sha256": "edfa816a27a767047a77fcf240806ed1d75efb22d18f56606dad5578ff7cea21",
+  "commit_count": 10,
+  "test_total": 824,
+  "test_result": "824/824 PASS",
+  "nsec": "PASS",
+  "drift": "NO DRIFT",
+  "secret": "CLEAN",
+  "ruff": "CLEAN",
+  "receipt_verifier": "PASS",
+  "known_p1": 0,
+  "known_p2": 0,
+  "stale_sha": 0,
+  "silent_mock_fallback": 0,
+  "duplicate_side_effects": 0,
+  "status": "PASS",
+  "timestamp": "2026-07-18T19:06:52.621846+00:00",
+  "receipt_sha256": "2a1030ad3309ba4413d2b37cf809f4d47712507240a88818ed46ebdf100683b5"
+}

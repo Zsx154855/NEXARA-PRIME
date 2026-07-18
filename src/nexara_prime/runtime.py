@@ -514,10 +514,10 @@ class NexaraRuntime:
         verification = self._verify_report(mission)
         parent = [mission.result["receipt_evidence_id"]] if mission.result.get("receipt_evidence_id") else None
         try:
-            vid = self.evidence.add(mission.mission_id, "verification_report", "VerificationReport", json.dumps(verification, ensure_ascii=False, indent=2), mission.trace_id, actor="reviewer", source="filesystem", verification_status="verified", parent_evidence=parent, idempotency_key=vkey).evidence_id
+            result = self.evidence.add(mission.mission_id, "verification_report", "VerificationReport", json.dumps(verification, ensure_ascii=False, indent=2), mission.trace_id, actor="reviewer", source="filesystem", verification_status="verified", parent_evidence=parent, idempotency_key=vkey)
         except (RuntimeError, ValueError):
-            vid = self.evidence.store.find_record("evidence", "idempotency_key", vkey)["evidence_id"]
-        mission.result["verification_evidence_id"] = vid
+            result = self._find_evidence_by_idempotency(vkey, mission.mission_id)
+        mission.result["verification_evidence_id"] = result.evidence_id
         self._save_mission(mission)
         self._advance(mission, MissionState.EVIDENCE, "reviewer")
         return self._commit_evidence_stage(mission)
@@ -538,17 +538,18 @@ class NexaraRuntime:
         if not re_id:
             for e in self.evidence.list(mission.mission_id):
                 if e.get("kind") == "execution_result": re_id = e.get("evidence_id"); break
-        mem = self.memory.patch(mission.mission_id, "mission.completed_report", "A bounded local report was generated and verified.", mission.trace_id, re_id or "")
+        mem = self.memory.patch(mission.mission_id, "mission.completed_report", "A bounded local report was generated and verified.", mission.trace_id, re_id or "", idempotency_key=mkey)
         mission.result["memory_patch_id"] = mem.memory_id
         self._save_mission(mission)
         self._advance(mission, MissionState.EVALUATION, "kairos")
         return self._evaluate_stage(mission)
 
     def _evaluate_stage(self, mission: Mission) -> Mission:
+        ek = f"{mission.mission_id}:evaluation"
         md = mission.result.get(f"{mission.mission_id}:model_tokens", {})
         it = int(md.get("input_tokens", 0)) if isinstance(md, dict) else 0
         ot = int(md.get("output_tokens", 0)) if isinstance(md, dict) else 0
-        ev = self.evaluator.evaluate(mission, len(self.evidence.list(mission.mission_id)), len(self.tools.list_invocations(mission.mission_id)), it, ot)
+        ev = self.evaluator.evaluate(mission, len(self.evidence.list(mission.mission_id)), len(self.tools.list_invocations(mission.mission_id)), it, ot, idempotency_key=ek)
         mission.result["evaluation_id"] = ev.evaluation_id
         mission.result["evaluation_passed"] = ev.passed
         self._save_mission(mission)
@@ -583,6 +584,16 @@ class NexaraRuntime:
         digest = hashlib.sha256(path.read_bytes()).hexdigest() if exists else None
         return {"exists": exists, "bytes": bytes_count, "non_empty": bytes_count > 0, "sha256": digest, "verified_at": now_iso()}
 
+    def _find_evidence_by_idempotency(self, key: str, mission_id: str) -> Any:
+        """Find existing evidence by idempotency_key using public EvidenceStore.list API.
+        Returns an EvidenceArtifact (or any object with .evidence_id attribute)."""
+        for e in self.evidence.list(mission_id):
+            if e.get("idempotency_key") == key:
+                # list() returns dicts with internal fields (envelope_sha256 etc.)
+                # — reconstruct a minimal EvidenceArtifact with just evidence_id
+                return type('Evidence', (), {'evidence_id': e['evidence_id']})()
+        raise KeyError(f"evidence_not_found_by_idempotency_key:{key}")
+
     def pause(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)
         mission.paused = True
@@ -608,14 +619,15 @@ class NexaraRuntime:
         evidence_list = self.evidence.list(mission_id)
         # Approval status from ApprovalEngine records
         approval_status = "integrity_error"
-        try:
-            if mission.pending_approval_id:
-                for a in self.approvals.list(mission_id):
+        if mission.pending_approval_id:
+            try:
+                approvals = self.approvals.list(mission_id)
+                for a in approvals:
                     if a.get("approval_id") == mission.pending_approval_id:
                         approval_status = a.get("status", "pending")
                         break
-        except Exception:
-            pass
+            except Exception as exc:
+                self.audit.record("approval.integrity_failure", actor_id="inspect_mission", actor_type="system", mission_id=mission_id, action="inspect_mission", decision="integrity_error", risk_level=mission.spec.risk_level.value if mission.spec.risk_level else "R0", trace_id=mission.trace_id, metadata={"error": str(exc)[:500]})
         if approval_status == "integrity_error" and mission.state == "Completed":
             for a in self.approvals.list(mission_id):
                 if a.get("action") == "file_write_report":
