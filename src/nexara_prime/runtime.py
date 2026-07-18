@@ -515,7 +515,7 @@ class NexaraRuntime:
         parent = [mission.result["receipt_evidence_id"]] if mission.result.get("receipt_evidence_id") else None
         try:
             vid = self.evidence.add(mission.mission_id, "verification_report", "VerificationReport", json.dumps(verification, ensure_ascii=False, indent=2), mission.trace_id, actor="reviewer", source="filesystem", verification_status="verified", parent_evidence=parent, idempotency_key=vkey).evidence_id
-        except RuntimeError:
+        except (RuntimeError, ValueError):
             vid = self.evidence.store.find_record("evidence", "idempotency_key", vkey)["evidence_id"]
         mission.result["verification_evidence_id"] = vid
         self._save_mission(mission)
