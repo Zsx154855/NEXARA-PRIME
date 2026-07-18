@@ -10,7 +10,11 @@ class EvaluationEngine:
         self.store = store
         self.events = events
 
-    def evaluate(self, mission: Mission, evidence_count: int, tool_count: int, input_tokens: int, output_tokens: int) -> EvaluationResult:
+    def evaluate(self, mission: Mission, evidence_count: int, tool_count: int, input_tokens: int, output_tokens: int, *, idempotency_key: str | None = None) -> EvaluationResult:
+        if idempotency_key:
+            existing = self.store.find_record("evaluation", "idempotency_key", idempotency_key)
+            if existing:
+                return EvaluationResult.model_validate(existing)
         has_report = bool(mission.result.get("report_path"))
         evidence_coverage = 1.0 if evidence_count >= 4 else min(1.0, evidence_count / 4)
         correctness = 1.0 if has_report and mission.state in {MissionState.EVALUATION.value, MissionState.COMPLETED.value} else 0.5
@@ -26,7 +30,7 @@ class EvaluationEngine:
             recovery_rate=recovery_rate, passed=passed,
             notes=["Deterministic MVP evaluation; replace with domain evaluators per mission type."],
         )
-        self.store.save_record(result.evaluation_id, "evaluation", result.model_dump(mode="json"), result.created_at, mission.mission_id)
+        self.store.save_record(result.evaluation_id, "evaluation", {**result.model_dump(mode="json"), "idempotency_key": idempotency_key}, result.created_at, mission.mission_id)
         self.events.publish("mission.evaluated", mission.mission_id, "mission", "evaluation_engine", mission.trace_id, result.model_dump(mode="json"))
         return result
 

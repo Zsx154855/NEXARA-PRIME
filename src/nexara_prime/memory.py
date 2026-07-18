@@ -81,7 +81,11 @@ class MemoryKernel:
         self.events.publish("memory.written", mission_id or "global", "mission" if mission_id else "memory", "memory_kernel", trace_id, {"memory_id": record.memory_id, "kind": kind.value})
         return record
 
-    def patch(self, mission_id: str, key: str, content: str, trace_id: str, evidence_id: str | None = None) -> MemoryRecord:
+    def patch(self, mission_id: str, key: str, content: str, trace_id: str, evidence_id: str | None = None, *, idempotency_key: str | None = None) -> MemoryRecord:
+        if idempotency_key:
+            existing = [item for item in self.inspect(mission_id) if item.get("idempotency_key") == idempotency_key and item.get("status") == "committed"]
+            if existing:
+                return MemoryRecord.model_validate(existing[0])
         return self.propose(MemoryKind.PATCH, key, content, trace_id, mission_id, evidence_id, 1.0, auto_commit=True)
 
     def propose(
