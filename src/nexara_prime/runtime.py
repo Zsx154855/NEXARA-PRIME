@@ -423,18 +423,58 @@ class NexaraRuntime:
         return mission
 
     def _checkpointed_model(self, mission: Mission, compiled, context: dict) -> tuple[str, str, int, int, float]:
-        # Replay from mission.result (governed), not raw store.find_record
         tk = f"{mission.mission_id}:model_tokens"
         p = mission.result.get(tk)
         if p and isinstance(p, dict) and int(p.get("input_tokens", 0)) > 0:
             return mission.result.get("model_text", ""), p.get("provider", "unknown"), int(p["input_tokens"]), int(p["output_tokens"]), float(p.get("cost_usd", 0.0))
+        # Migrate the durable response written by the pre-convergence runtime.
+        # This check must precede the provider call or a restart can duplicate
+        # an already completed and billed model request.
+        legacy_key = f"{mission.mission_id}:model-completion"
+        legacy = self.store.find_record(
+            "model_response", "idempotency_key", legacy_key
+        )
+        if legacy:
+            required = {"text", "provider", "input_tokens", "output_tokens"}
+            if not required.issubset(legacy):
+                raise ValueError("legacy_model_response_invalid")
+            migrated = {
+                "input_tokens": int(legacy["input_tokens"]),
+                "output_tokens": int(legacy["output_tokens"]),
+                "cost_usd": float(legacy.get("cost_usd", 0.0)),
+                "provider": str(legacy["provider"]),
+            }
+            mission.result[tk] = migrated
+            mission.result["model_text"] = str(legacy["text"])
+            mission.result["model_provider"] = migrated["provider"]
+            self._clear_provider_unavailable(mission)
+            self._save_mission(mission)
+            return (
+                mission.result["model_text"],
+                migrated["provider"],
+                migrated["input_tokens"],
+                migrated["output_tokens"],
+                migrated["cost_usd"],
+            )
         model_response = self.models.complete(compiled.system, compiled.task, context, trace_id=mission.trace_id)
         mission.result[tk] = {"input_tokens": model_response.input_tokens, "output_tokens": model_response.output_tokens, "cost_usd": model_response.cost_usd, "provider": model_response.provider}
         mission.result["model_text"] = model_response.text
         mission.result["model_provider"] = model_response.provider
+        self._clear_provider_unavailable(mission)
         self._save_mission(mission)
         self.recovery.checkpoint(mission.mission_id, "model_completed", mission.trace_id, data={"provider": model_response.provider})
         return model_response.text, model_response.provider, model_response.input_tokens, model_response.output_tokens, model_response.cost_usd
+
+    def _clear_provider_unavailable(self, mission: Mission) -> None:
+        """Clear only the transient provider failure state after real success."""
+        recovery = mission.result.get("recovery")
+        if isinstance(recovery, dict):
+            recovery.pop("provider_unavailable", None)
+            recovery.pop("retry_after_configured", None)
+            if not recovery:
+                mission.result.pop("recovery", None)
+        if getattr(getattr(self.models, "provider", None), "name", None) != "unavailable":
+            self._provider_unavailable = False
 
     def run_mission(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)
@@ -513,10 +553,26 @@ class NexaraRuntime:
         vkey = f"{mission.mission_id}:verification_evidence"
         verification = self._verify_report(mission)
         parent = [mission.result["receipt_evidence_id"]] if mission.result.get("receipt_evidence_id") else None
-        try:
+        existing = self._get_evidence_by_idempotency(vkey, mission.mission_id)
+        if existing:
+            try:
+                stored_verification = json.loads(existing.get("content", ""))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("verification_evidence_invalid") from exc
+            stable_fields = {"exists", "bytes", "non_empty", "sha256"}
+            if (
+                any(
+                    stored_verification.get(field) != verification.get(field)
+                    for field in stable_fields
+                )
+                or existing.get("parent_evidence", []) != (parent or [])
+            ):
+                raise ValueError("verification_evidence_conflict")
+            result = type(
+                "Evidence", (), {"evidence_id": existing["evidence_id"]}
+            )()
+        else:
             result = self.evidence.add(mission.mission_id, "verification_report", "VerificationReport", json.dumps(verification, ensure_ascii=False, indent=2), mission.trace_id, actor="reviewer", source="filesystem", verification_status="verified", parent_evidence=parent, idempotency_key=vkey)
-        except (RuntimeError, ValueError):
-            result = self._find_evidence_by_idempotency(vkey, mission.mission_id)
         mission.result["verification_evidence_id"] = result.evidence_id
         self._save_mission(mission)
         self._advance(mission, MissionState.EVIDENCE, "reviewer")
@@ -596,6 +652,15 @@ class NexaraRuntime:
                 return type('Evidence', (), {'evidence_id': e['evidence_id']})()
         raise KeyError(f"evidence_not_found_by_idempotency_key:{key}")
 
+    def _get_evidence_by_idempotency(
+        self, key: str, mission_id: str
+    ) -> dict[str, Any] | None:
+        """Return an integrity-checked evidence projection for one replay key."""
+        for evidence in self.evidence.list(mission_id):
+            if evidence.get("idempotency_key") == key:
+                return evidence
+        return None
+
     def pause(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)
         mission.paused = True
@@ -620,8 +685,9 @@ class NexaraRuntime:
         mission = self._load_mission(mission_id)
         evidence_list = self.evidence.list(mission_id)
         # Approval status from ApprovalEngine records
-        approval_status = "integrity_error"
+        approval_status = "not_required"
         if mission.pending_approval_id:
+            approval_status = "pending"
             try:
                 approvals = self.approvals.list(mission_id)
                 for a in approvals:
@@ -629,20 +695,32 @@ class NexaraRuntime:
                         approval_status = a.get("status", "pending")
                         break
             except Exception as exc:
+                approval_status = "integrity_error"
                 self.audit.record("approval.integrity_failure", actor_id="inspect_mission", actor_type="system", mission_id=mission_id, action="inspect_mission", decision="integrity_error", risk_level=mission.spec.risk_level.value if mission.spec.risk_level else "R0", trace_id=mission.trace_id, metadata={"error": str(exc)[:500]})
-        if approval_status == "integrity_error" and mission.state == "Completed":
-            for a in self.approvals.list(mission_id):
-                if a.get("action") == "file_write_report":
-                    approval_status = a.get("status", "consumed")
-                    break
         # Provider unavailability: merge runtime init flag + mission recovery flag
         runtime_unavailable = getattr(self, '_provider_unavailable', False)
         mission_recovery = mission.result.get("recovery", {}) if isinstance(mission.result, dict) else {}
         mission_unavailable = mission_recovery.get("provider_unavailable", False)
         provider_unavailable = runtime_unavailable or mission_unavailable
-        # Receipt detection from evidence kind
-        receipt_kinds = {"execution_receipt", "receipt", "file_write_receipt", "report_receipt", "verification_receipt"}
-        receipt_present = any(e.get("kind") in receipt_kinds for e in evidence_list)
+        # A report receipt must bind to this mission's file_write_report tool;
+        # an unrelated code execution receipt cannot satisfy completion truth.
+        tool_by_id = {
+            item.get("invocation_id"): item
+            for item in self.tools.list_invocations(mission_id)
+        }
+        expected_receipt_id = mission.result.get("receipt_evidence_id")
+        receipt_present = any(
+            evidence.get("kind") == "execution_receipt"
+            and (
+                not expected_receipt_id
+                or evidence.get("evidence_id") == expected_receipt_id
+            )
+            and tool_by_id.get(evidence.get("tool_invocation_id"), {}).get(
+                "tool_name"
+            )
+            == "file_write_report"
+            for evidence in evidence_list
+        )
         return {
             "mission_id": mission.mission_id,
             "state": mission.state, "current_state": mission.state,

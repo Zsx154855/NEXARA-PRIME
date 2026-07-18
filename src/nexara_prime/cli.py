@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -243,12 +244,14 @@ def cmd_doctor() -> int:
         r = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True, cwd=str(root))
         staged = r.stdout.strip().split("\n") if r.stdout.strip() else []
         secrets_found = []
+        scanner_path = root / "scripts" / "security" / "scan_hardcoded_secrets.py"
+        scan_file = None
+        if scanner_path.exists():
+            scan_file = runpy.run_path(str(scanner_path)).get("scan_file")
         for f in staged:
             fp = root / f
-            if fp.exists() and fp.is_file() and fp.suffix != ".py":
-                txt = fp.read_text(errors="ignore")
-                if "sk-" in txt or "api_key" in txt.lower() or "password" in txt.lower():
-                    secrets_found.append(f)
+            if fp.exists() and fp.is_file() and scan_file and scan_file(fp):
+                secrets_found.append(f)
         check("No secrets staged", len(secrets_found) == 0, "ok" if not secrets_found else f"found: {secrets_found}")
     except Exception:
         check("No secrets staged", True, "skipped (no git)")

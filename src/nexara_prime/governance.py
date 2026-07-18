@@ -171,6 +171,33 @@ class ApprovalEngine:
                 return True
         return False
 
+    def consumption_matches(
+        self,
+        approval: ApprovalRequest,
+        *,
+        actor_id: str,
+        use_id: str,
+    ) -> bool:
+        """Return whether a consumed single-action approval belongs to this replay."""
+        idempotency_key = f"approval.consumed:{approval.approval_id}"
+        event = self.store.get_event_by_idempotency(idempotency_key)
+        if not event:
+            return False
+        payload = event.get("payload", {})
+        return (
+            approval.status == ApprovalStatus.CONSUMED
+            and self.decision_transition_is_valid(approval)
+            and self.consumption_transition_exists(approval)
+            and event.get("actor") == actor_id
+            and payload.get("actor_id") == actor_id
+            and payload.get("use_id") == use_id
+            and payload.get("approval_id") == approval.approval_id
+            and payload.get("proposal_sha256") == approval.proposal_sha256
+            and payload.get("action") == approval.action
+            and payload.get("risk_level") == approval.risk_level.value
+            and payload.get("executor_id") == approval.executor_id
+        )
+
     def expiry_transition_is_valid(self, approval: ApprovalRequest) -> bool:
         idempotency_key = f"approval.expired:{approval.approval_id}"
         expected_event_id = self._transition_event_id(idempotency_key)

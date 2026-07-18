@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+
 from .db import SQLiteStore
 from .events import EventBus
-from .models import EvaluationResult, Mission, MissionState, new_id
+from .models import EvaluationResult, Mission, MissionState
 
 
 class EvaluationEngine:
@@ -16,7 +18,9 @@ class EvaluationEngine:
             if existing and existing.get("evaluation_id"):
                 record = self.store.get_record(existing["evaluation_id"])
                 if record:
-                    return EvaluationResult.model_validate(record)
+                    result = EvaluationResult.model_validate(record)
+                    self._publish_evaluation(mission, result, idempotency_key)
+                    return result
         has_report = bool(mission.result.get("report_path"))
         evidence_coverage = 1.0 if evidence_count >= 4 else min(1.0, evidence_count / 4)
         correctness = 1.0 if has_report and mission.state in {MissionState.EVALUATION.value, MissionState.COMPLETED.value} else 0.5
@@ -26,17 +30,92 @@ class EvaluationEngine:
         cost_score = 1.0 if input_tokens + output_tokens < 5_000 else 0.8
         recovery_rate = 1.0 if mission.rollback_point else 0.5
         passed = all(value >= 0.9 for value in (correctness, reliability, safety, evidence_coverage))
+        digest = (
+            hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:16]
+            if idempotency_key
+            else None
+        )
+        identity = {"evaluation_id": f"eval_{digest}"} if digest else {}
         result = EvaluationResult(
+            **identity,
             mission_id=mission.mission_id, correctness=correctness, reliability=reliability, safety=safety,
             evidence_coverage=evidence_coverage, token_efficiency=token_efficiency, cost_score=cost_score,
             recovery_rate=recovery_rate, passed=passed,
             notes=["Deterministic MVP evaluation; replace with domain evaluators per mission type."],
+            idempotency_key=idempotency_key,
         )
-        self.store.save_record(result.evaluation_id, "evaluation", result.model_dump(mode="json"), result.created_at, mission.mission_id)
         if idempotency_key:
-            self.store.save_record(new_id("evidem"), "evaluation_idempotency", {"idempotency_key": idempotency_key, "evaluation_id": result.evaluation_id}, result.created_at, mission.mission_id)
-        self.events.publish("mission.evaluated", mission.mission_id, "mission", "evaluation_engine", mission.trace_id, result.model_dump(mode="json"))
+            try:
+                self.store.save_records_atomically(
+                    [
+                        {
+                            "record_id": result.evaluation_id,
+                            "record_type": "evaluation",
+                            "payload": result.model_dump(mode="json"),
+                            "created_at": result.created_at,
+                            "mission_id": mission.mission_id,
+                        },
+                        {
+                            "record_id": f"evidem_{digest}",
+                            "record_type": "evaluation_idempotency",
+                            "payload": {
+                                "idempotency_key": idempotency_key,
+                                "evaluation_id": result.evaluation_id,
+                            },
+                            "created_at": result.created_at,
+                            "mission_id": mission.mission_id,
+                        },
+                    ]
+                )
+            except ValueError as exc:
+                if str(exc) != "atomic_record_identity_conflict":
+                    raise
+                winner = self.store.find_record(
+                    "evaluation_idempotency",
+                    "idempotency_key",
+                    idempotency_key,
+                )
+                winner_record = (
+                    self.store.get_record(winner["evaluation_id"])
+                    if winner and winner.get("evaluation_id")
+                    else None
+                )
+                if not winner_record:
+                    raise
+                result = EvaluationResult.model_validate(winner_record)
+                if (
+                    result.mission_id != mission.mission_id
+                    or result.idempotency_key != idempotency_key
+                ):
+                    raise ValueError("evaluation_idempotency_conflict") from exc
+        else:
+            self.store.save_record(
+                result.evaluation_id,
+                "evaluation",
+                result.model_dump(mode="json"),
+                result.created_at,
+                mission.mission_id,
+            )
+        self._publish_evaluation(mission, result, idempotency_key)
         return result
+
+    def _publish_evaluation(
+        self,
+        mission: Mission,
+        result: EvaluationResult,
+        idempotency_key: str | None,
+    ) -> None:
+        self.events.publish(
+            "mission.evaluated",
+            mission.mission_id,
+            "mission",
+            "evaluation_engine",
+            mission.trace_id,
+            result.model_dump(mode="json"),
+            idempotency_key=(
+                f"evaluation-event:{idempotency_key}" if idempotency_key else None
+            ),
+        )
 
     def list(self, mission_id: str | None = None) -> list[dict]:
         return self.store.list_records("evaluation", mission_id)

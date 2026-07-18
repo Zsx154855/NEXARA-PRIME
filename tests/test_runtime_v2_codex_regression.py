@@ -78,7 +78,7 @@ class TestThread2MockProviderNotUsed:
 class TestThread3ReceiptStatusFromKind:
     """Thread 3: Report receipt status from evidence kind."""
 
-    def test_receipt_kind_detection(self) -> None:
+    def test_unbound_receipt_kind_does_not_count(self) -> None:
         db_dir = Path(tempfile.mkdtemp())
         rt = NexaraRuntime(_make_settings(db_dir))
         m = rt.create_mission("Receipt kind test")
@@ -86,7 +86,7 @@ class TestThread3ReceiptStatusFromKind:
         rt.evidence.add(m.mission_id, "execution_receipt", "Test receipt",
                        "receipt content", m.trace_id)
         snap = rt.inspect_mission(m.mission_id)
-        assert snap["receipt_status"] == "present"
+        assert snap["receipt_status"] == "missing"
 
     def test_missing_receipt_with_other_evidence(self) -> None:
         db_dir = Path(tempfile.mkdtemp())
