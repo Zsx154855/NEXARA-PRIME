@@ -17,7 +17,7 @@ from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine, WriterLeaseManager
 from .memory import MemoryKernel
 from .mission_compiler import MissionCompiler
-from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider
+from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider, UnavailableProvider
 from .models import (
     Mission, MissionState, RiskLevel, AdaptiveMode, AdaptiveMissionProfile,
     MissionTriageResult, SchedulingPlan, ModelRoutingDecision,
@@ -287,7 +287,7 @@ class NexaraRuntime:
             provider = None
         if provider is None:
             self._provider_unavailable = True
-            return ModelGateway(MockProvider())  # structural placeholder, never completes missions
+            return ModelGateway(UnavailableProvider())  # raises ProviderUnavailable on every call
         self._provider_unavailable = False
         return ModelGateway(provider, fallback=None)
 

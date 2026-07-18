@@ -104,6 +104,16 @@ class MockProvider:
         return ModelResponse(self.name, "mock-v1", text, input_tokens, output_tokens, trace_id, 0.0, metadata={"deterministic": True})
 
 
+class UnavailableProvider:
+    """Provider that raises on every call — used when no real provider is configured.
+    This ensures missions cannot silently complete with fake results."""
+
+    name = "unavailable"
+
+    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None) -> ModelResponse:
+        raise ProviderUnavailable("no_provider_configured: set NEXARA_MODEL_PROVIDER or enable mock_model for testing")
+
+
 class _HTTPProvider:
     name = "http"
 
