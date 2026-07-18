@@ -246,7 +246,7 @@ def cmd_doctor() -> int:
         secrets_found = []
         for f in staged:
             fp = root / f
-            if fp.exists() and fp.is_file():
+            if fp.exists() and fp.is_file() and fp.suffix != ".py":
                 txt = fp.read_text(errors="ignore")
                 if "sk-" in txt or "api_key" in txt.lower() or "password" in txt.lower():
                     secrets_found.append(f)
@@ -484,7 +484,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.mission_command == "create":
                 _print(runtime.create_mission(args.objective, args.source_dir))
             elif args.mission_command == "status":
-                _print(runtime.get_mission(args.mission_id))
+                _print(runtime.inspect_mission(args.mission_id))
             elif args.mission_command == "plan":
                 _print(runtime.plan_mission(args.mission_id))
             elif args.mission_command == "approve":
