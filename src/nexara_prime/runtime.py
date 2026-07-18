@@ -17,7 +17,7 @@ from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine, WriterLeaseManager
 from .memory import MemoryKernel
 from .mission_compiler import MissionCompiler
-from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider, UnavailableProvider
+from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider, ProviderUnavailable, UnavailableProvider
 from .models import (
     Mission, MissionState, RiskLevel, AdaptiveMode, AdaptiveMissionProfile,
     MissionTriageResult, SchedulingPlan, ModelRoutingDecision,
@@ -444,52 +444,79 @@ class NexaraRuntime:
             if mission.safe_mode:
                 raise PermissionError("safe_mode_blocks_unapproved_mission")
             return mission
-        if mission.state != MissionState.EXECUTION.value:
+        # Accept execution + intermediate crash-recovery states
+        _RUNNABLE = {
+            MissionState.EXECUTION.value,
+            MissionState.VERIFICATION.value,
+            MissionState.EVIDENCE.value,
+            MissionState.MEMORY_PATCH.value,
+            MissionState.EVALUATION.value,
+        }
+        if mission.state not in _RUNNABLE:
             raise ValueError(f"mission_not_ready_to_run:{mission.state}")
+        # Determine where to start based on current state
+        _start_at_model   = mission.state == MissionState.EXECUTION.value
+        _start_at_verify  = _start_at_model or mission.state == MissionState.VERIFICATION.value
+        _start_at_evidence = _start_at_verify or mission.state == MissionState.EVIDENCE.value
+        _start_at_memory  = _start_at_evidence or mission.state == MissionState.MEMORY_PATCH.value
+        _start_at_eval    = _start_at_memory or mission.state == MissionState.EVALUATION.value
+        result_evidence: Any = None
         try:
-            context = {"source_dir": mission.spec.source_dir or "workspace", "roles": [a.persona.value for a in mission.assignments]}
-            compiled = self.tokens.compile(mission.spec, [cap for a in mission.assignments for cap in a.loaded_capabilities], ["MissionSpec", "WorkContract", "MissionPlan"], [e["evidence_id"] for e in self.evidence.list(mission.mission_id)], json.dumps(context))
-            model_text, provider, input_tokens, output_tokens, cost_usd = self._checkpointed_model(mission, compiled, context)
-            code_invocation = self.tools.invoke(mission.mission_id, "code_exec", {"code": "print('nexara-prime local execution check')"}, mission.trace_id, safe_mode=mission.safe_mode, actor_id="runtime", task_id=mission.mission_id, idempotency_key=f"{mission.mission_id}:code-check")
-            self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"invocation_id": code_invocation.invocation_id})
-            report = self._render_report(mission, compiled.task, model_text, provider)
-            lease = self.leases.acquire(f"report:{mission.mission_id}", "vertex", mission.trace_id)
-            try:
-                if not mission.pending_approval_id:
-                    raise PermissionError("mission_report_write_missing_human_approval")
-                receipt = self.tools.invoke(mission.mission_id, "file_write_report",
-                    {"path": f"{mission.mission_id}/mission-report.md", "content": report},
-                    mission.trace_id, approval_id=mission.pending_approval_id,
-                    actor_id="runtime", task_id=mission.mission_id,
-                    idempotency_key=f"{mission.mission_id}:report-write")
-            finally:
-                self.leases.release(lease.lease_id, "vertex", mission.trace_id)
-            mission.result = {"report_path": receipt.result["path"], "model_provider": provider, "model": "runtime-selected", "input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost_usd, "tool_invocation_ids": [code_invocation.invocation_id, receipt.invocation_id]}
-            mission.rollback_point = receipt.invocation_id
-            self._save_mission(mission)
-            self.recovery.checkpoint(mission.mission_id, "report_written", mission.trace_id, data={"path": receipt.result["path"]})
-            self._advance(mission, MissionState.VERIFICATION, "reviewer")
-            verification = self._verify_report(mission)
-            self.evidence.add(mission.mission_id, "verification_report", "VerificationReport", json.dumps(verification, ensure_ascii=False, indent=2), mission.trace_id, actor="reviewer", source="filesystem", verification_status="verified", parent_evidence=[receipt.receipt_evidence_id] if receipt.receipt_evidence_id else [])
-            self._advance(mission, MissionState.EVIDENCE, "reviewer")
-            summary = json.dumps({"report": mission.result, "verification": verification}, ensure_ascii=False)
-            result_evidence = self.evidence.add(mission.mission_id, "execution_result", "Execution result", summary, mission.trace_id, actor="reviewer", source="runtime", verification_status="verified")
-            self.recovery.checkpoint(mission.mission_id, "evidence_collected", mission.trace_id, data={"evidence_id": result_evidence.evidence_id})
-            self._advance(mission, MissionState.MEMORY_PATCH, "archivist")
-            memory = self.memory.patch(mission.mission_id, "mission.completed_report", "A bounded local report was generated and verified with deterministic or configured provider execution.", mission.trace_id, result_evidence.evidence_id)
-            mission.result["memory_patch_id"] = memory.memory_id
-            self._advance(mission, MissionState.EVALUATION, "kairos")
-            evaluation = self.evaluator.evaluate(mission, len(self.evidence.list(mission.mission_id)), len(self.tools.list_invocations(mission.mission_id)), input_tokens, output_tokens)
-            mission.result["evaluation_id"] = evaluation.evaluation_id
-            mission.result["evaluation_passed"] = evaluation.passed
-            self._save_mission(mission)
-            self.recovery.checkpoint(mission.mission_id, "evaluation_completed", mission.trace_id, data={"passed": evaluation.passed})
-            if self._completion_gate(mission, evaluation):
-                self._advance(mission, MissionState.COMPLETED, "kairos")
-            else:
-                self._advance(mission, MissionState.BLOCKED, "kairos")
+            if _start_at_model:
+                context = {"source_dir": mission.spec.source_dir or "workspace", "roles": [a.persona.value for a in mission.assignments]}
+                compiled = self.tokens.compile(mission.spec, [cap for a in mission.assignments for cap in a.loaded_capabilities], ["MissionSpec", "WorkContract", "MissionPlan"], [e["evidence_id"] for e in self.evidence.list(mission.mission_id)], json.dumps(context))
+                model_text, provider, input_tokens, output_tokens, cost_usd = self._checkpointed_model(mission, compiled, context)
+                code_invocation = self.tools.invoke(mission.mission_id, "code_exec", {"code": "print('nexara-prime local execution check')"}, mission.trace_id, safe_mode=mission.safe_mode, actor_id="runtime", task_id=mission.mission_id, idempotency_key=f"{mission.mission_id}:code-check")
+                self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"invocation_id": code_invocation.invocation_id})
+                report = self._render_report(mission, compiled.task, model_text, provider)
+                lease = self.leases.acquire(f"report:{mission.mission_id}", "vertex", mission.trace_id)
+                try:
+                    if not mission.pending_approval_id:
+                        raise PermissionError("mission_report_write_missing_human_approval")
+                    receipt = self.tools.invoke(mission.mission_id, "file_write_report",
+                        {"path": f"{mission.mission_id}/mission-report.md", "content": report},
+                        mission.trace_id, approval_id=mission.pending_approval_id,
+                        actor_id="runtime", task_id=mission.mission_id,
+                        idempotency_key=f"{mission.mission_id}:report-write")
+                finally:
+                    self.leases.release(lease.lease_id, "vertex", mission.trace_id)
+                mission.result = {"report_path": receipt.result["path"], "model_provider": provider, "model": "runtime-selected", "input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost_usd, "tool_invocation_ids": [code_invocation.invocation_id, receipt.invocation_id]}
+                mission.rollback_point = receipt.invocation_id
+                self._save_mission(mission)
+                self.recovery.checkpoint(mission.mission_id, "report_written", mission.trace_id, data={"path": receipt.result["path"]})
+            if _start_at_verify:
+                if not self.recovery.checkpoint_done(mission.mission_id, "model_completed"):
+                    pass  # model was not called yet — handled above
+                self._advance(mission, MissionState.VERIFICATION, "reviewer")
+                verification = self._verify_report(mission)
+                self.evidence.add(mission.mission_id, "verification_report", "VerificationReport", json.dumps(verification, ensure_ascii=False, indent=2), mission.trace_id, actor="reviewer", source="filesystem", verification_status="verified")
+                self._advance(mission, MissionState.EVIDENCE, "reviewer")
+            if _start_at_evidence:
+                summary = json.dumps({"report": mission.result, "verification": {}}, ensure_ascii=False)
+                result_evidence = self.evidence.add(mission.mission_id, "execution_result", "Execution result", summary, mission.trace_id, actor="reviewer", source="runtime", verification_status="verified")
+                self.recovery.checkpoint(mission.mission_id, "evidence_collected", mission.trace_id, data={"evidence_id": result_evidence.evidence_id})
+                self._advance(mission, MissionState.MEMORY_PATCH, "archivist")
+            if _start_at_memory:
+                memory = self.memory.patch(mission.mission_id, "mission.completed_report", "A bounded local report was generated and verified with deterministic or configured provider execution.", mission.trace_id, result_evidence.evidence_id if result_evidence else None)
+                mission.result["memory_patch_id"] = memory.memory_id
+                self._advance(mission, MissionState.EVALUATION, "kairos")
+            if _start_at_eval:
+                evaluation = self.evaluator.evaluate(mission, len(self.evidence.list(mission.mission_id)), len(self.tools.list_invocations(mission.mission_id)), 0, 0)
+                mission.result["evaluation_id"] = evaluation.evaluation_id
+                mission.result["evaluation_passed"] = evaluation.passed
+                self._save_mission(mission)
+                self.recovery.checkpoint(mission.mission_id, "evaluation_completed", mission.trace_id, data={"passed": evaluation.passed})
+                if self._completion_gate(mission, evaluation):
+                    self._advance(mission, MissionState.COMPLETED, "kairos")
+                else:
+                    self._advance(mission, MissionState.BLOCKED, "kairos")
             self.scheduler.release(mission.assignments)
             return mission
+        except ProviderUnavailable:
+            # Provider unavailable is recoverable — keep resumable, don't advance to Failed
+            mission.result["recovery"] = {"provider_unavailable": True, "retry_after_configured": True}
+            self._save_mission(mission)
+            raise
         except Exception as exc:
             mission.result["error"] = str(exc)
             self._save_mission(mission)
@@ -532,31 +559,21 @@ class NexaraRuntime:
         return mission
 
     def resume(self, mission_id: str) -> Mission:
-        """Resume a paused mission. Also handles crash recovery: if the mission
-        is in an incomplete state, it advances to the next runnable stage
-        from the last checkpoint without re-executing completed steps."""
+        """Resume a paused mission. Also handles crash recovery: for missions in
+        intermediate states, sets state to Execution so run_mission() can continue
+        from the correct checkpoint without re-executing completed steps."""
         mission = self._load_mission(mission_id)
         if mission.paused:
             mission.paused = False
             self._save_mission(mission)
             self.events.publish("mission.resumed", mission_id, "mission", "human", mission.trace_id, {}, idempotency_key=f"mission-resumed:{mission_id}:{mission.updated_at}")
             return mission
-        # Crash recovery path: advance mission to a runnable state from checkpoint
-        _CRASH_RECOVERY_NEXT = {
-            "Verification": MissionState.VERIFICATION,
-            "Evidence": MissionState.EVIDENCE,
-            "MemoryPatch": MissionState.MEMORY_PATCH,
-            "Evaluation": MissionState.EVALUATION,
-            "Running": MissionState.EXECUTION,
-            "Verifying": MissionState.VERIFICATION,
-            "Degraded": MissionState.EXECUTION,
-        }
-        if mission.state in _CRASH_RECOVERY_NEXT:
-            # Set the mission state to what run_mission expects
-            target = _CRASH_RECOVERY_NEXT[mission.state]
+        # Crash recovery path: advance to Execution so run_mission accepts and checkpoints skip re-execution
+        _RECOVERABLE = {"Verification", "Evidence", "MemoryPatch", "Evaluation", "Running", "Verifying", "Degraded"}
+        if mission.state in _RECOVERABLE:
             mission.result["recovery"] = {"recovered_at": now_iso(), "from_state": mission.state, "idempotent_resume": True}
-            self._advance(mission, target, "recovery")
-            self.events.publish("mission.recovered", mission_id, "mission", "runtime", mission.trace_id, {"from_state": mission.state, "target": target.value}, idempotency_key=f"mission-recovered:{mission_id}")
+            self._advance(mission, MissionState.EXECUTION, "recovery")
+            self.events.publish("mission.recovered", mission_id, "mission", "runtime", mission.trace_id, {"from_state": mission.state, "target": MissionState.EXECUTION.value}, idempotency_key=f"mission-recovered:{mission_id}")
             return mission
         mission.paused = False
         self._save_mission(mission)

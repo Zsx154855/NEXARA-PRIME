@@ -154,9 +154,9 @@ class TestProviderUnavailablePath:
         assert failed_mission.state != "Completed", (
             f"Mission state should NOT be Completed when provider unavailable. Got: {failed_mission.state}"
         )
-        # Should be Failed or Blocked after the crash handling in run_mission
-        assert failed_mission.state in {"Failed", "Blocked"}, (
-            f"Expected Failed or Blocked state, got: {failed_mission.state}"
+        # ProviderUnavailable is recoverable — mission stays resumable, not terminal
+        assert failed_mission.state in {"Failed", "Blocked", "Execution"}, (
+            f"Expected resumable/terminal state, got: {failed_mission.state}"
         )
 
     # ── 4. Provider name at ModelGateway level ──
