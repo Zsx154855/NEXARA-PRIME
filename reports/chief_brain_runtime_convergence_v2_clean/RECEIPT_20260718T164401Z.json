@@ -1,0 +1,10 @@
+{
+  "receipt_type": "NEXARA_V2_PRE_PR_INTEGRITY_CLOSURE_ONEPASS_V1",
+  "implementation_sha": "390f917fa9d34fd5c1af0b8db4f03744a556b20b",
+  "base_sha": "b37d0f31bbc1fd9162aa28f04ca195afe766d501",
+  "evidence_path": ".nexara/evidence/v2_pre_pr_integrity_20260718T164401Z.json",
+  "evidence_sha256": "4f71ccad98c4b26b97827642ffea97c5025fd9ca0dea558f42d2cac4a3c8b276",
+  "tests_total": 820,
+  "status": "PASS",
+  "receipt_sha256": "63d82607f989393674f73237ff77d565bbd615a9a950a05abb1713ab423ef3c1"
+}
