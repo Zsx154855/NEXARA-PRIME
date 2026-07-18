@@ -1,0 +1,52 @@
+name: NEXARA Self-Hosted Probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexara-self-hosted-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on:
+      - self-hosted
+      - macOS
+      - ARM64
+      - nexara-ci-probe-arm64
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Environment info
+        run: |
+          echo "runner: $RUNNER_NAME"
+          uname -a
+          uname -m
+          sw_vers
+          python3 --version
+          node --version
+          npm --version
+          swift --version 2>&1 | head -1
+          xcodebuild -version 2>&1 | head -1
+          echo "HEAD: $(git rev-parse HEAD)"
+      - name: Verify HEAD
+        run: |
+          EXPECTED="${{ github.sha }}"
+          ACTUAL="$(git rev-parse HEAD)"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "HEAD MISMATCH: expected=$EXPECTED actual=$ACTUAL"
+            exit 1
+          fi
+          echo "HEAD verified: $ACTUAL"
+      - name: Probe file test
+        run: |
+          PROBE="$RUNNER_TEMP/probe-test.txt"
+          echo "nexara-self-hosted-probe-$(date -u +%s)" > "$PROBE"
+          echo "content: $(cat "$PROBE")"
+          HASH=$(shasum -a 256 "$PROBE" | awk '{print $1}')
+          echo "sha256: $HASH"
+          rm "$PROBE"
+          test ! -f "$PROBE" && echo "probe file deleted OK"

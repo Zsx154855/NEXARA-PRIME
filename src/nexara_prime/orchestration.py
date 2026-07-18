@@ -20,6 +20,7 @@ import hashlib
 import threading
 import time
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 from .db import SQLiteStore
@@ -135,6 +136,24 @@ def _instant_before_or_equal(a: str | None, b: str | None) -> bool:
 # ── 1. Persistent Mission Queue ──
 
 
+class EnqueueStatus(str, Enum):
+    CREATED_NEW = "created_new"
+    EXISTING_ITEM = "existing_item"
+    IDEMPOTENCY_CONFLICT = "idempotency_conflict"
+
+
+@dataclass
+class EnqueueResult:
+    status: EnqueueStatus
+    item: MissionQueueItem
+    conflict_detail: str = ""
+
+
+def _strip_internal_fields(data: dict) -> dict:
+    """Remove internal fields (prefixed with '_') before model construction."""
+    return {k: v for k, v in data.items() if not k.startswith("_")}
+
+
 class MissionQueue:
     """Persistent priority queue backed by SQLiteStore."""
 
@@ -143,18 +162,64 @@ class MissionQueue:
         self._events = events
         self._lock = threading.Lock()
 
-    def enqueue(self, item: MissionQueueItem) -> MissionQueueItem:
-        if item.idempotency_key:
-            all_records = self._store.list_records("mission_queue")
-            terminal = {QueueItemState.COMPLETED.value, QueueItemState.CANCELLED.value}
-            for raw in all_records:
-                p = raw.get("payload", raw)
-                if p.get("idempotency_key") == item.idempotency_key and p.get("state") not in terminal:
-                    return MissionQueueItem(**p)
-        payload = item.model_dump(mode="json")
-        _sr(self._store, item.mission_id, "mission_queue", payload)
-        _emit(self._events, "mission_queued", item.mission_id, {"priority": item.priority})
-        return item
+    def enqueue(self, item: MissionQueueItem,
+                new_payload_hash: str | None = None) -> EnqueueResult:
+        """Enqueue a mission, respecting idempotency with first-write-wins.
+
+        Thread 2 (Codex V8) + Thread 4 (Codex V12): Returns a structured
+        EnqueueResult so callers never infer "is_new" from mission_id equality.
+
+        Statuses:
+          - created_new:           brand-new mission written to queue
+          - existing_item:         idempotency_key matched; original returned
+          - idempotency_conflict:  same key but different payload → fail closed
+
+        Thread-safe: the entire check-then-write is protected by _lock so
+        concurrent callers with the same idempotency_key see only the first
+        payload (first-write-wins).
+
+        When new_payload_hash is provided (a content hash of the proposed
+        command+prompt), the method detects conflicting retries where the
+        same idempotency_key carries a different payload.  Without it, only
+        key-based dedup is performed (backward-compatible).
+
+        First-write-wins: the ORIGINAL payload is never overwritten.
+        A repeated submit with a different command/prompt MUST NOT replace
+        the original.  The caller receives the conflict status and must
+        NOT persist a new payload.
+        """
+        with self._lock:
+            if item.idempotency_key:
+                all_records = self._store.list_records("mission_queue")
+                terminal = {QueueItemState.COMPLETED.value, QueueItemState.CANCELLED.value}
+                for raw in all_records:
+                    p = raw.get("payload", raw)
+                    # Strip internal fields before model construction
+                    p_clean = {k: v for k, v in p.items() if not k.startswith("_")}
+                    if p_clean.get("idempotency_key") == item.idempotency_key and p_clean.get("state") not in terminal:
+                        existing = MissionQueueItem(**p_clean)
+                        # Check payload hash for conflict detection
+                        existing_hash = p.get("_payload_hash", "")
+                        if new_payload_hash and existing_hash and new_payload_hash != existing_hash:
+                            return EnqueueResult(
+                                status=EnqueueStatus.IDEMPOTENCY_CONFLICT,
+                                item=existing,
+                                conflict_detail=(
+                                    f"idempotency_key '{item.idempotency_key}' already used "
+                                    f"with a different payload (mission_id={existing.mission_id})"
+                                ),
+                            )
+                        # Return original — never overwrite payload
+                        return EnqueueResult(
+                            status=EnqueueStatus.EXISTING_ITEM, item=existing,
+                        )
+            # Persist the payload hash alongside the queue item for future conflict detection
+            p = item.model_dump(mode="json")
+            if new_payload_hash:
+                p["_payload_hash"] = new_payload_hash
+            _sr(self._store, item.mission_id, "mission_queue", p)
+            _emit(self._events, "mission_queued", item.mission_id, {"priority": item.priority})
+            return EnqueueResult(status=EnqueueStatus.CREATED_NEW, item=item)
 
     def dequeue(self) -> MissionQueueItem | None:
         with self._lock:
@@ -162,7 +227,7 @@ class MissionQueue:
             candidates: list[MissionQueueItem] = []
             now = now_iso()
             for raw in all_items:
-                p = raw.get("payload", raw)
+                p = _strip_internal_fields(raw.get("payload", raw))
                 item = MissionQueueItem(**p)
                 if item.state != QueueItemState.READY:
                     continue
@@ -182,7 +247,7 @@ class MissionQueue:
             dep_raw = self._store.find_record("mission_queue", "mission_id", dep_id)
             if dep_raw is None:
                 return False
-            p = dep_raw.get("payload", dep_raw)
+            p = _strip_internal_fields(dep_raw.get("payload", dep_raw))
             dep = MissionQueueItem(**p)
             if dep.state != QueueItemState.COMPLETED:
                 return False
@@ -192,7 +257,7 @@ class MissionQueue:
         raw = self._store.find_record("mission_queue", "mission_id", mission_id)
         if raw is None:
             return None
-        p = raw.get("payload", raw)
+        p = _strip_internal_fields(raw.get("payload", raw))
         item = MissionQueueItem(**p)
         item.state = target
         item.updated_at = now_iso()
@@ -207,7 +272,7 @@ class MissionQueue:
         raw = self._store.find_record("mission_queue", "mission_id", mission_id)
         if raw is None:
             return None
-        p = raw.get("payload", raw)
+        p = _strip_internal_fields(raw.get("payload", raw))
         item = MissionQueueItem(**p)
         item.attempt_count += 1
         item.updated_at = now_iso()
@@ -218,12 +283,12 @@ class MissionQueue:
         raw = self._store.find_record("mission_queue", "mission_id", mission_id)
         if raw is None:
             return None
-        p = raw.get("payload", raw)
+        p = _strip_internal_fields(raw.get("payload", raw))
         return MissionQueueItem(**p)
 
     def list_by_state(self, state: QueueItemState) -> list[MissionQueueItem]:
         return [
-            MissionQueueItem(**(r.get("payload", r)))
+            MissionQueueItem(**_strip_internal_fields(r.get("payload", r)))
             for r in self._store.list_records("mission_queue")
             if r.get("payload", r).get("state") == state.value
         ]
@@ -296,6 +361,13 @@ class WorkerScheduler:
         return available
 
     def schedule(self, item: MissionQueueItem) -> WorkerDescriptor | None:
+        """Select the best worker for a mission.
+
+        Thread 7 (Codex V7): Filters ALL available workers by capability,
+        risk, health, availability, and payload-kind compatibility before
+        returning None.  A mission is only BLOCKED when zero candidates
+        match across the entire pool — never on the first incompatible worker.
+        """
         available = self.list_available()
         if not available:
             return None
@@ -303,6 +375,7 @@ class WorkerScheduler:
             w for w in available
             if self._capability_match(w, item.required_capabilities)
             and self._risk_compatible(w, item.risk_level)
+            and self._payload_kind_compatible(w, item.required_capabilities)
         ]
         if not candidates:
             return None
@@ -318,10 +391,80 @@ class WorkerScheduler:
         )
         return candidates[0]
 
-    def _capability_match(self, worker: WorkerDescriptor, required: list[str]) -> bool:
+    # Thread 4 (Codex V12): Built-in capabilities that are derived from
+    # worker_type rather than requiring explicit declaration.  Everything
+    # else is a custom capability that MUST be in worker.capabilities.
+    _BUILTIN_CAPABILITIES: set[str] = {"command", "prompt"}
+
+    @staticmethod
+    def _payload_kind_compatible(
+        worker: WorkerDescriptor, required: list[str],
+    ) -> bool:
+        """Ensure the worker can handle the payload kind.
+
+        - command-only missions require a command-capable worker (LOCAL_TOOL)
+        - prompt-only missions require a prompt-capable worker (CLAUDE, CODE_REVIEWER)
+        - empty worker capabilities are NOT wildcards — compatibility is
+          derived from worker_type for BUILT-IN capabilities only.
+        - Custom capabilities (docker, gpu, browser, review, research, etc.)
+          MUST be explicitly declared by the worker.  Empty capabilities
+          satisfy NO custom requirements.
+        """
         if not required:
             return True
-        return set(required).issubset(set(worker.capabilities))
+        required_set = set(required)
+        worker_caps = set(worker.capabilities)
+        wt = worker.worker_type.value
+
+        for cap in required_set:
+            if cap in WorkerScheduler._BUILTIN_CAPABILITIES:
+                # Built-in: derive from worker_type if not explicit
+                if cap in worker_caps:
+                    continue  # explicit capability → satisfied
+                if cap == "command" and wt != "local_tool":
+                    return False
+                if cap == "prompt" and wt not in ("claude", "code_reviewer"):
+                    return False
+            else:
+                # Custom capability: MUST be explicitly declared
+                if cap not in worker_caps:
+                    return False
+        return True
+
+    def _capability_match(self, worker: WorkerDescriptor, required: list[str]) -> bool:
+        """Check worker capabilities match requirements.
+
+        Thread 11 (Codex V10) + Thread 2 (Codex V11) + Thread 4 (Codex V12):
+        Empty worker capabilities are NOT a wildcard for custom capabilities.
+
+        Built-in capabilities (command, prompt) are derived from worker_type
+        when not explicitly declared.  Custom capabilities (docker, gpu,
+        browser, review, research, etc.) MUST be explicitly in
+        worker.capabilities — an empty list satisfies NONE of them.
+
+        In a mixed worker pool, only workers that truly declare a custom
+        capability are selected for missions requiring it.
+        """
+        if not required:
+            return True
+        required_set = set(required)
+        worker_caps = set(worker.capabilities)
+        wt = worker.worker_type.value
+
+        for cap in required_set:
+            if cap in WorkerScheduler._BUILTIN_CAPABILITIES:
+                # Built-in: derive from worker_type if not explicit
+                if cap in worker_caps:
+                    continue  # explicit → satisfied
+                if cap == "command" and wt != "local_tool":
+                    return False
+                if cap == "prompt" and wt not in ("claude", "code_reviewer"):
+                    return False
+            else:
+                # Custom capability: MUST be explicitly declared
+                if cap not in worker_caps:
+                    return False
+        return True
 
     def _risk_compatible(self, worker: WorkerDescriptor, risk: RiskLevel) -> bool:
         if risk in (RiskLevel.R3, RiskLevel.R4):
@@ -351,7 +494,9 @@ class WorkerScheduler:
 
 
 class WriterLeaseManager:
-    HEARTBEAT_TTL_S = 120
+    # Thread 5 (Codex V8): Match supervisor default_lease_duration_s (600s)
+    # so the durable lease TTL covers the full worker execution window.
+    HEARTBEAT_TTL_S = 600
 
     def __init__(self, store: SQLiteStore, events: EventBus) -> None:
         self._store = store
@@ -865,10 +1010,23 @@ class RuntimeOrchestrator:
         return True
 
     def _lease_held_by(self, mission_id: str, worker_id: str) -> bool:
+        """Check if worker_id holds an active durable Writer Lease.
+
+        Thread 4 (Codex V7): Only an active, non-expired durable WriterLease
+        authorises completion.  The mission_queue.lease_owner field is NOT a
+        fallback — expired, released, or stale leases, and the raw field,
+        cannot authorise completion.  A mission without an active lease must
+        re-acquire before completing.
+        """
         lease = self.leases._latest_active_lease(mission_id)
         if lease is None:
             return False
-        return lease.get("state") == "active" and lease.get("worker_id") == worker_id
+        if lease.get("state") != "active":
+            return False
+        # Verify lease has not expired
+        if not _instant_before(now_iso(), lease.get("expires_at", "")):
+            return False
+        return lease.get("worker_id") == worker_id
 
     def _crash_resume(self) -> None:
         recovered_count = 0

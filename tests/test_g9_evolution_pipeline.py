@@ -6,7 +6,7 @@ import unittest
 from nexara_prime.benchmark_runner import BenchmarkRunner
 from nexara_prime.db import SQLiteStore
 from nexara_prime.events import EventBus
-from nexara_prime.models import MissionSpec, RiskLevel, new_id, now_iso
+from nexara_prime.models import MissionSpec, RiskLevel
 from nexara_prime.product_reality.models import ImprovementProposal
 
 
@@ -48,7 +48,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
     """Test the BenchmarkRunner with baseline vs candidate comparison."""
 
     def setUp(self):
-        import tempfile, os
+        import tempfile
         self.tmp = tempfile.mkdtemp()
         self.store = SQLiteStore(f"{self.tmp}/test.db")
         self.events = EventBus(self.store)
@@ -62,7 +62,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
                       evidence_count: int = 0, tool_count: int = 0,
                       tokens: int = 1000, has_report: bool = False,
                       has_rollback: bool = False):  # returns Mission
-        from nexara_prime.models import Mission, MissionSpec, MissionState
+        from nexara_prime.models import Mission, MissionState
         state_map = {
             "COMPLETED": MissionState.COMPLETED,
             "FAILED": MissionState.FAILED,

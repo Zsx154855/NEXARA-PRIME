@@ -12,11 +12,6 @@ from fastapi.testclient import TestClient
 from nexara_prime.api import create_app
 from nexara_prime.capabilities import CapabilityRegistry
 from nexara_prime.config import Settings
-from nexara_prime.db import SQLiteStore
-from nexara_prime.events import EventBus
-from nexara_prime.evidence import EvidenceStore
-from nexara_prime.governance import WriterLeaseManager
-from nexara_prime.memory import MemoryKernel
 from nexara_prime.models import MemoryKind, MissionState
 from nexara_prime.runtime import NexaraRuntime
 from nexara_prime.scheduler import AdaptiveScheduler
