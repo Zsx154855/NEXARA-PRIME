@@ -14,7 +14,9 @@ class EvaluationEngine:
         if idempotency_key:
             existing = self.store.find_record("evaluation", "idempotency_key", idempotency_key)
             if existing:
-                return EvaluationResult.model_validate(existing)
+                # Strip idempotency_key from stored payload before model_validate
+                existing_payload = {k: v for k, v in existing.items() if k != "idempotency_key"}
+                return EvaluationResult.model_validate(existing_payload)
         has_report = bool(mission.result.get("report_path"))
         evidence_coverage = 1.0 if evidence_count >= 4 else min(1.0, evidence_count / 4)
         correctness = 1.0 if has_report and mission.state in {MissionState.EVALUATION.value, MissionState.COMPLETED.value} else 0.5

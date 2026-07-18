@@ -489,15 +489,19 @@ class NexaraRuntime:
             input_tokens = int(persisted.get("input_tokens", 0))
             output_tokens = int(persisted.get("output_tokens", 0))
             cost_usd = float(persisted.get("cost_usd", 0.0))
+            model_text = mission.result.get("model_text", "")
+            provider = persisted.get("provider", "unknown")
         else:
             context = {"source_dir": mission.spec.source_dir or "workspace", "roles": [a.persona.value for a in mission.assignments]}
             compiled = self.tokens.compile(mission.spec, [cap for a in mission.assignments for cap in a.loaded_capabilities], ["MissionSpec", "WorkContract", "MissionPlan"], [e["evidence_id"] for e in self.evidence.list(mission.mission_id)], json.dumps(context))
             input_tokens, output_tokens, cost_usd = 0, 0, 0.0
             model_text, provider, input_tokens, output_tokens, cost_usd = self._checkpointed_model(mission, compiled, context)
             mission.result[model_key] = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost_usd, "provider": provider}
+            mission.result["model_text"] = model_text
+            mission.result["model_provider"] = provider
         code_invocation = self.tools.invoke(mission.mission_id, "code_exec", {"code": "print('nexara-prime local execution check')"}, mission.trace_id, safe_mode=mission.safe_mode, actor_id="runtime", task_id=mission.mission_id, idempotency_key=f"{mission.mission_id}:code-check")
         self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"invocation_id": code_invocation.invocation_id})
-        report = self._render_report(mission, mission.spec.objective, "Deterministic mock" if getattr(self.models.provider, 'name', '') == 'mock' else "Provider output", "mock")
+        report = self._render_report(mission, mission.spec.objective, model_text, provider)
         lease = self.leases.acquire(f"report:{mission.mission_id}", "vertex", mission.trace_id)
         try:
             if not mission.pending_approval_id:
@@ -507,6 +511,7 @@ class NexaraRuntime:
             self.leases.release(lease.lease_id, "vertex", mission.trace_id)
         mission.result["report_path"] = receipt.result["path"]
         mission.result["tool_invocation_ids"] = [code_invocation.invocation_id, receipt.invocation_id]
+        mission.result["receipt_evidence_id"] = receipt.receipt_evidence_id
         mission.rollback_point = receipt.invocation_id
         self._save_mission(mission)
         self.recovery.checkpoint(mission.mission_id, "report_written", mission.trace_id, data={"path": receipt.result["path"]})
@@ -514,10 +519,17 @@ class NexaraRuntime:
         return self._verify_stage(mission)
 
     def _verify_stage(self, mission: Mission) -> Mission:
-        """Verification report (idempotent) → advance to Evidence."""
+        """Verification report (idempotent, replay-safe) → advance to Evidence."""
         vkey = f"{mission.mission_id}:verification_evidence"
         verification = self._verify_report(mission)
-        v_id = self.evidence.add(mission.mission_id, "verification_report", "VerificationReport", json.dumps(verification, ensure_ascii=False, indent=2), mission.trace_id, actor="reviewer", source="filesystem", verification_status="verified", idempotency_key=vkey).evidence_id
+        parent_evidence = [mission.result["receipt_evidence_id"]] if mission.result.get("receipt_evidence_id") else None
+        try:
+            v_id = self.evidence.add(mission.mission_id, "verification_report", "VerificationReport", json.dumps(verification, ensure_ascii=False, indent=2), mission.trace_id, actor="reviewer", source="filesystem", verification_status="verified", parent_evidence=parent_evidence, idempotency_key=vkey).evidence_id
+        except RuntimeError:
+            # Replay-safe: if evidence already exists under same idempotency_key,
+            # use the existing record rather than failing on content mismatch
+            existing = self.evidence.store.find_record("evidence", "idempotency_key", vkey)
+            v_id = existing["evidence_id"]
         mission.result["verification_evidence_id"] = v_id
         self._save_mission(mission)
         self._advance(mission, MissionState.EVIDENCE, "reviewer")
