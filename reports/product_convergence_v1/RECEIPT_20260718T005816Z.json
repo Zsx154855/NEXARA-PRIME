@@ -1,0 +1,49 @@
+{
+  "base": "8f397dd179f887f3861f94fb0f1f5c6e5b3f98a2",
+  "branch": "work/nexara-product-convergence-v1",
+  "canonical_nsec_v2_hash": "sha256:e3ed168fee070b1aec68227f696f0f6fb92e3d9f87ded59a927169d46e8c7e94",
+  "ci": "EXTERNAL_CI_DEGRADED",
+  "commits": [
+    "2fe6c78 refactor(convergence): merge CapabilityRegistry + TokenCompiler V2 → V1"
+  ],
+  "convergence_targets": {
+    "capability_registry": {
+      "authoritative": "src/nexara_prime/capabilities.py :: CapabilityRegistry",
+      "status": "CONVERGED",
+      "deprecated": "capability_registry_v2.py (compat alias)"
+    },
+    "token_compiler": {
+      "authoritative": "src/nexara_prime/token_compiler.py :: TokenCompiler",
+      "status": "CONVERGED (scope deviation justified — see IMPLEMENTATION_REPORT.md)",
+      "deprecated": "token_compiler_v2.py (compat alias)"
+    },
+    "scheduler": {
+      "authoritative": "src/nexara_prime/scheduler.py :: AdaptiveScheduler",
+      "status": "ALREADY_CLEAN — no structural change",
+      "subcomponents": 5
+    },
+    "truth_authority": {
+      "authoritative_domains": 3,
+      "status": "NO_CONFLICT — different semantic domains",
+      "deprecated_files": 4
+    }
+  },
+  "drift_detector": "NO DRIFT",
+  "head": "2fe6c78080119567dd6708c5bd6c419ef6287eae",
+  "local_main": "8f397dd179f887f3861f94fb0f1f5c6e5b3f98a2",
+  "local_main_synced": true,
+  "nsec_validator": "PASS",
+  "origin_main": "8f397dd179f887f3861f94fb0f1f5c6e5b3f98a2",
+  "receipt_type": "NEXARA_PRODUCT_CONVERGENCE_V1_LOCAL_CORRECTION",
+  "repository": "/Users/agentos/NEXARA-PRIME",
+  "scope_deviation": {
+    "target": "token_compiler",
+    "justification": "Reality Audit D-002 (P0), same defect class, no functional expansion",
+    "verdict": "RETAIN",
+    "evidence": "reports/product_convergence_v1/IMPLEMENTATION_REPORT.md §Scope Deviation"
+  },
+  "tests": "742/742 PASS",
+  "timestamp": "2026-07-18T00:58:16.625869+00:00",
+  "worktree": "CLEAN (evidence+reports intentionally untracked per .gitignore)",
+  "receipt_hash": "sha256:96d212fd906ae7bc498f27d64471a2c706a18990d73d0eb599ef4dfeffff6197"
+}

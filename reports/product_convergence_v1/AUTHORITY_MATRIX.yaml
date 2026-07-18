@@ -1,0 +1,115 @@
+# NEXARA PRIME — Authority Matrix V1
+#
+# ESTABLISHED: 2026-07-18
+# GOVERNED BY: NSEC V2.0, Article IX (Single Truth)
+#
+# Every fact has exactly one authoritative writer.  Files that appear to
+# overlap MUST be either:
+#   (A) Different semantic domains (no conflict), or
+#   (B) Derived views (cache / snapshot / mirror) with the authoritative
+#       source documented, or
+#   (C) Deprecated (retained for audit only)
+
+version: 1
+matrix_name: NEXARA_AUTHORITY_MATRIX_V1
+established: "2026-07-18"
+
+# ── Capability Registry ──────────────────────────────────────────────────────
+
+capability_registry:
+  authoritative_module: "src/nexara_prime/capabilities.py"
+  authoritative_class: "CapabilityRegistry"
+  authoritative_writer: "NexaraRuntime.__init__ (runtime.py:L213)"
+  readers:
+    - "scheduler.py:L3"
+    - "platform/__init__.py:L19 (re-export)"
+    - "tests/test_core.py:L13"
+    - "tests/test_adaptive_runtime.py"
+  compatibility_aliases:
+    - "capability_registry_v2.CapabilityRegistryV2 → capabilities.CapabilityRegistry (deprecated, removal: v0.2.0)"
+  deprecated_modules:
+    - "capability_registry_v2.py — thin compat alias only"
+
+# ── Token Compiler ────────────────────────────────────────────────────────────
+
+token_compiler:
+  authoritative_module: "src/nexara_prime/token_compiler.py"
+  authoritative_class: "TokenCompiler"
+  authoritative_writer: "NexaraRuntime.__init__ (runtime.py:L217)"
+  readers:
+    - "runtime.py:L192 (conditional, adaptive V2 path)"
+    - "tests/test_core.py:L23"
+    - "tests/test_adaptive_runtime.py"
+  compatibility_aliases:
+    - "token_compiler_v2.TokenCompilerV2 → token_compiler.TokenCompiler (deprecated, removal: v0.2.0)"
+  deprecated_modules:
+    - "token_compiler_v2.py — thin compat alias only"
+
+# ── Scheduler ─────────────────────────────────────────────────────────────────
+
+scheduler:
+  authoritative_entry: "src/nexara_prime/scheduler.py :: AdaptiveScheduler"
+  state_owner: "NexaraRuntime.scheduler (runtime.py:L214)"
+  subcomponents:
+    - "adaptive_scheduler.py — multi-agent dispatch (internal)"
+    - "adaptive_runtime.py — AdaptiveOrchestrator (internal)"
+    - "orchestration.py — control plane (internal)"
+    - "program_loop.py — lifecycle (internal)"
+    - "repair_loop.py — self-healing (internal)"
+  deprecated_entries: []
+
+# ── Truth / State Domains ─────────────────────────────────────────────────────
+
+truth_domains:
+  - domain: "project_identity"
+    description: "Project name, platform, agent_package, python version, test baseline"
+    authoritative_file: ".nexara/PROGRAM_STATE.json"
+    authoritative_writer: "scripts/runtime_truth/compile_program_state.py"
+    readers:
+      - "scripts/governance/detect_state_drift.py"
+      - "scripts/runtime_truth/validate_program_state.py"
+      - "tests/"
+    derived_views: []
+    conflict_rule: "PROGRAM_STATE.json > PROJECT_STATE.json (DEPRECATED)"
+    recovery_rule: "Re-run compile_program_state.py to regenerate from git HEAD + pytest results"
+    deprecated_files:
+      - ".nexara/PROJECT_STATE.json — superseded, read-only"
+
+  - domain: "gate_progression"
+    description: "Current gate, gate statuses, order, dependencies"
+    authoritative_file: ".nexara/GATE_STATUS.json"
+    authoritative_writer: "Human (manual) + CI gates (automated)"
+    readers:
+      - "scripts/governance/detect_state_drift.py"
+      - ".nexara/DECISION_LOG.md"
+    derived_views: []
+    conflict_rule: "GATE_STATUS.json > EXECUTION_CHECKPOINT.json (DEPRECATED)"
+    recovery_rule: "Re-declare gate statuses manually; re-run CI gates"
+    deprecated_files:
+      - ".nexara/EXECUTION_CHECKPOINT.json — legacy checkpoint, content migrated"
+      - ".nexara/CURRENT_GATE.md — legacy pointer, content migrated"
+
+  - domain: "historical_baseline"
+    description: "Frozen baseline snapshot — commit SHAs, environment, baselines at freeze time"
+    authoritative_file: ".nexara/BASELINE.json"
+    authoritative_writer: "One-time freeze (2026-07-14)"
+    readers:
+      - "governance/baselines/v0.1.0/"
+    derived_views: []
+    conflict_rule: "BASELINE.json is IMMUTABLE — never modified after creation"
+    recovery_rule: "Re-freeze from git HEAD at relevant historical point"
+    deprecated_files: []
+
+# ── Audit Trail ───────────────────────────────────────────────────────────────
+#
+# These files are APPEND-ONLY audit/decision records, not state:
+#
+# - .nexara/DECISION_LOG.md — decision audit trail (human + agent, append-only)
+# - .nexara/NEXT_ACTION.md — DEPRECATED (content migrated to PROGRAM_STATE.json)
+
+# ── Verification ──────────────────────────────────────────────────────────────
+
+verification:
+  drift_detector: "scripts/governance/detect_state_drift.py"
+  state_validator: "scripts/runtime_truth/validate_program_state.py"
+  nsec_compliance: "Article IX (Single Truth) — no conflict between 3 authoritative domains"
