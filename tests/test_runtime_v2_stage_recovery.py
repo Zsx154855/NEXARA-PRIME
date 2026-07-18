@@ -17,9 +17,23 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from nexara_prime.config import Settings
 from nexara_prime.models import MissionState
 from nexara_prime.runtime import NexaraRuntime
+from nexara_prime.sandbox_v2 import TestSandboxBackend as _StageSandboxBackend
+
+
+@pytest.fixture(autouse=True)
+def _use_stage_test_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise Runtime recovery independently of the host OS sandbox.
+
+    OS sandbox enforcement has its own security suite. These tests need a
+    deterministic executor on Linux and macOS so they can focus on persisted
+    stage boundaries and idempotency.
+    """
+    monkeypatch.setattr("nexara_prime.tools.MacOSSandboxBackend", _StageSandboxBackend)
 
 
 def _mk(db_dir: Path) -> Settings:
@@ -237,7 +251,7 @@ class TestCrashAtEvaluationToCompletedBoundary:
 
 class TestCrashBEvidenceNotCommitted:
     """Crash B: tool write succeeded (report file on disk), but evidence NOT committed.
-    After re-instantiation, the verification evidence must be idempotent (exactly 1)."""
+    After re-instantiation, execution resumes without repeating tool side effects."""
 
     def test_tool_success_evidence_uncommitted(self) -> None:
         db_dir = Path(tempfile.mkdtemp())
@@ -246,22 +260,43 @@ class TestCrashBEvidenceNotCommitted:
         mid = m.mission_id
         rt1.plan_mission(mid)
         rt1.approve_mission(mid, approved=True)
-        # Run to completion — the report file is on disk, all evidence is committed
-        result = rt1.run_mission(mid)
-        assert result.state == "Completed"
-        report_path = result.result.get("report_path", "")
+
+        original_advance = rt1._advance
+
+        def crash_after_tool_success(mission, target, actor):
+            if target == MissionState.VERIFICATION and mission.state == "Execution":
+                raise KeyboardInterrupt("crash after tool success, before verification evidence")
+            return original_advance(mission, target, actor)
+
+        rt1._advance = crash_after_tool_success
+        try:
+            rt1.run_mission(mid)
+        except KeyboardInterrupt:
+            pass
+
+        crashed = rt1.get_mission(mid)
+        assert crashed.state == "Execution"
+        report_path = crashed.result.get("report_path", "")
         assert report_path, "Report must be written"
-        # Verify the report file actually exists on disk
-        assert (Path(report_path).exists()), f"Report file missing: {report_path}"
-        er_before = sum(1 for e in rt1.evidence.list(mid) if e.get("kind") == "execution_result")
-        assert er_before == 1
+        assert Path(report_path).exists(), f"Report file missing: {report_path}"
+
+        evidence_before = rt1.evidence.list(mid)
+        assert sum(1 for e in evidence_before if e.get("kind") == "verification_report") == 0
+        assert sum(1 for e in evidence_before if e.get("kind") == "execution_result") == 0
+        tool_count_before = len(rt1.tools.list_invocations(mid))
+        assert tool_count_before == 2
         del rt1
 
-        # Re-instantiate — evidence should NOT be duplicated
+        # Re-instantiate from the persisted Execution state. Stable tool keys
+        # replay the completed calls, then the missing evidence stages run once.
         rt2 = NexaraRuntime(_mk(db_dir))
-        rt2.run_mission(mid)  # Completed → no-op
-        er_after = sum(1 for e in rt2.evidence.list(mid) if e.get("kind") == "execution_result")
-        assert er_after == er_before, f"Evidence duplicated on re-instantiation: {er_before}→{er_after}"
+        result = rt2.run_mission(mid)
+        assert result.state == "Completed"
+        assert len(rt2.tools.list_invocations(mid)) == tool_count_before
+
+        evidence_after = rt2.evidence.list(mid)
+        assert sum(1 for e in evidence_after if e.get("kind") == "verification_report") == 1
+        assert sum(1 for e in evidence_after if e.get("kind") == "execution_result") == 1
 
 
 class TestIdempotencyAfterReInstantiation:

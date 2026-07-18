@@ -59,6 +59,19 @@ class TestProviderUnavailablePath:
 
     # ── 1. Structural checks at init ────────────────────────────────────
 
+    def test_from_env_defaults_to_unavailable(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Production defaults must never opt into MockProvider implicitly."""
+        monkeypatch.delenv("NEXARA_MODEL_PROVIDER", raising=False)
+        monkeypatch.delenv("NEXARA_MOCK_MODEL", raising=False)
+
+        settings = Settings.from_env(tmp_path)
+        assert settings.model_provider == "none"
+        assert settings.mock_model is False
+
+        rt = NexaraRuntime(settings)
+        assert rt.models.provider.name == "unavailable"
+        assert getattr(rt, "_provider_unavailable", False) is True
+
     def test_unavailable_provider_is_not_mock(self) -> None:
         """When mock_model=False + model_provider='none', provider is UnavailableProvider, not MockProvider."""
         rt = _unavailable_runtime()
