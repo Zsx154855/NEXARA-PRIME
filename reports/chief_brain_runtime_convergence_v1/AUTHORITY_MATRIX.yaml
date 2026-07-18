@@ -1,0 +1,46 @@
+# Chief Brain Runtime Authority Matrix V1
+
+chief_brain_runtime:
+  authority: NexaraRuntime (src/nexara_prime/runtime.py)
+  parallel_runtime: none
+  supervisor: absent
+  mission_creation_authority: NexaraRuntime.create_mission()
+  mission_state_authority: NexaraRuntime._advance() + MissionStateMachine
+  resume_authority: NexaraRuntime.resume()
+  finalization_authority: NexaraRuntime._completion_gate()
+
+entrypoints:
+  api: FastAPI adapter → NexaraRuntime (src/nexara_prime/api.py)
+  cli: argparse adapter → NexaraRuntime (src/nexara_prime/cli.py)
+  ui_backend: StaticFiles → /api/runtime/overview (src/nexara_prime/api.py)
+
+orchestration:
+  planner: domain service (MissionCompiler + ContractEngine)
+  scheduler: AdaptiveScheduler (src/nexara_prime/scheduler.py)
+  supervisor: absent
+  executor: ToolRuntime (src/nexara_prime/tools.py)
+  reviewer: verification component (_verify_report)
+  verifier: EvaluationEngine + EvidenceStore
+
+provider:
+  production_selection: explicit configured provider (model_provider setting)
+  test_selection: MockProvider (mock_model=True)
+  deterministic_replay: MockProvider (mock_model=True)
+  implicit_mock_fallback_in_production: forbidden
+  unavailable_behavior: _provider_unavailable flag set, recoverable
+
+approval:
+  request_authority: PolicyEngine.requires_approval() + ApprovalEngine.request()
+  decision_authority: human (approve_mission with actor="human")
+  resume_binding: original mission_id + pending_approval_id
+
+recovery:
+  checkpoint_authority: DurableRecovery.checkpoint()
+  idempotency_authority: DurableRecovery.checkpoint_done()
+  retry_authority: NexaraRuntime.resume() crash recovery path
+
+runtime_truth:
+  snapshot_authority: NexaraRuntime.inspect_mission()
+  event_authority: EventBus publish
+  evidence_authority: EvidenceStore
+  receipt_authority: EvidenceStore (receipt evidence type)

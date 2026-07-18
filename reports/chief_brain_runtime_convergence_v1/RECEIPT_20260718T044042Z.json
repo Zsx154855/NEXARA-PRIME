@@ -1,0 +1,11 @@
+{
+  "receipt_type": "NEXARA_CHIEF_BRAIN_RUNTIME_CONVERGENCE_V1",
+  "evidence_path": ".nexara/evidence/chief_brain_runtime_convergence_v1_20260718T044042Z.json",
+  "evidence_sha256": "7fb080028a48ca2d6c1b50d09849c9633e8a0e22697cb2c065ff49ac06288435",
+  "branch": "work/nexara-chief-brain-runtime-convergence-v1",
+  "base": "b37d0f31",
+  "tests_total": 769,
+  "status": "PASS",
+  "timestamp": "2026-07-18T04:40:42.949283+00:00",
+  "receipt_sha256": "cec708aff16e8e073ed98b5e3e94effaaa649ca1d0d7b44e38af92df4a4b443f"
+}
