@@ -242,19 +242,23 @@ def cmd_doctor() -> int:
     # 9. No secrets tracked by git
     try:
         r = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True, cwd=str(root))
+        if r.returncode != 0:
+            raise RuntimeError("git_staged_file_query_failed")
         staged = r.stdout.strip().split("\n") if r.stdout.strip() else []
         secrets_found = []
         scanner_path = root / "scripts" / "security" / "scan_hardcoded_secrets.py"
         scan_file = None
         if scanner_path.exists():
             scan_file = runpy.run_path(str(scanner_path)).get("scan_file")
+        if staged and not callable(scan_file):
+            raise RuntimeError("canonical_secret_scanner_unavailable")
         for f in staged:
             fp = root / f
             if fp.exists() and fp.is_file() and scan_file and scan_file(fp):
                 secrets_found.append(f)
         check("No secrets staged", len(secrets_found) == 0, "ok" if not secrets_found else f"found: {secrets_found}")
-    except Exception:
-        check("No secrets staged", True, "skipped (no git)")
+    except Exception as exc:
+        check("No secrets staged", False, f"scan failed: {type(exc).__name__}")
 
     # 10. Worktree status
     try:

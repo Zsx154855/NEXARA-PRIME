@@ -14,11 +14,29 @@ class EvaluationEngine:
 
     def evaluate(self, mission: Mission, evidence_count: int, tool_count: int, input_tokens: int, output_tokens: int, *, idempotency_key: str | None = None) -> EvaluationResult:
         if idempotency_key:
-            existing = self.store.find_record("evaluation_idempotency", "idempotency_key", idempotency_key)
-            if existing and existing.get("evaluation_id"):
-                record = self.store.get_record(existing["evaluation_id"])
+            existing_envelope = self.store.find_record_envelope(
+                "evaluation_idempotency", "idempotency_key", idempotency_key
+            )
+            existing = (
+                existing_envelope["payload"] if existing_envelope else None
+            )
+            if (
+                existing_envelope
+                and existing_envelope.get("mission_id") == mission.mission_id
+                and existing
+                and existing.get("evaluation_id")
+            ):
+                record_envelope = self.store.get_record_envelope(
+                    existing["evaluation_id"]
+                )
+                record = record_envelope["payload"] if record_envelope else None
                 if record:
                     result = EvaluationResult.model_validate(record)
+                    if (
+                        result.mission_id != mission.mission_id
+                        or result.idempotency_key not in {None, idempotency_key}
+                    ):
+                        raise ValueError("evaluation_idempotency_conflict")
                     self._publish_evaluation(mission, result, idempotency_key)
                     return result
         has_report = bool(mission.result.get("report_path"))
@@ -70,14 +88,25 @@ class EvaluationEngine:
             except ValueError as exc:
                 if str(exc) != "atomic_record_identity_conflict":
                     raise
-                winner = self.store.find_record(
+                winner_envelope = self.store.find_record_envelope(
                     "evaluation_idempotency",
                     "idempotency_key",
                     idempotency_key,
                 )
+                winner = winner_envelope["payload"] if winner_envelope else None
+                winner_record_envelope = (
+                    self.store.get_record_envelope(winner["evaluation_id"])
+                    if (
+                        winner_envelope
+                        and winner_envelope.get("mission_id") == mission.mission_id
+                        and winner
+                        and winner.get("evaluation_id")
+                    )
+                    else None
+                )
                 winner_record = (
-                    self.store.get_record(winner["evaluation_id"])
-                    if winner and winner.get("evaluation_id")
+                    winner_record_envelope["payload"]
+                    if winner_record_envelope
                     else None
                 )
                 if not winner_record:

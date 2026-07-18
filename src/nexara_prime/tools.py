@@ -55,11 +55,29 @@ class ToolRuntime:
             raise PermissionError(f"path_outside_allowed_root:{candidate}") from exc
         return candidate
 
-    def _existing(self, idempotency_key: str | None) -> ToolInvocation | None:
+    def _existing(
+        self,
+        idempotency_key: str | None,
+        mission_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> ToolInvocation | None:
         if not idempotency_key:
             return None
-        raw = self.store.find_record("tool", "idempotency_key", idempotency_key)
-        return ToolInvocation.model_validate(raw) if raw else None
+        envelope = self.store.find_record_envelope(
+            "tool", "idempotency_key", idempotency_key
+        )
+        if not envelope:
+            return None
+        invocation = ToolInvocation.model_validate(envelope["payload"])
+        if (
+            envelope.get("mission_id") != mission_id
+            or invocation.mission_id != mission_id
+            or invocation.tool_name != tool_name
+            or invocation.arguments != arguments
+        ):
+            raise ValueError("tool_idempotency_conflict")
+        return invocation
 
     def invoke(
         self,
@@ -75,7 +93,9 @@ class ToolRuntime:
         idempotency_key: str | None = None,
         timeout_seconds: int | None = None,
     ) -> ToolInvocation:
-        existing = self._existing(idempotency_key)
+        existing = self._existing(
+            idempotency_key, mission_id, tool_name, arguments
+        )
         if existing:
             return existing
         risk = {

@@ -431,8 +431,14 @@ class NexaraRuntime:
         # This check must precede the provider call or a restart can duplicate
         # an already completed and billed model request.
         legacy_key = f"{mission.mission_id}:model-completion"
-        legacy = self.store.find_record(
+        legacy_envelope = self.store.find_record_envelope(
             "model_response", "idempotency_key", legacy_key
+        )
+        legacy = (
+            legacy_envelope["payload"]
+            if legacy_envelope
+            and legacy_envelope.get("mission_id") == mission.mission_id
+            else None
         )
         if legacy:
             required = {"text", "provider", "input_tokens", "output_tokens"}
@@ -559,6 +565,8 @@ class NexaraRuntime:
                 stored_verification = json.loads(existing.get("content", ""))
             except (TypeError, ValueError) as exc:
                 raise ValueError("verification_evidence_invalid") from exc
+            if not isinstance(stored_verification, dict):
+                raise ValueError("verification_evidence_invalid")
             stable_fields = {"exists", "bytes", "non_empty", "sha256"}
             if (
                 any(
