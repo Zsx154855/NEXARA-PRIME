@@ -5,14 +5,13 @@ import hashlib
 import ipaddress
 import time
 import urllib.parse
-from typing import List
 
 from .base import (
     BaseConnector, ConnectorInvocation, ConnectorManifest,
     ConnectorReceipt, ConnectorPermission, RiskLevel,
     ConnectorPolicyDecision,
 )
-from ..models import now_iso, new_id
+from ..models import now_iso
 
 _PRIVATE_IP_RANGES = [
     ipaddress.ip_network("10.0.0.0/8"),

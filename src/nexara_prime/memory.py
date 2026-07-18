@@ -295,7 +295,7 @@ class MemoryLayerManager:
             return self._keyword_search(query, layers, top_k)
 
         from .rag_pipeline import MemoryLayer as RAGLayer
-        layer_filter = [RAGLayer(l) for l in layers] if layers else None
+        layer_filter = [RAGLayer(layer) for layer in layers] if layers else None
         result = self.rag.query(
             query, top_k=top_k, layer_filter=layer_filter,
             mission_id=mission_id, include_evaluation=True,

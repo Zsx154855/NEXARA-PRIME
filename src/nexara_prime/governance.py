@@ -13,7 +13,6 @@ from .models import (
     Event,
     RiskLevel,
     WriterLease,
-    new_id,
     now_iso,
 )
 

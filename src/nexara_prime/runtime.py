@@ -19,9 +19,7 @@ from .memory import MemoryKernel
 from .mission_compiler import MissionCompiler
 from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider, ProviderUnavailable, UnavailableProvider
 from .models import (
-    Mission, MissionState, RiskLevel, AdaptiveMode, AdaptiveMissionProfile,
-    MissionTriageResult, SchedulingPlan, ModelRoutingDecision,
-    ResourceBudget, BudgetUsage, EscalationDecision,
+    Mission, MissionState, RiskLevel, AdaptiveMissionProfile,
     now_iso, new_id,
 )
 from .recovery import DurableRecovery
@@ -482,8 +480,10 @@ class NexaraRuntime:
         model_key = f"{mission.mission_id}:model_tokens"
         persisted = mission.result.get(model_key)
         if persisted and isinstance(persisted, dict):
-            mt = int(persisted.get("input_tokens", 0)); ot = int(persisted.get("output_tokens", 0))
-            c = float(persisted.get("cost_usd", 0.0)); model_text = mission.result.get("model_text", "")
+            mt = int(persisted.get("input_tokens", 0))
+            ot = int(persisted.get("output_tokens", 0))
+            c = float(persisted.get("cost_usd", 0.0))
+            model_text = mission.result.get("model_text", "")
             provider = persisted.get("provider", "unknown")
         else:
             context = {"source_dir": mission.spec.source_dir or "workspace", "roles": [a.persona.value for a in mission.assignments]}
@@ -537,7 +537,9 @@ class NexaraRuntime:
         re_id = mission.result.get("result_evidence_id")
         if not re_id:
             for e in self.evidence.list(mission.mission_id):
-                if e.get("kind") == "execution_result": re_id = e.get("evidence_id"); break
+                if e.get("kind") == "execution_result":
+                    re_id = e.get("evidence_id")
+                    break
         mem = self.memory.patch(mission.mission_id, "mission.completed_report", "A bounded local report was generated and verified.", mission.trace_id, re_id or "", idempotency_key=mkey)
         mission.result["memory_patch_id"] = mem.memory_id
         self._save_mission(mission)

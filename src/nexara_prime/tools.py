@@ -4,7 +4,6 @@ import hashlib
 import os
 import shlex
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -14,7 +13,7 @@ from .db import SQLiteStore
 from .evidence import EvidenceStore
 from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine
-from .models import ApprovalStatus, RiskLevel, ToolInvocation, new_id, now_iso
+from .models import ApprovalStatus, RiskLevel, ToolInvocation, new_id
 from .sandbox_v2 import MacOSSandboxBackend, ProcessConstrainedBackend, SandboxInvocation
 from .security_audit import SecurityAuditLedger
 

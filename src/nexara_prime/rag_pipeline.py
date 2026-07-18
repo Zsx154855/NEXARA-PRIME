@@ -20,12 +20,11 @@ import math
 import re
 import time
 from abc import ABC, abstractmethod
-from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from .models import MemoryKind, MemoryRecord, new_id, now_iso
+from .models import MemoryKind, new_id, now_iso
 
 
 # ── Memory layer classification ──
@@ -423,8 +422,6 @@ class RAGPipeline:
         mission_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Retrieve relevant chunks for a query."""
-        started = time.monotonic()
-
         query_embedding = self.embedder.embed([query])[0]
 
         raw_results = self.index.search(

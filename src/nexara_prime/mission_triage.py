@@ -3,7 +3,6 @@ from __future__ import annotations
 from .models import (
     AdaptiveMode,
     MissionTriageResult,
-    RiskLevel,
     now_iso,
 )
 

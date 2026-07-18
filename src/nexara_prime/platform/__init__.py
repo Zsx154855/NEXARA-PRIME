@@ -21,7 +21,7 @@ from nexara_prime.events import EventBus
 from nexara_prime.governance import PolicyEngine  # noqa: F401 — re-export
 from nexara_prime.identity import IdentityStore
 from nexara_prime.network_policy import NetworkPolicyEngine
-from nexara_prime.governance import PolicyEngine, ApprovalEngine
+from nexara_prime.governance import ApprovalEngine
 
 __all__ = [
     "CapabilityRegistry",

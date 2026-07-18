@@ -9,7 +9,6 @@ No real external systems are touched. All drivers are mock.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -327,7 +326,7 @@ class TestMemoryLayers:
 
     def test_patch_review_flow(self, runtime):
         ml = runtime.memory_layers
-        patch = ml.propose_patch(
+        ml.propose_patch(
             "test_patch", "Test patch content",
             "trace-6", mission_id="mis-e2e",
         )
@@ -377,7 +376,6 @@ class TestRepairLoop:
 
 class TestProgramLoop:
     def test_lifecycle(self, runtime):
-        from nexara_prime.program_loop import ProgramLoopConfig
         import time
 
         pl = runtime.program
@@ -390,7 +388,6 @@ class TestProgramLoop:
         assert state["cycle_count"] > 0
 
     def test_pause_resume(self, runtime):
-        from nexara_prime.program_loop import ProgramLoopConfig
         import time
 
         pl = runtime.program
@@ -424,7 +421,6 @@ class TestE2EMissionFlow:
 
     def test_full_mission_pipeline(self, runtime):
         """Simulate: analyze → compile → multi-agent → file ops → approval → git write → browser verify → evidence → memory → repair → done."""
-        from nexara_prime.models import RiskLevel
 
         # Step 1: Create mission
         mission = runtime.create_mission(

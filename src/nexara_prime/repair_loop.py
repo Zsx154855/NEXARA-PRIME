@@ -531,11 +531,9 @@ class RepairLoop:
 
         # Try up to MAX_ATTEMPTS
         self._active_apply_patch_fn = apply_patch_fn
-        last_result: RepairResult | None = None
         try:
             for _ in range(self.MAX_ATTEMPTS):
                 result = self.attempt_repair(failure.failure_id)
-                last_result = result
 
                 if result.success:
                     return result

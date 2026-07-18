@@ -4,7 +4,6 @@ from __future__ import annotations
 import ipaddress
 import socket
 from dataclasses import dataclass, field
-from typing import List, Set
 
 from .models import new_id, now_iso
 

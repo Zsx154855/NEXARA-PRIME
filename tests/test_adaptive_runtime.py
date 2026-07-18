@@ -13,36 +13,29 @@
 
 from __future__ import annotations
 
-import time
 from datetime import datetime, timezone
-from typing import Any
-from unittest.mock import MagicMock, patch
+from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock
 
 import pytest
 
 from nexara_prime.models import (
-    AdaptiveEvaluation,
-    AdaptiveMissionProfile,
     AdaptiveMode,
     BudgetUsage,
-    Capability,
     CapabilityScore,
-    CapabilityType,
     EscalationDecision,
     Mission,
     MissionSpec,
     MissionState,
     MissionTriageResult,
-    ModelRoutingDecision,
-    ResourceBudget,
     RiskLevel,
     RuntimeRole,
-    SchedulerPolicyVersion,
-    SchedulingPlan,
-    TokenCompilationRecord,
     new_id,
     now_iso,
 )
+
+if TYPE_CHECKING:
+    from nexara_prime.mission_triage import MissionTriageEngine
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -456,7 +449,7 @@ class TestAdaptiveScheduler:
     def test_active_agent_count(self) -> None:
         """active_agent_count excludes retired agents."""
         sched = self._make()
-        a1 = sched.create_role(RuntimeRole.ORCHESTRATOR, "Hermes")
+        sched.create_role(RuntimeRole.ORCHESTRATOR, "Hermes")
         a2 = sched.create_role(RuntimeRole.EXECUTOR, "Vertex")
         sched.retire_role(a2["agent_id"])
         assert sched.active_agent_count() == 1
@@ -1468,7 +1461,6 @@ class TestStateMachine:
     """MissionStateMachine transition validation."""
 
     def _make(self):
-        from unittest.mock import MagicMock
         from nexara_prime.state_machine import MissionStateMachine
         events = MagicMock()
         events.publish.return_value = MagicMock(timestamp=now_iso(), event_id=new_id("evt"))

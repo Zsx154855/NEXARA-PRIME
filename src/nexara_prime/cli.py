@@ -5,7 +5,6 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import Settings
@@ -171,7 +170,7 @@ def cmd_status() -> int:
         f"  Self-Evolution    {prog.get('self_evolution_loop', '?')}%",
         f"  Product Delivery  {prog.get('product_delivery', '?')}%",
         "",
-        f"  Next Gate",
+        "  Next Gate",
         f"  {state.get('next_gate', '?')}",
         f"  Updated           {state.get('updated_at', '?')}",
         "",
@@ -263,7 +262,7 @@ def cmd_doctor() -> int:
         check("Worktree status", True, "not a git repo")
 
     # Print
-    print(f"\n  NEXARA PRIME Doctor")
+    print("\n  NEXARA PRIME Doctor")
     print(f"  {'─' * 50}")
     print(f"  Repo: {root}")
     print()
@@ -282,7 +281,7 @@ def cmd_doctor() -> int:
 
 def cmd_secrets(args) -> int:
     """Handle secrets subcommands."""
-    from .secrets.base import SecretStore, redact_secrets
+    from .secrets.base import SecretStore
     from .secrets.memory import InMemorySecretStore
     import getpass
 
@@ -323,7 +322,6 @@ def cmd_connectors(args) -> int:
     """Handle connector subcommands."""
     if args.connectors_command == "list":
         try:
-            from .connectors.base import ConnectorManifest, ConnectorPermission, RiskLevel
             from .connectors.registry import ConnectorRegistry
             from .connectors.browser_readonly import BrowserReadOnlyConnector
             from .connectors.http_readonly import HTTPReadOnlyConnector
@@ -359,7 +357,7 @@ def cmd_connectors(args) -> int:
     elif args.connectors_command == "doctor":
         try:
             from .connectors.health import ConnectorHealthMonitor
-            hm = ConnectorHealthMonitor()
+            ConnectorHealthMonitor()
             print("  Connector health monitor: active")
             print("  Circuit breakers: 0 tracked")
             print("  All systems nominal")
@@ -388,9 +386,11 @@ def cmd_security(args) -> int:
         # Connectors
         try:
             from .connectors.browser_readonly import BrowserReadOnlyConnector
-            print(f"  Browser Connector: available (SSRF guard active)")
+            if BrowserReadOnlyConnector is None:
+                raise ImportError("browser connector class unavailable")
+            print("  Browser Connector: available (SSRF guard active)")
         except ImportError:
-            print(f"  Browser Connector: import failed")
+            print("  Browser Connector: import failed")
         # Sandbox
         try:
             from .sandbox_v2 import MacOSSandboxBackend
@@ -398,14 +398,14 @@ def cmd_security(args) -> int:
             flags_str = ", ".join(cap.flags) if cap.flags else "none"
             print(f"  Sandbox:           {cap.sandbox_mechanism} (flags: {flags_str})")
         except ImportError:
-            print(f"  Sandbox:           not available")
+            print("  Sandbox:           not available")
         # Identity
         try:
             from .identity import IdentityStore
             store = IdentityStore()
-            print(f"  Identity:          local-owner mode (localhost-only)")
+            print("  Identity:          local-owner mode (localhost-only)")
         except ImportError:
-            print(f"  Identity:          not available")
+            print("  Identity:          not available")
         # Audit
         try:
             from .security_audit import SecurityAuditLedger
@@ -420,10 +420,12 @@ def cmd_security(args) -> int:
             finally:
                 store.close()
         except ImportError:
-            print(f"  Audit Chain:       not available")
-        # Provider
-        print(f"  Provider:          mock-only (no real provider validated)")
-        print(f"  Network:           deny-by-default")
+            print("  Audit Chain:       not available")
+        # Provider — report configured truth without reading or printing credentials.
+        provider_settings = Settings.from_env(_resolve_repo_root())
+        provider_name = "mock (explicit)" if provider_settings.mock_model else provider_settings.model_provider
+        print(f"  Provider:          {provider_name or 'none'}")
+        print("  Network:           deny-by-default")
         print()
 
     elif args.security_command == "audit":

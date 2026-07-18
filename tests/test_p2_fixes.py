@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 import sys
 import tempfile
 import unittest
@@ -11,9 +13,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "governance"))
 sys.path.insert(0, str(ROOT / "scripts" / "security"))
 
-from detect_state_drift import check_consistency, check_git_consistency
-from scan_hardcoded_secrets import is_allowed, scan_file
-import hashlib, os
+from detect_state_drift import check_consistency  # noqa: E402
+from scan_hardcoded_secrets import is_allowed, scan_file  # noqa: E402
 
 
 class G10DriftDetectionTests(unittest.TestCase):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .models import AdaptiveMode, BudgetUsage, ResourceBudget, new_id, now_iso
+from .models import AdaptiveMode, BudgetUsage, ResourceBudget, now_iso
 
 
 class ResourceBudgetManager:
