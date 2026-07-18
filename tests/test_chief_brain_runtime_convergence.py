@@ -5,14 +5,12 @@ crash recovery, provider strategy, runtime snapshot, state machine invariants.
 """
 from __future__ import annotations
 
-import json
-import os
 import tempfile
 from pathlib import Path
 
 import pytest
 
-from nexara_prime.models import Mission, MissionState, RiskLevel, new_id, now_iso
+from nexara_prime.models import MissionState
 from nexara_prime.runtime import NexaraRuntime
 from nexara_prime.config import Settings
 
@@ -68,7 +66,6 @@ class TestApprovalResumeE2E:
         planned = runtime.plan_mission(mission.mission_id)
         assert planned.state == "Approval"
         assert planned.pending_approval_id is not None
-        pending_action_id = planned.pending_approval_id
 
         # Human approval
         approved = runtime.approve_mission(
@@ -115,7 +112,7 @@ class TestApprovalResumeE2E:
     def test_no_duplicate_side_effects_on_resume(self, runtime: NexaraRuntime) -> None:
         """Resuming does not re-execute completed work."""
         mission = runtime.create_mission("Test no duplicate side effects")
-        planned = runtime.plan_mission(mission.mission_id)
+        runtime.plan_mission(mission.mission_id)
         runtime.approve_mission(mission.mission_id, approved=True)
 
         # Complete first run
@@ -145,7 +142,7 @@ class TestCrashRecovery:
     def test_recoverable_state_detection(self, runtime: NexaraRuntime) -> None:
         """Mission in EXECUTION state is detected as resumable by recovery."""
         mission = runtime.create_mission("Test recoverable detection")
-        planned = runtime.plan_mission(mission.mission_id)
+        runtime.plan_mission(mission.mission_id)
         runtime.approve_mission(mission.mission_id, approved=True)
         result = runtime.run_mission(mission.mission_id)
         # After completion, mission should not be resumable
@@ -182,7 +179,7 @@ class TestRuntimeSnapshot:
 
     def test_snapshot_after_approval(self, runtime: NexaraRuntime) -> None:
         mission = runtime.create_mission("Test snapshot after approval")
-        planned = runtime.plan_mission(mission.mission_id)
+        runtime.plan_mission(mission.mission_id)
 
         snapshot = runtime.inspect_mission(mission.mission_id)
         assert snapshot["current_state"] == "Approval"

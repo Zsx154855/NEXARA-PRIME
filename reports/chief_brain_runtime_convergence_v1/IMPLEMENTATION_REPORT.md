@@ -86,3 +86,32 @@ NexaraRuntime 实例完成。test_entry 验证了 app.test_client()
 ## Final Decision
 
 PASS. NexaraRuntime 已确认并强化为唯一 Chief Brain Runtime Authority。
+
+
+## Document Consolidation Decision
+
+| 原定文档 | 实际文件 | 对应章节 |
+|----------|----------|----------|
+| RUNTIME_REALITY_MAP.md | IMPLEMENTATION_REPORT.md | §Runtime Authority |
+| CURRENT_MISSION_FLOW.md | IMPLEMENTATION_REPORT.md | §State Machine Changes |
+| TARGET_MISSION_FLOW.md | IMPLEMENTATION_REPORT.md | §Runtime Authority |
+| CHIEF_BRAIN_RUNTIME_AUTHORITY.md | CHIEF_BRAIN_RUNTIME_AUTHORITY.md (独立) | 完整权威表 |
+| MISSION_STATE_MACHINE.md | IMPLEMENTATION_REPORT.md | §State Machine Changes |
+| API_CLI_UI_CONVERGENCE.md | IMPLEMENTATION_REPORT.md | §API CLI UI Convergence |
+| MULTI_AGENT_AUTHORITY_MAP.md | AUTHORITY_MATRIX.yaml (独立) | §orchestration |
+| PROVIDER_AUTHORITY_AND_FALLBACK.md | IMPLEMENTATION_REPORT.md | §Provider Policy |
+| APPROVAL_RESUME_E2E_REPORT.md | IMPLEMENTATION_REPORT.md | §Approval Resume E2E |
+| CRASH_RECOVERY_REPORT.md | IMPLEMENTATION_REPORT.md | §Crash Recovery |
+| RUNTIME_TRUTH_SCHEMA.md | AUTHORITY_MATRIX.yaml | §runtime_truth |
+| COMPATIBILITY_AND_DEPRECATION_PLAN.md | IMPLEMENTATION_REPORT.md | §Compatibility |
+| IMPLEMENTATION_REPORT.md | IMPLEMENTATION_REPORT.md (独立) | 完整实施报告 |
+| VERIFICATION_REPORT.md | IMPLEMENTATION_REPORT.md | §Verification |
+| AUTHORITY_MATRIX.yaml | AUTHORITY_MATRIX.yaml (独立) | 完整矩阵 |
+| RECEIPT | RECEIPT_*.json (独立) | 可验证接收单 |
+
+推理: Audit Correction 已确认不存在 Supervisor，NexaraRuntime 为事实中央编排器。
+本轮是强化和入口收敛，不是新建 Runtime。多个原定文档描述的是同一收敛面
+（Runtime Authority / State Machine / API-CLI-UI），合并至 IMPLEMENTATION_REPORT
+更符合单一真相源原则（NSEC 第三十条）。
+
+Authority Matrix 和 Receipt 保持独立文件以确保机器可读性和可独立验证性。
