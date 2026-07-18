@@ -4,6 +4,7 @@ import json
 import os
 import threading
 from pathlib import Path
+from typing import Any
 
 from .adaptive_runtime import AdaptiveRuntime as AdaptiveOrchestrator
 from .capabilities import CapabilityRegistry
@@ -270,8 +271,9 @@ class NexaraRuntime:
 
     def _build_model_gateway(self) -> ModelGateway:
         provider_name = self.settings.model_provider.lower()
+        # Mock provider is only allowed when explicitly requested (testing, replay, demo)
         if self.settings.mock_model or provider_name == "mock":
-            return ModelGateway(MockProvider())
+            return ModelGateway(MockProvider(), fallback=None)
         if provider_name in {"openai", "openai_compatible"}:
             provider = OpenAICompatibleProvider(
                 os.getenv("NEXARA_MODEL_ENDPOINT", "https://api.openai.com/v1"),
@@ -281,9 +283,13 @@ class NexaraRuntime:
         elif provider_name == "local":
             provider = LocalModelProvider(os.getenv("NEXARA_LOCAL_MODEL_ENDPOINT"), os.getenv("NEXARA_MODEL_NAME", "local-model"))
         else:
-            provider = MockProvider()
-        fallback = MockProvider() if self.settings.mock_model else None
-        return ModelGateway(provider, fallback=fallback)
+            # No mock fallback — provider unavailable is a recoverable state
+            provider = None
+        if provider is None:
+            self._provider_unavailable = True
+            return ModelGateway(MockProvider())  # structural placeholder, never completes missions
+        self._provider_unavailable = False
+        return ModelGateway(provider, fallback=None)
 
     def _save_mission(self, mission: Mission) -> None:
         mission.updated_at = now_iso()
@@ -519,11 +525,64 @@ class NexaraRuntime:
         return mission
 
     def resume(self, mission_id: str) -> Mission:
+        """Resume a paused mission. Also handles crash recovery: if the mission
+        is in an incomplete state (EXECUTION, VERIFICATION, etc.), it will resume
+        from the last checkpoint without re-executing completed steps."""
         mission = self._load_mission(mission_id)
+        if mission.paused:
+            mission.paused = False
+            self._save_mission(mission)
+            self.events.publish("mission.resumed", mission_id, "mission", "human", mission.trace_id, {}, idempotency_key=f"mission-resumed:{mission_id}:{mission.updated_at}")
+            return mission
+        # Crash recovery path: mission is in an incomplete state
+        incomplete_states = {"Execution", "Verification", "Evidence", "MemoryPatch", "Evaluation", "Running", "Verifying", "Degraded"}
+        if mission.state in incomplete_states:
+            recovery_result = self.recovery.recover()
+            for entry in recovery_result.missions:
+                if entry.get("mission_id") == mission_id and entry.get("resumable"):
+                    mission.result["recovery"] = {"recovered_at": now_iso(), "from_state": mission.state, "idempotent_resume": True}
+                    self._save_mission(mission)
+                    self.events.publish("mission.recovered", mission_id, "mission", "runtime", mission.trace_id, {"from_state": mission.state}, idempotency_key=f"mission-recovered:{mission_id}")
+                    return mission
         mission.paused = False
         self._save_mission(mission)
         self.events.publish("mission.resumed", mission_id, "mission", "human", mission.trace_id, {}, idempotency_key=f"mission-resumed:{mission_id}:{mission.updated_at}")
         return mission
+
+    def inspect_mission(self, mission_id: str) -> dict[str, Any]:
+        """Return a comprehensive runtime truth snapshot for a mission.
+        This is the single authoritative source for mission state queries —
+        API, CLI, and UI must read from this, not infer state from partial data."""
+        mission = self._load_mission(mission_id)
+        evidence_list = self.evidence.list(mission_id)
+        return {
+            "mission_id": mission.mission_id,
+            "current_state": mission.state,
+            "current_stage": mission.state,
+            "risk_level": mission.spec.risk_level.value if mission.spec.risk_level else "R0",
+            "provider": self.models.provider.name if hasattr(self.models, 'provider') else "mock",
+            "provider_unavailable": getattr(self, '_provider_unavailable', False),
+            "approval_status": mission.pending_approval_id or None,
+            "pending_action": mission.pending_approval_id or None,
+            "plan": mission.plan.model_dump(mode="json") if mission.plan else None,
+            "scheduled_tasks": len(mission.assignments) if mission.assignments else 0,
+            "assignments": [a.persona.value for a in mission.assignments] if mission.assignments else [],
+            "completed_tasks": mission.result.get("completed", []),
+            "failed_tasks": mission.result.get("failed", []) if isinstance(mission.result, dict) else [],
+            "evidence_count": len(evidence_list),
+            "latest_evidence": evidence_list[-1] if evidence_list else None,
+            "receipt_status": "present" if any(e.get("evidence_type") == "receipt" for e in evidence_list) else "missing",
+            "memory_patch_status": "patched" if mission.result.get("memory_patch_id") else "not_patched",
+            "evaluation_status": "passed" if mission.result.get("evaluation_passed") else ("failed" if "evaluation_id" in (mission.result or {}) else "not_evaluated"),
+            "retry_count": mission.result.get("retry_count", 0) if isinstance(mission.result, dict) else 0,
+            "recovery_pointer": mission.rollback_point,
+            "started_at": mission.created_at,
+            "updated_at": mission.updated_at,
+            "terminal_reason": mission.result.get("error") if mission.state in {"Failed", "Blocked"} else None,
+            "paused": mission.paused,
+            "safe_mode": mission.safe_mode,
+            "trace_id": mission.trace_id,
+        }
 
     def takeover(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)
