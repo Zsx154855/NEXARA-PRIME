@@ -271,7 +271,7 @@ class NexaraRuntime:
 
     def _build_model_gateway(self) -> ModelGateway:
         provider_name = self.settings.model_provider.lower()
-        if self.settings.mock_model or provider_name == "mock":
+        if self.settings.mock_model:
             return ModelGateway(MockProvider(), fallback=None)
         if provider_name == "mock" and not self.settings.mock_model:
             self._provider_unavailable = True

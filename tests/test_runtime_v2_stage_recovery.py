@@ -1,13 +1,15 @@
-"""V2 Runtime — Real Stage Crash Recovery Tests (monkeypatch injection).
+"""V2 Runtime — Real Stage Crash Recovery Tests.
 
 LEGAL BOUNDARY CRASH PATTERN:
-1. Runtime 1 runs mission through full pipeline, reaching a specific state
-2. Monkeypatch a stage processor to raise SimulatedCrash AFTER completing work
-   but BEFORE advancing to the next state
-3. Runtime 1's run_mission() crashes — state stays at the pre-crash stage
-4. Runtime 2 = new NexaraRuntime(same_db_path) — re-instantiates
-5. Runtime 2.run_mission() dispatches from the persisted state
-6. Waits: no duplicate side effects, exactly 1 of each artifact
+Monkeypatch _advance to raise KeyboardInterrupt (BaseException, not caught by
+run_mission's except Exception) at a specific transition boundary. This leaves
+the mission naturally in the pre-transition state with all artifacts persisted.
+Then re-instantiate runtime from the same DB and call run_mission() — the stage
+dispatcher routes to the correct stage processor with full idempotency.
+
+IDEMPOTENCY TESTS:
+Run mission to completion, re-instantiate, re-run → verify no duplicate artifacts.
+These test the "restart after clean completion" scenario — a valid recovery path.
 """
 from __future__ import annotations
 
@@ -17,11 +19,6 @@ from pathlib import Path
 from nexara_prime.config import Settings
 from nexara_prime.models import MissionState
 from nexara_prime.runtime import NexaraRuntime
-
-
-class SimulatedCrash(RuntimeError):
-    """Distinct exception to avoid collision with real errors."""
-    pass
 
 
 def _mk(db_dir: Path) -> Settings:
@@ -37,9 +34,9 @@ def _mk(db_dir: Path) -> Settings:
 
 
 class TestVerificationCrashRecovery:
-    """Crash during _verify_stage: evidence written but state not advanced."""
+    """KeyboardInterrupt at Verification→Evidence boundary — state stays Verification naturally."""
 
-    def test_crash_during_verification_recovers_resumable(self) -> None:
+    def test_crash_at_verification_boundary_recovers(self) -> None:
         db_dir = Path(tempfile.mkdtemp())
         rt1 = NexaraRuntime(_mk(db_dir))
         m = rt1.create_mission("Verification crash")
@@ -47,50 +44,53 @@ class TestVerificationCrashRecovery:
         rt1.plan_mission(mid)
         rt1.approve_mission(mid, approved=True)
 
-        # Patch _verify_stage: do real work (evidence + _save_mission), then crash
-        # AFTER _save_mission but BEFORE _advance to EVIDENCE.
-        # This leaves verification evidence persisted but state at Verification.
-        original_verify = rt1._verify_stage
+        # Monkeypatch _advance: raise KeyboardInterrupt (BaseException, NOT caught
+        # by except Exception) when transitioning Verification→Evidence.
+        # This leaves evidence persisted (evidence.add + _save_mission happened
+        # before _advance) but state stays Verification naturally.
+        original_advance = rt1._advance
         crashed = {"count": 0}
 
-        def crash_after_persist(mission):
-            result = original_verify(mission)
-            crashed["count"] += 1
-            raise SimulatedCrash("crash after verification persist")
+        def crash_on_evidence_transition(m, target, actor):
+            if target == MissionState.EVIDENCE and m.state == "Verification":
+                crashed["count"] += 1
+                raise KeyboardInterrupt("simulated crash at Evidence transition")
+            return original_advance(m, target, actor)
 
-        rt1._verify_stage = crash_after_persist
+        rt1._advance = crash_on_evidence_transition
         try:
             rt1.run_mission(mid)
-        except SimulatedCrash:
-            pass
+        except KeyboardInterrupt:
+            pass  # KeyboardInterrupt escapes except Exception — state stays Verification
         assert crashed["count"] == 1
 
-        # SimulatedCrash is caught by run_mission's except Exception → FAILED.
-        # Restore mission state to Verification (crash happened at verify boundary).
+        # State must be Verification (advance skipped), evidence persisted
         m2 = rt1.get_mission(mid)
-        m2.state = "Verification"  # legal: crash left evidence persisted, state = Verification
-        rt1._save_mission(m2)
+        assert m2.state == "Verification", f"Expected Verification, got {m2.state}"
+        vr_count_1 = sum(1 for e in rt1.evidence.list(mid) if e.get("kind") == "verification_report")
+        assert vr_count_1 == 1, "Verification evidence should be persisted"
+        sid = rt1.tools.list_invocations(mid)
+        assert len(sid) == 2, f"Expected 2 tool invocations, got {len(sid)}"
         del rt1
 
-        # Re-instantiate with same DB
+        # Re-instantiate with same DB — stage dispatcher routes to _verify_stage
         rt2 = NexaraRuntime(_mk(db_dir))
         result = rt2.run_mission(mid)
         assert result.state == "Completed"
 
-        # Idempotency: exactly 1 verification_report (RuntimeError catch on re-add)
-        evidence = rt2.evidence.list(mid)
-        vr_count = sum(1 for e in evidence if e.get("kind") == "verification_report")
-        assert vr_count == 1, f"Expected 1 verification_report, got {vr_count}"
+        # Idempotency: verification_report count stays 1 (ValueError caught on re-add)
+        vr_count_2 = sum(1 for e in rt2.evidence.list(mid) if e.get("kind") == "verification_report")
+        assert vr_count_2 == 1, f"Expected 1 verification_report, got {vr_count_2}"
 
-        # Tool invocations: exactly 2, not duplicated
-        invocations = rt2.tools.list_invocations(mid)
-        assert len(invocations) == 2, f"Expected 2, got {len(invocations)}"
+        # Tool invocations still 2 (not duplicated)
+        sid2 = rt2.tools.list_invocations(mid)
+        assert len(sid2) == 2, f"Expected 2 tool invocations, got {len(sid2)}"
 
 
 class TestIdempotencyAfterRestart:
     """Re-instantiate after full completion: re-run must NOT duplicate artifacts."""
 
-    def test_re_instantiation_on_completed_produces_no_duplicate_evidence(self) -> None:
+    def test_evidence_idempotent_on_re_instantiation(self) -> None:
         db_dir = Path(tempfile.mkdtemp())
         rt1 = NexaraRuntime(_mk(db_dir))
         m = rt1.create_mission("Evidence idempotent")
@@ -106,7 +106,7 @@ class TestIdempotencyAfterRestart:
         er_after = sum(1 for e in rt2.evidence.list(mid) if e.get("kind") == "execution_result")
         assert er_after == er_before
 
-    def test_re_instantiation_on_completed_produces_no_duplicate_memory(self) -> None:
+    def test_memory_idempotent_on_re_instantiation(self) -> None:
         db_dir = Path(tempfile.mkdtemp())
         rt1 = NexaraRuntime(_mk(db_dir))
         m = rt1.create_mission("Memory idempotent")
@@ -122,7 +122,7 @@ class TestIdempotencyAfterRestart:
         c2 = len([x for x in rt2.memory.inspect(mid) if x.get("status") == "committed"])
         assert c2 == c1
 
-    def test_re_instantiation_on_completed_produces_no_duplicate_evaluation(self) -> None:
+    def test_evaluation_idempotent_on_re_instantiation(self) -> None:
         db_dir = Path(tempfile.mkdtemp())
         rt1 = NexaraRuntime(_mk(db_dir))
         m = rt1.create_mission("Eval idempotent")
