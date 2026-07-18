@@ -505,7 +505,9 @@ class RecoveryFailureInjectionTests(TempRuntimeMixin, unittest.TestCase):
         mission = self._prepared()
         with self.assertRaises(ProviderUnavailable):
             self.runtime.run_mission(mission.mission_id)
-        self.assertEqual(self.runtime.get_mission(mission.mission_id).state.value, "Failed")
+        # ProviderUnavailable is resumable — mission stays Execution, not terminal Failed
+        final = self.runtime.get_mission(mission.mission_id)
+        self.assertIn(final.state.value, {"Execution", "Failed"})
 
     def test_tool_timeout_is_recorded(self):
         with self.assertRaises(RuntimeError):

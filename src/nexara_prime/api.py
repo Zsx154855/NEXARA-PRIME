@@ -52,7 +52,18 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     @app.get("/api/runtime/overview")
     def overview() -> dict[str, Any]:
-        return runtime.overview()
+        data = runtime.overview()
+        # Enrich with inspect_mission snapshots; SDK compatibility fields
+        enriched = []
+        for m in runtime.list_missions()[-20:]:
+            try:
+                snap = runtime.inspect_mission(m["mission_id"])
+                snap["state"] = snap.get("current_state", "Intent")
+                enriched.append(snap)
+            except KeyError:
+                enriched.append(m)
+        data["missions"] = enriched
+        return data
 
     @app.get("/api/missions")
     def list_missions() -> list[dict[str, Any]]:
@@ -67,7 +78,18 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     @app.get("/api/missions/{mission_id}")
     def status(mission_id: str) -> dict[str, Any]:
-        return get_mission(mission_id).model_dump(mode="json")
+        try:
+            snap = runtime.inspect_mission(mission_id)
+            # SDK compat fields for Swift/TypeScript
+            mission = runtime.get_mission(mission_id)
+            snap["state"] = snap.get("current_state", mission.state)
+            snap["spec"] = mission.spec.model_dump(mode="json")
+            snap["title"] = mission.spec.title
+            snap["objective"] = mission.spec.objective
+            snap["created_at"] = mission.created_at
+            return snap
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/plan")
     def plan(mission_id: str) -> dict[str, Any]:
