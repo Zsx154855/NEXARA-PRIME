@@ -79,15 +79,7 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     @app.get("/api/missions/{mission_id}")
     def status(mission_id: str) -> dict[str, Any]:
         try:
-            snap = runtime.inspect_mission(mission_id)
-            # SDK compat fields for Swift/TypeScript
-            mission = runtime.get_mission(mission_id)
-            snap["state"] = snap.get("current_state", mission.state)
-            snap["spec"] = mission.spec.model_dump(mode="json")
-            snap["title"] = mission.spec.title
-            snap["objective"] = mission.spec.objective
-            snap["created_at"] = mission.created_at
-            return snap
+            return runtime.inspect_mission(mission_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

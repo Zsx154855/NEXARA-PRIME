@@ -195,7 +195,9 @@ class FallbackProvider:
 
 class ModelGateway:
     def __init__(self, provider: ModelProvider | None = None, fallback: ModelProvider | None = None, *, max_attempts: int = 2, retry_delay_seconds: float = 0.02):
-        self.provider = provider or MockProvider()
+        if provider is None:
+            raise ValueError("ModelGateway requires a concrete provider; use UnavailableProvider instead of None")
+        self.provider = provider
         self.fallback = fallback
         self.max_attempts = max(1, max_attempts)
         self.retry_delay_seconds = retry_delay_seconds
