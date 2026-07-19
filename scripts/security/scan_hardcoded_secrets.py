@@ -138,6 +138,21 @@ def is_allowed(line: str) -> bool:
     return any(re.search(pattern, line, re.IGNORECASE) for pattern in ALLOWED_PATTERNS)
 
 
+def is_self_referential(match: re.Match) -> bool:
+    """Return True when the matched value equals the key name (enum self-reference)."""
+    key_name = match.group(1)
+    matched_text = match.group(0).strip().rstrip(",")
+    variants = {
+        f'{key_name} = "{key_name}"',
+        f"{key_name} = '{key_name}'",
+        f'{key_name}: "{key_name}"',
+        f"{key_name}: '{key_name}'",
+        f'"{key_name}": "{key_name}"',
+        f"'{key_name}': '{key_name}'",
+    }
+    return matched_text in variants
+
+
 def scan_file(path: Path) -> list[dict[str, object]]:
     """Scan one file and return normalized findings."""
 
@@ -158,6 +173,8 @@ def scan_file(path: Path) -> list[dict[str, object]]:
         for pattern, quote in all_patterns:
             for match in pattern.finditer(line):
                 if is_allowed(line):
+                    continue
+                if is_self_referential(match):
                     continue
                 try:
                     rel = str(path.relative_to(REPO_ROOT))
