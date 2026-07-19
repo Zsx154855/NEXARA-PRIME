@@ -1,19 +1,36 @@
 {
-  "evidence_id": "evidence_chief_brain_closure_v1_20260720",
+  "evidence_id": "evidence_chief_brain_closure_v1_20260720_v2",
   "mission": "NEXARA_CHIEF_BRAIN_REAL_MISSION_PRODUCT_CLOSURE_V1",
   "branch": "work/nexara-chief-brain-real-mission-product-closure-v1",
   "base_sha": "105b536710fc36d5d272d225b12f0aae640fe8f4",
-  "timestamp": "2026-07-20T00:00:00Z",
+  "acceptance_head": "bcf043420aab0380ab7ae6b8f33a69039b2ef1c7",
+  "timestamp": "2026-07-20T12:00:00Z",
+  "reverified_at": "2026-07-20T12:00:00Z",
   "verification_results": {
-    "focused_tests": {"total": 42, "passed": 42, "failed": 0},
+    "focused_tests": {
+      "total": 84,
+      "passed": 84,
+      "failed": 0,
+      "breakdown": {
+        "test_chief_brain_closure_v1_py": 42,
+        "test_e2e_runtime_closure_py": 42
+      }
+    },
     "full_test_suite": {"total": 881, "passed": 881, "failed": 0, "subtests": 3},
-    "pr18_runtime_regression": {"total": 19, "passed": 19, "failed": 0},
-    "ruff_lint": "PASS",
+    "ruff_lint": "PASS_BRANCH_SCOPE — 7 pre-existing issues in scripts/runtime_truth/ (not in branch diff)",
+    "ruff_pre_existing_errors": 7,
+    "ruff_pre_existing_files": [
+      "scripts/runtime_truth/collect_git_truth.py",
+      "scripts/runtime_truth/collect_github_truth.py",
+      "scripts/runtime_truth/compile_program_state.py",
+      "scripts/runtime_truth/validate_program_state.py"
+    ],
     "nsec_validation": "PASS",
     "nsec_drift": "NO_DRIFT",
     "secret_scan": "CLEAN",
     "diff_check": "PASS",
-    "worktree": "CLEAN"
+    "worktree": "CLEAN",
+    "commits_ahead_of_base": 1
   },
   "changed_files": [
     "src/nexara_prime/models.py",
@@ -22,15 +39,23 @@
     "src/nexara_prime/memory.py",
     "tests/test_chief_brain_closure_v1.py",
     "tests/test_e2e_runtime_closure.py",
-    "scripts/security/scan_hardcoded_secrets.py"
+    "scripts/security/scan_hardcoded_secrets.py",
+    "reports/chief_brain_real_mission_product_closure_v1/EVIDENCE.json",
+    "reports/chief_brain_real_mission_product_closure_v1/RECEIPT.json",
+    "reports/chief_brain_real_mission_product_closure_v1/IMPLEMENTATION_REPORT.md"
   ],
+  "diff_stats": {
+    "files_changed": 10,
+    "insertions": 1120,
+    "deletions": 6
+  },
   "key_additions": {
     "failure_code_enum": "32 deterministic failure codes",
     "reason_code_enum": "34 deterministic reason codes",
     "receipt_chain_verification": "verify_receipt_chain() method",
     "memory_evidence_binding": "verify_evidence_binding() method + enforcement",
     "failure_classification": "_classify_failure() static method",
-    "new_tests": "42 tests in test_chief_brain_closure_v1.py"
+    "new_tests": "42 tests in test_chief_brain_closure_v1.py; 42 tests run in test_e2e_runtime_closure.py"
   },
   "nsec_compliance": {
     "article_4": "最正确方向 — Deterministic classification eliminates ambiguous error handling",

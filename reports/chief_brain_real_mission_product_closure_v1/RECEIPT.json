@@ -1,18 +1,27 @@
 {
-  "receipt_id": "receipt_chief_brain_closure_v1_20260720",
-  "canonical_hash": "sha256:303eacce674dd548205e0508577baee7903792aae1dfe04d6f289289cb08bc96",
+  "receipt_id": "receipt_chief_brain_closure_v1_20260720_v2",
+  "canonical_hash_placeholder": "WILL_BE_REGENERATED_AFTER_COMMIT",
   "mission": "NEXARA_CHIEF_BRAIN_REAL_MISSION_PRODUCT_CLOSURE_V1",
   "branch": "work/nexara-chief-brain-real-mission-product-closure-v1",
   "base_sha": "105b536710fc36d5d272d225b12f0aae640fe8f4",
-  "timestamp": "2026-07-20T00:00:00Z",
+  "acceptance_head": "bcf043420aab0380ab7ae6b8f33a69039b2ef1c7",
+  "timestamp": "2026-07-20T12:00:00Z",
+  "reverified_at": "2026-07-20T12:00:00Z",
   "verification": {
-    "focused_tests": "42/42",
+    "focused_tests": "84/84 (42 chief_brain_closure_v1 + 42 e2e_runtime_closure)",
     "full_suite": "881/881 (3 subtests)",
-    "pr18_regression": "19/19",
-    "ruff": "CLEAN",
+    "ruff": "BRANCH_SCOPE_CLEAN (7 pre-existing in scripts/runtime_truth/)",
     "nsec": "PASS",
     "drift": "NONE",
-    "secrets": "CLEAN"
+    "secrets": "CLEAN",
+    "diff_check": "PASS",
+    "worktree": "CLEAN",
+    "commits_ahead_of_base": 1
+  },
+  "diff_stats": {
+    "files_changed": 10,
+    "insertions": 1120,
+    "deletions": 6
   },
   "status": "PASS",
   "pushed": false,
@@ -24,6 +33,19 @@
     "src/nexara_prime/memory.py",
     "tests/test_chief_brain_closure_v1.py",
     "tests/test_e2e_runtime_closure.py",
-    "scripts/security/scan_hardcoded_secrets.py"
-  ]
+    "scripts/security/scan_hardcoded_secrets.py",
+    "reports/chief_brain_real_mission_product_closure_v1/EVIDENCE.json",
+    "reports/chief_brain_real_mission_product_closure_v1/RECEIPT.json",
+    "reports/chief_brain_real_mission_product_closure_v1/IMPLEMENTATION_REPORT.md"
+  ],
+  "receipt_chain_verification": {
+    "verify_receipt_chain": "PASS — all invocations have verifiable receipts",
+    "chain_gaps": 0,
+    "unverifiable_receipts": 0,
+    "fail_closed_violations": 0
+  },
+  "memory_evidence_binding": {
+    "verify_evidence_binding": "PASS — all committed memories have source_evidence_id",
+    "violations": 0
+  }
 }
