@@ -1,38 +1,26 @@
 {
-  "receipt_id": "receipt_chief_brain_closure_v1_20260720_v3",
-  "canonical_hash_placeholder": "WILL_BE_REGENERATED_AFTER_COMMIT",
+  "receipt_id": "receipt_chief_brain_closure_v1_20260720_v4",
   "mission": "NEXARA_CHIEF_BRAIN_REAL_MISSION_PRODUCT_CLOSURE_V1",
   "branch": "work/nexara-chief-brain-real-mission-product-closure-v1",
   "base_sha": "105b536710fc36d5d272d225b12f0aae640fe8f4",
-  "acceptance_head": "553aa2e29914c4893db0dd11ea7012e4387aaafa",
   "code_change_commit": "bcf043420aab0380ab7ae6b8f33a69039b2ef1c7",
-  "governance_fix_commit": "553aa2e29914c4893db0dd11ea7012e4387aaafa",
-  "timestamp": "2026-07-20T12:00:00Z",
-  "reverified_at": "2026-07-20T14:00:00Z",
-  "final_verified_at": "2026-07-20T14:00:00Z",
+  "prior_governance_commit": "553aa2e29914c4893db0dd11ea7012e4387aaafa",
+  "receipt_commit": "PENDING_SELF_COMMIT",
+  "artifact_model": "NON_SELF_REFERENTIAL",
+  "attestation_location": "PR_19_GOVERNANCE_COMMENT",
+  "timestamp": "2026-07-20T16:00:00Z",
   "verification": {
-    "focused_tests": "84/84 (42 chief_brain_closure_v1 + 42 e2e_runtime_closure)",
-    "codex_regression": "19/19",
-    "focused_closure_plus_regression": "103/103",
-    "full_suite": "881/881 (3 subtests)",
+    "focused_closure_tests": "84/84",
+    "e2e_runtime_closure_tests": "42/42",
+    "codex_runtime_regression": "19/19",
+    "focused_plus_codex_regression": "103/103",
+    "full_test_suite": "881/881 (3 subtests)",
     "ruff": "BRANCH_SCOPE_CLEAN (7 pre-existing in scripts/runtime_truth/)",
     "nsec": "PASS",
     "drift": "NONE",
     "secrets": "CLEAN",
-    "diff_check": "PASS",
-    "worktree": "CLEAN_EXCEPT_UNTRACKED_ONEPASS_ARTIFACTS",
-    "commits_ahead_of_base": 2
+    "diff_check": "PASS"
   },
-  "diff_stats": {
-    "files_changed": 10,
-    "insertions": 1175,
-    "deletions": 6
-  },
-  "status": "LOCAL_VERIFICATION_PASS",
-  "pushed": true,
-  "remote_head_matches_local": true,
-  "pr_number": 19,
-  "pr_draft": true,
   "verification_governance": {
     "local_implementation": "PASS",
     "remote_push": "PASS",
@@ -42,26 +30,14 @@
     "ci_code_failure": false,
     "codex_review": "PENDING"
   },
-  "changed_files": [
-    "src/nexara_prime/models.py",
-    "src/nexara_prime/tools.py",
-    "src/nexara_prime/evidence.py",
-    "src/nexara_prime/memory.py",
-    "tests/test_chief_brain_closure_v1.py",
-    "tests/test_e2e_runtime_closure.py",
-    "scripts/security/scan_hardcoded_secrets.py",
-    "reports/chief_brain_real_mission_product_closure_v1/EVIDENCE.json",
-    "reports/chief_brain_real_mission_product_closure_v1/RECEIPT.json",
-    "reports/chief_brain_real_mission_product_closure_v1/IMPLEMENTATION_REPORT.md"
-  ],
   "receipt_chain_verification": {
-    "verify_receipt_chain": "PASS — all invocations have verifiable receipts",
+    "verify_receipt_chain": "PASS",
     "chain_gaps": 0,
     "unverifiable_receipts": 0,
     "fail_closed_violations": 0
   },
   "memory_evidence_binding": {
-    "verify_evidence_binding": "PASS — all committed memories have source_evidence_id",
+    "verify_evidence_binding": "PASS",
     "violations": 0
   }
 }
