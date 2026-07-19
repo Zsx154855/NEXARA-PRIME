@@ -64,9 +64,12 @@ class ToolRuntime:
     ) -> ToolInvocation | None:
         if not idempotency_key:
             return None
+        raw = self.store.find_record("tool", "idempotency_key", idempotency_key)
         envelope = self.store.find_record_envelope(
             "tool", "idempotency_key", idempotency_key
         )
+        if raw and not envelope:
+            raise ValueError("tool_integrity_invalid")
         if not envelope:
             return None
         invocation = ToolInvocation.model_validate(envelope["payload"])

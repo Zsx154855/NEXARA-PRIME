@@ -246,12 +246,62 @@ def cmd_doctor() -> int:
             raise RuntimeError("git_staged_file_query_failed")
         staged = r.stdout.strip().split("\n") if r.stdout.strip() else []
         secrets_found = []
-        scanner_path = root / "scripts" / "security" / "scan_hardcoded_secrets.py"
+
+        scanner_rel = "scripts/security/scan_hardcoded_secrets.py"
+        scanner_path = root / scanner_rel
         scan_file = None
-        if scanner_path.exists():
-            scan_file = runpy.run_path(str(scanner_path)).get("scan_file")
+
+        # Check if scanner itself is staged or modified
+        scanner_staged_or_modified = False
+        try:
+            r_status = subprocess.run(
+                ["git", "status", "--porcelain", scanner_rel],
+                capture_output=True,
+                text=True,
+                cwd=str(root)
+            )
+            status_line = r_status.stdout.strip()
+            if status_line and not status_line.startswith("??"):
+                scanner_staged_or_modified = True
+        except Exception:
+            pass
+
+        # Try to load trusted scanner from git HEAD
+        temp_scanner_path = None
+        try:
+            r_show = subprocess.run(
+                ["git", "show", f"HEAD:{scanner_rel}"],
+                capture_output=True,
+                text=True,
+                cwd=str(root)
+            )
+            if r_show.returncode == 0 and r_show.stdout.strip():
+                import tempfile
+                fd, path_str = tempfile.mkstemp(suffix=".py")
+                temp_scanner_path = Path(path_str)
+                with open(fd, "w", encoding="utf-8") as f_temp:
+                    f_temp.write(r_show.stdout)
+                scan_file = runpy.run_path(str(temp_scanner_path)).get("scan_file")
+        except Exception:
+            pass
+
+        # Fallback to local scanner only if not staged/modified
+        if not scan_file:
+            if scanner_staged_or_modified:
+                raise RuntimeError("trusted_secret_scanner_modified")
+            if scanner_path.exists():
+                scan_file = runpy.run_path(str(scanner_path)).get("scan_file")
+
+        # Cleanup temp file if created
+        if temp_scanner_path and temp_scanner_path.exists():
+            try:
+                temp_scanner_path.unlink()
+            except Exception:
+                pass
+
         if staged and not callable(scan_file):
             raise RuntimeError("canonical_secret_scanner_unavailable")
+
         for f in staged:
             fp = root / f
             if fp.exists() and fp.is_file() and scan_file and scan_file(fp):

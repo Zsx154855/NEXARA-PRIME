@@ -83,11 +83,45 @@ class MemoryKernel:
 
     def patch(self, mission_id: str, key: str, content: str, trace_id: str, evidence_id: str | None = None, *, idempotency_key: str | None = None) -> MemoryRecord:
         if idempotency_key:
-            existing = self.store.find_record("memory_idempotency", "idempotency_key", idempotency_key)
-            if existing and existing.get("memory_id"):
-                record = self.store.get_record(existing["memory_id"])
-                if record:
-                    return MemoryRecord.model_validate(record)
+            raw_idem = self.store.find_record("memory_idempotency", "idempotency_key", idempotency_key)
+            idem_envelope = self.store.find_record_envelope("memory_idempotency", "idempotency_key", idempotency_key)
+
+            if raw_idem and not idem_envelope:
+                raise ValueError("memory_idempotency_integrity_invalid")
+
+            if idem_envelope:
+                mapping = idem_envelope["payload"]
+                if (
+                    idem_envelope.get("mission_id") != mission_id
+                    or mapping.get("idempotency_key") != idempotency_key
+                    or not mapping.get("memory_id")
+                ):
+                    raise ValueError("memory_idempotency_conflict")
+
+                mem_id = mapping["memory_id"]
+                raw_mem = self.store.get_record(mem_id)
+                mem_envelope = self.store.get_record_envelope(mem_id)
+
+                if raw_mem and not mem_envelope:
+                    raise ValueError("memory_record_integrity_invalid")
+
+                if not mem_envelope:
+                    raise ValueError("memory_record_not_found")
+
+                if mem_envelope.get("record_type") != "memory":
+                    raise ValueError("memory_record_type_invalid")
+
+                if mem_envelope.get("mission_id") != mission_id:
+                    raise ValueError("memory_mission_mismatch")
+
+                memory = MemoryRecord.model_validate(mem_envelope["payload"])
+                if (
+                    memory.key != key
+                    or memory.content != content
+                    or memory.source_evidence_id != evidence_id
+                ):
+                    raise ValueError("memory_idempotency_conflict")
+                return memory
         result = self.propose(MemoryKind.PATCH, key, content, trace_id, mission_id, evidence_id, 1.0, auto_commit=True)
         if idempotency_key:
             self.store.save_record(new_id("memidem"), "memory_idempotency", {"idempotency_key": idempotency_key, "memory_id": result.memory_id}, result.created_at, mission_id)
@@ -365,7 +399,7 @@ class MemoryLayerManager:
                 "source_evidence_id": evidence_id,
             }
             self.kernel.store.save_record(pending_id, "memory", pending_record, now_iso(), mission_id or "global")
-            
+
             review = PatchReview(
                 memory_id=pending_id,
                 patch_key=key,
@@ -373,9 +407,9 @@ class MemoryLayerManager:
                 evidence_refs=[evidence_id] if evidence_id else [],
             )
             self._reviews[review.review_id] = review
-            
+
             return {"memory_id": pending_id, "status": "pending_review", "review_id": review.review_id}
-        
+
         # Non-evidence or review-disabled: commit directly
         record = self.kernel.patch(
             mission_id or "global", key, content, trace_id, evidence_id,

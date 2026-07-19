@@ -400,7 +400,6 @@ class TestThread11VerificationReplayEvidenceEnvelope:
         # Run the execute stage to produce a report on disk
         result = rt.run_mission(m.mission_id)
         assert result.state == "Completed"
-        report_path = result.result.get("report_path", "")
         # Reload fresh mission (run_mission mutated the persisted state)
         m = rt.get_mission(m.mission_id)
         vkey = f"{m.mission_id}:verification_evidence"
@@ -419,14 +418,16 @@ class TestThread11VerificationReplayEvidenceEnvelope:
         )
         rt.store._conn.commit()
 
-        # Preserve the MissionState enum instead of assigning a raw string.
-        # A raw string bypasses the runtime's enum-based Verification branch and
-        # therefore does not exercise verification replay integrity enforcement.
         state_type = type(m.state)
         m.state = next(
             state
             for state in state_type
-            if getattr(state, "value", None) == "Verification"
+            if (
+                str(getattr(state, "name", "")).casefold()
+                == "verification"
+                or str(getattr(state, "value", "")).casefold()
+                == "verification"
+            )
         )
         rt._save_mission(m)
 
