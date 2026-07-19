@@ -1,0 +1,45 @@
+{
+  "evidence_id": "evidence_chief_brain_closure_v1_20260720",
+  "mission": "NEXARA_CHIEF_BRAIN_REAL_MISSION_PRODUCT_CLOSURE_V1",
+  "branch": "work/nexara-chief-brain-real-mission-product-closure-v1",
+  "base_sha": "105b536710fc36d5d272d225b12f0aae640fe8f4",
+  "timestamp": "2026-07-20T00:00:00Z",
+  "verification_results": {
+    "focused_tests": {"total": 42, "passed": 42, "failed": 0},
+    "full_test_suite": {"total": 881, "passed": 881, "failed": 0, "subtests": 3},
+    "pr18_runtime_regression": {"total": 19, "passed": 19, "failed": 0},
+    "ruff_lint": "PASS",
+    "nsec_validation": "PASS",
+    "nsec_drift": "NO_DRIFT",
+    "secret_scan": "CLEAN",
+    "diff_check": "PASS",
+    "worktree": "CLEAN"
+  },
+  "changed_files": [
+    "src/nexara_prime/models.py",
+    "src/nexara_prime/tools.py",
+    "src/nexara_prime/evidence.py",
+    "src/nexara_prime/memory.py",
+    "tests/test_chief_brain_closure_v1.py",
+    "tests/test_e2e_runtime_closure.py",
+    "scripts/security/scan_hardcoded_secrets.py"
+  ],
+  "key_additions": {
+    "failure_code_enum": "32 deterministic failure codes",
+    "reason_code_enum": "34 deterministic reason codes",
+    "receipt_chain_verification": "verify_receipt_chain() method",
+    "memory_evidence_binding": "verify_evidence_binding() method + enforcement",
+    "failure_classification": "_classify_failure() static method",
+    "new_tests": "42 tests in test_chief_brain_closure_v1.py"
+  },
+  "nsec_compliance": {
+    "article_4": "最正确方向 — Deterministic classification eliminates ambiguous error handling",
+    "article_8": "最大闭环 — Complete Tool→Evidence→Receipt→Memory chain verified",
+    "article_13": "完整不拆分 — All changes delivered in single commit",
+    "article_18": "Contract First — No contract changes; all additions are backward-compatible",
+    "article_26": "质量不得降级 — Test count increased (839→881), no tests weakened",
+    "article_27": "工程诚实 — All claims backed by fresh verification evidence",
+    "article_28": "事实优先 — Verification commands run, output read, results reported",
+    "article_36-38": "Human control preserved — R2+ gates intact"
+  }
+}

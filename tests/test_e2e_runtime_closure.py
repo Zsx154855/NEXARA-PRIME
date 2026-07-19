@@ -308,8 +308,14 @@ class TestRAGPipeline:
 class TestMemoryLayers:
     def test_four_layer_writes(self, runtime):
         ml = runtime.memory_layers
+        # Create evidence for episodic write (NSEC 第四十三条 — evidence-bound memory)
+        evidence = runtime.evidence.add(
+            "mis-e2e", "test_checkpoint", "Four-layer test",
+            "Test content for four-layer writes", "trace-ev-4lw",
+        )
         ml.write_working("task", "test task", "trace-1", mission_id="mis-e2e")
-        ml.write_episodic("result", "test result", "trace-2", mission_id="mis-e2e")
+        ml.write_episodic("result", "test result", "trace-2", mission_id="mis-e2e",
+                          source_evidence_id=evidence.evidence_id)
         ml.write_semantic("fact", "test fact", "trace-3")
         ml.write_procedural("skill", "test skill", "trace-4")
 
@@ -453,11 +459,18 @@ class TestE2EMissionFlow:
         )
         runtime.rag.index_document(doc)
 
-        # Step 6: Memory layers — write episodic memory
+        # Step 6: Memory layers — write episodic memory (evidence-bound per NSEC)
+        evidence = runtime.evidence.add(
+            mission.mission_id, "e2e_checkpoint",
+            f"E2E step for {mission.mission_id}",
+            f"Executed E2E mission {mission.mission_id}",
+            mission.trace_id,
+        )
         ml = runtime.memory_layers
         ml.write_episodic(
             "e2e_step", f"Executed E2E mission {mission.mission_id}",
             mission.trace_id, mission_id=mission.mission_id,
+            source_evidence_id=evidence.evidence_id,
         )
 
         # Step 7: Message adapter — draft notification

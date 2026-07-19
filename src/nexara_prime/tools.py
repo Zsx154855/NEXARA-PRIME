@@ -14,7 +14,7 @@ from .db import SQLiteStore
 from .evidence import EvidenceStore
 from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine
-from .models import ApprovalStatus, RiskLevel, ToolInvocation, new_id
+from .models import ApprovalStatus, FailureCode, ReasonCode, RiskLevel, ToolInvocation, new_id
 from .models import now_iso
 from .sandbox_v2 import MacOSSandboxBackend, ProcessConstrainedBackend, SandboxInvocation
 from .security_audit import SecurityAuditLedger
@@ -153,10 +153,16 @@ class ToolRuntime:
         except Exception as exc:
             status = "failed"
             failure = exc
-            result = {"error": str(exc), "error_type": type(exc).__name__}
+            failure_code, reason_code = self._classify_failure(exc)
+            result = {"error": str(exc), "error_type": type(exc).__name__, "failure_code": failure_code.value, "reason_code": reason_code.value}
+        else:
+            failure_code = None
+            reason_code = None
         invocation = ToolInvocation(
             invocation_id=new_id("tool"), mission_id=mission_id, tool_name=tool_name,
             arguments=arguments, result=result, risk_level=risk, status=status,
+            failure_code=failure_code.value if failure_code else None,
+            reason_code=reason_code.value if reason_code else None,
             duration_ms=int((time.monotonic() - started) * 1000), trace_id=trace_id,
             idempotency_key=idempotency_key,
             rollback_point={"kind": "filesystem_snapshot_placeholder", "reversible": tool_name in {"file_write_report", "write_workspace_file"}},
@@ -430,6 +436,60 @@ class ToolRuntime:
             trace_id=trace_id,
             metadata=metadata,
         )
+
+    @staticmethod
+    def _classify_failure(exc: Exception) -> tuple[FailureCode, ReasonCode]:
+        """Map every exception type to deterministic FailureCode + ReasonCode.
+
+        This is the SINGLE classification point for all tool failures.
+        Verifier/Auditor/Recovery depend on these codes being stable.
+        """
+        exc_msg = str(exc)
+
+        if isinstance(exc, KeyError) and exc_msg.startswith("unknown_tool:"):
+            return FailureCode.TOOL_UNKNOWN, ReasonCode.TOOL_NOT_REGISTERED
+        if isinstance(exc, PermissionError):
+            msg_lower = exc_msg.lower()
+            if "approval_required" in msg_lower:
+                if "no approval_id" in msg_lower:
+                    return FailureCode.APPROVAL_MISSING, ReasonCode.APPROVAL_NOT_PROVIDED
+                return FailureCode.APPROVAL_INVALID, ReasonCode.APPROVAL_WRONG_MISSION
+            if "code_policy" in msg_lower:
+                return FailureCode.TOOL_POLICY_REJECTED, ReasonCode.CODE_FORBIDDEN
+            if "command_policy" in msg_lower:
+                return FailureCode.TOOL_POLICY_REJECTED, ReasonCode.COMMAND_FORBIDDEN
+            if "executable_not_allowlisted" in msg_lower:
+                return FailureCode.TOOL_POLICY_REJECTED, ReasonCode.COMMAND_FORBIDDEN
+            if "external_or_shell" in msg_lower:
+                return FailureCode.TOOL_POLICY_REJECTED, ReasonCode.COMMAND_FORBIDDEN
+            if "policy_rejected" in msg_lower:
+                return FailureCode.TOOL_POLICY_REJECTED, ReasonCode.POLICY_DENIED
+            if "sandbox" in msg_lower:
+                return FailureCode.TOOL_SANDBOX_UNAVAILABLE, ReasonCode.SANDBOX_FAILED
+            if "path_outside" in msg_lower:
+                return FailureCode.IO_PATH_TRAVERSAL, ReasonCode.PATH_OUTSIDE_ROOT
+            return FailureCode.IO_PERMISSION_DENIED, ReasonCode.PERMISSION_DENIED
+        if isinstance(exc, RuntimeError):
+            if "tool_timeout" in exc_msg:
+                return FailureCode.TOOL_TIMEOUT, ReasonCode.EXECUTION_TIMEOUT
+            if "tool_failed" in exc_msg:
+                return FailureCode.RUNTIME_INTERNAL, ReasonCode.INTERNAL_ERROR
+            return FailureCode.RUNTIME_INTERNAL, ReasonCode.INTERNAL_ERROR
+        if isinstance(exc, FileNotFoundError):
+            return FailureCode.IO_NOT_FOUND, ReasonCode.FILE_NOT_FOUND
+        if isinstance(exc, ValueError):
+            if "write_payload_too_large" in exc_msg or "code_payload_too_large" in exc_msg:
+                return FailureCode.TOOL_OUTPUT_TOO_LARGE, ReasonCode.PAYLOAD_TOO_LARGE
+            if "tool_idempotency_conflict" in exc_msg:
+                return FailureCode.INTEGRITY_IDEMPOTENCY_CONFLICT, ReasonCode.IDEMPOTENCY_KEY_REUSED
+            if "tool_integrity_invalid" in exc_msg:
+                return FailureCode.INTEGRITY_ENVELOPE_INVALID, ReasonCode.ENVELOPE_CORRUPT
+            if "browser_url" in exc_msg or "command_must_not_be_empty" in exc_msg:
+                return FailureCode.TOOL_ARGUMENT_INVALID, ReasonCode.POLICY_DENIED
+            return FailureCode.TOOL_ARGUMENT_INVALID, ReasonCode.UNKNOWN
+        if isinstance(exc, OSError):
+            return FailureCode.IO_PERMISSION_DENIED, ReasonCode.PERMISSION_DENIED
+        return FailureCode.RUNTIME_INTERNAL, ReasonCode.INTERNAL_ERROR
 
     def list_invocations(self, mission_id: str | None = None) -> list[dict]:
         return self.store.list_records("tool", mission_id)

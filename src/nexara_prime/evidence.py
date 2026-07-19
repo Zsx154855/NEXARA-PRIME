@@ -536,6 +536,78 @@ class EvidenceStore:
         envelope_digest = raw.get("envelope_sha256")
         return bool(envelope_digest) and envelope_digest == self._envelope_sha256(raw)
 
+    def verify_receipt_chain(self, mission_id: str) -> dict[str, Any]:
+        """Verify the complete receipt chain for a mission.
+
+        Every tool invocation must have a linked evidence receipt.
+        Returns a structured report with chain integrity status.
+        """
+
+        invocations = self.store.list_records("tool", mission_id)
+        evidence_records = self.store.list_records("evidence", mission_id)
+
+        evidence_by_tool: dict[str, list[dict[str, Any]]] = {}
+        for ev in evidence_records:
+            tiid = ev.get("tool_invocation_id")
+            if tiid:
+                evidence_by_tool.setdefault(str(tiid), []).append(ev)
+
+        chain: list[dict[str, Any]] = []
+        gaps = 0
+        unverifiable = 0
+        fail_closed_violations = 0
+        total = len(invocations)
+
+        for inv in invocations:
+            iid = str(inv.get("invocation_id"))
+            receipt_id = inv.get("receipt_evidence_id")
+            status = str(inv.get("status", "completed"))
+            failure_code = inv.get("failure_code")
+
+            linked = evidence_by_tool.get(iid, [])
+            has_receipt = any(
+                str(ev.get("evidence_id")) == str(receipt_id) for ev in linked
+            ) if receipt_id else bool(linked)
+
+            receipt_verifiable = False
+            if receipt_id:
+                envelope = self.store.get_record_envelope(str(receipt_id))
+                if envelope:
+                    raw = envelope.get("payload", {})
+                    content_digest = hashlib.sha256(
+                        str(raw.get("content", "")).encode("utf-8")
+                    ).hexdigest()
+                    receipt_verifiable = content_digest == raw.get("sha256")
+
+            if status == "failed" and not failure_code:
+                fail_closed_violations += 1
+
+            if not has_receipt:
+                gaps += 1
+            elif not receipt_verifiable:
+                unverifiable += 1
+
+            chain.append({
+                "invocation_id": iid,
+                "tool_name": inv.get("tool_name"),
+                "status": status,
+                "failure_code": failure_code,
+                "reason_code": inv.get("reason_code"),
+                "receipt_evidence_id": receipt_id,
+                "has_receipt": has_receipt,
+                "receipt_verifiable": receipt_verifiable,
+            })
+
+        return {
+            "mission_id": mission_id,
+            "total_invocations": total,
+            "chain_gaps": gaps,
+            "unverifiable_receipts": unverifiable,
+            "fail_closed_violations": fail_closed_violations,
+            "chain_intact": gaps == 0 and unverifiable == 0 and fail_closed_violations == 0,
+            "chain": chain,
+        }
+
     def verify_all(self, mission_id: str | None = None) -> dict[str, Any]:
         envelopes, corrupt_ids = self.store.audit_record_envelopes(
             "evidence", mission_id

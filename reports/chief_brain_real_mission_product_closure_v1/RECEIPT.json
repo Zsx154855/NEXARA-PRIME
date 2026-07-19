@@ -1,0 +1,29 @@
+{
+  "receipt_id": "receipt_chief_brain_closure_v1_20260720",
+  "canonical_hash": "sha256:303eacce674dd548205e0508577baee7903792aae1dfe04d6f289289cb08bc96",
+  "mission": "NEXARA_CHIEF_BRAIN_REAL_MISSION_PRODUCT_CLOSURE_V1",
+  "branch": "work/nexara-chief-brain-real-mission-product-closure-v1",
+  "base_sha": "105b536710fc36d5d272d225b12f0aae640fe8f4",
+  "timestamp": "2026-07-20T00:00:00Z",
+  "verification": {
+    "focused_tests": "42/42",
+    "full_suite": "881/881 (3 subtests)",
+    "pr18_regression": "19/19",
+    "ruff": "CLEAN",
+    "nsec": "PASS",
+    "drift": "NONE",
+    "secrets": "CLEAN"
+  },
+  "status": "PASS",
+  "pushed": false,
+  "ready_for_push_approval": true,
+  "changed_files": [
+    "src/nexara_prime/models.py",
+    "src/nexara_prime/tools.py",
+    "src/nexara_prime/evidence.py",
+    "src/nexara_prime/memory.py",
+    "tests/test_chief_brain_closure_v1.py",
+    "tests/test_e2e_runtime_closure.py",
+    "scripts/security/scan_hardcoded_secrets.py"
+  ]
+}

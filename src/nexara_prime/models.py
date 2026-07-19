@@ -88,6 +88,107 @@ class MemoryKind(str, Enum):
     UNVERIFIED_INFERENCE = "unverified_inference"
 
 
+class FailureCode(str, Enum):
+    """Deterministic failure codes emitted by the Chief Brain runtime.
+
+    Every tool/evidence/receipt/memory failure MUST carry one of these codes.
+    Consumers (Verifier, Auditor, Recovery) use these codes for automated
+    classification without parsing unstructured error strings.
+    """
+    # Provider / model failures
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    PROVIDER_TIMEOUT = "PROVIDER_TIMEOUT"
+    PROVIDER_QUOTA_EXCEEDED = "PROVIDER_QUOTA_EXCEEDED"
+    PROVIDER_AUTH_INVALID = "PROVIDER_AUTH_INVALID"
+    # Tool failures
+    TOOL_UNKNOWN = "TOOL_UNKNOWN"
+    TOOL_TIMEOUT = "TOOL_TIMEOUT"
+    TOOL_SANDBOX_UNAVAILABLE = "TOOL_SANDBOX_UNAVAILABLE"
+    TOOL_POLICY_REJECTED = "TOOL_POLICY_REJECTED"
+    TOOL_ARGUMENT_INVALID = "TOOL_ARGUMENT_INVALID"
+    TOOL_OUTPUT_TOO_LARGE = "TOOL_OUTPUT_TOO_LARGE"
+    # Approval failures
+    APPROVAL_MISSING = "APPROVAL_MISSING"
+    APPROVAL_INVALID = "APPROVAL_INVALID"
+    APPROVAL_EXPIRED = "APPROVAL_EXPIRED"
+    APPROVAL_MISMATCH = "APPROVAL_MISMATCH"
+    # Integrity failures
+    INTEGRITY_ENVELOPE_INVALID = "INTEGRITY_ENVELOPE_INVALID"
+    INTEGRITY_IDEMPOTENCY_CONFLICT = "INTEGRITY_IDEMPOTENCY_CONFLICT"
+    INTEGRITY_RECEIPT_CHAIN_BROKEN = "INTEGRITY_RECEIPT_CHAIN_BROKEN"
+    INTEGRITY_HASH_MISMATCH = "INTEGRITY_HASH_MISMATCH"
+    # Evidence / receipt failures
+    EVIDENCE_MISSING = "EVIDENCE_MISSING"
+    EVIDENCE_UNVERIFIABLE = "EVIDENCE_UNVERIFIABLE"
+    RECEIPT_MISSING = "RECEIPT_MISSING"
+    RECEIPT_UNVERIFIABLE = "RECEIPT_UNVERIFIABLE"
+    # Memory failures
+    MEMORY_EVIDENCE_UNBOUND = "MEMORY_EVIDENCE_UNBOUND"
+    MEMORY_CONFLICT_UNRESOLVED = "MEMORY_CONFLICT_UNRESOLVED"
+    # Runtime failures
+    RUNTIME_INTERNAL = "RUNTIME_INTERNAL"
+    RUNTIME_STATE_CORRUPT = "RUNTIME_STATE_CORRUPT"
+    # I/O and system failures
+    IO_NOT_FOUND = "IO_NOT_FOUND"
+    IO_PERMISSION_DENIED = "IO_PERMISSION_DENIED"
+    IO_PATH_TRAVERSAL = "IO_PATH_TRAVERSAL"
+    # External / network failures
+    EXTERNAL_UNREACHABLE = "EXTERNAL_UNREACHABLE"
+    EXTERNAL_RATE_LIMITED = "EXTERNAL_RATE_LIMITED"
+
+
+class ReasonCode(str, Enum):
+    """Human-readable, deterministic reason codes for every failure path.
+
+    Each FailureCode maps to one or more ReasonCodes that explain WHY
+    the failure occurred at the operational level.
+    """
+    # Generic
+    OK = "OK"
+    UNKNOWN = "UNKNOWN"
+    # Provider reasons
+    NO_API_KEY = "NO_API_KEY"
+    NO_ENDPOINT = "NO_ENDPOINT"
+    CREDENTIAL_INVALID = "CREDENTIAL_INVALID"
+    QUOTA_EXHAUSTED = "QUOTA_EXHAUSTED"
+    CONNECTION_TIMEOUT = "CONNECTION_TIMEOUT"
+    # Tool reasons
+    TOOL_NOT_REGISTERED = "TOOL_NOT_REGISTERED"
+    EXECUTION_TIMEOUT = "EXECUTION_TIMEOUT"
+    SANDBOX_FAILED = "SANDBOX_FAILED"
+    POLICY_DENIED = "POLICY_DENIED"
+    COMMAND_FORBIDDEN = "COMMAND_FORBIDDEN"
+    CODE_FORBIDDEN = "CODE_FORBIDDEN"
+    PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
+    PATH_OUTSIDE_ROOT = "PATH_OUTSIDE_ROOT"
+    FILE_NOT_FOUND = "FILE_NOT_FOUND"
+    # Approval reasons
+    APPROVAL_NOT_PROVIDED = "APPROVAL_NOT_PROVIDED"
+    APPROVAL_WRONG_MISSION = "APPROVAL_WRONG_MISSION"
+    APPROVAL_WRONG_TOOL = "APPROVAL_WRONG_TOOL"
+    APPROVAL_WRONG_TASK = "APPROVAL_WRONG_TASK"
+    APPROVAL_WRONG_ACTOR = "APPROVAL_WRONG_ACTOR"
+    APPROVAL_HAS_EXPIRED = "APPROVAL_HAS_EXPIRED"
+    APPROVAL_ALREADY_CONSUMED = "APPROVAL_ALREADY_CONSUMED"
+    # Integrity reasons
+    ENVELOPE_CORRUPT = "ENVELOPE_CORRUPT"
+    IDEMPOTENCY_KEY_REUSED = "IDEMPOTENCY_KEY_REUSED"
+    RECEIPT_CHAIN_GAP = "RECEIPT_CHAIN_GAP"
+    HASH_DOES_NOT_MATCH = "HASH_DOES_NOT_MATCH"
+    # Evidence reasons
+    EVIDENCE_NOT_FOUND = "EVIDENCE_NOT_FOUND"
+    EVIDENCE_HASH_INVALID = "EVIDENCE_HASH_INVALID"
+    RECEIPT_NOT_FOUND = "RECEIPT_NOT_FOUND"
+    # Memory reasons
+    NO_EVIDENCE_REF = "NO_EVIDENCE_REF"
+    MEMORY_CONFLICT = "MEMORY_CONFLICT"
+    MEMORY_UNVERIFIED = "MEMORY_UNVERIFIED"
+    # System reasons
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+    STATE_INCONSISTENT = "STATE_INCONSISTENT"
+    PERMISSION_DENIED = "PERMISSION_DENIED"
+
+
 class CapabilityType(str, Enum):
     SKILL = "skill"
     TOOL = "tool"
@@ -274,6 +375,8 @@ class ToolInvocation(NModel):
     result: dict[str, Any] = Field(default_factory=dict)
     risk_level: RiskLevel = RiskLevel.R1
     status: str = "completed"
+    failure_code: str | None = None
+    reason_code: str | None = None
     duration_ms: int = 0
     trace_id: str
     idempotency_key: str | None = None
