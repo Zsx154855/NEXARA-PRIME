@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shlex
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -14,7 +14,8 @@ from .db import SQLiteStore
 from .evidence import EvidenceStore
 from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine
-from .models import ApprovalStatus, RiskLevel, ToolInvocation, new_id, now_iso
+from .models import ApprovalStatus, RiskLevel, ToolInvocation, new_id
+from .models import now_iso
 from .sandbox_v2 import MacOSSandboxBackend, ProcessConstrainedBackend, SandboxInvocation
 from .security_audit import SecurityAuditLedger
 
@@ -54,11 +55,32 @@ class ToolRuntime:
             raise PermissionError(f"path_outside_allowed_root:{candidate}") from exc
         return candidate
 
-    def _existing(self, idempotency_key: str | None) -> ToolInvocation | None:
+    def _existing(
+        self,
+        idempotency_key: str | None,
+        mission_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> ToolInvocation | None:
         if not idempotency_key:
             return None
         raw = self.store.find_record("tool", "idempotency_key", idempotency_key)
-        return ToolInvocation.model_validate(raw) if raw else None
+        envelope = self.store.find_record_envelope(
+            "tool", "idempotency_key", idempotency_key
+        )
+        if raw and not envelope:
+            raise ValueError("tool_integrity_invalid")
+        if not envelope:
+            return None
+        invocation = ToolInvocation.model_validate(envelope["payload"])
+        if (
+            envelope.get("mission_id") != mission_id
+            or invocation.mission_id != mission_id
+            or invocation.tool_name != tool_name
+            or invocation.arguments != arguments
+        ):
+            raise ValueError("tool_idempotency_conflict")
+        return invocation
 
     def invoke(
         self,
@@ -74,7 +96,9 @@ class ToolRuntime:
         idempotency_key: str | None = None,
         timeout_seconds: int | None = None,
     ) -> ToolInvocation:
-        existing = self._existing(idempotency_key)
+        existing = self._existing(
+            idempotency_key, mission_id, tool_name, arguments
+        )
         if existing:
             return existing
         risk = {
@@ -104,6 +128,8 @@ class ToolRuntime:
                 task_id,
                 actor_id,
                 trace_id,
+                idempotency_key,
+                arguments,
             )
             if not approval:
                 self._audit_denial(mission_id, task_id, tool_name, trace_id, actor_id, "invalid_or_mismatched_approval", risk)
@@ -190,11 +216,14 @@ class ToolRuntime:
         if len(encoded) > self.MAX_WRITE_BYTES:
             raise ValueError("write_payload_too_large")
         previous = path.read_bytes() if path.exists() else b""
-        path.write_bytes(encoded)
+        replayed = previous == encoded
+        if not replayed:
+            path.write_bytes(encoded)
         return {
             "path": str(path), "bytes": len(encoded), "sha256": hashlib.sha256(encoded).hexdigest(),
             "previous_sha256": hashlib.sha256(previous).hexdigest() if previous else None,
             "rollback_available": bool(previous), "root": str(root),
+            "replayed": replayed,
         }
 
     def _code_exec(self, arguments: dict[str, Any], timeout_seconds: int) -> dict[str, Any]:
@@ -267,6 +296,8 @@ class ToolRuntime:
         task_id: str,
         actor_id: str,
         trace_id: str,
+        idempotency_key: str | None,
+        arguments: dict[str, Any],
     ) -> bool:
         """P0-2: Validate real Approval from persistent store. Never trust parameters alone."""
         try:
@@ -274,8 +305,6 @@ class ToolRuntime:
         except ValueError:
             return False
         if not approval:
-            return False
-        if approval.status != ApprovalStatus.APPROVED:
             return False
         if approval.mission_id != mission_id:
             return False
@@ -285,17 +314,44 @@ class ToolRuntime:
             return False
         if approval.executor_id and approval.executor_id != actor_id:
             return False
-        # Check expiry
-        if approval.expires_at:
+        if approval.status not in {
+            ApprovalStatus.APPROVED,
+            ApprovalStatus.CONSUMED,
+        }:
+            return False
+        if approval.status == ApprovalStatus.APPROVED and approval.expires_at:
             from datetime import datetime, timezone
+
             try:
-                if datetime.fromisoformat(approval.expires_at) <= datetime.now(timezone.utc):
+                if datetime.fromisoformat(approval.expires_at) <= datetime.now(
+                    timezone.utc
+                ):
                     return False
             except (ValueError, TypeError):
                 pass
+        use_id = (
+            idempotency_key.strip()
+            if idempotency_key and idempotency_key.strip()
+            else task_id.strip() or f"tool:{tool_name}:{trace_id}"
+        )
+        claim = self._claim_approved_action(
+            approval.approval_id,
+            mission_id,
+            tool_name,
+            arguments,
+            actor_id,
+            use_id,
+            idempotency_key,
+            allow_create=approval.status == ApprovalStatus.APPROVED,
+        )
+        if approval.status == ApprovalStatus.CONSUMED:
+            return claim and self.approvals.consumption_matches(
+                approval,
+                actor_id=actor_id,
+                use_id=use_id,
+            )
         # Scope check
         if approval.approval_scope == "single_action":
-            use_id = task_id.strip() or f"tool:{tool_name}:{trace_id}"
             if not self.approvals.consume_single_action(
                 approval.approval_id,
                 actor_id=actor_id,
@@ -304,6 +360,56 @@ class ToolRuntime:
             ):
                 return False
         return True
+
+    def _claim_approved_action(
+        self,
+        approval_id: str,
+        mission_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        actor_id: str,
+        use_id: str,
+        idempotency_key: str | None,
+        *,
+        allow_create: bool,
+    ) -> bool:
+        """Durably bind one approval use to one exact tool request.
+
+        The claim is written before approval consumption and before the side
+        effect.  A restart may replay only the same approval, actor, use id,
+        tool, and canonical arguments.
+        """
+        if not idempotency_key:
+            return allow_create
+        digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:20]
+        record_id = f"toolclaim_{digest}"
+        canonical_arguments = json.dumps(
+            arguments, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        payload = {
+            "approval_id": approval_id,
+            "mission_id": mission_id,
+            "tool_name": tool_name,
+            "arguments_sha256": hashlib.sha256(
+                canonical_arguments.encode("utf-8")
+            ).hexdigest(),
+            "actor_id": actor_id,
+            "use_id": use_id,
+            "idempotency_key": idempotency_key,
+        }
+        if allow_create:
+            created_at = now_iso()
+            if self.store.save_record_if_absent(
+                record_id, "tool_claim", payload, created_at, mission_id
+            ):
+                return True
+        existing = self.store.get_record_envelope(record_id)
+        return bool(
+            existing
+            and existing.get("record_type") == "tool_claim"
+            and existing.get("mission_id") == mission_id
+            and existing.get("payload") == payload
+        )
 
     def _audit_denial(self, mission_id: str, task_id: str, tool_name: str, trace_id: str, actor_id: str, reason: str, risk: RiskLevel) -> None:
         self._audit("tool.authorization_denied", mission_id, task_id, tool_name, "denied", risk, trace_id, actor_id or "unknown", {"reason": reason})

@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from .models import Capability, CapabilityScore, CapabilityType, RiskLevel, new_id, now_iso
+from .models import Capability, CapabilityScore, CapabilityType, RiskLevel, now_iso
 
 
 class CapabilityRegistry:

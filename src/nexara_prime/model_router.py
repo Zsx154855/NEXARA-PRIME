@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
-from .models import ModelRoutingDecision, new_id, now_iso
+from .models import ModelRoutingDecision, now_iso
 
 
 # ── Provider definitions ─────────────────────────────────────────────────────

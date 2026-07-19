@@ -23,7 +23,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-from .models import new_id, now_iso
+from .models import RiskLevel, new_id, now_iso
 
 
 # ── Capability flags ──

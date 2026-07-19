@@ -8,7 +8,6 @@ from .models import (
     Mission,
     MissionTriageResult,
     new_id,
-    now_iso,
 )
 
 

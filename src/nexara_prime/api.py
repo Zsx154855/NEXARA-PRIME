@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from .config import Settings
 try:
@@ -52,7 +52,18 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     @app.get("/api/runtime/overview")
     def overview() -> dict[str, Any]:
-        return runtime.overview()
+        data = runtime.overview()
+        # Enrich with inspect_mission snapshots; SDK compatibility fields
+        enriched = []
+        for m in runtime.list_missions()[-20:]:
+            try:
+                snap = runtime.inspect_mission(m["mission_id"])
+                snap["state"] = snap.get("current_state", "Intent")
+                enriched.append(snap)
+            except KeyError:
+                enriched.append(m)
+        data["missions"] = enriched
+        return data
 
     @app.get("/api/missions")
     def list_missions() -> list[dict[str, Any]]:
@@ -67,7 +78,10 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     @app.get("/api/missions/{mission_id}")
     def status(mission_id: str) -> dict[str, Any]:
-        return get_mission(mission_id).model_dump(mode="json")
+        try:
+            return runtime.inspect_mission(mission_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/plan")
     def plan(mission_id: str) -> dict[str, Any]:

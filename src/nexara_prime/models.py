@@ -315,6 +315,7 @@ class EvaluationResult(NModel):
     recovery_rate: float
     passed: bool
     notes: list[str] = Field(default_factory=list)
+    idempotency_key: str | None = None
     created_at: str = Field(default_factory=now_iso)
 
 

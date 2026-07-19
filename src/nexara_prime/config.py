@@ -25,8 +25,8 @@ class Settings:
             db_path=db_path,
             workspace_root=workspace_root,
             report_root=report_root,
-            model_provider=os.getenv("NEXARA_MODEL_PROVIDER", "mock"),
-            mock_model=os.getenv("NEXARA_MOCK_MODEL", "true").lower() not in {"0", "false", "no"},
+            model_provider=os.getenv("NEXARA_MODEL_PROVIDER", "none"),
+            mock_model=os.getenv("NEXARA_MOCK_MODEL", "false").lower() in {"1", "true", "yes", "on"},
             api_host=os.getenv("NEXARA_API_HOST", "127.0.0.1"),
             api_port=int(os.getenv("NEXARA_API_PORT", "8765")),
         )

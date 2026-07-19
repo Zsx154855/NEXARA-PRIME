@@ -414,6 +414,69 @@ class SQLiteStore:
             )
             return cursor.rowcount == 1
 
+    def save_records_atomically(self, records: list[dict[str, Any]]) -> None:
+        """Persist a related set of records in one transaction.
+
+        Existing records are accepted only when their complete persisted
+        identity and payload match the requested record.  This makes the
+        operation safe to replay after a process interruption without
+        permitting an idempotency key to be rebound to different content.
+        """
+        prepared: list[tuple[str, str, str | None, str, str, str]] = []
+        for record in records:
+            record_id = str(record["record_id"])
+            record_type = str(record["record_type"])
+            mission_id = record.get("mission_id")
+            created_at = str(record["created_at"])
+            payload = record["payload"]
+            if not isinstance(payload, dict):
+                raise TypeError("atomic_record_payload_must_be_object")
+            canonical = self._canonical_payload(payload)
+            integrity = self._record_integrity(
+                record_id, record_type, mission_id, created_at, payload
+            )
+            prepared.append(
+                (
+                    record_id,
+                    record_type,
+                    mission_id,
+                    canonical,
+                    created_at,
+                    integrity,
+                )
+            )
+
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                for item in prepared:
+                    existing = self._conn.execute(
+                        "SELECT record_type, mission_id, payload, created_at, "
+                        "integrity_sha256 FROM records WHERE record_id=?",
+                        (item[0],),
+                    ).fetchone()
+                    if existing is not None:
+                        matches = (
+                            existing["record_type"] == item[1]
+                            and existing["mission_id"] == item[2]
+                            and existing["payload"] == item[3]
+                            and existing["created_at"] == item[4]
+                            and existing["integrity_sha256"] == item[5]
+                        )
+                        if not matches:
+                            raise ValueError("atomic_record_identity_conflict")
+                        continue
+                    self._conn.execute(
+                        "INSERT INTO records(record_id, record_type, mission_id, "
+                        "payload, created_at, integrity_sha256, origin_sha256) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (*item, item[5]),
+                    )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+
     def get_record_envelope(self, record_id: str) -> dict[str, Any] | None:
         """Return a record only when its persisted identity envelope is intact."""
         with self._lock:

@@ -4,6 +4,7 @@ import json
 import os
 import threading
 from pathlib import Path
+from typing import Any
 
 from .adaptive_runtime import AdaptiveRuntime as AdaptiveOrchestrator
 from .capabilities import CapabilityRegistry
@@ -16,11 +17,9 @@ from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine, WriterLeaseManager
 from .memory import MemoryKernel
 from .mission_compiler import MissionCompiler
-from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider
+from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider, ProviderUnavailable, UnavailableProvider
 from .models import (
-    Mission, MissionState, RiskLevel, AdaptiveMode, AdaptiveMissionProfile,
-    MissionTriageResult, SchedulingPlan, ModelRoutingDecision,
-    ResourceBudget, BudgetUsage, EscalationDecision,
+    Mission, MissionState, RiskLevel, AdaptiveMissionProfile,
     now_iso, new_id,
 )
 from .recovery import DurableRecovery
@@ -57,7 +56,7 @@ def _ensure_adapters(runtime):
         _ensure_adapters._last_runtime_id = id(runtime)
         _ADAPTERS_INITIALIZED = False  # Force re-init for new runtime
         try:
-    
+
             from .browser_adapter import GovernedBrowserAdapter, MockBrowserDriver
             _browser_adapter = GovernedBrowserAdapter(
                 MockBrowserDriver(),
@@ -139,7 +138,7 @@ def _ensure_adapters(runtime):
             )
         except ImportError:
             pass
-    
+
         _ADAPTERS_INITIALIZED = True
 
 # Adaptive Runtime imports (lazy — loaded on first use)
@@ -270,20 +269,32 @@ class NexaraRuntime:
 
     def _build_model_gateway(self) -> ModelGateway:
         provider_name = self.settings.model_provider.lower()
-        if self.settings.mock_model or provider_name == "mock":
-            return ModelGateway(MockProvider())
+        if self.settings.mock_model:
+            return ModelGateway(MockProvider(), fallback=None)
+        if provider_name == "mock" and not self.settings.mock_model:
+            self._provider_unavailable = True
+            return ModelGateway(UnavailableProvider())
         if provider_name in {"openai", "openai_compatible"}:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                self._provider_unavailable = True
+                return ModelGateway(UnavailableProvider())
             provider = OpenAICompatibleProvider(
                 os.getenv("NEXARA_MODEL_ENDPOINT", "https://api.openai.com/v1"),
                 model=os.getenv("NEXARA_MODEL_NAME", "gpt-4o-mini"),
-                api_key=os.getenv("OPENAI_API_KEY"),
+                api_key=api_key,
             )
         elif provider_name == "local":
-            provider = LocalModelProvider(os.getenv("NEXARA_LOCAL_MODEL_ENDPOINT"), os.getenv("NEXARA_MODEL_NAME", "local-model"))
+            endpoint = os.getenv("NEXARA_LOCAL_MODEL_ENDPOINT")
+            if not endpoint:
+                self._provider_unavailable = True
+                return ModelGateway(UnavailableProvider())
+            provider = LocalModelProvider(endpoint, os.getenv("NEXARA_MODEL_NAME", "local-model"))
         else:
-            provider = MockProvider()
-        fallback = MockProvider() if self.settings.mock_model else None
-        return ModelGateway(provider, fallback=fallback)
+            self._provider_unavailable = True
+            return ModelGateway(UnavailableProvider())
+        self._provider_unavailable = False
+        return ModelGateway(provider, fallback=None)
 
     def _save_mission(self, mission: Mission) -> None:
         mission.updated_at = now_iso()
@@ -412,14 +423,69 @@ class NexaraRuntime:
         return mission
 
     def _checkpointed_model(self, mission: Mission, compiled, context: dict) -> tuple[str, str, int, int, float]:
-        key = f"{mission.mission_id}:model-completion"
-        previous = self.store.find_record("model_response", "idempotency_key", key)
-        if previous:
-            return previous["text"], previous["provider"], int(previous["input_tokens"]), int(previous["output_tokens"]), float(previous.get("cost_usd", 0.0))
+        tk = f"{mission.mission_id}:model_tokens"
+        p = mission.result.get(tk)
+        if p and isinstance(p, dict) and int(p.get("input_tokens", 0)) > 0:
+            return mission.result.get("model_text", ""), p.get("provider", "unknown"), int(p["input_tokens"]), int(p["output_tokens"]), float(p.get("cost_usd", 0.0))
+        # Migrate the durable response written by the pre-convergence runtime.
+        # This check must precede the provider call or a restart can duplicate
+        # an already completed and billed model request.
+        legacy_key = f"{mission.mission_id}:model-completion"
+        legacy_raw = self.store.find_record(
+            "model_response", "idempotency_key", legacy_key
+        )
+        legacy_envelope = self.store.find_record_envelope(
+            "model_response", "idempotency_key", legacy_key
+        )
+        if legacy_raw and not legacy_envelope:
+            raise ValueError("model_response_integrity_invalid")
+        legacy = (
+            legacy_envelope["payload"]
+            if legacy_envelope
+            and legacy_envelope.get("mission_id") == mission.mission_id
+            else None
+        )
+        if legacy:
+            required = {"text", "provider", "input_tokens", "output_tokens"}
+            if not required.issubset(legacy):
+                raise ValueError("legacy_model_response_invalid")
+            migrated = {
+                "input_tokens": int(legacy["input_tokens"]),
+                "output_tokens": int(legacy["output_tokens"]),
+                "cost_usd": float(legacy.get("cost_usd", 0.0)),
+                "provider": str(legacy["provider"]),
+            }
+            mission.result[tk] = migrated
+            mission.result["model_text"] = str(legacy["text"])
+            mission.result["model_provider"] = migrated["provider"]
+            self._clear_provider_unavailable(mission)
+            self._save_mission(mission)
+            return (
+                mission.result["model_text"],
+                migrated["provider"],
+                migrated["input_tokens"],
+                migrated["output_tokens"],
+                migrated["cost_usd"],
+            )
         model_response = self.models.complete(compiled.system, compiled.task, context, trace_id=mission.trace_id)
-        self.store.save_record(new_id("model"), "model_response", {"provider": model_response.provider, "model": model_response.model, "text": model_response.text, "input_tokens": model_response.input_tokens, "output_tokens": model_response.output_tokens, "cost_usd": model_response.cost_usd, "trace_id": model_response.trace_id, "idempotency_key": key}, now_iso(), mission.mission_id)
-        self.recovery.checkpoint(mission.mission_id, "model_completed", mission.trace_id, data={"provider": model_response.provider}, idempotency_key=f"checkpoint:{mission.mission_id}:model_completed")
+        mission.result[tk] = {"input_tokens": model_response.input_tokens, "output_tokens": model_response.output_tokens, "cost_usd": model_response.cost_usd, "provider": model_response.provider}
+        mission.result["model_text"] = model_response.text
+        mission.result["model_provider"] = model_response.provider
+        self._clear_provider_unavailable(mission)
+        self._save_mission(mission)
+        self.recovery.checkpoint(mission.mission_id, "model_completed", mission.trace_id, data={"provider": model_response.provider})
         return model_response.text, model_response.provider, model_response.input_tokens, model_response.output_tokens, model_response.cost_usd
+
+    def _clear_provider_unavailable(self, mission: Mission) -> None:
+        """Clear only the transient provider failure state after real success."""
+        recovery = mission.result.get("recovery")
+        if isinstance(recovery, dict):
+            recovery.pop("provider_unavailable", None)
+            recovery.pop("retry_after_configured", None)
+            if not recovery:
+                mission.result.pop("recovery", None)
+        if getattr(getattr(self.models, "provider", None), "name", None) != "unavailable":
+            self._provider_unavailable = False
 
     def run_mission(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)
@@ -431,52 +497,25 @@ class NexaraRuntime:
             if mission.safe_mode:
                 raise PermissionError("safe_mode_blocks_unapproved_mission")
             return mission
-        if mission.state != MissionState.EXECUTION.value:
+        _ADAPTIVE = {"Running", "Verifying", "Degraded"}
+        if mission.state in _ADAPTIVE:
+            raise ValueError(f"ADAPTIVE_RECOVERY_REQUIRED: {mission.state}")
+        _DISPATCH = {
+            MissionState.EXECUTION.value: self._execute_stage,
+            MissionState.VERIFICATION.value: self._verify_stage,
+            MissionState.EVIDENCE.value: self._commit_evidence_stage,
+            MissionState.MEMORY_PATCH.value: self._update_memory_stage,
+            MissionState.EVALUATION.value: self._evaluate_stage,
+        }
+        processor = _DISPATCH.get(mission.state)
+        if processor is None:
             raise ValueError(f"mission_not_ready_to_run:{mission.state}")
         try:
-            context = {"source_dir": mission.spec.source_dir or "workspace", "roles": [a.persona.value for a in mission.assignments]}
-            compiled = self.tokens.compile(mission.spec, [cap for a in mission.assignments for cap in a.loaded_capabilities], ["MissionSpec", "WorkContract", "MissionPlan"], [e["evidence_id"] for e in self.evidence.list(mission.mission_id)], json.dumps(context))
-            model_text, provider, input_tokens, output_tokens, cost_usd = self._checkpointed_model(mission, compiled, context)
-            code_invocation = self.tools.invoke(mission.mission_id, "code_exec", {"code": "print('nexara-prime local execution check')"}, mission.trace_id, safe_mode=mission.safe_mode, actor_id="runtime", task_id=mission.mission_id, idempotency_key=f"{mission.mission_id}:code-check")
-            self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"invocation_id": code_invocation.invocation_id})
-            report = self._render_report(mission, compiled.task, model_text, provider)
-            lease = self.leases.acquire(f"report:{mission.mission_id}", "vertex", mission.trace_id)
-            try:
-                if not mission.pending_approval_id:
-                    raise PermissionError("mission_report_write_missing_human_approval")
-                receipt = self.tools.invoke(mission.mission_id, "file_write_report",
-                    {"path": f"{mission.mission_id}/mission-report.md", "content": report},
-                    mission.trace_id, approval_id=mission.pending_approval_id,
-                    actor_id="runtime", task_id=mission.mission_id,
-                    idempotency_key=f"{mission.mission_id}:report-write")
-            finally:
-                self.leases.release(lease.lease_id, "vertex", mission.trace_id)
-            mission.result = {"report_path": receipt.result["path"], "model_provider": provider, "model": "runtime-selected", "input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost_usd, "tool_invocation_ids": [code_invocation.invocation_id, receipt.invocation_id]}
-            mission.rollback_point = receipt.invocation_id
+            return processor(mission)
+        except ProviderUnavailable:
+            mission.result["recovery"] = {"provider_unavailable": True, "retry_after_configured": True}
             self._save_mission(mission)
-            self.recovery.checkpoint(mission.mission_id, "report_written", mission.trace_id, data={"path": receipt.result["path"]})
-            self._advance(mission, MissionState.VERIFICATION, "reviewer")
-            verification = self._verify_report(mission)
-            self.evidence.add(mission.mission_id, "verification_report", "VerificationReport", json.dumps(verification, ensure_ascii=False, indent=2), mission.trace_id, actor="reviewer", source="filesystem", verification_status="verified", parent_evidence=[receipt.receipt_evidence_id] if receipt.receipt_evidence_id else [])
-            self._advance(mission, MissionState.EVIDENCE, "reviewer")
-            summary = json.dumps({"report": mission.result, "verification": verification}, ensure_ascii=False)
-            result_evidence = self.evidence.add(mission.mission_id, "execution_result", "Execution result", summary, mission.trace_id, actor="reviewer", source="runtime", verification_status="verified")
-            self.recovery.checkpoint(mission.mission_id, "evidence_collected", mission.trace_id, data={"evidence_id": result_evidence.evidence_id})
-            self._advance(mission, MissionState.MEMORY_PATCH, "archivist")
-            memory = self.memory.patch(mission.mission_id, "mission.completed_report", "A bounded local report was generated and verified with deterministic or configured provider execution.", mission.trace_id, result_evidence.evidence_id)
-            mission.result["memory_patch_id"] = memory.memory_id
-            self._advance(mission, MissionState.EVALUATION, "kairos")
-            evaluation = self.evaluator.evaluate(mission, len(self.evidence.list(mission.mission_id)), len(self.tools.list_invocations(mission.mission_id)), input_tokens, output_tokens)
-            mission.result["evaluation_id"] = evaluation.evaluation_id
-            mission.result["evaluation_passed"] = evaluation.passed
-            self._save_mission(mission)
-            self.recovery.checkpoint(mission.mission_id, "evaluation_completed", mission.trace_id, data={"passed": evaluation.passed})
-            if self._completion_gate(mission, evaluation):
-                self._advance(mission, MissionState.COMPLETED, "kairos")
-            else:
-                self._advance(mission, MissionState.BLOCKED, "kairos")
-            self.scheduler.release(mission.assignments)
-            return mission
+            raise
         except Exception as exc:
             mission.result["error"] = str(exc)
             self._save_mission(mission)
@@ -488,6 +527,113 @@ class NexaraRuntime:
                     pass
             raise
 
+    def _execute_stage(self, mission: Mission) -> Mission:
+        model_key = f"{mission.mission_id}:model_tokens"
+        persisted = mission.result.get(model_key)
+        if persisted and isinstance(persisted, dict):
+            mt = int(persisted.get("input_tokens", 0))
+            ot = int(persisted.get("output_tokens", 0))
+            c = float(persisted.get("cost_usd", 0.0))
+            model_text = mission.result.get("model_text", "")
+            provider = persisted.get("provider", "unknown")
+        else:
+            context = {"source_dir": mission.spec.source_dir or "workspace", "roles": [a.persona.value for a in mission.assignments]}
+            compiled = self.tokens.compile(mission.spec, [cap for a in mission.assignments for cap in a.loaded_capabilities], ["MissionSpec", "WorkContract", "MissionPlan"], [e["evidence_id"] for e in self.evidence.list(mission.mission_id)], json.dumps(context))
+            model_text, provider, mt, ot, c = self._checkpointed_model(mission, compiled, context)
+            mission.result[model_key] = {"input_tokens": mt, "output_tokens": ot, "cost_usd": c, "provider": provider}
+            mission.result["model_text"] = model_text
+        code = self.tools.invoke(mission.mission_id, "code_exec", {"code": "print('nexara-prime local execution check')"}, mission.trace_id, safe_mode=mission.safe_mode, actor_id="runtime", task_id=mission.mission_id, idempotency_key=f"{mission.mission_id}:code-check")
+        self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"invocation_id": code.invocation_id})
+        report = self._render_report(mission, mission.spec.objective, model_text, provider)
+        lease = self.leases.acquire(f"report:{mission.mission_id}", "vertex", mission.trace_id)
+        try:
+            if not mission.pending_approval_id:
+                raise PermissionError("mission_report_write_missing_human_approval")
+            receipt = self.tools.invoke(mission.mission_id, "file_write_report", {"path": f"{mission.mission_id}/mission-report.md", "content": report}, mission.trace_id, approval_id=mission.pending_approval_id, actor_id="runtime", task_id=mission.mission_id, idempotency_key=f"{mission.mission_id}:report-write")
+        finally:
+            self.leases.release(lease.lease_id, "vertex", mission.trace_id)
+        mission.result["report_path"] = receipt.result["path"]
+        mission.result["receipt_evidence_id"] = receipt.receipt_evidence_id
+        mission.rollback_point = receipt.invocation_id
+        self._save_mission(mission)
+        self.recovery.checkpoint(mission.mission_id, "report_written", mission.trace_id, data={"path": receipt.result["path"]})
+        self._advance(mission, MissionState.VERIFICATION, "reviewer")
+        return self._verify_stage(mission)
+
+    def _verify_stage(self, mission: Mission) -> Mission:
+        vkey = f"{mission.mission_id}:verification_evidence"
+        verification = self._verify_report(mission)
+        parent = [mission.result["receipt_evidence_id"]] if mission.result.get("receipt_evidence_id") else None
+        existing = self._get_evidence_by_idempotency(vkey, mission.mission_id)
+        if existing:
+            try:
+                stored_verification = json.loads(existing.get("content", ""))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("verification_evidence_invalid") from exc
+            if not isinstance(stored_verification, dict):
+                raise ValueError("verification_evidence_invalid")
+            # Verify evidence integrity via evidence store before relying on stored content
+            self.evidence.verify(existing["evidence_id"])
+            stable_fields = {"exists", "bytes", "non_empty", "sha256"}
+            if (
+                any(
+                    stored_verification.get(field) != verification.get(field)
+                    for field in stable_fields
+                )
+                or existing.get("parent_evidence", []) != (parent or [])
+            ):
+                raise ValueError("verification_evidence_conflict")
+            result = type(
+                "Evidence", (), {"evidence_id": existing["evidence_id"]}
+            )()
+        else:
+            result = self.evidence.add(mission.mission_id, "verification_report", "VerificationReport", json.dumps(verification, ensure_ascii=False, indent=2), mission.trace_id, actor="reviewer", source="filesystem", verification_status="verified", parent_evidence=parent, idempotency_key=vkey)
+        mission.result["verification_evidence_id"] = result.evidence_id
+        self._save_mission(mission)
+        self._advance(mission, MissionState.EVIDENCE, "reviewer")
+        return self._commit_evidence_stage(mission)
+
+    def _commit_evidence_stage(self, mission: Mission) -> Mission:
+        ekey = f"{mission.mission_id}:execution_result_evidence"
+        summary = json.dumps({"report_path": mission.result.get("report_path", "")}, ensure_ascii=False)
+        re = self.evidence.add(mission.mission_id, "execution_result", "Execution result", summary, mission.trace_id, actor="reviewer", source="runtime", verification_status="verified", idempotency_key=ekey)
+        mission.result["result_evidence_id"] = re.evidence_id
+        self.recovery.checkpoint(mission.mission_id, "evidence_collected", mission.trace_id, data={"evidence_id": re.evidence_id})
+        self._save_mission(mission)
+        self._advance(mission, MissionState.MEMORY_PATCH, "archivist")
+        return self._update_memory_stage(mission)
+
+    def _update_memory_stage(self, mission: Mission) -> Mission:
+        mkey = f"{mission.mission_id}:memory_patch"
+        re_id = mission.result.get("result_evidence_id")
+        if not re_id:
+            for e in self.evidence.list(mission.mission_id):
+                if e.get("kind") == "execution_result":
+                    re_id = e.get("evidence_id")
+                    break
+        mem = self.memory.patch(mission.mission_id, "mission.completed_report", "A bounded local report was generated and verified.", mission.trace_id, re_id or "", idempotency_key=mkey)
+        mission.result["memory_patch_id"] = mem.memory_id
+        self._save_mission(mission)
+        self._advance(mission, MissionState.EVALUATION, "kairos")
+        return self._evaluate_stage(mission)
+
+    def _evaluate_stage(self, mission: Mission) -> Mission:
+        ek = f"{mission.mission_id}:evaluation"
+        md = mission.result.get(f"{mission.mission_id}:model_tokens", {})
+        it = int(md.get("input_tokens", 0)) if isinstance(md, dict) else 0
+        ot = int(md.get("output_tokens", 0)) if isinstance(md, dict) else 0
+        ev = self.evaluator.evaluate(mission, len(self.evidence.list(mission.mission_id)), len(self.tools.list_invocations(mission.mission_id)), it, ot, idempotency_key=ek)
+        mission.result["evaluation_id"] = ev.evaluation_id
+        mission.result["evaluation_passed"] = ev.passed
+        self._save_mission(mission)
+        self.recovery.checkpoint(mission.mission_id, "evaluation_completed", mission.trace_id, data={"passed": ev.passed})
+        if self._completion_gate(mission, ev):
+            self._advance(mission, MissionState.COMPLETED, "kairos")
+        else:
+            self._advance(mission, MissionState.BLOCKED, "kairos")
+        self.scheduler.release(mission.assignments)
+        return mission
+
     def _completion_gate(self, mission: Mission, evaluation) -> bool:
         if not mission.contract or mission.contract.status != "approved":
             return False
@@ -495,6 +641,18 @@ class NexaraRuntime:
             return False
         if self.evidence.verify_all(mission.mission_id)["invalid"]:
             return False
+        mem_id = mission.result.get("memory_patch_id")
+        if mem_id:
+            mem_envelope = self.store.get_record_envelope(mem_id)
+            if not mem_envelope:
+                return False
+            mkey = f"{mission.mission_id}:memory_patch"
+            idem_envelope = self.store.find_record_envelope("memory_idempotency", "idempotency_key", mkey)
+            if not idem_envelope or idem_envelope.get("mission_id") != mission.mission_id:
+                return False
+            mapping = idem_envelope["payload"]
+            if mapping.get("memory_id") != mem_id:
+                return False
         approvals = self.approvals.list(mission.mission_id)
         if mission.spec.risk_level.value in {"R2", "R3", "R4"} and not any(item.get("status") in {"approved", "consumed"} for item in approvals):
             return False
@@ -511,6 +669,30 @@ class NexaraRuntime:
         digest = hashlib.sha256(path.read_bytes()).hexdigest() if exists else None
         return {"exists": exists, "bytes": bytes_count, "non_empty": bytes_count > 0, "sha256": digest, "verified_at": now_iso()}
 
+    def _find_evidence_by_idempotency(self, key: str, mission_id: str) -> Any:
+        """Find existing evidence by idempotency_key using public EvidenceStore.list API.
+        Returns an EvidenceArtifact (or any object with .evidence_id attribute)."""
+        for e in self.evidence.list(mission_id):
+            if e.get("idempotency_key") == key:
+                # list() returns dicts with internal fields (envelope_sha256 etc.)
+                # — reconstruct a minimal EvidenceArtifact with just evidence_id
+                return type('Evidence', (), {'evidence_id': e['evidence_id']})()
+        raise KeyError(f"evidence_not_found_by_idempotency_key:{key}")
+
+    def _get_evidence_by_idempotency(
+        self, key: str, mission_id: str
+    ) -> dict[str, Any] | None:
+        """Return an integrity-checked evidence projection for one replay key."""
+        raw_evidence = self.store.find_record("evidence", "idempotency_key", key)
+        evidence_envelope = self.store.find_record_envelope("evidence", "idempotency_key", key)
+        if raw_evidence and not evidence_envelope:
+            raise ValueError("evidence_integrity_invalid")
+        if evidence_envelope:
+            if evidence_envelope.get("mission_id") != mission_id:
+                raise ValueError("evidence_mission_mismatch")
+            return evidence_envelope["payload"]
+        return None
+
     def pause(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)
         mission.paused = True
@@ -519,11 +701,79 @@ class NexaraRuntime:
         return mission
 
     def resume(self, mission_id: str) -> Mission:
+        """Unpause a paused mission. Does NOT reset mission state —
+        run_mission() dispatches from persisted state."""
         mission = self._load_mission(mission_id)
-        mission.paused = False
-        self._save_mission(mission)
-        self.events.publish("mission.resumed", mission_id, "mission", "human", mission.trace_id, {}, idempotency_key=f"mission-resumed:{mission_id}:{mission.updated_at}")
+        if mission.paused:
+            mission.paused = False
+            self._save_mission(mission)
+            self.events.publish("mission.resumed", mission_id, "mission", "human", mission.trace_id, {}, idempotency_key=f"mission-resumed:{mission_id}:{mission.updated_at}")
         return mission
+
+    def inspect_mission(self, mission_id: str) -> dict[str, Any]:
+        """Single authoritative runtime truth snapshot. Includes SDK compatibility
+        fields (state, spec, title, objective, created_at) so API/CLI/UI don't
+        patch separately. Merges provider_unavailable from runtime init + mission recovery."""
+        mission = self._load_mission(mission_id)
+        evidence_list = self.evidence.list(mission_id)
+        # Approval status from ApprovalEngine records
+        approval_status = "not_required"
+        if mission.pending_approval_id:
+            approval_status = "pending"
+            try:
+                approvals = self.approvals.list(mission_id)
+                for a in approvals:
+                    if a.get("approval_id") == mission.pending_approval_id:
+                        approval_status = a.get("status", "pending")
+                        break
+            except Exception as exc:
+                approval_status = "integrity_error"
+                self.audit.record("approval.integrity_failure", actor_id="inspect_mission", actor_type="system", mission_id=mission_id, action="inspect_mission", decision="integrity_error", risk_level=mission.spec.risk_level.value if mission.spec.risk_level else "R0", trace_id=mission.trace_id, metadata={"error": str(exc)[:500]})
+        # Provider unavailability: merge runtime init flag + mission recovery flag
+        runtime_unavailable = getattr(self, '_provider_unavailable', False)
+        mission_recovery = mission.result.get("recovery", {}) if isinstance(mission.result, dict) else {}
+        mission_unavailable = mission_recovery.get("provider_unavailable", False)
+        provider_unavailable = runtime_unavailable or mission_unavailable
+        # A report receipt must bind to this mission's file_write_report tool;
+        # an unrelated code execution receipt cannot satisfy completion truth.
+        tool_by_id = {
+            item.get("invocation_id"): item
+            for item in self.tools.list_invocations(mission_id)
+        }
+        expected_receipt_id = mission.result.get("receipt_evidence_id")
+        receipt_present = any(
+            evidence.get("kind") == "execution_receipt"
+            and (
+                not expected_receipt_id
+                or evidence.get("evidence_id") == expected_receipt_id
+            )
+            and tool_by_id.get(evidence.get("tool_invocation_id"), {}).get(
+                "tool_name"
+            )
+            == "file_write_report"
+            for evidence in evidence_list
+        )
+        return {
+            "mission_id": mission.mission_id,
+            "state": mission.state, "current_state": mission.state,
+            "risk_level": mission.spec.risk_level.value if mission.spec.risk_level else "R0",
+            "spec": mission.spec.model_dump(mode="json"),
+            "title": mission.spec.title, "objective": mission.spec.objective,
+            "created_at": mission.created_at, "started_at": mission.created_at,
+            "updated_at": mission.updated_at,
+            "provider": self.models.provider.name if hasattr(self.models, 'provider') else "mock",
+            "provider_unavailable": provider_unavailable,
+            "approval_status": approval_status, "pending_action": mission.pending_approval_id or None,
+            "evidence_count": len(evidence_list),
+            "latest_evidence": evidence_list[-1] if evidence_list else None,
+            "receipt_status": "present" if receipt_present else "missing",
+            "memory_patch_status": "patched" if mission.result.get("memory_patch_id") else "not_patched",
+            "evaluation_status": "passed" if mission.result.get("evaluation_passed") else ("failed" if "evaluation_id" in (mission.result or {}) else "not_evaluated"),
+            "retry_count": mission.result.get("retry_count", 0) if isinstance(mission.result, dict) else 0,
+            "recovery_pointer": mission.rollback_point,
+            "terminal_reason": mission.result.get("error") if mission.state in {"Failed", "Blocked"} else None,
+            "paused": mission.paused, "safe_mode": mission.safe_mode, "trace_id": mission.trace_id,
+        }
 
     def takeover(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)

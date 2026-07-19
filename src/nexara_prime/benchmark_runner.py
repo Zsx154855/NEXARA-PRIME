@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from .db import SQLiteStore
 from .events import EventBus
-from .models import Mission, new_id, now_iso
+from .models import Mission
 from .product_reality.models import BenchmarkResult, ImprovementProposal
 
 

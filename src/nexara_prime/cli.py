@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import runpy
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import Settings
@@ -171,7 +171,7 @@ def cmd_status() -> int:
         f"  Self-Evolution    {prog.get('self_evolution_loop', '?')}%",
         f"  Product Delivery  {prog.get('product_delivery', '?')}%",
         "",
-        f"  Next Gate",
+        "  Next Gate",
         f"  {state.get('next_gate', '?')}",
         f"  Updated           {state.get('updated_at', '?')}",
         "",
@@ -242,17 +242,73 @@ def cmd_doctor() -> int:
     # 9. No secrets tracked by git
     try:
         r = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True, cwd=str(root))
+        if r.returncode != 0:
+            raise RuntimeError("git_staged_file_query_failed")
         staged = r.stdout.strip().split("\n") if r.stdout.strip() else []
         secrets_found = []
+
+        scanner_rel = "scripts/security/scan_hardcoded_secrets.py"
+        scanner_path = root / scanner_rel
+        scan_file = None
+
+        # Check if scanner itself is staged or modified
+        scanner_staged_or_modified = False
+        try:
+            r_status = subprocess.run(
+                ["git", "status", "--porcelain", scanner_rel],
+                capture_output=True,
+                text=True,
+                cwd=str(root)
+            )
+            status_line = r_status.stdout.strip()
+            if status_line and not status_line.startswith("??"):
+                scanner_staged_or_modified = True
+        except Exception:
+            pass
+
+        # Try to load trusted scanner from git HEAD
+        temp_scanner_path = None
+        try:
+            r_show = subprocess.run(
+                ["git", "show", f"HEAD:{scanner_rel}"],
+                capture_output=True,
+                text=True,
+                cwd=str(root)
+            )
+            if r_show.returncode == 0 and r_show.stdout.strip():
+                import tempfile
+                fd, path_str = tempfile.mkstemp(suffix=".py")
+                temp_scanner_path = Path(path_str)
+                with open(fd, "w", encoding="utf-8") as f_temp:
+                    f_temp.write(r_show.stdout)
+                scan_file = runpy.run_path(str(temp_scanner_path)).get("scan_file")
+        except Exception:
+            pass
+
+        # Fallback to local scanner only if not staged/modified
+        if not scan_file:
+            if scanner_staged_or_modified:
+                raise RuntimeError("trusted_secret_scanner_modified")
+            if scanner_path.exists():
+                scan_file = runpy.run_path(str(scanner_path)).get("scan_file")
+
+        # Cleanup temp file if created
+        if temp_scanner_path and temp_scanner_path.exists():
+            try:
+                temp_scanner_path.unlink()
+            except Exception:
+                pass
+
+        if staged and not callable(scan_file):
+            raise RuntimeError("canonical_secret_scanner_unavailable")
+
         for f in staged:
             fp = root / f
-            if fp.exists() and fp.is_file():
-                txt = fp.read_text(errors="ignore")
-                if "sk-" in txt or "api_key" in txt.lower() or "password" in txt.lower():
-                    secrets_found.append(f)
+            if fp.exists() and fp.is_file() and scan_file and scan_file(fp):
+                secrets_found.append(f)
         check("No secrets staged", len(secrets_found) == 0, "ok" if not secrets_found else f"found: {secrets_found}")
-    except Exception:
-        check("No secrets staged", True, "skipped (no git)")
+    except Exception as exc:
+        check("No secrets staged", False, f"scan failed: {type(exc).__name__}")
 
     # 10. Worktree status
     try:
@@ -263,7 +319,7 @@ def cmd_doctor() -> int:
         check("Worktree status", True, "not a git repo")
 
     # Print
-    print(f"\n  NEXARA PRIME Doctor")
+    print("\n  NEXARA PRIME Doctor")
     print(f"  {'─' * 50}")
     print(f"  Repo: {root}")
     print()
@@ -282,7 +338,7 @@ def cmd_doctor() -> int:
 
 def cmd_secrets(args) -> int:
     """Handle secrets subcommands."""
-    from .secrets.base import SecretStore, redact_secrets
+    from .secrets.base import SecretStore
     from .secrets.memory import InMemorySecretStore
     import getpass
 
@@ -323,7 +379,6 @@ def cmd_connectors(args) -> int:
     """Handle connector subcommands."""
     if args.connectors_command == "list":
         try:
-            from .connectors.base import ConnectorManifest, ConnectorPermission, RiskLevel
             from .connectors.registry import ConnectorRegistry
             from .connectors.browser_readonly import BrowserReadOnlyConnector
             from .connectors.http_readonly import HTTPReadOnlyConnector
@@ -359,7 +414,7 @@ def cmd_connectors(args) -> int:
     elif args.connectors_command == "doctor":
         try:
             from .connectors.health import ConnectorHealthMonitor
-            hm = ConnectorHealthMonitor()
+            ConnectorHealthMonitor()
             print("  Connector health monitor: active")
             print("  Circuit breakers: 0 tracked")
             print("  All systems nominal")
@@ -388,9 +443,11 @@ def cmd_security(args) -> int:
         # Connectors
         try:
             from .connectors.browser_readonly import BrowserReadOnlyConnector
-            print(f"  Browser Connector: available (SSRF guard active)")
+            if BrowserReadOnlyConnector is None:
+                raise ImportError("browser connector class unavailable")
+            print("  Browser Connector: available (SSRF guard active)")
         except ImportError:
-            print(f"  Browser Connector: import failed")
+            print("  Browser Connector: import failed")
         # Sandbox
         try:
             from .sandbox_v2 import MacOSSandboxBackend
@@ -398,14 +455,14 @@ def cmd_security(args) -> int:
             flags_str = ", ".join(cap.flags) if cap.flags else "none"
             print(f"  Sandbox:           {cap.sandbox_mechanism} (flags: {flags_str})")
         except ImportError:
-            print(f"  Sandbox:           not available")
+            print("  Sandbox:           not available")
         # Identity
         try:
             from .identity import IdentityStore
             store = IdentityStore()
-            print(f"  Identity:          local-owner mode (localhost-only)")
+            print("  Identity:          local-owner mode (localhost-only)")
         except ImportError:
-            print(f"  Identity:          not available")
+            print("  Identity:          not available")
         # Audit
         try:
             from .security_audit import SecurityAuditLedger
@@ -420,10 +477,12 @@ def cmd_security(args) -> int:
             finally:
                 store.close()
         except ImportError:
-            print(f"  Audit Chain:       not available")
-        # Provider
-        print(f"  Provider:          mock-only (no real provider validated)")
-        print(f"  Network:           deny-by-default")
+            print("  Audit Chain:       not available")
+        # Provider — report configured truth without reading or printing credentials.
+        provider_settings = Settings.from_env(_resolve_repo_root())
+        provider_name = "mock (explicit)" if provider_settings.mock_model else provider_settings.model_provider
+        print(f"  Provider:          {provider_name or 'none'}")
+        print("  Network:           deny-by-default")
         print()
 
     elif args.security_command == "audit":
@@ -484,7 +543,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.mission_command == "create":
                 _print(runtime.create_mission(args.objective, args.source_dir))
             elif args.mission_command == "status":
-                _print(runtime.get_mission(args.mission_id))
+                _print(runtime.inspect_mission(args.mission_id))
             elif args.mission_command == "plan":
                 _print(runtime.plan_mission(args.mission_id))
             elif args.mission_command == "approve":

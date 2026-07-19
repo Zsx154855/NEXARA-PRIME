@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-import typing as t
-
-if t.TYPE_CHECKING:
-    from .base import SecretBackend
 
 
 _SECURITY = "/usr/bin/security"
@@ -102,7 +98,7 @@ class MacOSKeychainSecretStore:
         lines = result.stdout.splitlines()
         for i, line in enumerate(lines):
             # Look for 'acct' lines with nexara account
-            if f'"acct"' in line and _KEYCHAIN_ACCOUNT in line:
+            if '"acct"' in line and _KEYCHAIN_ACCOUNT in line:
                 # Scan nearby lines for the service name
                 for j in range(max(0, i - 3), min(len(lines), i + 3)):
                     if '"svce"' in lines[j]:

@@ -15,9 +15,7 @@ import os
 import sys
 import tempfile
 import unittest
-import hashlib
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -149,7 +147,7 @@ class SecretSecurityTests(unittest.TestCase):
 
 class PathSecurityTests(unittest.TestCase):
     def setUp(self):
-        from nexara_prime.sandbox_v2 import _validate_path, _workspace_jail_execute
+        from nexara_prime.sandbox_v2 import _validate_path
         self._validate_path = _validate_path
         self.tmpdir = tempfile.mkdtemp()
 
@@ -419,7 +417,7 @@ class IdentityAuthorizationTests(unittest.TestCase):
         store._user.roles = [self.Role.READ_ONLY]
         g = store.grant_permission("mission.create", "admin")
         self.assertIsNotNone(g.grant_id)
-        r = store.revoke_permission(g.grant_id, "admin", "test revoke")
+        store.revoke_permission(g.grant_id, "admin", "test revoke")
         self.assertFalse(store.check_permission("local-owner", "mission.create"))
 
     def test_revoked_permission_denied(self):
@@ -558,7 +556,7 @@ class NetworkPolicyTests(unittest.TestCase):
 
 class SandboxCapabilityTests(unittest.TestCase):
     def test_macos_probe(self):
-        from nexara_prime.sandbox_v2 import MacOSSandboxBackend, OS_SANDBOX_CAPABLE
+        from nexara_prime.sandbox_v2 import MacOSSandboxBackend
         sb = MacOSSandboxBackend()
         cap = sb.probe_capability()
         self.assertIsNotNone(cap.sandbox_mechanism)
@@ -599,7 +597,6 @@ class BrowserE2ETests(unittest.TestCase):
     def test_browser_post_rejected(self):
         """POST must be rejected in read-only mode."""
         # This is tested at the connector level — POST is blocked
-        from nexara_prime.connectors.browser_readonly import _ssrf_check
         from nexara_prime.network_policy import NetworkPolicyEngine
         engine = NetworkPolicyEngine(deny_by_default=False)
         engine.allow_domain("example.com")
