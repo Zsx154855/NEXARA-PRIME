@@ -56,7 +56,7 @@ def _ensure_adapters(runtime):
         _ensure_adapters._last_runtime_id = id(runtime)
         _ADAPTERS_INITIALIZED = False  # Force re-init for new runtime
         try:
-    
+
             from .browser_adapter import GovernedBrowserAdapter, MockBrowserDriver
             _browser_adapter = GovernedBrowserAdapter(
                 MockBrowserDriver(),
@@ -138,7 +138,7 @@ def _ensure_adapters(runtime):
             )
         except ImportError:
             pass
-    
+
         _ADAPTERS_INITIALIZED = True
 
 # Adaptive Runtime imports (lazy — loaded on first use)
@@ -431,9 +431,14 @@ class NexaraRuntime:
         # This check must precede the provider call or a restart can duplicate
         # an already completed and billed model request.
         legacy_key = f"{mission.mission_id}:model-completion"
+        legacy_raw = self.store.find_record(
+            "model_response", "idempotency_key", legacy_key
+        )
         legacy_envelope = self.store.find_record_envelope(
             "model_response", "idempotency_key", legacy_key
         )
+        if legacy_raw and not legacy_envelope:
+            raise ValueError("model_response_integrity_invalid")
         legacy = (
             legacy_envelope["payload"]
             if legacy_envelope
@@ -567,6 +572,8 @@ class NexaraRuntime:
                 raise ValueError("verification_evidence_invalid") from exc
             if not isinstance(stored_verification, dict):
                 raise ValueError("verification_evidence_invalid")
+            # Verify evidence integrity via evidence store before relying on stored content
+            self.evidence.verify(existing["evidence_id"])
             stable_fields = {"exists", "bytes", "non_empty", "sha256"}
             if (
                 any(
@@ -634,6 +641,18 @@ class NexaraRuntime:
             return False
         if self.evidence.verify_all(mission.mission_id)["invalid"]:
             return False
+        mem_id = mission.result.get("memory_patch_id")
+        if mem_id:
+            mem_envelope = self.store.get_record_envelope(mem_id)
+            if not mem_envelope:
+                return False
+            mkey = f"{mission.mission_id}:memory_patch"
+            idem_envelope = self.store.find_record_envelope("memory_idempotency", "idempotency_key", mkey)
+            if not idem_envelope or idem_envelope.get("mission_id") != mission.mission_id:
+                return False
+            mapping = idem_envelope["payload"]
+            if mapping.get("memory_id") != mem_id:
+                return False
         approvals = self.approvals.list(mission.mission_id)
         if mission.spec.risk_level.value in {"R2", "R3", "R4"} and not any(item.get("status") in {"approved", "consumed"} for item in approvals):
             return False
@@ -664,9 +683,14 @@ class NexaraRuntime:
         self, key: str, mission_id: str
     ) -> dict[str, Any] | None:
         """Return an integrity-checked evidence projection for one replay key."""
-        for evidence in self.evidence.list(mission_id):
-            if evidence.get("idempotency_key") == key:
-                return evidence
+        raw_evidence = self.store.find_record("evidence", "idempotency_key", key)
+        evidence_envelope = self.store.find_record_envelope("evidence", "idempotency_key", key)
+        if raw_evidence and not evidence_envelope:
+            raise ValueError("evidence_integrity_invalid")
+        if evidence_envelope:
+            if evidence_envelope.get("mission_id") != mission_id:
+                raise ValueError("evidence_mission_mismatch")
+            return evidence_envelope["payload"]
         return None
 
     def pause(self, mission_id: str) -> Mission:

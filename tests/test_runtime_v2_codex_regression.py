@@ -213,3 +213,261 @@ class TestThread7ReceiptVerifiability:
                     print(f"Evidence file found: {ef.name}")
             else:
                 print("No PR17 evidence files yet (valid: staged tracked evidence is committed separately)")
+
+
+class TestThread8ToolReplayEnvelopeFailClosed:
+    """Thread 8: Fail closed on invalid/corrupt tool replay envelopes."""
+
+    def test_invalid_tool_envelope_raises_integrity_error(self, tmp_path: Path) -> None:
+        import pytest
+        from nexara_prime.runtime import NexaraRuntime
+        from nexara_prime.tools import ToolInvocation
+
+        rt = NexaraRuntime(_make_settings(tmp_path))
+        m = rt.create_mission("tool envelope test")
+
+        ikey = f"{m.mission_id}:test-tool"
+        inv = ToolInvocation(
+            invocation_id="tool-123",
+            mission_id=m.mission_id,
+            tool_name="code_exec",
+            arguments={"code": "print('hello')"},
+            trace_id=m.trace_id,
+            status="completed",
+            result={"output": "hello"},
+            idempotency_key=ikey,
+        )
+        rt.store.save_record(
+            inv.invocation_id,
+            "tool",
+            inv.model_dump(mode="json"),
+            inv.created_at,
+            m.mission_id,
+        )
+
+        # Corrupt integrity in DB
+        rt.store._conn.execute(
+            "UPDATE records SET integrity_sha256='corrupt' WHERE record_id=?",
+            (inv.invocation_id,)
+        )
+        rt.store._conn.commit()
+
+        with pytest.raises(ValueError, match="tool_integrity_invalid"):
+            rt.tools.invoke(
+                m.mission_id,
+                "code_exec",
+                {"code": "print('hello')"},
+                m.trace_id,
+                idempotency_key=ikey,
+            )
+
+
+class TestThread9LegacyModelEnvelopeFailClosed:
+    """Thread 9: Fail closed when legacy model envelopes are invalid."""
+
+    def test_invalid_legacy_model_envelope_raises_integrity_error(self, tmp_path: Path) -> None:
+        import pytest
+        from nexara_prime.runtime import NexaraRuntime
+        from nexara_prime.models import now_iso
+
+        rt = NexaraRuntime(_make_settings(tmp_path))
+        m = rt.create_mission("legacy model envelope test")
+        rt.plan_mission(m.mission_id)
+        rt.approve_mission(m.mission_id, approved=True)
+
+        legacy_key = f"{m.mission_id}:model-completion"
+        rt.store.save_record(
+            "model_legacy",
+            "model_response",
+            {
+                "provider": "legacy-provider",
+                "model": "legacy-model",
+                "text": "legacy durable output",
+                "input_tokens": 11,
+                "output_tokens": 7,
+                "cost_usd": 0.01,
+                "trace_id": m.trace_id,
+                "idempotency_key": legacy_key,
+            },
+            now_iso(),
+            m.mission_id,
+        )
+
+        # Corrupt the model_response envelope
+        rt.store._conn.execute(
+            "UPDATE records SET integrity_sha256='corrupt' WHERE record_id='model_legacy'"
+        )
+        rt.store._conn.commit()
+
+        with pytest.raises(ValueError, match="model_response_integrity_invalid"):
+            rt.run_mission(m.mission_id)
+
+
+class TestThread10MemoryReplayMappingValidation:
+    """Thread 10: Validate memory replay mappings before accepting them."""
+
+    def test_invalid_memory_idempotency_raises_error(self, tmp_path: Path) -> None:
+        import pytest
+        from nexara_prime.runtime import NexaraRuntime
+
+        rt = NexaraRuntime(_make_settings(tmp_path))
+        m = rt.create_mission("memory envelope test")
+        rt.plan_mission(m.mission_id)
+        rt.approve_mission(m.mission_id, approved=True)
+
+        mkey = f"{m.mission_id}:memory_patch"
+        rt.memory.patch(
+            m.mission_id,
+            "mission.completed_report",
+            "A bounded local report was generated and verified.",
+            m.trace_id,
+            "evidence-id-123",
+            idempotency_key=mkey,
+        )
+
+        # Corrupt the memory idempotency record's envelope
+        row = rt.store._conn.execute(
+            "SELECT record_id FROM records WHERE record_type='memory_idempotency' AND mission_id=?",
+            (m.mission_id,)
+        ).fetchone()
+        assert row is not None
+        rec_id = row["record_id"]
+
+        rt.store._conn.execute(
+            "UPDATE records SET integrity_sha256='corrupt' WHERE record_id=?",
+            (rec_id,)
+        )
+        rt.store._conn.commit()
+
+        with pytest.raises(ValueError, match="memory_idempotency_integrity_invalid"):
+            rt.memory.patch(
+                m.mission_id,
+                "mission.completed_report",
+                "A bounded local report was generated and verified.",
+                m.trace_id,
+                "evidence-id-123",
+                idempotency_key=mkey,
+            )
+
+    def test_corrupt_memory_record_envelope_raises_error(self, tmp_path: Path) -> None:
+        import pytest
+        from nexara_prime.runtime import NexaraRuntime
+
+        rt = NexaraRuntime(_make_settings(tmp_path))
+        m = rt.create_mission("memory record envelope test")
+
+        mkey = f"{m.mission_id}:memory_patch"
+        mem = rt.memory.patch(
+            m.mission_id,
+            "mission.completed_report",
+            "A bounded local report was generated and verified.",
+            m.trace_id,
+            "evidence-id-123",
+            idempotency_key=mkey,
+        )
+
+        # Corrupt the memory record's envelope itself
+        rt.store._conn.execute(
+            "UPDATE records SET integrity_sha256='corrupt' WHERE record_id=?",
+            (mem.memory_id,)
+        )
+        rt.store._conn.commit()
+
+        with pytest.raises(ValueError, match="memory_record_integrity_invalid"):
+            rt.memory.patch(
+                m.mission_id,
+                "mission.completed_report",
+                "A bounded local report was generated and verified.",
+                m.trace_id,
+                "evidence-id-123",
+                idempotency_key=mkey,
+            )
+
+
+class TestThread11VerificationReplayEvidenceEnvelope:
+    """Thread 11: Read verification replay evidence through envelopes."""
+
+    def test_invalid_verification_evidence_envelope_raises_error(self, tmp_path: Path) -> None:
+        import pytest
+        import json
+        from nexara_prime.runtime import NexaraRuntime
+
+        rt = NexaraRuntime(_make_settings(tmp_path))
+        m = rt.create_mission("verification envelope test")
+        rt.plan_mission(m.mission_id)
+        rt.approve_mission(m.mission_id, approved=True)
+
+        # Run the execute stage to produce a report on disk
+        result = rt.run_mission(m.mission_id)
+        assert result.state == "Completed"
+        report_path = result.result.get("report_path", "")
+        # Reload fresh mission (run_mission mutated the persisted state)
+        m = rt.get_mission(m.mission_id)
+        vkey = f"{m.mission_id}:verification_evidence"
+        evidence = rt.evidence.list(m.mission_id)
+        ev = next((e for e in evidence if e.get("idempotency_key") == vkey), None)
+
+        # Corrupt it by modifying the stored content, which breaks envelope_sha256
+        # during _verify_stage's integrity validation in _get_evidence_by_idempotency.
+        stored = rt.store.get_record_envelope(ev["evidence_id"])
+        # payload is already a parsed dict from get_record_envelope
+        corrupt_content = dict(stored["payload"])
+        corrupt_content["content"] = "corrupted-content-" + str(corrupt_content.get("content", ""))
+        rt.store._conn.execute(
+            "UPDATE records SET payload=? WHERE record_id=?",
+            (json.dumps(corrupt_content), ev["evidence_id"]),
+        )
+        rt.store._conn.commit()
+
+        # Preserve the MissionState enum instead of assigning a raw string.
+        # A raw string bypasses the runtime's enum-based Verification branch and
+        # therefore does not exercise verification replay integrity enforcement.
+        state_type = type(m.state)
+        m.state = next(
+            state
+            for state in state_type
+            if getattr(state, "value", None) == "Verification"
+        )
+        rt._save_mission(m)
+
+        # run_mission() dispatches to _verify_stage, which replays evidence.add()
+        # with the same idempotency_key — the corrupted content breaks
+        # envelope_sha256 validation in _replay_and_repair_event.
+        with pytest.raises(ValueError, match="evidence_integrity_invalid"):
+            rt.run_mission(m.mission_id)
+
+
+class TestThread12TrustedSecretScanner:
+    """Thread 12: Load the secret scanner from a trusted source."""
+
+    def test_staged_scanner_change_is_rejected(self, tmp_path: Path, monkeypatch) -> None:
+        import subprocess
+        from nexara_prime.cli import cmd_doctor
+        import shutil
+
+        (tmp_path / ".nexara").mkdir()
+        (tmp_path / ".nexara" / "PROJECT_STATE.json").write_text("{}")
+        for directory in ("docs", "src", "tests", "scripts/security"):
+            (tmp_path / directory).mkdir(parents=True, exist_ok=True)
+
+        scanner = (
+            Path(__file__).resolve().parents[1]
+            / "scripts"
+            / "security"
+            / "scan_hardcoded_secrets.py"
+        )
+        dest_scanner = tmp_path / "scripts/security/scan_hardcoded_secrets.py"
+        shutil.copy2(scanner, dest_scanner)
+
+        # Initialize git and stage a change to the scanner itself!
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+        with open(dest_scanner, "a") as f:
+            f.write("\n# modified scanner comment\n")
+
+        subprocess.run(["git", "add", "scripts/security/scan_hardcoded_secrets.py"], cwd=tmp_path, check=True)
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("VIRTUAL_ENV", str(tmp_path / ".venv"))
+
+        # Running cmd_doctor should return 1 because the scanner itself is modified/staged!
+        assert cmd_doctor() == 1
