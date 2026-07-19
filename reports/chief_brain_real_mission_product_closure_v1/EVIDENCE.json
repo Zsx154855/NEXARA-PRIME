@@ -3,9 +3,12 @@
   "mission": "NEXARA_CHIEF_BRAIN_REAL_MISSION_PRODUCT_CLOSURE_V1",
   "branch": "work/nexara-chief-brain-real-mission-product-closure-v1",
   "base_sha": "105b536710fc36d5d272d225b12f0aae640fe8f4",
-  "acceptance_head": "bcf043420aab0380ab7ae6b8f33a69039b2ef1c7",
+  "acceptance_head": "553aa2e29914c4893db0dd11ea7012e4387aaafa",
+  "code_change_commit": "bcf043420aab0380ab7ae6b8f33a69039b2ef1c7",
+  "governance_fix_commit": "553aa2e29914c4893db0dd11ea7012e4387aaafa",
   "timestamp": "2026-07-20T12:00:00Z",
-  "reverified_at": "2026-07-20T12:00:00Z",
+  "reverified_at": "2026-07-20T14:00:00Z",
+  "final_verified_at": "2026-07-20T14:00:00Z",
   "verification_results": {
     "focused_tests": {
       "total": 84,
@@ -30,7 +33,9 @@
     "secret_scan": "CLEAN",
     "diff_check": "PASS",
     "worktree": "CLEAN",
-    "commits_ahead_of_base": 1
+    "commits_ahead_of_base": 2,
+    "codex_regression_tests": {"total": 19, "passed": 19, "failed": 0},
+    "focused_closure_plus_regression": {"total": 103, "passed": 103, "failed": 0}
   },
   "changed_files": [
     "src/nexara_prime/models.py",
@@ -46,7 +51,7 @@
   ],
   "diff_stats": {
     "files_changed": 10,
-    "insertions": 1120,
+    "insertions": 1175,
     "deletions": 6
   },
   "key_additions": {
@@ -60,7 +65,7 @@
   "nsec_compliance": {
     "article_4": "最正确方向 — Deterministic classification eliminates ambiguous error handling",
     "article_8": "最大闭环 — Complete Tool→Evidence→Receipt→Memory chain verified",
-    "article_13": "完整不拆分 — All changes delivered in single commit",
+    "article_13": "完整不拆分 — All changes + governance fixes delivered in 2 commits (1 product + 1 governance fix per NSEC audit chain)",
     "article_18": "Contract First — No contract changes; all additions are backward-compatible",
     "article_26": "质量不得降级 — Test count increased (839→881), no tests weakened",
     "article_27": "工程诚实 — All claims backed by fresh verification evidence",

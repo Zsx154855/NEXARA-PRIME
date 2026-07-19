@@ -3,8 +3,11 @@
 **Date**: 2026-07-20
 **Branch**: `work/nexara-chief-brain-real-mission-product-closure-v1`
 **Base SHA**: `105b536710fc36d5d272d225b12f0aae640fe8f4`
-**Acceptance HEAD**: `bcf043420aab0380ab7ae6b8f33a69039b2ef1c7`
-**Re-verified**: 2026-07-20T12:00:00Z
+**Acceptance HEAD**: `553aa2e29914c4893db0dd11ea7012e4387aaafa`
+**Code Change Commit**: `bcf043420aab0380ab7ae6b8f33a69039b2ef1c7`
+**Governance Fix Commit**: `553aa2e29914c4893db0dd11ea7012e4387aaafa`
+**Re-verified**: 2026-07-20T14:00:00Z
+**Final Verified**: 2026-07-20T14:00:00Z
 **NSEC Compliance**: NSEC V2.0 — This component SHALL comply with the NEXARA Sovereign Engineering Constitution.
 
 ---
@@ -75,15 +78,17 @@
 | Check | Result |
 |---|---|
 | Focused Tests (84 total) | 84 passed — 42 chief_brain_closure_v1 + 42 e2e_runtime_closure |
+| Codex Regression (test_runtime_v2_codex_regression.py) | 19 passed |
+| Focused + Regression Combined | 103 passed |
 | Full Test Suite | 881 passed, 3 subtests passed — 0 failures |
 | Ruff Lint (branch scope) | CLEAN (7 pre-existing issues in scripts/runtime_truth/, not in branch diff) |
 | NSEC Validation | PASS |
 | NSEC Drift Detection | NO DRIFT |
 | Secret Scan | CLEAN — no hardcoded secrets |
 | Git Diff Check | PASS |
-| Worktree | CLEAN |
-| Commits Ahead of Base | 1 |
-| Changed Files | 10 (+1120/-6) |
+| Worktree | CLEAN (untracked .nexara/onepass/ artifacts only) |
+| Commits Ahead of Base | 2 |
+| Changed Files | 10 (+1175/-6) |
 
 ---
 
