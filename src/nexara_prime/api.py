@@ -127,6 +127,19 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     def approvals(mission_id: str | None = None) -> list[dict[str, Any]]:
         return runtime.approvals.list(mission_id)
 
+    @app.get("/api/receipts")
+    def receipts(mission_id: str | None = None) -> dict[str, Any]:
+        if mission_id:
+            return runtime.evidence.verify_receipt_chain(mission_id)
+        missions = runtime.list_missions()
+        results = {}
+        for m in missions:
+            mid = m["mission_id"]
+            invocations = runtime.store.list_records("tool", mid)
+            if invocations:
+                results[mid] = runtime.evidence.verify_receipt_chain(mid)
+        return {"missions": results, "total": len(results)}
+
     @app.get("/api/evidence")
     def evidence(mission_id: str | None = None) -> list[dict[str, Any]]:
         return runtime.evidence.list(mission_id)
@@ -188,7 +201,10 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     ui_root = Path(__file__).resolve().parents[2] / "ui"
     if ui_root.exists():
-        app.mount("/console", StaticFiles(directory=ui_root, html=True), name="console")
+        # Serve Next.js static export if available; fall back to legacy static
+        out_root = ui_root / "out"
+        console_root = out_root if out_root.exists() and (out_root / "index.html").exists() else ui_root
+        app.mount("/console", StaticFiles(directory=console_root, html=True), name="console")
         universe_root = ui_root / "knowledge-universe"
         if universe_root.exists():
             app.mount("/knowledge-universe", StaticFiles(directory=universe_root, html=True), name="knowledge-universe")
