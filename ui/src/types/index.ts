@@ -450,6 +450,32 @@ export interface SafeModeBody {
   enabled?: boolean;
 }
 
+export interface ReceiptChainItem {
+  invocation_id: string;
+  tool_name: string;
+  status: string;
+  failure_code: string | null;
+  reason_code: string | null;
+  receipt_evidence_id: string | null;
+  has_receipt: boolean;
+  receipt_verifiable: boolean;
+}
+
+export interface ReceiptChainResponse {
+  mission_id: string;
+  total_invocations: number;
+  chain_gaps: number;
+  unverifiable_receipts: number;
+  fail_closed_violations: number;
+  chain_intact: boolean;
+  chain: ReceiptChainItem[];
+}
+
+export interface ReceiptsResponse {
+  missions: Record<string, ReceiptChainResponse>;
+  total: number;
+}
+
 // ── Generic API wrappers ──
 
 export interface ApiResult<T> {

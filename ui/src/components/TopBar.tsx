@@ -17,6 +17,7 @@ const SCREEN_LABELS: Record<Screen, string> = {
   overview: "主脑总览",
   "mission-creator": "任务创建",
   "mission-workspace": "任务工作区",
+  "agent-team": "智能体团队",
   approvals: "审批中心",
   evidence: "证据与回执",
   capabilities: "能力注册",

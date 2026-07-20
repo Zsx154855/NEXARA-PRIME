@@ -14,6 +14,8 @@ import type {
   MemoryRecord,
   Event,
   RecoveryStateResponse,
+  ReceiptChainResponse,
+  ReceiptsResponse,
   MissionCreateRequest,
   ApprovalBody,
   SafeModeBody,
@@ -491,6 +493,13 @@ export function triageAdaptiveMissionSafe(
   return apiResult(triageAdaptiveMission(missionId));
 }
 
+// ── Receipts ──
+
+export function fetchReceipts(missionId?: string): Promise<ReceiptsResponse | ReceiptChainResponse> {
+  const params = missionId ? `?mission_id=${encodeURIComponent(missionId)}` : "";
+  return request<ReceiptsResponse | ReceiptChainResponse>("GET", `/api/receipts${params}`);
+}
+
 // ── Class wrapper (convenience for React components) ──
 
 export class NexaraAPI {
@@ -512,6 +521,7 @@ export class NexaraAPI {
   getEvents(id: string) { return fetchEvents(id); }
   fetchEvents(id: string) { return fetchEvents(id); }
   fetchTools(_id: string) { return Promise.resolve([]); }
+  getReceipts(id?: string) { return fetchReceipts(id); }
   checkRecovery() { return checkRecovery(); }
   getAdaptiveStatus() { return fetchAdaptiveStatus(); }
 }

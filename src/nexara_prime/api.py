@@ -127,6 +127,19 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     def approvals(mission_id: str | None = None) -> list[dict[str, Any]]:
         return runtime.approvals.list(mission_id)
 
+    @app.get("/api/receipts")
+    def receipts(mission_id: str | None = None) -> dict[str, Any]:
+        if mission_id:
+            return runtime.evidence.verify_receipt_chain(mission_id)
+        missions = runtime.list_missions()
+        results = {}
+        for m in missions:
+            mid = m["mission_id"]
+            invocations = runtime.store.list_records("tool", mid)
+            if invocations:
+                results[mid] = runtime.evidence.verify_receipt_chain(mid)
+        return {"missions": results, "total": len(results)}
+
     @app.get("/api/evidence")
     def evidence(mission_id: str | None = None) -> list[dict[str, Any]]:
         return runtime.evidence.list(mission_id)

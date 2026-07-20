@@ -192,9 +192,13 @@ export function EvidenceViewer({ api, overview }: EvidenceViewerProps) {
   }, [loadEvidence, filterMission]);
 
   const handleCopy = (id: string) => {
-    navigator.clipboard.writeText(id).catch(() => {});
-    setCopyFeedback(id);
-    setTimeout(() => setCopyFeedback(null), 2000);
+    navigator.clipboard.writeText(id).then(() => {
+      setCopyFeedback(id);
+      setTimeout(() => setCopyFeedback(null), 2000);
+    }).catch(() => {
+      setCopyFeedback("error");
+      setTimeout(() => setCopyFeedback(null), 2000);
+    });
   };
 
   // Loading state
@@ -269,8 +273,13 @@ export function EvidenceViewer({ api, overview }: EvidenceViewerProps) {
 
       {/* Copy feedback toast */}
       {copyFeedback && (
-        <div className="fixed bottom-6 right-6 z-50 animate-slide-up rounded-lg bg-text-primary px-4 py-2 text-sm text-text-on-dark shadow-lg">
-          已复制证据 ID
+        <div className={cn(
+          "fixed bottom-6 right-6 z-50 animate-slide-up rounded-lg px-4 py-2 text-sm shadow-lg",
+          copyFeedback === "error"
+            ? "bg-warm-red/90 text-ivory"
+            : "bg-graphite text-ivory"
+        )}>
+          {copyFeedback === "error" ? "复制失败 — 请检查浏览器权限" : "已复制证据 ID"}
         </div>
       )}
 

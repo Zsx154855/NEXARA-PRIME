@@ -5,6 +5,7 @@ import { NexaraAPI } from "@/lib/api";
 import { RuntimeOverview } from "@/types";
 import { Sidebar } from "@/components/Sidebar";
 import { TopBar } from "@/components/TopBar";
+import { AgentTeam } from "@/components/screens/AgentTeam";
 import { Overview } from "@/components/screens/Overview";
 import { MissionCreator } from "@/components/screens/MissionCreator";
 import { MissionWorkspace } from "@/components/screens/MissionWorkspace";
@@ -17,6 +18,7 @@ export type Screen =
   | "overview"
   | "mission-creator"
   | "mission-workspace"
+  | "agent-team"
   | "approvals"
   | "evidence"
   | "capabilities"
@@ -63,7 +65,7 @@ export default function DashboardShell() {
   return (
     <div className="flex h-screen overflow-hidden bg-ivory text-graphite">
       {/* Left Sidebar Navigation */}
-      <Sidebar screen={screen} onNavigate={setScreen} overview={overview} />
+      <Sidebar screen={screen} onNavigate={setScreen} onMissionSelect={handleMissionSelect} overview={overview} />
 
       {/* Main Content Area */}
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -93,6 +95,9 @@ export default function DashboardShell() {
               missionId={selectedMissionId}
               onBack={() => setScreen("overview")}
             />
+          )}
+          {screen === "agent-team" && (
+            <AgentTeam api={api} overview={overview} />
           )}
           {screen === "approvals" && (
             <ApprovalCenter api={api} />

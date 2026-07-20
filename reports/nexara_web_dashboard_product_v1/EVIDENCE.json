@@ -44,5 +44,32 @@
     "hardcoded_fake_agents": 0,
     "mock_product_data": "NO",
     "non_functional_buttons": "NO"
+  },
+  "acceptance_repair": {
+    "evidence_id": "web-dashboard-acceptance-v1-20260720T031136Z",
+    "workstream": "NEXARA_WEB_DASHBOARD_PRODUCT_V1_ACCEPTANCE_REPAIR_ONEPASS",
+    "base_head": "62cc4d4cbaf5566df3919f2bcb7cc8b6e6150535",
+    "code_head": "3719a2ca74e099f1dd9d8a411ebe46d495f70483",
+    "timestamp": "2026-07-20T03:11:36.090501+00:00",
+    "screens_implemented": 8,
+    "verification": {
+      "pytest": "885/885 PASS (881 original + 4 receipt tests)",
+      "nsrc": "PASS",
+      "drift": "NO DRIFT",
+      "ruff": "CLEAN (F401/F841)",
+      "secret_scan": "***",
+      "frontend_build": "PASS (Next.js 16 static export)",
+      "diff_check": "CLEAN"
+    },
+    "repairs_completed": {
+      "agent_team_screen": "YES \u2014 8th screen, reads real adaptive API",
+      "mobile_navigation": "YES \u2014 bottom nav bar with 5 primary + more menu, lg:hidden sidebar",
+      "receipt_endpoint": "YES \u2014 GET /api/receipts + 4 tests",
+      "receipt_types_and_api": "YES \u2014 RecieptChainItem/Response types, getReceipts() client",
+      "nested_buttons": "FIXED \u2014 EvidenceRow uses div + separate expand/copy buttons",
+      "silent_catch": "FIXED \u2014 copy failure shows error toast",
+      "recent_missions": "FIXED \u2014 clickable, calls onMissionSelect",
+      "eslint_config": "YES \u2014 eslint.config.mjs flat config"
+    }
   }
 }
