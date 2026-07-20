@@ -49,7 +49,7 @@
     "evidence_id": "web-dashboard-acceptance-v1-20260720T031136Z",
     "workstream": "NEXARA_WEB_DASHBOARD_PRODUCT_V1_ACCEPTANCE_REPAIR_ONEPASS",
     "base_head": "62cc4d4cbaf5566df3919f2bcb7cc8b6e6150535",
-    "code_head": "3719a2ca74e099f1dd9d8a411ebe46d495f70483",
+    "code_head": "1d16adf36bdf69de293d4e58bb06697875636f1b",
     "timestamp": "2026-07-20T03:11:36.090501+00:00",
     "screens_implemented": 8,
     "verification": {
