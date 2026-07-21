@@ -15,6 +15,7 @@ from .evaluation import EvaluationEngine
 from .evidence import EvidenceStore
 from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine, WriterLeaseManager
+from .independent_review import IndependentReview
 from .memory import MemoryKernel
 from .mission_compiler import MissionCompiler
 from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider, ProviderUnavailable, UnavailableProvider
@@ -23,6 +24,7 @@ from .models import (
     now_iso, new_id,
 )
 from .recovery import DurableRecovery
+from .real_context import ContextCollectionError, RealRepositoryContext, RepositoryContext
 from .scheduler import AdaptiveScheduler
 from .security_audit import SecurityAuditLedger
 from .state_machine import MissionStateMachine
@@ -219,6 +221,7 @@ class NexaraRuntime:
         self.evaluator = EvaluationEngine(self.store, self.events)
         self.state_machine = MissionStateMachine(self.events, self.evidence)
         self.recovery = DurableRecovery(self.store, self.events)
+        self.repository_context = RealRepositoryContext()
 
     # ── Adapter accessors ──
 
@@ -284,6 +287,17 @@ class NexaraRuntime:
                 model=os.getenv("NEXARA_MODEL_NAME", "gpt-4o-mini"),
                 api_key=api_key,
             )
+        elif provider_name == "deepseek":
+            api_key = self._resolve_api_key("deepseek_api_key", "DEEPSEEK_API_KEY")
+            if not api_key:
+                self._provider_unavailable = True
+                return ModelGateway(UnavailableProvider())
+            provider = OpenAICompatibleProvider(
+                os.getenv("NEXARA_MODEL_ENDPOINT", "https://api.deepseek.com/v1"),
+                model=os.getenv("NEXARA_MODEL_NAME", "deepseek-chat"),
+                api_key=api_key,
+                provider_name="deepseek",
+            )
         elif provider_name == "local":
             endpoint = os.getenv("NEXARA_LOCAL_MODEL_ENDPOINT")
             if not endpoint:
@@ -295,6 +309,21 @@ class NexaraRuntime:
             return ModelGateway(UnavailableProvider())
         self._provider_unavailable = False
         return ModelGateway(provider, fallback=None)
+
+    @staticmethod
+    def _resolve_api_key(secret_name: str, env_var: str) -> str | None:
+        """Resolve Keychain first, with an explicit environment fallback."""
+        require_keychain = os.getenv("NEXARA_REQUIRE_KEYCHAIN_CREDENTIAL", "").lower() in {"1", "true", "yes"}
+        try:
+            from .secrets.keychain import MacOSKeychainSecretStore
+            store = MacOSKeychainSecretStore()
+            if store.exists(secret_name):
+                return store.get(secret_name)
+        except (ImportError, RuntimeError, OSError):
+            pass
+        if require_keychain:
+            raise RuntimeError(f"keychain_credential_required:{secret_name}")
+        return os.getenv(env_var)
 
     def _save_mission(self, mission: Mission) -> None:
         mission.updated_at = now_iso()
@@ -335,6 +364,40 @@ class NexaraRuntime:
             trace_id=mission.trace_id, metadata={"from_state": previous, "to_state": target.value},
         )
 
+    def _collect_repository_context(self, mission: Mission) -> RepositoryContext | None:
+        if not mission.spec.source_dir:
+            return None
+        try:
+            return self.repository_context.collect(mission.spec.source_dir)
+        except (ContextCollectionError, RuntimeError):
+            return None
+
+    def _execution_context(self, mission: Mission) -> RepositoryContext | None:
+        context = self._collect_repository_context(mission)
+        expected = mission.result.get("context_hash")
+        if expected and (context is None or context.context_hash != expected):
+            raise ValueError("context_hash_mismatch")
+        return context
+
+    def _assignment_lifecycle(self, mission: Mission, assignment, status: str, actor: str, step_id: str | None = None) -> None:
+        assignment.status = status
+        assignment.current_step_id = step_id
+        item = {
+            "assignment_id": assignment.assignment_id,
+            "mission_id": mission.mission_id,
+            "role": assignment.runtime_role.value,
+            "persona": assignment.persona.value,
+            "step_id": step_id,
+            "status": status,
+            "actor": actor,
+            "timestamp": now_iso(),
+        }
+        mission.agent_lifecycle.append(item)
+        self.events.publish("assignment.lifecycle", mission.mission_id, "assignment", actor, mission.trace_id, item, idempotency_key=f"assignment:{assignment.assignment_id}:{status}:{step_id or ''}")
+
+    def _assignment_for_role(self, mission: Mission, role: str):
+        return next((a for a in mission.assignments if a.runtime_role.value == role), None)
+
     def plan_mission(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)
         if mission.state != MissionState.INTENT.value:
@@ -352,15 +415,24 @@ class NexaraRuntime:
                 context_summary = "Source directory recorded; runtime read skipped because it is outside the approved workspace root."
         else:
             context_summary = "No external source directory; task is bounded to the NEXARA workspace."
+        repository_context = self._collect_repository_context(mission)
+        if repository_context:
+            mission.result["context_hash"] = repository_context.context_hash
+            mission.result["context_manifest"] = repository_context.manifest()
+            context_summary = json.dumps(repository_context.manifest(), ensure_ascii=False, sort_keys=True)
+            self.evidence.add(mission.mission_id, "repository_context", "Real Git and file context", context_summary, mission.trace_id, actor="nexara", source="real_repository_context", verification_status="verified", idempotency_key=f"{mission.mission_id}:repository-context")
         self.recovery.checkpoint(mission.mission_id, "context_assembled", mission.trace_id, data={"summary": context_summary})
         self._advance(mission, MissionState.CONTRACT, "nexara")
         mission.contract = self.contracts.create(mission.spec)
         self._save_mission(mission)
         self.recovery.checkpoint(mission.mission_id, "contract_created", mission.trace_id, data={"contract_id": mission.contract.contract_id})
         self._advance(mission, MissionState.PLAN, "nexara")
-        mission.assignments = self.scheduler.schedule(mission.spec)
+        mission.assignments = self.scheduler.schedule(mission.spec, self.models.provider.name)
         steps = [{"role": assignment.runtime_role.value, "persona": assignment.persona.value, "capabilities": assignment.loaded_capabilities} for assignment in mission.assignments]
         mission.plan = self._build_plan(mission, steps)
+        for assignment, step in zip(mission.assignments, mission.plan.steps):
+            step.status = "assigned"
+            self._assignment_lifecycle(mission, assignment, "assigned", "scheduler", step.step_id)
         self._save_mission(mission)
         self._advance(mission, MissionState.SIMULATION, "nexara")
         mission.plan.simulated = True
@@ -468,6 +540,10 @@ class NexaraRuntime:
                 migrated["cost_usd"],
             )
         model_response = self.models.complete(compiled.system, compiled.task, context, trace_id=mission.trace_id)
+        if context.get("context_hash") and model_response.provider != "mock":
+            returned_hash = model_response.metadata.get("context_hash")
+            if returned_hash != context["context_hash"]:
+                raise ValueError("provider_context_hash_unbound")
         mission.result[tk] = {"input_tokens": model_response.input_tokens, "output_tokens": model_response.output_tokens, "cost_usd": model_response.cost_usd, "provider": model_response.provider}
         mission.result["model_text"] = model_response.text
         mission.result["model_provider"] = model_response.provider
@@ -528,6 +604,20 @@ class NexaraRuntime:
             raise
 
     def _execute_stage(self, mission: Mission) -> Mission:
+        context_object = self._execution_context(mission)
+        context = context_object.to_provider_context(mission.mission_id) if context_object else {
+            "source_dir": mission.spec.source_dir or "workspace",
+            "roles": [a.persona.value for a in mission.assignments],
+        }
+        if context_object:
+            mission.result["provider_context_hash"] = context_object.context_hash
+            self._assignment_lifecycle(
+                mission,
+                self._assignment_for_role(mission, "Executor"),
+                "running",
+                "executor",
+                next((s.step_id for s in (mission.plan.steps if mission.plan else []) if s.role.value == "Executor"), None),
+            ) if self._assignment_for_role(mission, "Executor") else None
         model_key = f"{mission.mission_id}:model_tokens"
         persisted = mission.result.get(model_key)
         if persisted and isinstance(persisted, dict):
@@ -537,7 +627,6 @@ class NexaraRuntime:
             model_text = mission.result.get("model_text", "")
             provider = persisted.get("provider", "unknown")
         else:
-            context = {"source_dir": mission.spec.source_dir or "workspace", "roles": [a.persona.value for a in mission.assignments]}
             compiled = self.tokens.compile(mission.spec, [cap for a in mission.assignments for cap in a.loaded_capabilities], ["MissionSpec", "WorkContract", "MissionPlan"], [e["evidence_id"] for e in self.evidence.list(mission.mission_id)], json.dumps(context))
             model_text, provider, mt, ot, c = self._checkpointed_model(mission, compiled, context)
             mission.result[model_key] = {"input_tokens": mt, "output_tokens": ot, "cost_usd": c, "provider": provider}
@@ -555,6 +644,14 @@ class NexaraRuntime:
         mission.result["report_path"] = receipt.result["path"]
         mission.result["receipt_evidence_id"] = receipt.receipt_evidence_id
         mission.rollback_point = receipt.invocation_id
+        executor = self._assignment_for_role(mission, "Executor")
+        if executor:
+            step_id = executor.current_step_id
+            if mission.plan:
+                for step in mission.plan.steps:
+                    if step.step_id == step_id:
+                        step.status = "completed"
+            self._assignment_lifecycle(mission, executor, "completed", "executor", step_id)
         self._save_mission(mission)
         self.recovery.checkpoint(mission.mission_id, "report_written", mission.trace_id, data={"path": receipt.result["path"]})
         self._advance(mission, MissionState.VERIFICATION, "reviewer")
@@ -563,6 +660,19 @@ class NexaraRuntime:
     def _verify_stage(self, mission: Mission) -> Mission:
         vkey = f"{mission.mission_id}:verification_evidence"
         verification = self._verify_report(mission)
+        context_object = self._execution_context(mission)
+        if context_object:
+            verification["context_hash"] = context_object.context_hash
+            reviewer_assignment = self._assignment_for_role(mission, "Reviewer")
+            if reviewer_assignment:
+                self._assignment_lifecycle(mission, reviewer_assignment, "running", "reviewer", reviewer_assignment.current_step_id)
+            reviewer = IndependentReview.reviewer_verdict(mission.mission_id, mission.result["report_path"], context_object)
+            if not reviewer["passed"]:
+                raise ValueError("independent_reviewer_rejected")
+            reviewer_evidence = self.evidence.add(mission.mission_id, "reviewer_verdict", "Independent reviewer verdict", IndependentReview.encode(reviewer), mission.trace_id, actor="reviewer", source="independent_reviewer", verification_status="verified", idempotency_key=f"{mission.mission_id}:reviewer-verdict")
+            mission.result["reviewer_evidence_id"] = reviewer_evidence.evidence_id
+            if reviewer_assignment:
+                self._assignment_lifecycle(mission, reviewer_assignment, "completed", "reviewer", reviewer_assignment.current_step_id)
         parent = [mission.result["receipt_evidence_id"]] if mission.result.get("receipt_evidence_id") else None
         existing = self._get_evidence_by_idempotency(vkey, mission.mission_id)
         if existing:
@@ -598,6 +708,18 @@ class NexaraRuntime:
         summary = json.dumps({"report_path": mission.result.get("report_path", "")}, ensure_ascii=False)
         re = self.evidence.add(mission.mission_id, "execution_result", "Execution result", summary, mission.trace_id, actor="reviewer", source="runtime", verification_status="verified", idempotency_key=ekey)
         mission.result["result_evidence_id"] = re.evidence_id
+        context_object = self._execution_context(mission)
+        if context_object:
+            auditor_assignment = self._assignment_for_role(mission, "Auditor")
+            if auditor_assignment:
+                self._assignment_lifecycle(mission, auditor_assignment, "running", "auditor", auditor_assignment.current_step_id)
+            auditor = IndependentReview.auditor_verdict(mission.mission_id, context_object, self.evidence, self.memory)
+            if not auditor["passed"]:
+                raise ValueError("independent_auditor_rejected")
+            auditor_evidence = self.evidence.add(mission.mission_id, "auditor_verdict", "Independent auditor verdict", IndependentReview.encode(auditor), mission.trace_id, actor="auditor", source="independent_auditor", verification_status="verified", parent_evidence=[re.evidence_id], idempotency_key=f"{mission.mission_id}:auditor-verdict")
+            mission.result["auditor_evidence_id"] = auditor_evidence.evidence_id
+            if auditor_assignment:
+                self._assignment_lifecycle(mission, auditor_assignment, "completed", "auditor", auditor_assignment.current_step_id)
         self.recovery.checkpoint(mission.mission_id, "evidence_collected", mission.trace_id, data={"evidence_id": re.evidence_id})
         self._save_mission(mission)
         self._advance(mission, MissionState.MEMORY_PATCH, "archivist")
@@ -632,6 +754,9 @@ class NexaraRuntime:
         else:
             self._advance(mission, MissionState.BLOCKED, "kairos")
         self.scheduler.release(mission.assignments)
+        for assignment in mission.assignments:
+            self._assignment_lifecycle(mission, assignment, "released", "scheduler", assignment.current_step_id)
+        self._save_mission(mission)
         return mission
 
     def _completion_gate(self, mission: Mission, evaluation) -> bool:
@@ -659,7 +784,16 @@ class NexaraRuntime:
         return not any(item.get("state") == MissionState.BLOCKED.value for item in self.recovery.recover().missions if item.get("mission_id") == mission.mission_id)
 
     def _render_report(self, mission: Mission, task: str, model_text: str, provider: str) -> str:
-        return f"# NEXARA PRIME Mission Report\n\n- Mission: `{mission.mission_id}`\n- Title: {mission.spec.title}\n- Risk: {mission.spec.risk_level.value}\n- Provider: {provider}\n\n## Compiled task\n\n{task}\n\n## Result\n\n{model_text}\n\n## Governance\n\nThis report was written only after human approval, under a Writer Lease, with an execution receipt and verification evidence.\n"
+        context_hash = mission.result.get("context_hash", "not_applicable")
+        manifest = mission.result.get("context_manifest", {})
+        facts = "\n".join([
+            f"- Repository Branch: `{manifest.get('branch', 'not_applicable')}`",
+            f"- Repository HEAD: `{manifest.get('head_sha', 'not_applicable')}`",
+            f"- Repository Dirty: `{manifest.get('dirty', False)}`",
+            f"- Repository Files: `{manifest.get('file_count', 0)}`",
+            f"- Context Hash: `{context_hash}`",
+        ])
+        return f"# NEXARA PRIME Mission Report\n\n- Mission: `{mission.mission_id}`\n- Title: {mission.spec.title}\n- Risk: {mission.spec.risk_level.value}\n- Provider: {provider}\n\n## Verified repository facts\n\n{facts}\n\n## Compiled task\n\n{task}\n\n## Result\n\n{model_text}\n\n## Governance\n\nThis report was written only after human approval, under a Writer Lease, with an execution receipt and verification evidence.\n"
 
     def _verify_report(self, mission: Mission) -> dict:
         import hashlib

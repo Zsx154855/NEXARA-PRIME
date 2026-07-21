@@ -22,7 +22,7 @@ class AdaptiveScheduler:
     def __init__(self, registry: CapabilityRegistry):
         self.registry = registry
 
-    def schedule(self, spec: MissionSpec) -> list[AgentAssignment]:
+    def schedule(self, spec: MissionSpec, provider_name: str = "") -> list[AgentAssignment]:
         text = f"{spec.objective} {' '.join(spec.deliverables)}".lower()
         roles = [RuntimeRole.ORCHESTRATOR, RuntimeRole.PLANNER, RuntimeRole.EXECUTOR, RuntimeRole.REVIEWER, RuntimeRole.AUDITOR, RuntimeRole.ARCHIVIST]
         if any(word in text for word in ("analy", "data", "metric", "report")):
@@ -33,7 +33,9 @@ class AdaptiveScheduler:
         assignments: list[AgentAssignment] = []
         for role in roles:
             persona = PERSONA_BY_ROLE[role]
-            required = ["skill.evidence", "policy.risk", "model.mock"]
+            required = ["skill.evidence", "policy.risk", "model.provider"]
+            if provider_name == "mock":
+                required[-1] = "model.mock"
             if role == RuntimeRole.RESEARCHER:
                 required += ["tool.file_read"]
             if role == RuntimeRole.EXECUTOR:

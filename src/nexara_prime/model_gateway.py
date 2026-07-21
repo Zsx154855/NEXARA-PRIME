@@ -127,8 +127,11 @@ class _HTTPProvider:
         if not self.endpoint:
             raise ProviderUnavailable(f"{self.name}_endpoint_not_configured")
         payload = {"model": self.model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": task}], "temperature": 0}
+        context_hash = str((context or {}).get("context_hash", ""))
         if context:
             payload["metadata"] = redact_secrets(context)
+            if context_hash:
+                payload["metadata"]["nexara_context_hash"] = context_hash
         headers = {"Content-Type": "application/json", "X-NEXARA-Trace-ID": trace_id}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -148,15 +151,16 @@ class _HTTPProvider:
         return ModelResponse(
             self.name, self.model, str(text), int(usage.get("prompt_tokens", estimate_tokens(system + task))),
             int(usage.get("completion_tokens", estimate_tokens(str(text)))), trace_id,
-            float(body.get("cost_usd", 0.0)), metadata=redact_secrets({"usage": usage}),
+            float(body.get("cost_usd", 0.0)), metadata=redact_secrets({"usage": usage, "context_hash": context_hash}),
         )
 
 
 class OpenAICompatibleProvider(_HTTPProvider):
     name = "openai_compatible"
 
-    def __init__(self, endpoint: str, model: str = "gpt-4o-mini", api_key: str | None = None, timeout_seconds: float = 20.0):
+    def __init__(self, endpoint: str, model: str = "gpt-4o-mini", api_key: str | None = None, timeout_seconds: float = 20.0, provider_name: str = "openai_compatible"):
         super().__init__(endpoint, model, api_key, timeout_seconds)
+        self.name = provider_name
 
     def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None) -> ModelResponse:
         return self._complete_http(system, task, context, trace_id, timeout_seconds)
