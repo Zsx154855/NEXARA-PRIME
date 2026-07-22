@@ -1,4 +1,4 @@
-"""Authoritative Capability Registry — NEXARA PRIME converged V2.0.
+"""Authoritative Capability Registry — NEXARA PRIME converged V2.1.
 
 Single source of truth for capability registration, resolution, scoring,
 and evidence tracking.  Formerly capabilities.py (V1) + capability_registry_v2.py

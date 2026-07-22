@@ -124,7 +124,7 @@ export function Sidebar({ screen, onNavigate, onMissionSelect, overview }: Sideb
 
         {/* Footer */}
         <div className="border-t border-taupe px-5 py-3">
-          <div className="text-[10px] text-stone/40">NSEC V2.0 · 人类控制</div>
+          <div className="text-[10px] text-stone/40">NSEC V2.1 · 人类控制</div>
         </div>
       </aside>
 

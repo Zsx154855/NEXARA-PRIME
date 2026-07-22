@@ -1,0 +1,82 @@
+{
+  "evidence_id": "evidence_nsec_v2_1_governance_alignment_20260722",
+  "mission": "NSEC_V2_1_GOVERNANCE_ALIGNMENT",
+  "objective": "Establish NSEC V2.1 as the single canonical governance source for NEXARA.",
+  "worktree": "/Users/agentos/Documents/Codex/2026-07-22/nexara-real-provider-context-tool-closure/worktree",
+  "branch": "work/nexara-real-provider-context-tool-closure-v1",
+  "head_before_commit": "637ba9979af824dfb6726a64a29473aff94759e3",
+  "canonical_governance": {
+    "active_version": "2.1.0",
+    "canonical_id": "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1",
+    "canonical_document": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md",
+    "canonical_sha256": "2b6352643cf5882d655d6ee234e68ea2511920da3ce33812577a74aee1a9ed2c",
+    "machine_declaration": "governance/nsec.yaml",
+    "authority_index": "governance/authority_index.yaml",
+    "supersedes": [
+      "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2",
+      "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1"
+    ]
+  },
+  "nsec_location_audit": {
+    "tracked_previous_canonical": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md",
+    "tracked_new_canonical": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md",
+    "machine_declaration": "governance/nsec.yaml",
+    "authority_index": "governance/authority_index.yaml",
+    "historical_v1": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md",
+    "untracked_main_checkout_copy": "/Users/agentos/NEXARA-PRIME/governance/NSEC_V2.0.md",
+    "untracked_main_checkout_copy_used_as_canonical": false,
+    "untracked_main_checkout_copy_reason": "Read-only audit showed it is an untracked shorter V2.0 copy, not V2.1 and not safe to promote as canonical."
+  },
+  "v2_0_to_v2_1_delta": {
+    "canonical_path_changed": true,
+    "canonical_id_changed": true,
+    "machine_version_changed": "2.0.0 -> 2.1.0",
+    "authority_index_changed": true,
+    "validator_binding_changed": true,
+    "drift_detector_binding_changed": true,
+    "agent_and_program_bindings_changed": true,
+    "requirements_weakened": false
+  },
+  "verification": {
+    "nsec_validation": {
+      "command": "python3 scripts/governance/validate_nsec.py",
+      "result": "PASS"
+    },
+    "drift_detection": {
+      "command": "python3 scripts/governance/detect_nsec_drift.py",
+      "result": "PASS",
+      "stdout_marker": "NO NSEC GOVERNANCE DRIFT DETECTED"
+    },
+    "nsec_tests": {
+      "command": "python3 -m pytest tests/test_nsec_governance.py -q",
+      "result": "PASS",
+      "passed": 41
+    },
+    "full_pytest": {
+      "sandbox_result": "ENVIRONMENT_FAIL",
+      "sandbox_failures": 6,
+      "sandbox_failure_class": "macOS sandbox subprocess/DNS plus missing transient .venv probe",
+      "host_permission_rerun_result": "PASS",
+      "host_permission_command": "python3 -m pytest -q",
+      "passed": 888
+    },
+    "ruff": {
+      "command": "ruff check src tests",
+      "result": "PASS"
+    },
+    "secret_scan": {
+      "command": "python3 scripts/security/scan_hardcoded_secrets.py",
+      "result": "CLEAN"
+    },
+    "git_diff_check": {
+      "command": "git diff --check",
+      "result": "PASS"
+    }
+  },
+  "human_control": {
+    "push": "NOT_EXECUTED",
+    "merge": "NOT_EXECUTED",
+    "deploy": "NOT_EXECUTED"
+  },
+  "artifact_model": "NON_SELF_REFERENTIAL"
+}

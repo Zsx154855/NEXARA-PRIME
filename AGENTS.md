@@ -1,13 +1,13 @@
 # NEXARA-PRIME — Agent Instructions
 
 ## What This Is
-NEXARA-PRIME is a governed first-party AI runtime — not a one-shot codebase. It owns Mission creation, planning, approval, execution, verification, evidence commit, memory patch, evaluation, and completion, all governed by NSEC V2.0 (19 chapters, 55 articles).
+NEXARA-PRIME is a governed first-party AI runtime — not a one-shot codebase. It owns Mission creation, planning, approval, execution, verification, evidence commit, memory patch, evaluation, and completion, all governed by NSEC V2.1 (19 chapters, 55 articles plus V2.1 governance alignment).
 
 ## Tech Stack
 - **Backend:** Python 3.9, pytest, SQLite (persistent), FastAPI (REST API)
 - **Frontend:** Next.js 16, React 19, TypeScript strict, Tailwind v4, shadcn/ui, Lucide React
 - **CI:** GitHub Actions (local sovereign verification as primary; GitHub CI degraded due to billing lock)
-- **Governance:** NSEC V2.0 — supreme engineering constitution at governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md
+- **Governance:** NSEC V2.1 — supreme engineering constitution at governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md
 
 ## Quick Commands
 ```bash
