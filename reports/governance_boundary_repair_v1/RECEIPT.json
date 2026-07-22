@@ -1,9 +1,10 @@
 {
   "receipt_type": "governance_boundary_repair_v1",
-  "head": "8efb684c0ddb80b3719015a5df20a26b06820ddd",
-  "branch": "work/nexara-sovereign-ci-authority-bridge-v1",
-  "timestamp": "2026-07-22T08:20:23.303893+00:00",
-  "evidence_sha256": "54521ad9ceceafaed440dac32f41d86489ade6d733de44fb7085d6270454e001",
-  "verification": "PASS — NSEC validate, drift, secret scan all clear",
-  "sha256": "a7730907ee15527d67243dfaad4a60c6dc7abb95987cf7b76b134d0cd69a7102"
+  "head": "dd77784e9c4d75121af8e3aae49c50c4a10b02b7",
+  "branch": "chore/governance-boundary-repair-v1",
+  "base_sha": "e840b3bf57d9a3b7c8640807d3819a09582c06c1",
+  "timestamp": "2026-07-22T12:45:00+00:00",
+  "evidence_sha256": "0bde6faa971d0315cad8e1f7cc417a7f385774bfcd6dc86be30f2fa2fb529838",
+  "verification": "PASS — NSEC validate, drift, secret scan all clear. Worktree exclusion applied to all recursive scanners. Relative path matching fixed.",
+  "sha256": "c81db2fa6370c8174960d9ce733e46647017da4d1a707aebe6547f8656b16f88"
 }

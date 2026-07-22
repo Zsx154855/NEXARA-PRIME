@@ -34,9 +34,10 @@ def _is_ignored_path(path: Path) -> bool:
     return False
 
 
-def _filter_scan_files(files: list[Path]) -> list[Path]:
+def _filter_scan_files(files: list) -> list:
     """Filter out files under ignored directories (e.g. .worktrees)."""
     return [f for f in files if not _is_ignored_path(f)]
+
 
 # ── Canonical paths ───────────────────────────────────────────────────────────
 NSEC_CANONICAL = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md"
@@ -360,9 +361,9 @@ def check_no_duplicate_supreme_authority() -> list[str]:
     scan_files: list[Path] = []
     for scan_dir in scan_dirs:
         if scan_dir.exists():
-            scan_files.extend(scan_dir.rglob("*.md"))
-            scan_files.extend(scan_dir.rglob("*.yaml"))
-            scan_files.extend(scan_dir.rglob("*.yml"))
+            scan_files.extend(_filter_scan_files(list(scan_dir.rglob("*.md"))))
+            scan_files.extend(_filter_scan_files(list(scan_dir.rglob("*.yaml"))))
+            scan_files.extend(_filter_scan_files(list(scan_dir.rglob("*.yml"))))
     scan_files.extend(REPO_ROOT.glob("*.md"))
     scan_files.extend(REPO_ROOT.glob("*.yaml"))
 
@@ -469,7 +470,7 @@ def check_copy_drift() -> list[str]:
     for scan_dir in scan_dirs:
         if not scan_dir.exists():
             continue
-        for md_file in scan_dir.rglob("*.md"):
+        for md_file in _filter_scan_files(list(scan_dir.rglob("*.md"))):
             if md_file.resolve() == NSEC_CANONICAL.resolve():
                 continue
             if md_file.resolve() == NSEC_CANONICAL_V1_SUPERSEDED.resolve():

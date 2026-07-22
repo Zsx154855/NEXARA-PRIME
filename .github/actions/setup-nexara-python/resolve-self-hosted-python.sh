@@ -68,20 +68,20 @@ resolve_python() {
 
     # C6: pyenv
     if command -v pyenv &>/dev/null; then
-        candidate="$(pyenv root)/versions/3.12.*/bin/python3.12"
-        # Expand glob
-        local expanded
-        expanded=$(echo ${candidate} 2>/dev/null || true)
-        if [[ -n "${expanded}" && "${expanded}" != "${candidate}" ]]; then
-            # Take first match
-            local first
-            first=$(echo "${expanded}" | head -1)
-            if [[ -x "${first}" ]]; then
-                if verify_python "${first}"; then
-                    RESOLVED_PYTHON="${first}"
-                    return 0
+        local pyenv_root
+        pyenv_root="$(pyenv root 2>/dev/null)" || pyenv_root=""
+        if [[ -n "${pyenv_root}" && -d "${pyenv_root}/versions" ]]; then
+            # Find all 3.12.x directories and test each
+            local found_py=""
+            for ver_dir in "${pyenv_root}"/versions/3.12.*/; do
+                candidate="${ver_dir}bin/python3.12"
+                if [[ -x "${candidate}" ]]; then
+                    if verify_python "${candidate}"; then
+                        RESOLVED_PYTHON="${candidate}"
+                        return 0
+                    fi
                 fi
-            fi
+            done
         fi
     fi
 

@@ -34,8 +34,20 @@ IGNORED_DIR_NAMES = {".git", ".worktrees", ".venv", "node_modules", "__pycache__
 
 
 def _is_ignored_path(path: Path) -> bool:
-    """True if any parent directory (or the path itself) is in the ignore set."""
-    for part in path.parts:
+    """True if any parent directory (or the path itself) is in the ignore set.
+
+    Paths are checked relative to REPO_ROOT to avoid false matches when
+    the checkout directory itself contains an ignored directory name.
+    """
+    try:
+        rel = path.resolve().relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        # Path outside repo — check all parts as fallback
+        for part in path.parts:
+            if part in IGNORED_DIR_NAMES:
+                return True
+        return False
+    for part in rel.parts:
         if part in IGNORED_DIR_NAMES:
             return True
     return False
@@ -44,6 +56,22 @@ def _is_ignored_path(path: Path) -> bool:
 def _filter_scan_files(files: list) -> list:
     """Filter out files under ignored directories (e.g. .worktrees)."""
     return [f for f in files if not _is_ignored_path(f)]
+
+
+def _rglob_filtered(root: Path, pattern: str) -> list:
+    """rglob with directory-level pruning: skip ignored dirs before descending."""
+    results: list[Path] = []
+    try:
+        for item in root.iterdir():
+            if _is_ignored_path(item):
+                continue
+            if item.is_dir():
+                results.extend(_rglob_filtered(item, pattern))
+            elif item.match(pattern):
+                results.append(item)
+    except (PermissionError, OSError):
+        pass
+    return results
 
 
 # ── Canonical paths ───────────────────────────────────────────────────────────

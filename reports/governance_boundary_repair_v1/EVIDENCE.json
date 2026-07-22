@@ -1,17 +1,25 @@
 {
   "evidence_id": "evidence_governance_boundary_repair_v1",
-  "sha256": "54521ad9ceceafaed440dac32f41d86489ade6d733de44fb7085d6270454e001",
-  "timestamp": "2026-07-22T08:20:23.303428+00:00",
+  "sha256": "0bde6faa971d0315cad8e1f7cc417a7f385774bfcd6dc86be30f2fa2fb529838",
+  "timestamp": "2026-07-22T12:45:00+00:00",
   "mission": "NEXARA_GOVERNANCE_BOUNDARY_REPAIR_ONEPASS",
-  "head": "8efb684c0ddb80b3719015a5df20a26b06820ddd",
-  "branch": "work/nexara-sovereign-ci-authority-bridge-v1",
+  "head": "dd77784e9c4d75121af8e3aae49c50c4a10b02b7",
+  "branch": "chore/governance-boundary-repair-v1",
+  "base": "e840b3bf57d9a3b7c8640807d3819a09582c06c1",
   "changes": {
+    "files_created": [
+      "reports/governance_boundary_repair_v1/EVIDENCE.json",
+      "reports/governance_boundary_repair_v1/RECEIPT.json"
+    ],
     "files_modified": [
+      ".github/workflows/ci.yml",
+      ".gitignore",
       "scripts/governance/validate_nsec.py",
       "scripts/governance/detect_nsec_drift.py"
     ],
-    "added_lines": "IGNORED_DIR_NAMES + _is_ignored_path() + _filter_scan_files()",
-    "rglob_calls_filtered": "all rglob() calls now pass through _filter_scan_files()",
+    "added_lines": "IGNORED_DIR_NAMES + _is_ignored_path() + _filter_scan_files() + _rglob_filtered()",
+    "rglob_calls_filtered": "all validate_nsec.py and detect_nsec_drift.py rglob() calls filtered via _filter_scan_files() or _rglob_filtered()",
+    "relative_path_matching": "detect_nsec_drift.py _is_ignored_path() matches relative to REPO_ROOT",
     "ignore_set": [
       ".git",
       ".worktrees",

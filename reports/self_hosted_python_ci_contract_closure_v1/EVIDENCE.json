@@ -1,13 +1,13 @@
 {
   "evidence_id": "self_hosted_python_ci_contract_closure_v1",
-  "sha256": "EVIDENCE_HASH_PLACEHOLDER",
-  "timestamp": "2026-07-22T11:05:00+00:00",
+  "sha256": "5cdf4720599e87f8fb70bd33e40cfb60b0fb14cafe9637b5d734ec8e4974294d",
+  "timestamp": "2026-07-22T12:45:00+00:00",
   "pr": 22,
   "mission": "NEXARA_PR22_SELF_HOSTED_PYTHON_CI_CONTRACT_CLOSURE_ONEPASS",
   "base": "e840b3bf57d9a3b7c8640807d3819a09582c06c1",
   "pre_fix_head": "adf5769a99abbf5434f4134a1e2b38f002de8936",
-  "final_head": "9c904424728b93a1d7b86c7f1ab9b23c2766dc12",
-  "final_run_id": 29914426443,
+  "final_head": "dd77784e9c4d75121af8e3aae49c50c4a10b02b7",
+  "final_run_id": 29920196099,
   "branch": "chore/governance-boundary-repair-v1",
   "root_cause_run": 29911143521,
   "root_cause_error": "mkdir: /Users/runner: Permission denied",
@@ -22,7 +22,11 @@
     ],
     "files_modified": [
       ".github/workflows/ci.yml",
-      "scripts/governance/detect_state_drift.py"
+      "scripts/governance/detect_state_drift.py",
+      "scripts/governance/validate_nsec.py",
+      "scripts/governance/detect_nsec_drift.py",
+      "reports/governance_boundary_repair_v1/EVIDENCE.json",
+      "reports/governance_boundary_repair_v1/RECEIPT.json"
     ],
     "contract": "Unified Python 3.12 CI contract — self-hosted resolves locally + per-job venv in $RUNNER_TEMP; github-hosted delegates to actions/setup-python@v5",
     "python_resolve_path": "/opt/homebrew/bin/python3.12",
@@ -33,7 +37,7 @@
   },
   "verification": {
     "local": {
-      "pytest_full_suite": "918 passed, 0 failed",
+      "pytest_full_suite": "917 passed, 1 pre-existing failure (test_pr21_review_closure.py — unrelated)",
       "pytest_ci_contract": "20 passed, 0 failed",
       "ruff_check": "CLEAN",
       "validate_nsec": "PASS",
@@ -43,8 +47,8 @@
       "git_diff_check": "PASS"
     },
     "remote": {
-      "run_id": 29914020835,
-      "run_url": "https://github.com/Zsx154855/NEXARA-PRIME/actions/runs/29914020835",
+      "run_id": 29920196099,
+      "run_url": "https://github.com/Zsx154855/NEXARA-PRIME/actions/runs/29920196099",
       "jobs": {
         "python": "SUCCESS",
         "typescript": "SUCCESS",
@@ -53,15 +57,16 @@
         "governance": "SUCCESS",
         "nsec-governance": "SUCCESS",
         "secret-scan": "SUCCESS",
+        "sovereign-delivery": "SUCCESS",
         "GitGuardian Security Checks": "SUCCESS"
       }
     }
   },
   "review": {
     "review_decision": "",
-    "reviews": 2,
-    "review_comments": 10,
-    "unresolved_threads": "NOT_CHECKED",
+    "reviews": 3,
+    "review_comments": 16,
+    "unresolved_threads": 0,
     "covers_final_head": true
   },
   "pr_state": {
