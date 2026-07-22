@@ -1,0 +1,25 @@
+{
+  "receipt_type": "self_hosted_python_ci_contract_closure_v1",
+  "sha256": "RECEIPT_HASH_PLACEHOLDER",
+  "timestamp": "2026-07-22T11:05:00+00:00",
+  "authority": "Hermes (explicit human authorization: NEXARA_PR22_SELF_HOSTED_PYTHON_CI_CONTRACT_CLOSURE_ONEPASS)",
+  "writer": "Hermes — single-writer worktree isolation",
+  "pr": 22,
+  "branch": "chore/governance-boundary-repair-v1",
+  "base_sha": "e840b3bf57d9a3b7c8640807d3819a09582c06c1",
+  "final_head_sha": "16a9e42a7295bb8012e0eedf2e17f4951f5a4df3",
+  "commits": [
+    "97585af fix(ci): establish self-hosted Python 3.12 contract",
+    "d6cbad8 fix(ci): add pytest dep and CI-aware state drift check",
+    "16a9e42 fix(ci): install dev deps and replace globstar with find"
+  ],
+  "evidence_path": "reports/self_hosted_python_ci_contract_closure_v1/EVIDENCE.json",
+  "local_verification": "PASS — 918 pytest + ruff + NSEC + drift + secret scan all clear",
+  "remote_verification": "PASS — Run 29914020835, all 8 jobs SUCCESS",
+  "delivery_gate": "READY_FOR_HUMAN_MERGE_APPROVAL",
+  "stop_boundary": "Human merge approval required — merge NOT performed",
+  "merge_performed": false,
+  "deploy_performed": false,
+  "tag_performed": false,
+  "release_performed": false
+}
