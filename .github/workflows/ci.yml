@@ -26,7 +26,7 @@ jobs:
       - run: git diff --check
 
   typescript:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,7 +38,7 @@ jobs:
         working-directory: platform/sdk/typescript
 
   swift-macos:
-    runs-on: macos-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: Build NexaraCore (if present)
@@ -57,7 +57,7 @@ jobs:
           fi
 
   swift-ios:
-    runs-on: macos-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: Detect iOS target
@@ -84,7 +84,7 @@ jobs:
         run: echo "[INFO] iOS NOT_PRESENT — no iOS target found in repository"
 
   governance:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -103,7 +103,7 @@ jobs:
           done
 
   nsec-governance:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -114,7 +114,7 @@ jobs:
       - run: python3 scripts/governance/detect_nsec_drift.py
 
   secret-scan:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
