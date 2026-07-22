@@ -72,7 +72,8 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     @app.post("/api/missions")
     def create_mission(body: MissionCreateRequest) -> dict[str, Any]:
         try:
-            return runtime.create_mission(body.objective, body.source_dir).model_dump(mode="json")
+            mission = runtime.create_mission(body.objective, body.source_dir)
+            return runtime.inspect_mission(mission.mission_id)
         except (ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -86,46 +87,74 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     @app.post("/api/missions/{mission_id}/plan")
     def plan(mission_id: str) -> dict[str, Any]:
         try:
-            return runtime.plan_mission(mission_id).model_dump(mode="json")
+            runtime.plan_mission(mission_id)
+            return runtime.inspect_mission(mission_id)
         except (KeyError, ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/approve")
     def approve(mission_id: str, body: ApprovalRequestBody) -> dict[str, Any]:
         try:
-            return runtime.approve_mission(mission_id, bool(body.approved), body.actor, body.note, body.decision, body.scope).model_dump(mode="json")
+            runtime.approve_mission(mission_id, bool(body.approved), body.actor, body.note, body.decision, body.scope)
+            return runtime.inspect_mission(mission_id)
         except (KeyError, ValueError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/run")
     def run(mission_id: str) -> dict[str, Any]:
         try:
-            return runtime.run_mission(mission_id).model_dump(mode="json")
+            runtime.run_mission(mission_id)
+            return runtime.inspect_mission(mission_id)
         except (KeyError, ValueError, RuntimeError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/pause")
     def pause(mission_id: str) -> dict[str, Any]:
-        return runtime.pause(mission_id).model_dump(mode="json")
+        runtime.pause(mission_id)
+        return runtime.inspect_mission(mission_id)
 
     @app.post("/api/missions/{mission_id}/resume")
     def resume(mission_id: str) -> dict[str, Any]:
-        return runtime.resume(mission_id).model_dump(mode="json")
+        runtime.resume(mission_id)
+        return runtime.inspect_mission(mission_id)
 
     @app.post("/api/missions/{mission_id}/rollback")
     def rollback(mission_id: str) -> dict[str, Any]:
         try:
-            return runtime.rollback(mission_id).model_dump(mode="json")
+            runtime.rollback(mission_id)
+            return runtime.inspect_mission(mission_id)
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/safe-mode")
     def safe_mode(mission_id: str, body: SafeModeBody) -> dict[str, Any]:
-        return runtime.safe_mode(mission_id, body.enabled).model_dump(mode="json")
+        runtime.safe_mode(mission_id, body.enabled)
+        return runtime.inspect_mission(mission_id)
 
     @app.get("/api/approvals")
     def approvals(mission_id: str | None = None) -> list[dict[str, Any]]:
         return runtime.approvals.list(mission_id)
+
+    @app.get("/api/receipts")
+    def receipts(mission_id: str | None = None) -> dict[str, Any]:
+        if mission_id:
+            return runtime.evidence.verify_receipt_chain(mission_id)
+        missions = runtime.list_missions()
+        results = {}
+        for m in missions:
+            mid = m["mission_id"]
+            invocations = runtime.store.list_records("tool", mid)
+            if invocations:
+                results[mid] = runtime.evidence.verify_receipt_chain(mid)
+        return {"missions": results, "total": len(results)}
+
+    @app.get("/api/tools")
+    def tools(mission_id: str | None = None) -> list[dict[str, Any]]:
+        return runtime.tools.list_invocations(mission_id)
+
+    @app.get("/api/missions/{mission_id}/tools")
+    def mission_tools(mission_id: str) -> list[dict[str, Any]]:
+        return runtime.tools.list_invocations(mission_id)
 
     @app.get("/api/evidence")
     def evidence(mission_id: str | None = None) -> list[dict[str, Any]]:
@@ -188,7 +217,11 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     ui_root = Path(__file__).resolve().parents[2] / "ui"
     if ui_root.exists():
-        app.mount("/console", StaticFiles(directory=ui_root, html=True), name="console")
+        # Serve only the built Next.js static export. Missing builds should be
+        # visible instead of silently falling back to legacy UI assets.
+        out_root = ui_root / "out"
+        if out_root.exists() and (out_root / "index.html").exists():
+            app.mount("/console", StaticFiles(directory=out_root, html=True), name="console")
         universe_root = ui_root / "knowledge-universe"
         if universe_root.exists():
             app.mount("/knowledge-universe", StaticFiles(directory=universe_root, html=True), name="knowledge-universe")

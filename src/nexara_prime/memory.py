@@ -8,7 +8,16 @@ from .events import EventBus
 from .models import MemoryKind, MemoryRecord, new_id, now_iso
 
 if TYPE_CHECKING:
+    from .evidence import EvidenceStore
     from .rag_pipeline import RAGPipeline
+
+
+EVIDENCE_REQUIRED_KINDS = {
+    MemoryKind.DECISION,
+    MemoryKind.FAILURE,
+    MemoryKind.FAILURE_EXPERIENCE,
+    MemoryKind.PATCH,
+}
 
 
 # ── Four-layer memory classification ──
@@ -65,21 +74,94 @@ def _safe_memory_kind(kind_str: str, default: "MemoryKind" = None) -> "MemoryKin
         return default or MemoryKind.FACT
 
 class MemoryKernel:
-    def __init__(self, store: SQLiteStore, events: EventBus):
+    def __init__(self, store: SQLiteStore, events: EventBus, evidence: "EvidenceStore | None" = None):
         self.store = store
         self.events = events
+        self.evidence = evidence
 
     def write(self, kind: MemoryKind, key: str, content: str, trace_id: str, mission_id: str | None = None, source_evidence_id: str | None = None, confidence: float = 1.0) -> MemoryRecord:
         if kind == MemoryKind.UNVERIFIED_INFERENCE:
             return self.propose(kind, key, content, trace_id, mission_id, source_evidence_id, confidence)
+        # Evidence-binding enforcement: mission-scoped committed memories SHOULD have
+        # evidence linkage per NSEC 第四十三条. DECISION/FAILURE/FAILURE_EXPERIENCE/PATCH
+        # require evidence when tied to a mission. System-level kinds and working memory
+        # are exempt.
+        evidence_bound = bool(source_evidence_id)
+        if not evidence_bound and kind in EVIDENCE_REQUIRED_KINDS and mission_id:
+            raise ValueError(
+                f"memory_requires_evidence: kind={kind.value} requires "
+                f"source_evidence_id when bound to a mission"
+            )
         record = MemoryRecord(
             memory_id=new_id("memory"), mission_id=mission_id, kind=kind, key=key,
             content=content, source_evidence_id=source_evidence_id, confidence=confidence,
-            status="committed", verified=bool(source_evidence_id), canonical=bool(source_evidence_id),
+            status="committed", verified=evidence_bound, canonical=evidence_bound,
         )
         self.store.save_record(record.memory_id, "memory", record.model_dump(mode="json"), record.created_at, mission_id)
-        self.events.publish("memory.written", mission_id or "global", "mission" if mission_id else "memory", "memory_kernel", trace_id, {"memory_id": record.memory_id, "kind": kind.value})
+        self.events.publish("memory.written", mission_id or "global", "mission" if mission_id else "memory", "memory_kernel", trace_id, {"memory_id": record.memory_id, "kind": kind.value, "evidence_bound": evidence_bound})
         return record
+
+    def verify_evidence_binding(self, mission_id: str | None = None) -> dict[str, Any]:
+        """Verify that all committed memories have valid evidence bindings.
+
+        Returns a structured report of violations and integrity status.
+        """
+        records = self.inspect(mission_id)
+        violations: list[dict[str, Any]] = []
+        bound = 0
+        unbound = 0
+        exempt = 0
+
+        for r in records:
+            if r.get("status") != "committed":
+                continue
+            kind_str = r.get("kind", "")
+            try:
+                kind = MemoryKind(kind_str)
+            except ValueError:
+                kind = MemoryKind.FACT
+
+            evidence_id = str(r.get("source_evidence_id") or "")
+            evidence_valid = False
+            if evidence_id and self.evidence is not None:
+                try:
+                    envelope = self.store.get_record_envelope(evidence_id)
+                    evidence_valid = bool(
+                        envelope
+                        and envelope.get("mission_id") == r.get("mission_id")
+                        and self.evidence.verify(evidence_id)
+                    )
+                except (KeyError, ValueError, RuntimeError):
+                    evidence_valid = False
+            elif evidence_id:
+                envelope = self.store.get_record_envelope(evidence_id)
+                evidence_valid = bool(envelope and envelope.get("mission_id") == r.get("mission_id"))
+            requires_evidence = bool(r.get("mission_id")) and kind in EVIDENCE_REQUIRED_KINDS
+            is_exempt = not requires_evidence
+
+            if evidence_valid:
+                bound += 1
+            elif is_exempt:
+                exempt += 1
+            else:
+                unbound += 1
+                violations.append({
+                    "memory_id": r.get("memory_id"),
+                    "kind": kind_str,
+                    "key": r.get("key"),
+                    "has_evidence": bool(evidence_id),
+                    "evidence_valid": evidence_valid,
+                    "source_evidence_id": evidence_id,
+                })
+
+        return {
+            "total_committed": bound + unbound + exempt,
+            "evidence_bound": bound,
+            "unbound": unbound,
+            "exempt": exempt,
+            "violations": violations,
+            "all_bound": unbound == 0,
+        }
 
     def patch(self, mission_id: str, key: str, content: str, trace_id: str, evidence_id: str | None = None, *, idempotency_key: str | None = None) -> MemoryRecord:
         if idempotency_key:

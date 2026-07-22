@@ -30,7 +30,7 @@ from typing import Any
 REPO_ROOT = Path(os.environ.get("NEXARA_ROOT", Path(__file__).resolve().parent.parent.parent))
 
 # ── Canonical paths ───────────────────────────────────────────────────────────
-NSEC_CANONICAL = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
+NSEC_CANONICAL = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md"
 NSEC_CANONICAL_V1_SUPERSEDED = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
 NSEC_YAML = REPO_ROOT / "governance" / "nsec.yaml"
 AUTHORITY_INDEX = REPO_ROOT / "governance" / "authority_index.yaml"
@@ -202,16 +202,19 @@ def detect_version_drift() -> list[str]:
         issues.append(f"VERSION_DRIFT: Cannot read NSEC files: {exc}")
         return issues
 
-    # Extract version from canonical
-    canon_version_match = re.search(r'[\*]*Canonical ID:[\*]*\s*`NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V(\d+)`', canon_text)
+    # Extract the exact canonical ID rather than only the major version.
+    canon_id_match = re.search(
+        r'[\*]*Canonical ID[\*]*:[\*]*\s*`(NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V[0-9_]+)`',
+        canon_text,
+    )
     decl_version = decl.get("version", "")
     decl_id = decl.get("id", "")
 
-    if canon_version_match:
-        canon_major = canon_version_match.group(1)
-        if f"V{canon_major}" not in decl_id:
+    if canon_id_match:
+        canon_id = canon_id_match.group(1)
+        if decl_id != canon_id:
             issues.append(
-                f"VERSION_DRIFT: Canonical document declares V{canon_major} "
+                f"VERSION_DRIFT: Canonical document declares {canon_id} "
                 f"but nsec.yaml id is '{decl_id}'"
             )
 
@@ -334,7 +337,7 @@ def detect_stale_references() -> list[str]:
                     issues.append(
                         f"STALE_REFERENCE: '{file_path.relative_to(REPO_ROOT)}' "
                         f"references stale NSEC identifier: '{match.group(0)}'. "
-                        f"Update to current version: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2"
+                        f"Update to current version: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1"
                     )
 
     return issues
@@ -354,7 +357,10 @@ def detect_old_version_bindings() -> list[str]:
         for skill_file in qoder_skills.rglob("SKILL.md"):
             scan_paths.append(skill_file)
 
-    old_version_pattern = re.compile(r'NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V(0|[3-9]|[1-9][0-9])', re.IGNORECASE)
+    old_version_pattern = re.compile(
+        r'NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_(?:V(0|[3-9]|[1-9][0-9])|V2\.md\b)',
+        re.IGNORECASE,
+    )
 
     for file_path in scan_paths:
         if not file_path.exists():
@@ -368,8 +374,8 @@ def detect_old_version_bindings() -> list[str]:
         if matches:
             issues.append(
                 f"OLD_VERSION_BINDING: '{file_path.relative_to(REPO_ROOT)}' "
-                f"references non-V1 NSEC version(s): V{', V'.join(matches)}. "
-                f"Current NSEC version is V2."
+                f"references non-current NSEC version(s): {matches}. "
+                f"Current NSEC version is V2_1."
             )
 
     return issues
@@ -426,7 +432,7 @@ def detect_broken_nsec_links() -> list[str]:
         ONEPASS_SKILL,
     ]
 
-    expected_path = "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md"
+    expected_path = "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md"
 
     for file_path in required_files:
         if not file_path.exists():

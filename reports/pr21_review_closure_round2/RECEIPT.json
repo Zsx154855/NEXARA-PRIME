@@ -1,0 +1,52 @@
+{
+  "receipt_id": "receipt_pr21_review_closure_round2_20260722",
+  "mission": "PR21_REVIEW_CLOSURE_ROUND_2",
+  "status": "PASS",
+  "result": "PR21_ROUND2_REVIEW_FINDINGS_IMPLEMENTED_LOCALLY",
+  "artifact_model": "NON_SELF_REFERENTIAL",
+  "repository": {
+    "worktree": "/Users/agentos/Documents/Codex/2026-07-22/nexara-real-provider-context-tool-closure/worktree",
+    "branch": "work/nexara-real-provider-context-tool-closure-v1",
+    "head_before_round2": "a64769e5742680be83171bb502d49ff4722dc57a"
+  },
+  "review_closure": {
+    "p1_findings": 2,
+    "p2_findings": 6,
+    "closed_by_code": true,
+    "external_review_rerun_required": true
+  },
+  "required_gates": {
+    "provider_metadata_flat_strings": "PASS",
+    "repository_excerpt_secret_redaction": "PASS",
+    "memory_required_kind_alignment": "PASS",
+    "secret_scanner_weak_literal_detection": "PASS",
+    "dashboard_execution_action": "PASS",
+    "mission_plan_snapshot_rendering": "PASS",
+    "tool_envelope_receipt_chain_verification": "PASS",
+    "mission_mutation_snapshot_refresh": "PASS",
+    "evidence_generated": "PASS",
+    "receipt_generated": "PASS"
+  },
+  "verification_summary": {
+    "python_syntax": "PASS",
+    "focused_pytest": "91 passed; 46 targeted network/review tests passed",
+    "full_pytest_host_permission": "898 passed",
+    "ruff": "PASS",
+    "nsec_validation": "PASS",
+    "drift_detection": "PASS / NO DRIFT",
+    "secret_scan": "CLEAN",
+    "git_diff_check": "PASS",
+    "frontend_lint": "PASS",
+    "frontend_type_check": "PASS"
+  },
+  "external_blockers": {
+    "github_actions": "BLOCKED_BY_GITHUB_BILLING",
+    "runner_started": false,
+    "code_failed_by_ci": false
+  },
+  "human_control": {
+    "push": "PENDING_AFTER_LOCAL_COMMIT",
+    "merge": "NOT_EXECUTED",
+    "deploy": "NOT_EXECUTED"
+  }
+}

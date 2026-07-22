@@ -1,17 +1,22 @@
 # NEXARA Sovereign Engineering Constitution — Machine-Readable Declaration
-# NSEC V2.0 — This file is derived from the canonical document.
+# NSEC V2.1 — This file is derived from the canonical document.
 # The canonical document is authoritative.
 # Any discrepancy between this file and the canonical document MUST be resolved in favor of the canonical document.
 
-id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2
+id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1
 short_name: NSEC
-version: "2.0.0"
+version: "2.1.0"
 status: ACTIVE
 authority_level: supreme
-canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md
-canonical_hash: "sha256:e3ed168fee070b1aec68227f696f0f6fb92e3d9f87ded59a927169d46e8c7e94"
-ratified: "2026-07-18"
+canonical_document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md
+canonical_hash: "sha256:2b6352643cf5882d655d6ee234e68ea2511920da3ce33812577a74aee1a9ed2c"
+ratified: "2026-07-22"
 supersedes:
+  - id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2
+    document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md
+    status: SUPERSEDED
+    ratified: "2026-07-18"
+    reason: "V2.1 governance alignment per human directive: establish NSEC V2.1 as the single canonical governance source and update all machine bindings, validation, drift detection, evidence, and receipt paths."
   - id: NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1
     document: governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md
     status: SUPERSEDED
@@ -55,7 +60,7 @@ authority_relationship:
 binding_requirements:
   program_constitution_must_declare_subordination: true
   onepass_skill_must_reference_canonical: true
-  all_agent_entries_must_reference_nsec_v2: true
+  all_agent_entries_must_reference_nsec_v2_1: true
   ci_must_validate_nsec_integrity: true
   no_second_supreme_authority_permitted: true
 

@@ -1,0 +1,40 @@
+{
+  "receipt_id": "receipt_nsec_v2_1_governance_alignment_20260722",
+  "mission": "NSEC_V2_1_GOVERNANCE_ALIGNMENT",
+  "status": "PASS",
+  "result": "NSEC_V2_1_ESTABLISHED_AS_CANONICAL_GOVERNANCE_SOURCE",
+  "canonical_governance": {
+    "version": "2.1.0",
+    "canonical_id": "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1",
+    "canonical_document": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md",
+    "canonical_sha256": "2b6352643cf5882d655d6ee234e68ea2511920da3ce33812577a74aee1a9ed2c"
+  },
+  "required_gates": {
+    "audit_nsec_locations": "PASS",
+    "compare_v2_0_v2_1": "PASS",
+    "update_canonical_governance": "PASS",
+    "governance_validation": "PASS",
+    "evidence_generated": "PASS",
+    "receipt_generated": "PASS",
+    "drift_detection": "PASS"
+  },
+  "verification_summary": {
+    "nsec_validation": "PASS",
+    "drift": "PASS",
+    "nsec_governance_tests": "41 passed",
+    "full_pytest_host_permission": "888 passed",
+    "ruff": "PASS",
+    "secret_scan": "CLEAN",
+    "git_diff_check": "PASS"
+  },
+  "blocked_or_failed": {
+    "default_sandbox_full_pytest": "6 environment-sensitive failures; rerun with host permission passed 888 tests",
+    "functional_blocker": false
+  },
+  "human_control": {
+    "push": "NOT_EXECUTED",
+    "merge": "NOT_EXECUTED",
+    "deploy": "NOT_EXECUTED"
+  },
+  "artifact_model": "NON_SELF_REFERENTIAL"
+}

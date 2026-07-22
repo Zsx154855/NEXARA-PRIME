@@ -1,4 +1,4 @@
-"""Authoritative Capability Registry — NEXARA PRIME converged V2.0.
+"""Authoritative Capability Registry — NEXARA PRIME converged V2.1.
 
 Single source of truth for capability registration, resolution, scoring,
 and evidence tracking.  Formerly capabilities.py (V1) + capability_registry_v2.py
@@ -79,6 +79,7 @@ class CapabilityRegistry:
             Capability(capability_id="tool.code_exec", name="Controlled Code Execution", capability_type=CapabilityType.TOOL, description="Run allow-listed local Python commands.", risk_level=RiskLevel.R1),
             Capability(capability_id="tool.browser_readonly", name="Browser Read Only", capability_type=CapabilityType.TOOL, description="Placeholder for read-only browser access.", risk_level=RiskLevel.R1),
             Capability(capability_id="model.mock", name="Deterministic Mock Model", capability_type=CapabilityType.MODEL, description="Provider-free deterministic model for tests."),
+            Capability(capability_id="model.provider", name="Configured Model Provider", capability_type=CapabilityType.MODEL, description="A configured non-mock model provider with durable usage metadata."),
             Capability(capability_id="memory.sqlite", name="SQLite Memory", capability_type=CapabilityType.MEMORY, description="Short-term, fact, decision, failure and patch memory."),
             Capability(capability_id="policy.risk", name="Risk Policy", capability_type=CapabilityType.POLICY, description="R0-R4 policy and approval gates."),
         ]

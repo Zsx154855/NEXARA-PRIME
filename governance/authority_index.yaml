@@ -45,19 +45,20 @@ tiers:
       - must be unambiguous
 
   - tier: 2
-    label: "NSEC V2.0 (NEXARA Sovereign Engineering Constitution)"
+    label: "NSEC V2.1 (NEXARA Sovereign Engineering Constitution)"
     description: >
-      The single highest engineering governance document — NSEC V2.0 (2026-07-18).
+      The single highest engineering governance document — NSEC V2.1 (2026-07-22).
       All other documents, contracts, policies, skills, and agent behaviors
-      derive from and are subordinate to NSEC V2.0. NSEC V1 is SUPERSEDED.
+      derive from and are subordinate to NSEC V2.1. NSEC V2.0 and NSEC V1 are SUPERSEDED.
     sources:
-      - governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2.md
-      - governance/nsec.yaml (machine-readable declaration — V2.0)
+      - governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md
+      - governance/nsec.yaml (machine-readable declaration — V2.1)
     overrides: [3, 4, 5, 6, 7, 8]
     amendment: "R4 — requires ADR, program lead, maintainer, release manager, security review"
     history:
       - "V1 (2026-07-18, SUPERSEDED): 17 Articles, English"
-      - "V2.0 (2026-07-18, ACTIVE): 19 Chapters 55 Articles, Chinese (authoritative)"
+      - "V2.0 (2026-07-18, SUPERSEDED): 19 Chapters 55 Articles, Chinese (authoritative)"
+      - "V2.1 (2026-07-22, ACTIVE): canonical governance alignment, V2.0 requirements preserved"
 
   - tier: 3
     label: "Program Constitution"
@@ -167,7 +168,7 @@ binding_verification:
       must_declare: "subordination to NSEC"
       verified_by: "scripts/governance/validate_nsec.py"
     - target: ".qoder/skills/nexara-sovereign-onepass-program/SKILL.md"
-      must_reference: "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
+      must_reference: "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md"
       verified_by: "scripts/governance/validate_nsec.py"
     - target: ".github/workflows/ci.yml"
       must_include: "NSEC Governance Integrity job"

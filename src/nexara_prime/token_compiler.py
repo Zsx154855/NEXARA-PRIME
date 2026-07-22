@@ -1,4 +1,4 @@
-"""Authoritative Token Compiler — NEXARA PRIME converged V2.0.
+"""Authoritative Token Compiler — NEXARA PRIME converged V2.1.
 
 Single source of truth for context compilation, progressive disclosure, deduplication,
 and token estimation.  Formerly token_compiler.py (V1) + token_compiler_v2.py were two

@@ -110,6 +110,19 @@ class NetworkPolicyEngine:
             self._decision_log.append(d)
             return d
 
+        # Explicit domain allowlist is an authorization decision.  When the
+        # caller has not supplied a resolved IP, do not make the policy result
+        # depend on ambient DNS availability.  If a caller supplies resolved_ip
+        # (for example after connection or redirect resolution), the IP safety
+        # checks below still run.
+        if hostname in self._domain_allowlist and not resolved_ip:
+            d = NetworkPolicyDecision(allowed=True, reason="allowed",
+                                      target_host=hostname, resolved_ip="",
+                                      port=actual_port, scheme=scheme,
+                                      method=method)
+            self._decision_log.append(d)
+            return d
+
         # 5. Resolve IP and validate
         actual_ip = resolved_ip
         if not actual_ip and hostname:

@@ -27,12 +27,17 @@ def redact_secrets(value: Any) -> Any:
         return value
     value = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._-]+", r"\1[REDACTED]", value)
     value = re.sub(r"(?i)(sk-[A-Za-z0-9_-]{8,})", "[REDACTED]", value)
-    value = re.sub(r"(?i)(api[_-]?key|token|password)\s*[:=]\s*[^\s,]+", r"\1=[REDACTED]", value)
+    value = re.sub(r"(?i)(api[_-]?key|client[_-]?secret|secret[_-]?key|token|password)\s*[:=]\s*[^\s,]+", r"\1=[REDACTED]", value)
     return value
 
 
 def estimate_tokens(text: str) -> int:
     return max(1, (len(text.encode("utf-8")) + 3) // 4)
+
+
+def _flat_provider_metadata(context_hash: str) -> dict[str, str]:
+    """Return provider metadata that is valid for strict Chat Completions APIs."""
+    return {"nexara_context_hash": context_hash} if context_hash else {}
 
 
 @dataclass(frozen=True)
@@ -126,9 +131,27 @@ class _HTTPProvider:
     def _complete_http(self, system: str, task: str, context: dict[str, Any] | None, trace_id: str, timeout_seconds: float | None) -> ModelResponse:
         if not self.endpoint:
             raise ProviderUnavailable(f"{self.name}_endpoint_not_configured")
-        payload = {"model": self.model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": task}], "temperature": 0}
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": task}]
+        context_hash = str((context or {}).get("context_hash", ""))
         if context:
-            payload["metadata"] = redact_secrets(context)
+            model_visible_context = {
+                "context_hash": context_hash,
+                "repository": context.get("repository"),
+                "branch": context.get("branch"),
+                "head_sha": context.get("head_sha"),
+                "dirty": context.get("dirty"),
+                "files": context.get("files", []),
+                "excerpts": context.get("excerpts", []),
+            }
+            messages.append({
+                "role": "user",
+                "content": "NEXARA bounded repository context:\n"
+                + json.dumps(redact_secrets(model_visible_context), ensure_ascii=False, sort_keys=True),
+            })
+        payload = {"model": self.model, "messages": messages, "temperature": 0}
+        metadata = _flat_provider_metadata(context_hash)
+        if metadata:
+            payload["metadata"] = metadata
         headers = {"Content-Type": "application/json", "X-NEXARA-Trace-ID": trace_id}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -146,17 +169,18 @@ class _HTTPProvider:
             raise ProviderError(f"{self.name}_invalid_response_shape") from exc
         usage = body.get("usage", {})
         return ModelResponse(
-            self.name, self.model, str(text), int(usage.get("prompt_tokens", estimate_tokens(system + task))),
+            self.name, self.model, str(text), int(usage.get("prompt_tokens", estimate_tokens(system + task + json.dumps(context or {}, sort_keys=True)))),
             int(usage.get("completion_tokens", estimate_tokens(str(text)))), trace_id,
-            float(body.get("cost_usd", 0.0)), metadata=redact_secrets({"usage": usage}),
+            float(body.get("cost_usd", 0.0)), metadata=redact_secrets({"usage": usage, "context_hash": context_hash}),
         )
 
 
 class OpenAICompatibleProvider(_HTTPProvider):
     name = "openai_compatible"
 
-    def __init__(self, endpoint: str, model: str = "gpt-4o-mini", api_key: str | None = None, timeout_seconds: float = 20.0):
+    def __init__(self, endpoint: str, model: str = "gpt-4o-mini", api_key: str | None = None, timeout_seconds: float = 20.0, provider_name: str = "openai_compatible"):
         super().__init__(endpoint, model, api_key, timeout_seconds)
+        self.name = provider_name
 
     def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None) -> ModelResponse:
         return self._complete_http(system, task, context, trace_id, timeout_seconds)

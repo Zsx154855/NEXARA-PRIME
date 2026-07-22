@@ -1,0 +1,33 @@
+{
+  "receipt_id": "receipt_real_provider_context_tool_closure_v1_20260722",
+  "mission": "NEXARA_REAL_PROVIDER_CONTEXT_TOOL_CLOSURE_V1",
+  "mission_id": "mission_8ddd68af0e0b",
+  "status": "PASS",
+  "result": "LOCAL_IMPLEMENTATION_AND_REAL_READONLY_MISSION_VERIFIED",
+  "provider": "deepseek",
+  "context_hash": "405f80bfb00d997e15b93ac67d230527e6609b401a993ae9e20315e3c2fcf96a",
+  "receipt_chain": {
+    "total_invocations": 2,
+    "chain_gaps": 0,
+    "unverifiable_receipts": 0,
+    "fail_closed_violations": 0,
+    "chain_intact": true
+  },
+  "memory": {
+    "total_committed": 1,
+    "evidence_bound": 1,
+    "unbound": 0,
+    "all_bound": true
+  },
+  "independent_roles": {
+    "reviewer": "PASS",
+    "auditor": "PASS"
+  },
+  "artifact_model": "NON_SELF_REFERENTIAL",
+  "human_control": {
+    "report_write_approval": "APPROVED",
+    "push": "NOT_EXECUTED",
+    "merge": "NOT_EXECUTED",
+    "deploy": "NOT_EXECUTED"
+  }
+}

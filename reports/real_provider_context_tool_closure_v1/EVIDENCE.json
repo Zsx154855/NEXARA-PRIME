@@ -1,0 +1,42 @@
+{
+  "evidence_id": "evidence_real_provider_context_tool_closure_v1_20260722",
+  "mission": "NEXARA_REAL_PROVIDER_CONTEXT_TOOL_CLOSURE_V1",
+  "mission_id": "mission_8ddd68af0e0b",
+  "worktree": "/Users/agentos/Documents/Codex/2026-07-22/nexara-real-provider-context-tool-closure/worktree",
+  "branch": "work/nexara-real-provider-context-tool-closure-v1",
+  "base_sha": "760ed33e7ee445db02dfbaf1f28e2c4bfdcf015c",
+  "audited_repository": "/Users/agentos/NEXARA-PRIME",
+  "audited_branch": "work/nexara-web-dashboard-product-v1",
+  "audited_head_sha": "760ed33e7ee445db02dfbaf1f28e2c4bfdcf015c",
+  "context_hash": "405f80bfb00d997e15b93ac67d230527e6609b401a993ae9e20315e3c2fcf96a",
+  "provider": "deepseek",
+  "provider_model": "deepseek-chat",
+  "provider_context_hash": "405f80bfb00d997e15b93ac67d230527e6609b401a993ae9e20315e3c2fcf96a",
+  "provider_unavailable": false,
+  "verification": {
+    "pytest_passed": 888,
+    "pytest_subtests_passed": 3,
+    "ruff": "PASS",
+    "nsec_validation": "PASS",
+    "nsec_drift": "NO_DRIFT",
+    "secret_scan": "CLEAN",
+    "git_diff_check": "PASS"
+  },
+  "closure": {
+    "receipt_chain_intact": true,
+    "receipt_chain_gaps": 0,
+    "unverifiable_receipts": 0,
+    "fail_closed_violations": 0,
+    "memory_total_committed": 1,
+    "memory_evidence_bound": 1,
+    "memory_unbound": 0,
+    "reviewer": "PASS",
+    "auditor": "PASS",
+    "assignments": 8,
+    "repository_mutated": false
+  },
+  "artifact_model": "NON_SELF_REFERENTIAL",
+  "push": "NOT_EXECUTED",
+  "merge": "NOT_EXECUTED",
+  "deploy": "NOT_EXECUTED"
+}

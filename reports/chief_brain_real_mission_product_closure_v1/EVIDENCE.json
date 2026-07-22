@@ -1,0 +1,82 @@
+{
+  "evidence_id": "evidence_chief_brain_closure_v1_20260720_v3",
+  "mission": "NEXARA_CHIEF_BRAIN_REAL_MISSION_PRODUCT_CLOSURE_V1",
+  "branch": "work/nexara-chief-brain-real-mission-product-closure-v1",
+  "base_sha": "105b536710fc36d5d272d225b12f0aae640fe8f4",
+  "code_change_commit": "bcf043420aab0380ab7ae6b8f33a69039b2ef1c7",
+  "prior_governance_commit": "553aa2e29914c4893db0dd11ea7012e4387aaafa",
+  "receipt_commit": "PENDING_SELF_COMMIT",
+  "artifact_model": "NON_SELF_REFERENTIAL",
+  "attestation_location": "PR_19_GOVERNANCE_COMMENT",
+  "timestamp": "2026-07-20T16:00:00Z",
+  "verification_results": {
+    "focused_closure_tests": {
+      "total": 84,
+      "passed": 84,
+      "failed": 0,
+      "note": "42 chief_brain_closure_v1 + 42 e2e_runtime_closure"
+    },
+    "e2e_runtime_closure_tests": {
+      "total": 42,
+      "passed": 42,
+      "failed": 0,
+      "note": "subset of focused_closure_tests, not additive"
+    },
+    "codex_runtime_regression": {
+      "total": 19,
+      "passed": 19,
+      "failed": 0
+    },
+    "focused_plus_codex_regression": {
+      "total": 103,
+      "passed": 103,
+      "failed": 0,
+      "note": "84 focused_closure + 19 codex_regression"
+    },
+    "full_test_suite": {
+      "total": 881,
+      "passed": 881,
+      "failed": 0,
+      "subtests": 3
+    },
+    "ruff_lint": "BRANCH_SCOPE_CLEAN",
+    "ruff_pre_existing_errors": 7,
+    "ruff_pre_existing_files": [
+      "scripts/runtime_truth/collect_git_truth.py",
+      "scripts/runtime_truth/collect_github_truth.py",
+      "scripts/runtime_truth/compile_program_state.py",
+      "scripts/runtime_truth/validate_program_state.py"
+    ],
+    "nsec_validation": "PASS",
+    "nsec_drift": "NO_DRIFT",
+    "secret_scan": "CLEAN",
+    "diff_check": "PASS"
+  },
+  "branch_python_files": [
+    "scripts/security/scan_hardcoded_secrets.py",
+    "src/nexara_prime/evidence.py",
+    "src/nexara_prime/memory.py",
+    "src/nexara_prime/models.py",
+    "src/nexara_prime/tools.py",
+    "tests/test_chief_brain_closure_v1.py",
+    "tests/test_e2e_runtime_closure.py"
+  ],
+  "key_additions": {
+    "failure_code_enum": "32 deterministic failure codes",
+    "reason_code_enum": "34 deterministic reason codes",
+    "receipt_chain_verification": "verify_receipt_chain() method",
+    "memory_evidence_binding": "verify_evidence_binding() method with enforcement",
+    "failure_classification": "_classify_failure() static method",
+    "new_tests": "42 tests in test_chief_brain_closure_v1.py"
+  },
+  "nsec_compliance": {
+    "article_4": "最正确方向 — Deterministic classification eliminates ambiguous error handling",
+    "article_8": "最大闭环 — Complete Tool→Evidence→Receipt→Memory chain verified",
+    "article_13": "完整不拆分 — Product changes in 1 commit; governance fixes in separate audit-chain commits",
+    "article_18": "Contract First — No contract changes; all additions are backward-compatible",
+    "article_26": "质量不得降级 — Test count increased (839→881), no tests weakened",
+    "article_27": "工程诚实 — All claims backed by fresh verification evidence",
+    "article_28": "事实优先 — Verification commands run, output read, results reported",
+    "article_36-38": "Human control preserved — R2+ gates intact"
+  }
+}

@@ -20,9 +20,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from .models import RiskLevel, new_id, now_iso
@@ -316,6 +318,101 @@ class MockGitDriver(GitDriver):
 
     def get_head_sha(self) -> str:
         return self._get_last_commit_sha()
+
+
+class RealReadOnlyGitDriver(GitDriver):
+    """Real Git driver limited to non-mutating repository inspection."""
+
+    def __init__(self, repo_path: str):
+        self.repo_path = str(Path(repo_path).expanduser().resolve())
+        self._current_branch = self._run("branch", "--show-current").strip() or "DETACHED"
+
+    def _run(self, *args: str) -> str:
+        try:
+            result = subprocess.run(
+                ["git", *args], cwd=self.repo_path, capture_output=True,
+                text=True, check=False, timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise RuntimeError(f"real_git_probe_failed:{type(exc).__name__}") from exc
+        if result.returncode != 0:
+            raise RuntimeError(f"real_git_probe_failed:{' '.join(args)}:{result.stderr.strip()[:240]}")
+        return result.stdout
+
+    @property
+    def current_branch(self) -> str:
+        return self._current_branch
+
+    def probe_capability(self) -> GitCapability:
+        return GitCapability(
+            flags=["GIT_REAL_DRIVER", GIT_BRANCH_PROTECTION_ACTIVE, GIT_SECRET_SCAN_ACTIVE],
+            driver_type="real_read_only", repo_path=self.repo_path,
+            current_branch=self.current_branch,
+        )
+
+    def status(self) -> GitResult:
+        output = self._run("status", "--short", "--untracked-files=all")
+        files = [line[3:] for line in output.splitlines() if len(line) >= 4]
+        return GitResult(success=True, output=output, stdout=output, changed_files=files, branch=self.current_branch, head_sha=self.get_head_sha())
+
+    def diff(self, staged: bool = False) -> GitResult:
+        output = self._run("diff", "--cached" if staged else "") if staged else self._run("diff")
+        return GitResult(success=True, output=output, diff=output, branch=self.current_branch, head_sha=self.get_head_sha())
+
+    def diff_staged(self) -> GitResult:
+        return self.diff(staged=True)
+
+    def log(self, count: int = 10) -> GitResult:
+        output = self._run("log", f"-{max(1, count)}", "--oneline")
+        return GitResult(success=True, output=output, stdout=output, branch=self.current_branch, head_sha=self.get_head_sha())
+
+    def show(self, ref: str) -> GitResult:
+        output = self._run("show", ref)
+        return GitResult(success=True, output=output, stdout=output, branch=self.current_branch, head_sha=self.get_head_sha())
+
+    def branch_list(self) -> GitResult:
+        output = self._run("branch", "--list")
+        return GitResult(success=True, output=output, stdout=output, branch=self.current_branch, head_sha=self.get_head_sha())
+
+    def list_files(self) -> list[str]:
+        return sorted({line.strip() for line in self._run("ls-files", "--cached", "--others", "--exclude-standard").splitlines() if line.strip()})
+
+    def _write_denied(self, action: str) -> GitResult:
+        return GitResult(success=False, error=f"real_git_read_only_denies:{action}", branch=self.current_branch, head_sha=self.get_head_sha())
+
+    def create_branch(self, name: str, base: str = "HEAD") -> GitResult:
+        return self._write_denied("create_branch")
+
+    def checkout_branch(self, name: str) -> GitResult:
+        return self._write_denied("checkout_branch")
+
+    def stage_files(self, paths: list[str]) -> GitResult:
+        return self._write_denied("stage_files")
+
+    def unstage_files(self, paths: list[str]) -> GitResult:
+        return self._write_denied("unstage_files")
+
+    def commit(self, message: str) -> GitResult:
+        return self._write_denied("commit")
+
+    def push(self, remote: str = "origin", branch: str = "") -> GitResult:
+        return self._write_denied("push")
+
+    def fetch(self, remote: str = "origin") -> GitResult:
+        return self._write_denied("fetch")
+
+    def open_pr(self, title: str, body: str, base: str = "main", head: str = "") -> GitResult:
+        return self._write_denied("open_pr")
+
+    def merge_pr(self, pr_id: str, strategy: str = "merge") -> GitResult:
+        return self._write_denied("merge_pr")
+
+    def rev_parse(self, ref: str = "HEAD") -> GitResult:
+        output = self._run("rev-parse", ref).strip()
+        return GitResult(success=True, output=output, stdout=output, branch=self.current_branch, head_sha=output)
+
+    def get_head_sha(self) -> str:
+        return self._run("rev-parse", "HEAD").strip()
 
 
 class GovernedGitAdapter:

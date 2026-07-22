@@ -1,133 +1,149 @@
 {
-  "mission": "NEXARA_V2_FINAL_ONEPASS_PUSH_CLOSURE",
-  "branch": "work/nexara-chief-brain-runtime-convergence-v2-clean",
-  "base_sha": "b37d0f31bbc1fd9162aa28f04ca195afe766d501",
-  "head_sha": "56cc1f00b0871f21688c9983534f1fd586eafc35",
-  "commit_count": 9,
-  "commits": [
-    {
-      "sha": "56cc1f0",
-      "message": "fix(runtime): KeyboardInterrupt recovery + mock-only gate"
-    },
-    {
-      "sha": "4083c35",
-      "message": "docs: final V2 pre-PR integrity evidence — all 3 review items closed"
-    },
-    {
-      "sha": "31221e3",
-      "message": "fix(runtime): real verification crash recovery + ValueError idempotency catch"
-    },
-    {
-      "sha": "bc3da8d",
-      "message": "docs: add V2 pre-PR integrity final evidence and receipt"
-    },
-    {
-      "sha": "c2c9dbb",
-      "message": "fix(tests): rewrite stage recovery with real crash injection, not fake state mutation"
-    },
-    {
-      "sha": "f5aec6f",
-      "message": "docs: add V2 pre-PR integrity evidence and receipt"
-    },
-    {
-      "sha": "390f917",
-      "message": "fix(runtime): enforce provider integrity, remove raw store bypass, SDK compat in snapshot"
-    },
-    {
-      "sha": "6f53a48",
-      "message": "refactor(runtime): converge chief brain runtime — stage-dispatched replay-safe v2"
-    },
-    {
-      "sha": "5d4f320",
-      "message": "refactor(runtime): clean V2 rebuild — stage-dispatched recovery, provider integrity, inspect_mission"
-    }
-  ],
-  "test_ledger": {
-    "base_total": 742,
-    "added": 78,
-    "removed": 0,
-    "head_total": 820,
-    "verification": "pytest --collect-only nodeid set diff: comm -23/comm -13",
-    "breakdown": {
-      "test_chief_brain_runtime_convergence.py": 27,
-      "test_runtime_v2_codex_regression.py": 13,
-      "test_runtime_v2_crash_recovery.py": 3,
-      "test_runtime_v2_entry_convergence.py": 15,
-      "test_runtime_v2_provider_unavailable.py": 13,
-      "test_runtime_v2_stage_recovery.py": 7
-    },
-    "result": "820/820 PASS"
-  },
-  "crash_recovery_matrix": {
-    "verification_boundary": {
-      "method": "KeyboardInterrupt (BaseException) at _advance(Verification→Evidence)",
-      "recovery": "state stays Verification naturally; re-instantiate; _verify_stage dispatches",
-      "verification": "verification_report=1, tool_invocations=2, idempotent",
-      "side_effect_count": 2,
-      "duplicates": 0
-    },
-    "evidence_idempotent": {
-      "method": "Full completion + re-instantiation + re-run",
-      "recovery": "Completed → no-op; execution_result count unchanged",
-      "side_effect_count": 2,
-      "duplicates": 0
-    },
-    "memory_idempotent": {
-      "method": "Full completion + re-instantiation + re-run",
-      "recovery": "committed memory count unchanged",
-      "side_effect_count": 1,
-      "duplicates": 0
-    },
-    "evaluation_idempotent": {
-      "method": "Full completion + re-instantiation + re-run",
-      "recovery": "evaluation count unchanged",
-      "side_effect_count": 1,
-      "duplicates": 0
-    },
-    "token_persistence": {
-      "method": "Re-instantiation after full run",
-      "verification": "mission.result[model_tokens] not None, input_tokens > 0",
-      "side_effect_count": 0
-    },
-    "resume_preserves_state": {
-      "method": "resume() after re-instantiation",
-      "verification": "state unchanged before/after resume()",
-      "side_effect_count": 0
-    },
-    "provider_unavailable": {
-      "method": "model_provider=none + mock_model=False → UnavailableProvider",
-      "verification": "mission.state != 'Failed', stays resumable",
-      "side_effect_count": 0
-    }
-  },
-  "defects": {
-    "known_p1": 0,
-    "known_p2": 0,
-    "raw_store_bypass": 0,
-    "stale_sha": 0,
-    "silent_mock_fallback": 0,
-    "duplicate_side_effects": 0,
-    "invalid_self_transition": 0,
-    "approval_integrity_masking": 0,
-    "evidence_memory_eval_idempotency_gap": 0
-  },
-  "fixes": {
-    "mock_only_gate": "_build_model_gateway: only self.settings.mock_model (not provider_name=='mock') enables MockProvider",
-    "keyboardinterrupt_recovery": "monkeypatch _advance → KeyboardInterrupt at Verification→Evidence boundary; state stays naturally",
-    "checkpointed_model_governed": "replays from mission.result, not raw store.find_record",
-    "approval_integrity": "approval_status='integrity_error' default, not silent 'pending'",
-    "provider_unavailable_merged": "runtime init + mission recovery flags merged",
-    "sdk_compat_inline": "state/spec/title/objective/created_at in inspect_mission",
-    "api_snapshot_clean": "API status consumes full inspect_mission without patching",
-    "verification_value_error_catch": "ValueError caught alongside RuntimeError in _verify_stage evidence re-add",
-    "modelgateway_no_silent_mock": "ModelGateway.__init__ raises ValueError if provider=None"
-  },
-  "nsec_validator": "PASS",
-  "drift_detector": "NO DRIFT",
-  "ruff": "CLEAN (pre-existing F401 AdaptiveMode only)",
-  "secret_scan": "CLEAN",
-  "import_cycles": "NONE",
-  "receipt_verifier": "PASS",
+  "evidence_id": "evidence_migrated_b04ec0152fec",
+  "sha256": "63079014a8e299e37aaf11ecd5af85d15b36d3efee5219488844902259d5f0de",
   "timestamp": "2026-07-18T18:06:10.237216+00:00",
-  "evidence_sha256": "1366a7060f53e9281df007a307a81b65f52b44af86578d744456aaaa4006cdb4"
+  "mission_id": "NEXARA_V2_FINAL_ONEPASS_PUSH_CLOSURE",
+  "kind": "legacy_migrated",
+  "source": "legacy_migration_tool_v2.1",
+  "content": "Migrated from legacy evidence: v2_final_onepass_20260718T180610Z.json. Original SHA: b04ec0152fec783e8c150b3c6aaa4912a170e09f34c5447b9648046924198eae",
+  "legacy_data": {
+    "mission": "NEXARA_V2_FINAL_ONEPASS_PUSH_CLOSURE",
+    "branch": "work/nexara-chief-brain-runtime-convergence-v2-clean",
+    "base_sha": "b37d0f31bbc1fd9162aa28f04ca195afe766d501",
+    "head_sha": "56cc1f00b0871f21688c9983534f1fd586eafc35",
+    "commit_count": 9,
+    "commits": [
+      {
+        "sha": "56cc1f0",
+        "message": "fix(runtime): KeyboardInterrupt recovery + mock-only gate"
+      },
+      {
+        "sha": "4083c35",
+        "message": "docs: final V2 pre-PR integrity evidence — all 3 review items closed"
+      },
+      {
+        "sha": "31221e3",
+        "message": "fix(runtime): real verification crash recovery + ValueError idempotency catch"
+      },
+      {
+        "sha": "bc3da8d",
+        "message": "docs: add V2 pre-PR integrity final evidence and receipt"
+      },
+      {
+        "sha": "c2c9dbb",
+        "message": "fix(tests): rewrite stage recovery with real crash injection, not fake state mutation"
+      },
+      {
+        "sha": "f5aec6f",
+        "message": "docs: add V2 pre-PR integrity evidence and receipt"
+      },
+      {
+        "sha": "390f917",
+        "message": "fix(runtime): enforce provider integrity, remove raw store bypass, SDK compat in snapshot"
+      },
+      {
+        "sha": "6f53a48",
+        "message": "refactor(runtime): converge chief brain runtime — stage-dispatched replay-safe v2"
+      },
+      {
+        "sha": "5d4f320",
+        "message": "refactor(runtime): clean V2 rebuild — stage-dispatched recovery, provider integrity, inspect_mission"
+      }
+    ],
+    "test_ledger": {
+      "base_total": 742,
+      "added": 78,
+      "removed": 0,
+      "head_total": 820,
+      "verification": "pytest --collect-only nodeid set diff: comm -23/comm -13",
+      "breakdown": {
+        "test_chief_brain_runtime_convergence.py": 27,
+        "test_runtime_v2_codex_regression.py": 13,
+        "test_runtime_v2_crash_recovery.py": 3,
+        "test_runtime_v2_entry_convergence.py": 15,
+        "test_runtime_v2_provider_unavailable.py": 13,
+        "test_runtime_v2_stage_recovery.py": 7
+      },
+      "result": "820/820 PASS"
+    },
+    "crash_recovery_matrix": {
+      "verification_boundary": {
+        "method": "KeyboardInterrupt (BaseException) at _advance(Verification→Evidence)",
+        "recovery": "state stays Verification naturally; re-instantiate; _verify_stage dispatches",
+        "verification": "verification_report=1, tool_invocations=2, idempotent",
+        "side_effect_count": 2,
+        "duplicates": 0
+      },
+      "evidence_idempotent": {
+        "method": "Full completion + re-instantiation + re-run",
+        "recovery": "Completed → no-op; execution_result count unchanged",
+        "side_effect_count": 2,
+        "duplicates": 0
+      },
+      "memory_idempotent": {
+        "method": "Full completion + re-instantiation + re-run",
+        "recovery": "committed memory count unchanged",
+        "side_effect_count": 1,
+        "duplicates": 0
+      },
+      "evaluation_idempotent": {
+        "method": "Full completion + re-instantiation + re-run",
+        "recovery": "evaluation count unchanged",
+        "side_effect_count": 1,
+        "duplicates": 0
+      },
+      "token_persistence": {
+        "method": "Re-instantiation after full run",
+        "verification": "mission.result[model_tokens] not None, input_tokens > 0",
+        "side_effect_count": 0
+      },
+      "resume_preserves_state": {
+        "method": "resume() after re-instantiation",
+        "verification": "state unchanged before/after resume()",
+        "side_effect_count": 0
+      },
+      "provider_unavailable": {
+        "method": "model_provider=none + mock_model=False → UnavailableProvider",
+        "verification": "mission.state != 'Failed', stays resumable",
+        "side_effect_count": 0
+      }
+    },
+    "defects": {
+      "known_p1": 0,
+      "known_p2": 0,
+      "raw_store_bypass": 0,
+      "stale_sha": 0,
+      "silent_mock_fallback": 0,
+      "duplicate_side_effects": 0,
+      "invalid_self_transition": 0,
+      "approval_integrity_masking": 0,
+      "evidence_memory_eval_idempotency_gap": 0
+    },
+    "fixes": {
+      "mock_only_gate": "_build_model_gateway: only self.settings.mock_model (not provider_name=='mock') enables MockProvider",
+      "keyboardinterrupt_recovery": "monkeypatch _advance → KeyboardInterrupt at Verification→Evidence boundary; state stays naturally",
+      "checkpointed_model_governed": "replays from mission.result, not raw store.find_record",
+      "approval_integrity": "approval_status='integrity_error' default, not silent 'pending'",
+      "provider_unavailable_merged": "runtime init + mission recovery flags merged",
+      "sdk_compat_inline": "state/spec/title/objective/created_at in inspect_mission",
+      "api_snapshot_clean": "API status consumes full inspect_mission without patching",
+      "verification_value_error_catch": "ValueError caught alongside RuntimeError in _verify_stage evidence re-add",
+      "modelgateway_no_silent_mock": "ModelGateway.__init__ raises ValueError if provider=None"
+    },
+    "nsec_validator": "PASS",
+    "drift_detector": "NO DRIFT",
+    "ruff": "CLEAN (pre-existing F401 AdaptiveMode only)",
+    "secret_scan": "CLEAN",
+    "import_cycles": "NONE",
+    "receipt_verifier": "PASS",
+    "timestamp": "2026-07-18T18:06:10.237216+00:00",
+    "evidence_sha256": "1366a7060f53e9281df007a307a81b65f52b44af86578d744456aaaa4006cdb4"
+  },
+  "migration_metadata": {
+    "original_file": "v2_final_onepass_20260718T180610Z.json",
+    "original_sha256": "b04ec0152fec783e8c150b3c6aaa4912a170e09f34c5447b9648046924198eae",
+    "migrated_at": "2026-07-22T03:57:22.059108+00:00",
+    "migrator_version": "v2.1",
+    "schema_version": 2
+  }
 }
