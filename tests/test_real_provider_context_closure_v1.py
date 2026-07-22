@@ -17,7 +17,7 @@ def _git(repo: Path, *args: str) -> None:
 
 def _repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
-    repo.mkdir()
+    repo.mkdir(parents=True)
     (repo / "README.md").write_text("real repository\n", encoding="utf-8")
     (repo / ".env").write_text("API_KEY=must-not-be-collected\n", encoding="utf-8")
     _git(repo, "init", "-q")
@@ -63,10 +63,12 @@ def test_independent_reviewer_requires_bound_context(tmp_path: Path) -> None:
 
 
 def test_plan_persists_real_context_and_assignment_lifecycle(tmp_path: Path) -> None:
-    repo = _repo(tmp_path)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    repo = _repo(workspace)
     settings = Settings(
         db_path=tmp_path / "runtime" / "nexara.db",
-        workspace_root=tmp_path / "workspace",
+        workspace_root=workspace,
         report_root=tmp_path / "reports",
         model_provider="mock",
         mock_model=True,
@@ -83,3 +85,23 @@ def test_plan_persists_real_context_and_assignment_lifecycle(tmp_path: Path) -> 
     assert planned.agent_lifecycle
     assert {item["status"] for item in planned.agent_lifecycle} == {"assigned"}
     assert all("model.mock" in assignment.loaded_capabilities for assignment in planned.assignments)
+
+
+def test_plan_does_not_collect_repository_context_outside_workspace(tmp_path: Path) -> None:
+    repo = _repo(tmp_path / "outside")
+    workspace = tmp_path / "workspace"
+    settings = Settings(
+        db_path=tmp_path / "runtime" / "nexara.db",
+        workspace_root=workspace,
+        report_root=tmp_path / "reports",
+        model_provider="mock",
+        mock_model=True,
+        api_host="127.0.0.1",
+        api_port=8765,
+    )
+    runtime = NexaraRuntime(settings)
+    mission = runtime.create_mission("Read-only repository audit", source_dir=str(repo))
+    planned = runtime.plan_mission(mission.mission_id)
+
+    assert "context_hash" not in planned.result
+    assert not any(item["kind"] == "repository_context" for item in runtime.evidence.list(planned.mission_id))

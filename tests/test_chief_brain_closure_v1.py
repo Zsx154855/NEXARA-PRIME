@@ -57,6 +57,9 @@ class TestFailureCodeClassification:
         m = rt.create_mission("Unknown tool test")
         with pytest.raises(KeyError, match="unknown_tool"):
             rt.tools.invoke(m.mission_id, "nonexistent_tool", {}, "trace-1")
+        chain = rt.evidence.verify_receipt_chain(m.mission_id)
+        assert chain["chain_intact"] is True
+        assert chain["chain"][0]["failure_code"] == FailureCode.TOOL_UNKNOWN.value
 
     def test_missing_approval_emits_APPROVAL_MISSING(self, tmp_path: Path) -> None:
         rt = NexaraRuntime(_settings(tmp_path))
@@ -271,6 +274,33 @@ class TestMemoryEvidenceBinding:
         report = rt.memory.verify_evidence_binding(m.mission_id)
         assert report["all_bound"] is True, f"Expected all bound, got: {report}"
 
+    def test_verify_evidence_binding_rejects_missing_evidence_id(self, tmp_path: Path) -> None:
+        rt = NexaraRuntime(_settings(tmp_path))
+        m = rt.create_mission("Binding report test")
+        rt.store.save_record(
+            "memory_bad",
+            "memory",
+            {
+                "memory_id": "memory_bad",
+                "mission_id": m.mission_id,
+                "kind": MemoryKind.DECISION.value,
+                "key": "bad",
+                "content": "bad binding",
+                "source_evidence_id": "evidence_missing",
+                "confidence": 1.0,
+                "status": "committed",
+                "verified": True,
+                "canonical": True,
+                "created_at": "2026-01-01T00:00:00Z",
+                "schema_version": 1,
+            },
+            "2026-01-01T00:00:00Z",
+            m.mission_id,
+        )
+        report = rt.memory.verify_evidence_binding(m.mission_id)
+        assert report["all_bound"] is False
+        assert report["violations"][0]["source_evidence_id"] == "evidence_missing"
+
 
 # ── Replay / Idempotency ────────────────────────────────────────────────────
 
@@ -384,9 +414,13 @@ class TestFailClosed:
         # Verify mission state is not COMPLETED
         stored = rt.store.get_record(m.mission_id)
         assert stored is not None
-        # Failed tool should not produce fake completion
+        # Failed tool must produce an auditable failed invocation and receipt,
+        # not fake completion.
         invocations = rt.tools.list_invocations(m.mission_id)
-        assert len(invocations) == 0  # invocation was never persisted because it raised
+        assert len(invocations) == 1
+        assert invocations[0]["status"] == "failed"
+        assert invocations[0]["failure_code"] == FailureCode.TOOL_UNKNOWN.value
+        assert invocations[0]["receipt_evidence_id"]
 
     def test_failed_tool_does_not_fake_success(self, tmp_path: Path) -> None:
         rt = NexaraRuntime(_settings(tmp_path))

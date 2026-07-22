@@ -8,6 +8,7 @@ from .events import EventBus
 from .models import MemoryKind, MemoryRecord, new_id, now_iso
 
 if TYPE_CHECKING:
+    from .evidence import EvidenceStore
     from .rag_pipeline import RAGPipeline
 
 
@@ -65,9 +66,10 @@ def _safe_memory_kind(kind_str: str, default: "MemoryKind" = None) -> "MemoryKin
         return default or MemoryKind.FACT
 
 class MemoryKernel:
-    def __init__(self, store: SQLiteStore, events: EventBus):
+    def __init__(self, store: SQLiteStore, events: EventBus, evidence: "EvidenceStore | None" = None):
         self.store = store
         self.events = events
+        self.evidence = evidence
 
     def write(self, kind: MemoryKind, key: str, content: str, trace_id: str, mission_id: str | None = None, source_evidence_id: str | None = None, confidence: float = 1.0) -> MemoryRecord:
         if kind == MemoryKind.UNVERIFIED_INFERENCE:
@@ -115,10 +117,24 @@ class MemoryKernel:
             except ValueError:
                 kind = MemoryKind.FACT
 
-            has_evidence = bool(r.get("source_evidence_id"))
+            evidence_id = str(r.get("source_evidence_id") or "")
+            evidence_valid = False
+            if evidence_id and self.evidence is not None:
+                try:
+                    envelope = self.store.get_record_envelope(evidence_id)
+                    evidence_valid = bool(
+                        envelope
+                        and envelope.get("mission_id") == r.get("mission_id")
+                        and self.evidence.verify(evidence_id)
+                    )
+                except (KeyError, ValueError, RuntimeError):
+                    evidence_valid = False
+            elif evidence_id:
+                envelope = self.store.get_record_envelope(evidence_id)
+                evidence_valid = bool(envelope and envelope.get("mission_id") == r.get("mission_id"))
             is_exempt = kind in {MemoryKind.SHORT_TERM, MemoryKind.TEMPORARY_CONTEXT, MemoryKind.UNVERIFIED_INFERENCE}
 
-            if has_evidence:
+            if evidence_valid:
                 bound += 1
             elif is_exempt:
                 exempt += 1
@@ -128,7 +144,9 @@ class MemoryKernel:
                     "memory_id": r.get("memory_id"),
                     "kind": kind_str,
                     "key": r.get("key"),
-                    "has_evidence": False,
+                    "has_evidence": bool(evidence_id),
+                    "evidence_valid": evidence_valid,
+                    "source_evidence_id": evidence_id,
                 })
 
         return {

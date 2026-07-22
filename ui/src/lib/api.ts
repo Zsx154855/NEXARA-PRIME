@@ -20,6 +20,7 @@ import type {
   ApprovalBody,
   SafeModeBody,
   ApiResult,
+  ToolInvocation,
 } from "../types";
 
 // ── Configuration ──
@@ -500,6 +501,13 @@ export function fetchReceipts(missionId?: string): Promise<ReceiptsResponse | Re
   return request<ReceiptsResponse | ReceiptChainResponse>("GET", `/api/receipts${params}`);
 }
 
+export function fetchTools(missionId: string): Promise<ToolInvocation[]> {
+  return request<ToolInvocation[]>(
+    "GET",
+    `/api/missions/${encodeURIComponent(missionId)}/tools`,
+  );
+}
+
 // ── Class wrapper (convenience for React components) ──
 
 export class NexaraAPI {
@@ -520,7 +528,7 @@ export class NexaraAPI {
   getMemory(id?: string) { return fetchMemory(id); }
   getEvents(id: string) { return fetchEvents(id); }
   fetchEvents(id: string) { return fetchEvents(id); }
-  fetchTools(_id: string) { return Promise.resolve([]); }
+  fetchTools(id: string) { return fetchTools(id); }
   getReceipts(id?: string) { return fetchReceipts(id); }
   checkRecovery() { return checkRecovery(); }
   getAdaptiveStatus() { return fetchAdaptiveStatus(); }

@@ -126,8 +126,24 @@ class _HTTPProvider:
     def _complete_http(self, system: str, task: str, context: dict[str, Any] | None, trace_id: str, timeout_seconds: float | None) -> ModelResponse:
         if not self.endpoint:
             raise ProviderUnavailable(f"{self.name}_endpoint_not_configured")
-        payload = {"model": self.model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": task}], "temperature": 0}
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": task}]
         context_hash = str((context or {}).get("context_hash", ""))
+        if context:
+            model_visible_context = {
+                "context_hash": context_hash,
+                "repository": context.get("repository"),
+                "branch": context.get("branch"),
+                "head_sha": context.get("head_sha"),
+                "dirty": context.get("dirty"),
+                "files": context.get("files", []),
+                "excerpts": context.get("excerpts", []),
+            }
+            messages.append({
+                "role": "user",
+                "content": "NEXARA bounded repository context:\n"
+                + json.dumps(redact_secrets(model_visible_context), ensure_ascii=False, sort_keys=True),
+            })
+        payload = {"model": self.model, "messages": messages, "temperature": 0}
         if context:
             payload["metadata"] = redact_secrets(context)
             if context_hash:
@@ -149,7 +165,7 @@ class _HTTPProvider:
             raise ProviderError(f"{self.name}_invalid_response_shape") from exc
         usage = body.get("usage", {})
         return ModelResponse(
-            self.name, self.model, str(text), int(usage.get("prompt_tokens", estimate_tokens(system + task))),
+            self.name, self.model, str(text), int(usage.get("prompt_tokens", estimate_tokens(system + task + json.dumps(context or {}, sort_keys=True)))),
             int(usage.get("completion_tokens", estimate_tokens(str(text)))), trace_id,
             float(body.get("cost_usd", 0.0)), metadata=redact_secrets({"usage": usage, "context_hash": context_hash}),
         )

@@ -140,6 +140,14 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
                 results[mid] = runtime.evidence.verify_receipt_chain(mid)
         return {"missions": results, "total": len(results)}
 
+    @app.get("/api/tools")
+    def tools(mission_id: str | None = None) -> list[dict[str, Any]]:
+        return runtime.tools.list_invocations(mission_id)
+
+    @app.get("/api/missions/{mission_id}/tools")
+    def mission_tools(mission_id: str) -> list[dict[str, Any]]:
+        return runtime.tools.list_invocations(mission_id)
+
     @app.get("/api/evidence")
     def evidence(mission_id: str | None = None) -> list[dict[str, Any]]:
         return runtime.evidence.list(mission_id)
@@ -201,10 +209,11 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     ui_root = Path(__file__).resolve().parents[2] / "ui"
     if ui_root.exists():
-        # Serve Next.js static export if available; fall back to legacy static
+        # Serve only the built Next.js static export. Missing builds should be
+        # visible instead of silently falling back to legacy UI assets.
         out_root = ui_root / "out"
-        console_root = out_root if out_root.exists() and (out_root / "index.html").exists() else ui_root
-        app.mount("/console", StaticFiles(directory=console_root, html=True), name="console")
+        if out_root.exists() and (out_root / "index.html").exists():
+            app.mount("/console", StaticFiles(directory=out_root, html=True), name="console")
         universe_root = ui_root / "knowledge-universe"
         if universe_root.exists():
             app.mount("/knowledge-universe", StaticFiles(directory=universe_root, html=True), name="knowledge-universe")

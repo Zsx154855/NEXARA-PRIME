@@ -110,8 +110,9 @@ class ToolRuntime:
             "file_write_report": RiskLevel.R2,
             "write_workspace_file": RiskLevel.R2,
         }.get(tool_name)
+        unknown_tool = risk is None
         if risk is None:
-            raise KeyError(f"unknown_tool:{tool_name}")
+            risk = RiskLevel.R0
         allowed, reason = self.policy.allows_tool(tool_name, risk, safe_mode)
         if not allowed:
             raise PermissionError(reason)
@@ -139,6 +140,8 @@ class ToolRuntime:
         result: dict[str, Any]
         failure: Exception | None = None
         try:
+            if unknown_tool:
+                raise KeyError(f"unknown_tool:{tool_name}")
             if tool_name in {"file_read", "read_file"}:
                 result = self._file_read(arguments)
             elif tool_name in {"file_write_report", "write_workspace_file"}:
@@ -194,7 +197,7 @@ class ToolRuntime:
             metadata={"invocation_id": invocation.invocation_id, "status": status},
         )
         if status == "failed":
-            if failure is not None and isinstance(failure, (PermissionError, FileNotFoundError, ValueError)):
+            if failure is not None and isinstance(failure, (KeyError, PermissionError, FileNotFoundError, ValueError)):
                 raise failure
             raise RuntimeError(result.get("error", "tool_failed"))
         return invocation
@@ -444,7 +447,7 @@ class ToolRuntime:
         This is the SINGLE classification point for all tool failures.
         Verifier/Auditor/Recovery depend on these codes being stable.
         """
-        exc_msg = str(exc)
+        exc_msg = str(exc).strip("'\"")
 
         if isinstance(exc, KeyError) and exc_msg.startswith("unknown_tool:"):
             return FailureCode.TOOL_UNKNOWN, ReasonCode.TOOL_NOT_REGISTERED

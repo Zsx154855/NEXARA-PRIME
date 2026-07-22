@@ -572,9 +572,11 @@ export function ApprovalCenter({ api }: ApprovalCenterProps) {
   };
 
   const doApprove = async (approvalId: string) => {
+    const approval = approvals.find((a) => a.approval_id === approvalId);
+    if (!approval?.mission_id) return;
     setProcessing(approvalId);
     try {
-      await api.approveMission(approvalId, {
+      await api.approveMission(approval.mission_id, {
         approved: true,
         actor: actorName || undefined,
         note: approvalNote || undefined,
@@ -613,7 +615,8 @@ export function ApprovalCenter({ api }: ApprovalCenterProps) {
       async () => {
         setProcessing(approvalId);
         try {
-          await api.approveMission(approvalId, {
+          if (!approval.mission_id) return;
+          await api.approveMission(approval.mission_id, {
             approved: false,
             actor: actorName || undefined,
             note: approvalNote || undefined,

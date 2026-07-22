@@ -207,7 +207,7 @@ class NexaraRuntime:
         self.events = EventBus(self.store)
         self.audit = SecurityAuditLedger(self.store)
         self.evidence = EvidenceStore(self.store, self.events)
-        self.memory = MemoryKernel(self.store, self.events)
+        self.memory = MemoryKernel(self.store, self.events, self.evidence)
         self.policy = PolicyEngine()
         self.approvals = ApprovalEngine(self.store, self.events)
         self.leases = WriterLeaseManager(self.store, self.events)
@@ -366,6 +366,11 @@ class NexaraRuntime:
 
     def _collect_repository_context(self, mission: Mission) -> RepositoryContext | None:
         if not mission.spec.source_dir:
+            return None
+        try:
+            source_root = Path(mission.spec.source_dir).resolve()
+            source_root.relative_to(self.settings.workspace_root.resolve())
+        except ValueError:
             return None
         try:
             return self.repository_context.collect(mission.spec.source_dir)

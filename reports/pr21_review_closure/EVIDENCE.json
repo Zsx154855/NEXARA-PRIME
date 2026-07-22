@@ -1,0 +1,95 @@
+{
+  "evidence_id": "evidence_pr21_review_closure_20260722",
+  "mission": "PR21_REVIEW_CLOSURE",
+  "status": "PASS",
+  "pr": {
+    "number": 21,
+    "state": "OPEN",
+    "base": "main",
+    "head_branch": "work/nexara-real-provider-context-tool-closure-v1",
+    "head_before_review_closure": "f220c3d662a01cb12c02db8376f2b713069511f1",
+    "merge_allowed": false
+  },
+  "review_findings_closed": [
+    {
+      "priority": "P1",
+      "file": "src/nexara_prime/runtime.py",
+      "finding": "Repository context collection allowed source_dir outside the approved workspace root.",
+      "resolution": "Resolved source_dir and workspace_root before collection and fail-closed when source_dir is not inside the approved workspace root.",
+      "validation": "tests/test_real_provider_context_closure_v1.py::test_plan_does_not_collect_repository_context_outside_workspace"
+    },
+    {
+      "priority": "P2",
+      "file": "ui/src/components/screens/ApprovalCenter.tsx",
+      "finding": "Approval Center used approval_id when calling mission approve/reject APIs.",
+      "resolution": "Approve/reject now resolve the selected approval and call mission APIs with approval.mission_id."
+    },
+    {
+      "priority": "P2",
+      "file": "src/nexara_prime/evidence.py",
+      "finding": "Receipt chain verification recomputed content hash without full EvidenceStore integrity verification.",
+      "resolution": "Receipt chain verification now calls EvidenceStore.verify(receipt_id) and marks unverifiable receipts as gaps."
+    },
+    {
+      "priority": "P2",
+      "file": "src/nexara_prime/model_gateway.py",
+      "finding": "Repository excerpts were only placed in HTTP metadata and might not be visible to the real model.",
+      "resolution": "Bounded redacted repository context, including excerpts and context_hash, is now added as a model-visible user message while retaining metadata binding.",
+      "validation": "tests/test_pr21_review_closure.py::test_openai_compatible_provider_sends_excerpts_as_model_visible_message"
+    },
+    {
+      "priority": "P2",
+      "file": "ui/src/lib/api.ts",
+      "finding": "fetchTools returned a hardcoded empty array.",
+      "resolution": "fetchTools now calls the real backend mission tool invocation endpoint."
+    },
+    {
+      "priority": "P2",
+      "file": "src/nexara_prime/memory.py",
+      "finding": "Memory evidence binding only checked source_evidence_id was non-empty.",
+      "resolution": "Memory binding now verifies evidence existence, same mission ownership, and EvidenceStore integrity when available.",
+      "validation": "tests/test_chief_brain_closure_v1.py::test_verify_evidence_binding_rejects_missing_evidence_id"
+    },
+    {
+      "priority": "P2",
+      "file": "src/nexara_prime/api.py",
+      "finding": "FastAPI silently fell back to the legacy UI when the dashboard build was missing.",
+      "resolution": "Console route is only mounted when the Next static export exists; no silent legacy fallback is served.",
+      "validation": "tests/test_pr21_review_closure.py::test_console_route_is_not_mounted_without_next_export"
+    },
+    {
+      "priority": "P2",
+      "file": "src/nexara_prime/tools.py",
+      "finding": "Unknown tools raised before failed invocation and receipt generation.",
+      "resolution": "Unknown tools now enter deterministic failed invocation recording, receive TOOL_UNKNOWN, and emit a receipt before re-raising.",
+      "validation": "tests/test_chief_brain_closure_v1.py::test_unknown_tool_emits_TOOL_UNKNOWN"
+    }
+  ],
+  "duplicate_threads": {
+    "finding": "EvidenceStore receipt-chain finding appeared twice in Codex review threads.",
+    "handling": "Single code fix applied in src/nexara_prime/evidence.py; duplicate thread has the same remediation target."
+  },
+  "validation": {
+    "python_syntax": "PASS",
+    "focused_pytest": "54 passed",
+    "full_pytest": "893 passed",
+    "ruff": "PASS",
+    "nsec_validation": "PASS",
+    "drift_detection": "PASS / NO DRIFT",
+    "secret_scan": "CLEAN",
+    "git_diff_check": "PASS",
+    "frontend_lint": "PASS",
+    "frontend_type_check": "PASS"
+  },
+  "ci": {
+    "github_actions_result": "BLOCKED_BY_GITHUB_BILLING",
+    "runner_started": false,
+    "code_result": "NOT_FAILED_BY_CI",
+    "merge_allowed": false
+  },
+  "boundaries": {
+    "push": "PENDING_AFTER_LOCAL_COMMIT",
+    "merge": "NOT_EXECUTED",
+    "deploy": "NOT_EXECUTED"
+  }
+}

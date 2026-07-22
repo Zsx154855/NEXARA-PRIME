@@ -571,13 +571,10 @@ class EvidenceStore:
 
             receipt_verifiable = False
             if receipt_id:
-                envelope = self.store.get_record_envelope(str(receipt_id))
-                if envelope:
-                    raw = envelope.get("payload", {})
-                    content_digest = hashlib.sha256(
-                        str(raw.get("content", "")).encode("utf-8")
-                    ).hexdigest()
-                    receipt_verifiable = content_digest == raw.get("sha256")
+                try:
+                    receipt_verifiable = self.verify(str(receipt_id))
+                except (KeyError, ValueError, RuntimeError):
+                    receipt_verifiable = False
 
             if status == "failed" and not failure_code:
                 fail_closed_violations += 1

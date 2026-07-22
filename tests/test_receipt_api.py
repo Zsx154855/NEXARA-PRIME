@@ -69,6 +69,16 @@ class TestReceiptEndpoint:
         assert "missions" in data
         assert isinstance(data["total"], int)
 
+    def test_tools_for_mission(self, runtime_with_mission: TestClient) -> None:
+        r = runtime_with_mission.get("/api/missions")
+        assert r.status_code == 200
+        mid = r.json()[0]["mission_id"]
+        tools = runtime_with_mission.get(f"/api/missions/{mid}/tools")
+        assert tools.status_code == 200
+        data = tools.json()
+        assert isinstance(data, list)
+        assert any(item.get("tool_name") == "file_write_report" for item in data)
+
     def test_receipt_chain_fields(self, runtime_with_mission: TestClient) -> None:
         r = runtime_with_mission.get("/api/missions")
         missions = r.json()
