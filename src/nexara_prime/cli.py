@@ -93,6 +93,30 @@ def build_parser() -> argparse.ArgumentParser:
     route.add_argument("mission_id")
     triage = adaptive_sub.add_parser("triage")
     triage.add_argument("mission_id")
+    # delivery controller
+    delivery = sub.add_parser("delivery", help="delivery controller commands")
+    delivery_sub = delivery.add_subparsers(dest="delivery_command", required=True)
+    delivery_sub.add_parser("check", help="run all delivery gates and report readiness")
+    sc = delivery_sub.add_parser("sovereign-check", help="run A1-A11 sovereign authority gates")
+    sc.add_argument("--pr", type=int, default=21, help="PR number (default: 21)")
+    sc.add_argument("--target-head", help="exact commit SHA (default: live query from GitHub)")
+    sc.add_argument("--repo", default="Zsx154855/NEXARA-PRIME", help="repository slug")
+    ps = delivery_sub.add_parser("publish-status", help="publish sovereign commit status")
+    ps.add_argument("--pr", type=int, default=21)
+    ps.add_argument("--target-head", help="exact commit SHA")
+    ps.add_argument("--repo", default="Zsx154855/NEXARA-PRIME")
+    ps.add_argument("--state", default="pending", choices=["pending","success","failure","error"])
+    tk = delivery_sub.add_parser("takeover-required-check", help="take over main branch required check")
+    tk.add_argument("--repo", default="Zsx154855/NEXARA-PRIME")
+    tk.add_argument("--branch", default="main")
+    vt = delivery_sub.add_parser("verify-takeover", help="verify sovereign status + required check")
+    vt.add_argument("--pr", type=int, default=21)
+    vt.add_argument("--target-head", help="exact commit SHA")
+    vt.add_argument("--repo", default="Zsx154855/NEXARA-PRIME")
+    rt = delivery_sub.add_parser("rollback-takeover", help="rollback required check")
+    rt.add_argument("--repo", default="Zsx154855/NEXARA-PRIME")
+    rt.add_argument("--branch", default="main")
+
 
     return parser
 
@@ -519,6 +543,97 @@ def cmd_security(args) -> int:
     return 0
 
 
+def _resolve_target_head(pr: int, target_head: str | None, repo: str) -> str:
+    """Resolve target HEAD: explicit arg wins, else live GitHub query."""
+    if target_head:
+        return target_head
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["gh", "pr", "view", str(pr), "--repo", repo, "--json", "headRefOid", "--jq", ".headRefOid"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except Exception:
+        pass
+    raise RuntimeError(f"Cannot resolve target HEAD for PR #{pr} in {repo}")
+
+
+def cmd_delivery_check() -> int:
+    """Run all delivery controller gates and report readiness."""
+    root = _resolve_repo_root()
+    from .delivery_controller.controller import DeliveryController
+    controller = DeliveryController(str(root))
+    result = controller.check()
+    output = result.to_dict()
+    if result.status == "READY_FOR_PR":
+        print(json.dumps(output, ensure_ascii=False, indent=2))
+        return 0
+    else:
+        print(json.dumps(output, ensure_ascii=False, indent=2), file=sys.stderr)
+        return 1
+
+
+def cmd_sovereign_check(args) -> int:
+    """Run A1-A11 sovereign authority gates."""
+    root = _resolve_repo_root()
+    target_head = _resolve_target_head(args.pr, args.target_head, args.repo)
+    from .delivery_controller.sovereign_authority import SovereignAuthority
+    sa = SovereignAuthority(str(root), target_head, repo_slug=args.repo)
+    results = sa.run_all()
+    summary = sa.summary(results)
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0 if summary["mandatory_all_passed"] else 1
+
+
+def cmd_publish_status(args) -> int:
+    """Publish sovereign commit status."""
+    target_head = _resolve_target_head(args.pr, args.target_head, args.repo)
+    from .delivery_controller.github_status import GitHubStatusPublisher
+    publisher = GitHubStatusPublisher(args.repo)
+    result = publisher.publish(target_head, args.state, f"Sovereign validation: {args.state}")
+    print(json.dumps({"published": result.published, "state": result.state, "sha": result.target_sha, "error": result.error}, ensure_ascii=False, indent=2))
+    return 0 if result.published else 1
+
+
+def cmd_takeover_required_check(args) -> int:
+    """Take over main branch required check."""
+    from .delivery_controller.protection_adapter import ProtectionAdapter
+    adapter = ProtectionAdapter(args.repo)
+    success = adapter.set_required_check(args.branch, "nexara/sovereign-delivery")
+    print(json.dumps({"takeover": success, "context": "nexara/sovereign-delivery", "branch": args.branch}, ensure_ascii=False, indent=2))
+    return 0 if success else 1
+
+
+def cmd_verify_takeover(args) -> int:
+    """Verify sovereign status published and required check active."""
+    target_head = _resolve_target_head(args.pr, args.target_head, args.repo)
+    from .delivery_controller.github_status import GitHubStatusPublisher
+    from .delivery_controller.protection_adapter import ProtectionAdapter
+    publisher = GitHubStatusPublisher(args.repo)
+    adapter = ProtectionAdapter(args.repo)
+    status = publisher.get_sovereign_status(target_head)
+    snap = adapter.snapshot("main")
+    result = {
+        "sovereign_status_exists": status is not None,
+        "sovereign_status": status,
+        "protection_mode": snap.mode,
+        "required_checks": snap.required_checks_before,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    return 0 if status else 1
+
+
+def cmd_rollback_takeover(args) -> int:
+    """Rollback required check to pre-takeover state (empty checks)."""
+    from .delivery_controller.protection_adapter import ProtectionAdapter
+    adapter = ProtectionAdapter(args.repo)
+    success = adapter._set_classic_required_check(args.branch, [])
+    print(json.dumps({"rollback": success, "branch": args.branch}, ensure_ascii=False, indent=2))
+    return 0 if success else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     settings = Settings.from_env(Path.cwd())
@@ -580,6 +695,19 @@ def main(argv: list[str] | None = None) -> int:
                 from .knowledge_universe import scan_vault
                 vault = Path(__file__).resolve().parents[2] / "docs"
                 _print(scan_vault(vault))
+        elif args.command == "delivery":
+            if args.delivery_command == "check":
+                return cmd_delivery_check()
+            elif args.delivery_command == "sovereign-check":
+                return cmd_sovereign_check(args)
+            elif args.delivery_command == "publish-status":
+                return cmd_publish_status(args)
+            elif args.delivery_command == "takeover-required-check":
+                return cmd_takeover_required_check(args)
+            elif args.delivery_command == "verify-takeover":
+                return cmd_verify_takeover(args)
+            elif args.delivery_command == "rollback-takeover":
+                return cmd_rollback_takeover(args)
         return 0
     except Exception as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
