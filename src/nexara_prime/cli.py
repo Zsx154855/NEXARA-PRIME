@@ -202,6 +202,12 @@ def cmd_doctor() -> int:
         candidate = root / ".venv" / "bin" / "python3"
         if candidate.exists():
             py_bin = str(candidate)
+    if not py_bin:
+        # Fallback: system python3 is acceptable
+        import shutil
+        system_python = shutil.which("python3")
+        if system_python:
+            py_bin = system_python
     python_ok = bool(py_bin)
     check("Python virtualenv", python_ok, py_bin or "none")
 
