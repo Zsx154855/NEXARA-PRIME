@@ -22,6 +22,22 @@ from typing import Any
 
 REPO_ROOT = Path(os.environ.get("NEXARA_ROOT", Path(__file__).resolve().parent.parent.parent))
 
+# ── Scan boundary: directories excluded from recursive scans ──────────────────
+IGNORED_DIR_NAMES = {".git", ".worktrees", ".venv", "node_modules", "__pycache__", "dist", "build"}
+
+
+def _is_ignored_path(path: Path) -> bool:
+    """True if any parent directory (or the path itself) is in the ignore set."""
+    for part in path.parts:
+        if part in IGNORED_DIR_NAMES:
+            return True
+    return False
+
+
+def _filter_scan_files(files: list[Path]) -> list[Path]:
+    """Filter out files under ignored directories (e.g. .worktrees)."""
+    return [f for f in files if not _is_ignored_path(f)]
+
 # ── Canonical paths ───────────────────────────────────────────────────────────
 NSEC_CANONICAL = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md"
 NSEC_CANONICAL_V1_SUPERSEDED = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"

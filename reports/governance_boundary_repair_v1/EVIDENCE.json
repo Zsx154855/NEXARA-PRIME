@@ -1,0 +1,31 @@
+{
+  "evidence_id": "evidence_governance_boundary_repair_v1",
+  "sha256": "54521ad9ceceafaed440dac32f41d86489ade6d733de44fb7085d6270454e001",
+  "timestamp": "2026-07-22T08:20:23.303428+00:00",
+  "mission": "NEXARA_GOVERNANCE_BOUNDARY_REPAIR_ONEPASS",
+  "head": "8efb684c0ddb80b3719015a5df20a26b06820ddd",
+  "branch": "work/nexara-sovereign-ci-authority-bridge-v1",
+  "changes": {
+    "files_modified": [
+      "scripts/governance/validate_nsec.py",
+      "scripts/governance/detect_nsec_drift.py"
+    ],
+    "added_lines": "IGNORED_DIR_NAMES + _is_ignored_path() + _filter_scan_files()",
+    "rglob_calls_filtered": "all rglob() calls now pass through _filter_scan_files()",
+    "ignore_set": [
+      ".git",
+      ".worktrees",
+      ".venv",
+      "node_modules",
+      "__pycache__",
+      "dist",
+      "build"
+    ]
+  },
+  "verification": {
+    "validate_nsec": "PASS",
+    "detect_nsec_drift": "PASS (NO DRIFT)",
+    "secret_scan": "CLEAN",
+    "git_diff_check": "PASS"
+  }
+}
