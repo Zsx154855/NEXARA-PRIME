@@ -1,0 +1,25 @@
+{
+  "receipt_type": "sovereign_ci_authority_v1",
+  "target_head": "60f5eb625b7d316a09cdd52e937e4e088d7289a3",
+  "authority_context": "nexara/sovereign-delivery",
+  "timestamp": "2026-07-22T03:49:10.104386+00:00",
+  "gate_results": {
+    "A1_TARGET_HEAD": false,
+    "A2_REPOSITORY": true,
+    "A3_GOVERNANCE": true,
+    "A4_CONTRACT": true,
+    "A5_FULL_VALIDATION": false,
+    "A6_STATIC_AND_SECURITY": true,
+    "A7_EVIDENCE": false,
+    "A8_RECEIPT": false,
+    "A9_EXTERNAL_OBSERVATION": true,
+    "A10_REVIEW": true,
+    "A11_FINAL_AUTHORITY": true
+  },
+  "evidence_sha256": "3d5c21f9f24ca3d2f06157d0c1294666105c0641d1f0c0aef542d9b840057d07",
+  "protection_before_sha256": "df74f7677a225f996088ef350ae1363e175a09be891b5fface36adff1544c7ed",
+  "protection_after_sha256": "PENDING_TAKEOVER",
+  "publisher_identity": "nexara-sovereign-bridge",
+  "final_decision": "failure",
+  "sha256": "76ab844b61c93689012205b2ffdb168d70a5c83f11f2137afe290764a01b5dd0"
+}

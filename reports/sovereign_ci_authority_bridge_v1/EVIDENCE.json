@@ -1,0 +1,96 @@
+{
+  "evidence_id": "evidence_sovereign_bridge_v1_final",
+  "sha256": "3d5c21f9f24ca3d2f06157d0c1294666105c0641d1f0c0aef542d9b840057d07",
+  "timestamp": "2026-07-22T03:49:10.103313+00:00",
+  "target_head": "60f5eb625b7d316a09cdd52e937e4e088d7289a3",
+  "bridge_head": "7c8ee5850bb45686b82c2b57b85162b646c70859",
+  "pr_number": 21,
+  "sovereign_context": "nexara/sovereign-delivery",
+  "gate_summary": {
+    "target_head": "60f5eb625b7d316a09cdd52e937e4e088d7289a3",
+    "total_gates": 11,
+    "passed": 7,
+    "failed": 4,
+    "mandatory_all_passed": false,
+    "decision": "failure",
+    "gates": [
+      {
+        "name": "A1_TARGET_HEAD",
+        "passed": false,
+        "mandatory": true,
+        "error": "HEAD_MISMATCH",
+        "detail": "local=7c8ee5850bb4 remote=60f5eb625b7d"
+      },
+      {
+        "name": "A2_REPOSITORY",
+        "passed": true,
+        "mandatory": true,
+        "error": null,
+        "detail": null
+      },
+      {
+        "name": "A3_GOVERNANCE",
+        "passed": true,
+        "mandatory": true,
+        "error": null,
+        "detail": null
+      },
+      {
+        "name": "A4_CONTRACT",
+        "passed": true,
+        "mandatory": true,
+        "error": null,
+        "detail": null
+      },
+      {
+        "name": "A5_FULL_VALIDATION",
+        "passed": false,
+        "mandatory": true,
+        "error": "TEST_FAILURE",
+        "detail": "  1/14 checks FAILED.\n\n=========================== short test summary info ============================\nFAILED tests/test_p0_repairs.py::CLICoverageTests::test_doctor_runs - Asserti...\n1 failed, 949 passed in 15.60s"
+      },
+      {
+        "name": "A6_STATIC_AND_SECURITY",
+        "passed": true,
+        "mandatory": true,
+        "error": null,
+        "detail": null
+      },
+      {
+        "name": "A7_EVIDENCE",
+        "passed": false,
+        "mandatory": true,
+        "error": "NON_CONFORMING_EVIDENCE",
+        "detail": "[{'file': 'v2_closure_8_points_20260718T190652Z.json', 'status': 'LEGACY', 'missing': ['evidence_id', 'sha256'], 'legacy': ['mission', 'branch', 'base_sha', 'head_sha']}, {'file': 'v2_final_onepass_20260718T180610Z.json', 'status': 'LEGACY', 'missing': ['evidence_id', 'sha256'], 'legacy': ['mission', 'branch', 'base_sha', 'head_sha']}]"
+      },
+      {
+        "name": "A8_RECEIPT",
+        "passed": false,
+        "mandatory": true,
+        "error": "NO_RECEIPT_FILE",
+        "detail": null
+      },
+      {
+        "name": "A9_EXTERNAL_OBSERVATION",
+        "passed": true,
+        "mandatory": false,
+        "error": null,
+        "detail": "EXTERNAL_ACTIONS_OBSERVED"
+      },
+      {
+        "name": "A10_REVIEW",
+        "passed": true,
+        "mandatory": true,
+        "error": null,
+        "detail": null
+      },
+      {
+        "name": "A11_FINAL_AUTHORITY",
+        "passed": true,
+        "mandatory": true,
+        "error": null,
+        "detail": null
+      }
+    ]
+  }
+}
