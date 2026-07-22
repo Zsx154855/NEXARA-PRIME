@@ -30,6 +30,8 @@ _TEXT_SUFFIXES = {
     ".md", ".py", ".pyproject", ".toml", ".yaml", ".yml", ".json",
     ".txt", ".js", ".ts", ".tsx", ".css", ".sh", ".sql",
 }
+# P1-2: paths excluded from context hash (runtime outputs)
+_CONTEXT_HASH_EXCLUDE_PARTS = {"reports", "evidence", "receipts", "cache", ".nexara", "workspace", "runtime"}
 
 
 def _run_git(root: Path, *args: str) -> str:
@@ -60,6 +62,13 @@ def _safe_for_provider(relative: str) -> bool:
     return True
 
 
+def _is_immutable_source(relative: str) -> bool:
+    """True if the path is immutable source code, not runtime output."""
+    path = Path(relative)
+    parts = set(path.parts)
+    return not bool(parts & _CONTEXT_HASH_EXCLUDE_PARTS)
+
+
 @dataclass(frozen=True)
 class RepositoryContext:
     repository_root: str
@@ -71,19 +80,15 @@ class RepositoryContext:
     context_hash: str
 
     def to_provider_context(self, mission_id: str) -> dict[str, Any]:
-        """Return bounded, secret-filtered context for a real provider call."""
+        """Return bounded, secret-filtered context for a real provider call.
+
+        Per NSEC P1 review: only immutable identity fields are sent.
+        Repository structure, file lists, and excerpts are stripped —
+        they belong in the context hash, not the provider payload.
+        """
         return {
             "mission_id": mission_id,
             "context_hash": self.context_hash,
-            "repository": {
-                "root": self.repository_root,
-                "branch": self.branch,
-                "head_sha": self.head_sha,
-                "status_porcelain": self.status_porcelain,
-                "dirty": bool(self.status_porcelain),
-            },
-            "files": list(self.files),
-            "excerpts": dict(self.excerpts),
         }
 
     def manifest(self) -> dict[str, Any]:
@@ -108,13 +113,19 @@ class RealRepositoryContext:
         self.max_excerpt_files = max_excerpt_files
         self.max_excerpt_bytes = max_excerpt_bytes
 
-    def collect(self, repository_root: str | Path) -> RepositoryContext:
+    def collect(self, repository_root: str | Path, *, approved_roots: set[str] | None = None) -> RepositoryContext:
         requested = Path(repository_root).expanduser().resolve()
         if not requested.exists() or not requested.is_dir():
             raise ContextCollectionError(f"repository_not_found:{requested}")
         top_level = Path(_run_git(requested, "rev-parse", "--show-toplevel").strip()).resolve()
         if top_level != requested:
             raise ContextCollectionError(f"repository_root_mismatch:{top_level}")
+        # P1-1: Validate against approved workspace registry
+        if approved_roots is not None:
+            top_str = str(top_level)
+            top_resolved = str(top_level.resolve())
+            if top_str not in approved_roots and top_resolved not in approved_roots:
+                raise ContextCollectionError(f"repository_not_approved:{top_level}")
         driver = RealReadOnlyGitDriver(str(requested))
         branch = driver.current_branch
         head_sha = driver.get_head_sha()
@@ -137,14 +148,15 @@ class RealRepositoryContext:
                 text = data[: self.max_excerpt_bytes].decode("utf-8", errors="replace")
                 excerpts[relative] = str(redact_secrets(text))
 
+        # P1-2: context hash computed only from immutable source inputs.
+        # Exclude runtime outputs: reports, evidence, receipts, cache, .nexara, workspace, runtime.
+        immutable_files = [f for f in files if _is_immutable_source(f["path"])]
         canonical = {
             "version": 1,
             "repository_root": str(requested),
             "branch": branch,
             "head_sha": head_sha,
-            "status_porcelain": status,
-            "files": files,
-            "excerpts": excerpts,
+            "files": immutable_files,
         }
         context_hash = hashlib.sha256(
             json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
