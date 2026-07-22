@@ -1,0 +1,132 @@
+{
+  "timestamp": "2026-07-22T03:38:26.920155+00:00",
+  "source_worktree": "/Users/agentos/NEXARA-PRIME/.worktrees/hermes-2e072e1b",
+  "source_branch": "hermes/hermes-2e072e1b",
+  "source_head": "760ed33e7ee445db02dfbaf1f28e2c4bfdcf015c",
+  "target_worktree": "/Users/agentos/Worktrees/NEXARA-PRIME-sovereign-ci-authority-bridge-v1",
+  "target_head": "60f5eb625b7d316a09cdd52e937e4e088d7289a3",
+  "files": [
+    {
+      "file": "src/nexara_prime/delivery_controller/__init__.py",
+      "source_sha256": "6b7c715ab0e8f9909cbb148477ad5a3d611e3590e52a63539ffd2fd425736886",
+      "target_sha256": "c324a068c393e8c559dc2b0379b7fc53652fdcf3033f0ab0c658065f50568d9b",
+      "bytes_match": false,
+      "status": "MODIFIED_DURING_MIGRATION"
+    },
+    {
+      "file": "src/nexara_prime/delivery_controller/controller.py",
+      "source_sha256": "73b9513d6ad0524c0074b6f05a0f29ff7492f70d7d0cf9e6272ba65be43d1d31",
+      "target_sha256": "73b9513d6ad0524c0074b6f05a0f29ff7492f70d7d0cf9e6272ba65be43d1d31",
+      "bytes_match": true,
+      "status": "ACCEPTED"
+    },
+    {
+      "file": "src/nexara_prime/delivery_controller/evidence.py",
+      "source_sha256": "d2bcef1c3c33fea0268ce7d18b71f34fd91b120105d3df119b14936a05ff5ea7",
+      "target_sha256": "d2bcef1c3c33fea0268ce7d18b71f34fd91b120105d3df119b14936a05ff5ea7",
+      "bytes_match": true,
+      "status": "ACCEPTED"
+    },
+    {
+      "file": "src/nexara_prime/delivery_controller/gates.py",
+      "source_sha256": "04edae6b734fa13f65abe0367a337f518abaa913f73061b331112dd775a74212",
+      "target_sha256": "0488aa585bb1fa12624f1b2940c02d11afcae1fa685de7e7d21209a7afb5616d",
+      "bytes_match": false,
+      "status": "MODIFIED_DURING_MIGRATION"
+    },
+    {
+      "file": "src/nexara_prime/delivery_controller/migration.py",
+      "source_sha256": "9974988698af34dc8bba9c6766ef714a3c54b1bb7826e88cefe5bfa0702b2ada",
+      "target_sha256": "9974988698af34dc8bba9c6766ef714a3c54b1bb7826e88cefe5bfa0702b2ada",
+      "bytes_match": true,
+      "status": "ACCEPTED"
+    },
+    {
+      "file": "src/nexara_prime/delivery_controller/preflight.py",
+      "source_sha256": "023a10c5e38f78ac2b400884efd02968ac3613453309a64bd9b370f8ff5bec01",
+      "target_sha256": "023a10c5e38f78ac2b400884efd02968ac3613453309a64bd9b370f8ff5bec01",
+      "bytes_match": true,
+      "status": "ACCEPTED"
+    },
+    {
+      "file": "src/nexara_prime/delivery_controller/receipt.py",
+      "source_sha256": "7595c0b38d66cb3fb4165ad6a17b475f319c6a91b74e91af36c7c241d49dc752",
+      "target_sha256": "7595c0b38d66cb3fb4165ad6a17b475f319c6a91b74e91af36c7c241d49dc752",
+      "bytes_match": true,
+      "status": "ACCEPTED"
+    },
+    {
+      "file": "tests/test_delivery_controller.py",
+      "source_sha256": "587df9fff446685e9c5189cf99f26bcf52f7c32ba85ea3cff601e9187506d75b",
+      "target_sha256": "f66d43f4ae1dc79c4544dc5022bd037f0a55799850d983e2bdc76747e5b7362d",
+      "bytes_match": false,
+      "status": "MODIFIED_DURING_MIGRATION"
+    },
+    {
+      "file": "docs/contracts/Delivery_Controller_Contract_V1.md",
+      "source_sha256": "8c398a5574e2cad97bd23f61e599ffeb8d5a3c20cd28ffd6a2a805921ceab52d",
+      "target_sha256": "8c398a5574e2cad97bd23f61e599ffeb8d5a3c20cd28ffd6a2a805921ceab52d",
+      "bytes_match": true,
+      "status": "ACCEPTED"
+    },
+    {
+      "file": "docs/contracts/Delivery_Controller_Contract_V2.md",
+      "source_sha256": "0d736e817799bcbdf655530f01d270953367e4a12ff5006fbf5b1a42118e7284",
+      "target_sha256": "0d736e817799bcbdf655530f01d270953367e4a12ff5006fbf5b1a42118e7284",
+      "bytes_match": true,
+      "status": "ACCEPTED"
+    },
+    {
+      "file": "src/nexara_prime/cli.py",
+      "source_sha256": "a1f6c488d7fb261bb4c5dd91545de293b9ce0436fa53fd3f84c272a420ce7d04",
+      "target_sha256": "058820f28e64b513c062cef4592ed6a50a2d3afe0478372805a3c979c537d7e1",
+      "bytes_match": false,
+      "status": "MODIFIED_DURING_MIGRATION — CLI spliced for sovereign commands"
+    },
+    {
+      "file": "docs/contracts/NEXARA_Sovereign_CI_Authority_Bridge_Contract_V1.md",
+      "source_sha256": "NONE_NEW_FILE",
+      "target_sha256": "db421ceae4e427271a165ecd84891b676021f97a8d3ec5ae31c24c117c87d1e6",
+      "bytes_match": false,
+      "status": "NEW_BRIDGE_FILE"
+    },
+    {
+      "file": "src/nexara_prime/delivery_controller/github_status.py",
+      "source_sha256": "NONE_NEW_FILE",
+      "target_sha256": "5d0b43652ae6f469924cdc4ca6c802ab38ae46340cb9fc6d992288a9d644d184",
+      "bytes_match": false,
+      "status": "NEW_BRIDGE_FILE"
+    },
+    {
+      "file": "src/nexara_prime/delivery_controller/protection_adapter.py",
+      "source_sha256": "NONE_NEW_FILE",
+      "target_sha256": "cd1e6e400d5db216da7fbe8ddcc3b169049065cae5081260b00a66f50983254c",
+      "bytes_match": false,
+      "status": "NEW_BRIDGE_FILE"
+    },
+    {
+      "file": "src/nexara_prime/delivery_controller/authority_receipt.py",
+      "source_sha256": "NONE_NEW_FILE",
+      "target_sha256": "9d260bedfdd4a65b71c3ca3038f50f3f585f722b69b1869deb3c5255bcd00f4c",
+      "bytes_match": false,
+      "status": "NEW_BRIDGE_FILE"
+    },
+    {
+      "file": "src/nexara_prime/delivery_controller/sovereign_authority.py",
+      "source_sha256": "NONE_NEW_FILE",
+      "target_sha256": "47f41e224bc157438b75a79a2686999476f70547a9949513c595e9139a7bab77",
+      "bytes_match": false,
+      "status": "NEW_BRIDGE_FILE"
+    }
+  ],
+  "excluded": [
+    "Old Evidence (hermes HEAD 760ed33e — not PR #21 HEAD)",
+    "Old Receipts (hermes HEAD binding)",
+    "Error-head reports",
+    "reports/delivery_controller_bootstrap/",
+    "reports/delivery_controller_v2/",
+    "reports/delivery_controller_v2_1_closure/",
+    "reports/delivery_controller_validation_pr21/",
+    ".nexara/evidence/*.legacy.bak"
+  ]
+}

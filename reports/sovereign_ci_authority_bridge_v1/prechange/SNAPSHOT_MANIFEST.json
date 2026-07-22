@@ -1,0 +1,97 @@
+{
+  "captured_at": "2026-07-22T03:38:05.172320+00:00",
+  "target_head": "60f5eb625b7d316a09cdd52e937e4e088d7289a3",
+  "protection_mode": "RULESET",
+  "classic_protection": "NONE",
+  "active_ruleset_id": 18954532,
+  "files": [
+    {
+      "filename": "PR.json",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "41fbefd87788e591ec5a92efbf5e66fc556041858c0b1180be99bd9c9d522c8d",
+      "size_bytes": 5633,
+      "api_endpoint": "GET /repos/Zsx154855/NEXARA-PRIME/pulls/21",
+      "classification": "OK"
+    },
+    {
+      "filename": "COMBINED_STATUS.json",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "d5e0b662f8e0795e189bd7a3924679fde351950d24fd71ba64746454cff81772",
+      "size_bytes": 4783,
+      "api_endpoint": "GET /repos/.../commits/60f5eb6/status",
+      "classification": "OK"
+    },
+    {
+      "filename": "COMMIT_STATUSES.json",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "size_bytes": 2,
+      "api_endpoint": "GET /repos/.../commits/60f5eb6/statuses",
+      "classification": "EMPTY_ARRAY"
+    },
+    {
+      "filename": "CHECKS.json",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "a506002cec0b349758a1232ae6690e1c593291cb6f66d3e880f58968e18019b6",
+      "size_bytes": 56276,
+      "api_endpoint": "GET /repos/.../commits/60f5eb6/check-runs",
+      "classification": "OK"
+    },
+    {
+      "filename": "CLASSIC_PROTECTION.json",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "58a24881b3bbe5259c9964dc52c73f73ee1305164a75c3dd6b470960028774e6",
+      "size_bytes": 96,
+      "api_endpoint": "GET /repos/.../branches/main/protection → 404",
+      "classification": "HTTP_404_EXPECTED"
+    },
+    {
+      "filename": "RULESETS.json",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "47cb4c990ebf1042ba334d08e24cbca4a20d97603e4e595701be55b119a4801a",
+      "size_bytes": 456,
+      "api_endpoint": "GET /repos/.../rulesets",
+      "classification": "OK"
+    },
+    {
+      "filename": "RULESET_18954532.json",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "6c9b38fb8c196d51f11641f8c052676eae1912a32e1f44602697d4e1e1e77812",
+      "size_bytes": 936,
+      "api_endpoint": "GET /repos/.../rulesets/18954532",
+      "classification": "OK"
+    },
+    {
+      "filename": "REVIEWS.json",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "bbc61d2f0e18381519499be2c6646670e1f7afa7bc85f70adff0b8d8c918ba8e",
+      "size_bytes": 7351,
+      "api_endpoint": "GET /repos/.../pulls/21/reviews",
+      "classification": "OK"
+    },
+    {
+      "filename": "REVIEW_THREADS.json",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "0a5e2b2d835f7d3f1bf8c38788fa7d08a2a929b5dd0379f62704eddff5bb4c64",
+      "size_bytes": 201957,
+      "api_endpoint": "GET /repos/.../pulls/21/comments",
+      "classification": "OK"
+    },
+    {
+      "filename": "REPOSITORY.json",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "89bf3f1588cc7848012158083e9c9868a12def6ef3c23eafe19031250a1c6afe",
+      "size_bytes": 6241,
+      "api_endpoint": "GET /repos/Zsx154855/NEXARA-PRIME",
+      "classification": "OK"
+    },
+    {
+      "filename": "AUTHORIZATION.txt",
+      "captured_at": "2026-07-22T03:38:05.172320+00:00",
+      "sha256": "4f8243f156b7abbda353da5a307ca85d77b9674ecc5d3bf12cbf4821b1f87bd2",
+      "size_bytes": 238,
+      "api_endpoint": "gh auth status",
+      "classification": "OK"
+    }
+  ]
+}
