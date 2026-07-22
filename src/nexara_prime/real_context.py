@@ -30,8 +30,12 @@ _TEXT_SUFFIXES = {
     ".md", ".py", ".pyproject", ".toml", ".yaml", ".yml", ".json",
     ".txt", ".js", ".ts", ".tsx", ".css", ".sh", ".sql",
 }
-# P1-2: paths excluded from context hash (runtime outputs)
-_CONTEXT_HASH_EXCLUDE_PARTS = {"reports", "evidence", "receipts", "cache", ".nexara", "workspace", "runtime"}
+# P1-2: paths excluded from context hash.
+# Only genuinely runtime-generated paths are excluded.
+# Committed artifacts (reports, evidence, receipts, .nexara) ARE part of
+# the immutable context — they are version-controlled source of truth.
+# The hash represents task-available context integrity, not a workspace snapshot.
+_CONTEXT_HASH_EXCLUDE_PARTS = {"workspace", "runtime", "cache", "__pycache__", ".git"}
 
 
 def _run_git(root: Path, *args: str) -> str:
