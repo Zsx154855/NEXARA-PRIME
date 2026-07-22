@@ -120,3 +120,33 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 scripts/security/scan_hardcoded_secrets.py
+
+  sovereign-delivery:
+    needs:
+      - python
+      - typescript
+      - swift-macos
+      - swift-ios
+      - governance
+      - nsec-governance
+      - secret-scan
+    runs-on: [self-hosted, macOS, ARM64]
+    if: always()
+    steps:
+      - name: Aggregate gate
+        run: |
+          echo "=== NEXARA Sovereign Delivery Gate ==="
+          FAILED=""
+          for job in python typescript swift-macos swift-ios governance nsec-governance secret-scan; do
+            result=$(echo '${{ toJson(needs) }}' | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('${job}',{}).get('result','skipped'))")
+            echo "  ${job}: ${result}"
+            if [ "${result}" != "success" ]; then
+              FAILED="${FAILED} ${job}"
+            fi
+          done
+          if [ -n "${FAILED}" ]; then
+            echo "BLOCKED: upstream failures:${FAILED}"
+            exit 1
+          fi
+          echo "SOVEREIGN DELIVERY: ALL GATES PASS"
+          echo "READY_FOR_HUMAN_MERGE_APPROVAL"
