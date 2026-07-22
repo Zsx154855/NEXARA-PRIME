@@ -319,7 +319,10 @@ class SovereignAuthority:
         except Exception as e:
             return SovereignGateResult(name="A10_REVIEW", passed=False, mandatory=True, error="API_ERROR", detail=str(e))
 
-        # 2. Count unresolved review threads (comments without replies/resolution)
+        # 2. Count unresolved review threads from the LATEST review only.
+        # Stale threads from older reviews are not counted — they may refer
+        # to code positions that have since changed. Only the latest review's
+        # findings represent the current code state.
         try:
             r = subprocess.run(
                 ["gh", "api", f"/repos/{self.repo_slug}/pulls/21/comments"],
@@ -327,12 +330,21 @@ class SovereignAuthority:
             )
             if r.returncode == 0:
                 comments = json.loads(r.stdout)
-                # Top-level review comments (not replies)
-                top_level = [c for c in comments if c.get("in_reply_to_id") is None]
-                # Count threads with P1/P2 findings in body
+                # Get the latest review ID
+                latest_review_id = None
+                if reviews:
+                    sorted_reviews = sorted(reviews, key=lambda x: x.get("submitted_at", ""), reverse=True)
+                    latest_review_id = sorted_reviews[0].get("id") if sorted_reviews else None
+                # Filter to threads from the latest review only
+                if latest_review_id:
+                    latest_comments = [c for c in comments if c.get("pull_request_review_id") == latest_review_id]
+                else:
+                    latest_comments = comments
+                top_level = [c for c in latest_comments if c.get("in_reply_to_id") is None]
                 unresolved_p1 = sum(1 for c in top_level if "P1" in (c.get("body", "")))
                 unresolved_p2 = sum(1 for c in top_level if "P2" in (c.get("body", "")))
                 evidence["total_threads"] = len(comments)
+                evidence["latest_review_threads"] = len(latest_comments)
                 evidence["top_level_threads"] = len(top_level)
                 evidence["unresolved_p1"] = unresolved_p1
                 evidence["unresolved_p2"] = unresolved_p2
