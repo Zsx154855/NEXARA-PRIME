@@ -1,0 +1,73 @@
+# ============================================================================
+# NEXARA Python CI Contract
+# ============================================================================
+# Unified Python setup for both GitHub-hosted and self-hosted runners.
+#
+# GitHub-hosted: delegates to actions/setup-python (official).
+# Self-hosted:  resolves Python 3.12 from the local machine, creates a
+#               per-job isolated virtualenv in $RUNNER_TEMP, and exports
+#               it to $GITHUB_PATH — never writes to /Users/runner.
+# ============================================================================
+name: "NEXARA Python Setup"
+description: "Setup Python 3.12 for NEXARA CI — self-hosted and GitHub-hosted compatible"
+
+inputs:
+  python-version:
+    description: "Python version (only 3.12 supported for self-hosted)"
+    required: false
+    default: "3.12"
+
+outputs:
+  virtual-env:
+    description: "Path to created virtualenv"
+    value: ${{ steps.self-hosted.outputs.virtual-env }}
+  python-path:
+    description: "Path to python executable in virtualenv"
+    value: ${{ steps.self-hosted.outputs.python-path }}
+  python-version:
+    description: "Resolved Python version string"
+    value: ${{ steps.self-hosted.outputs.python-version }}
+
+runs:
+  using: "composite"
+  steps:
+    # Branch: Self-hosted — resolve local Python, create per-job venv
+    - name: Resolve self-hosted Python 3.12
+      id: self-hosted
+      if: runner.environment == 'self-hosted'
+      shell: bash
+      run: |
+        bash "${{ github.action_path }}/resolve-self-hosted-python.sh"
+      env:
+        INPUT_PYTHON_VERSION: ${{ inputs.python-version }}
+
+    # Branch: GitHub-hosted — use official setup-python
+    - name: Setup GitHub-hosted Python
+      if: runner.environment == 'github-hosted'
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    # Post-setup verification (runs on both environments)
+    - name: Verify Python contract
+      shell: bash
+      run: |
+        echo "=== NEXARA Python Contract Verification ==="
+        echo "Runner environment: ${RUNNER_ENVIRONMENT:-unknown}"
+        echo "Python: $(which python 2>/dev/null || echo 'NOT FOUND')"
+        echo "Python3: $(which python3 2>/dev/null || echo 'NOT FOUND')"
+        python --version 2>/dev/null || python3 --version 2>/dev/null || {
+          echo "FATAL: No python executable found in PATH"
+          exit 1
+        }
+        python -m pip --version || {
+          echo "FATAL: pip not available"
+          exit 1
+        }
+        echo "VIRTUAL_ENV=${VIRTUAL_ENV:-not in venv}"
+        VERSION=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        if [[ "${VERSION}" != "3.12" ]]; then
+          echo "FATAL: Expected Python 3.12, got ${VERSION}"
+          exit 1
+        fi
+        echo "Python contract verified: ${VERSION}"
