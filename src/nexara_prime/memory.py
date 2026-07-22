@@ -12,6 +12,14 @@ if TYPE_CHECKING:
     from .rag_pipeline import RAGPipeline
 
 
+EVIDENCE_REQUIRED_KINDS = {
+    MemoryKind.DECISION,
+    MemoryKind.FAILURE,
+    MemoryKind.FAILURE_EXPERIENCE,
+    MemoryKind.PATCH,
+}
+
+
 # ── Four-layer memory classification ──
 
 class MemoryLayer:
@@ -78,12 +86,8 @@ class MemoryKernel:
         # evidence linkage per NSEC 第四十三条. DECISION/FAILURE/FAILURE_EXPERIENCE/PATCH
         # require evidence when tied to a mission. System-level kinds and working memory
         # are exempt.
-        _EVIDENCE_REQUIRED_KINDS = {
-            MemoryKind.DECISION, MemoryKind.FAILURE,
-            MemoryKind.FAILURE_EXPERIENCE, MemoryKind.PATCH,
-        }
         evidence_bound = bool(source_evidence_id)
-        if not evidence_bound and kind in _EVIDENCE_REQUIRED_KINDS and mission_id:
+        if not evidence_bound and kind in EVIDENCE_REQUIRED_KINDS and mission_id:
             raise ValueError(
                 f"memory_requires_evidence: kind={kind.value} requires "
                 f"source_evidence_id when bound to a mission"
@@ -132,7 +136,8 @@ class MemoryKernel:
             elif evidence_id:
                 envelope = self.store.get_record_envelope(evidence_id)
                 evidence_valid = bool(envelope and envelope.get("mission_id") == r.get("mission_id"))
-            is_exempt = kind in {MemoryKind.SHORT_TERM, MemoryKind.TEMPORARY_CONTEXT, MemoryKind.UNVERIFIED_INFERENCE}
+            requires_evidence = bool(r.get("mission_id")) and kind in EVIDENCE_REQUIRED_KINDS
+            is_exempt = not requires_evidence
 
             if evidence_valid:
                 bound += 1

@@ -1,0 +1,99 @@
+{
+  "evidence_id": "evidence_pr21_review_closure_round2_20260722",
+  "mission": "PR21_REVIEW_CLOSURE_ROUND_2",
+  "status": "PASS",
+  "pr": {
+    "number": 21,
+    "state": "OPEN",
+    "base": "main",
+    "head_branch": "work/nexara-real-provider-context-tool-closure-v1",
+    "head_before_round2": "a64769e5742680be83171bb502d49ff4722dc57a",
+    "merge_allowed": false
+  },
+  "review_findings_closed": [
+    {
+      "priority": "P1",
+      "file": "src/nexara_prime/model_gateway.py",
+      "finding": "Provider metadata contained nested repository context that strict OpenAI-compatible providers can reject.",
+      "resolution": "Provider metadata is now limited to flat string values; full repository context remains model-visible in prompt messages.",
+      "validation": "tests/test_pr21_review_closure.py::test_openai_compatible_provider_sends_excerpts_as_model_visible_message"
+    },
+    {
+      "priority": "P1",
+      "file": "src/nexara_prime/real_context.py",
+      "finding": "Repository excerpts were collected without content-level secret redaction before provider use.",
+      "resolution": "Collected text excerpts are redacted through the runtime redaction path before hashing and provider context construction.",
+      "validation": "tests/test_pr21_review_closure.py::test_repository_context_redacts_secret_values_from_excerpts"
+    },
+    {
+      "priority": "P2",
+      "file": "src/nexara_prime/memory.py",
+      "finding": "Memory evidence verification required evidence for all committed non-working kinds, while write() only requires it for selected mission-scoped kinds.",
+      "resolution": "Verifier now reuses the same evidence-required kind set as write(): DECISION, FAILURE, FAILURE_EXPERIENCE, PATCH.",
+      "validation": "tests/test_pr21_review_closure.py::test_memory_fact_without_evidence_is_not_a_binding_violation"
+    },
+    {
+      "priority": "P2",
+      "file": "scripts/security/scan_hardcoded_secrets.py",
+      "finding": "Self-reference exemption suppressed weak literal credentials such as password = password.",
+      "resolution": "Self-reference exemption is now limited to uppercase enum/constant identifiers.",
+      "validation": "tests/test_p2_fixes.py::SecretScannerNewTests::test_weak_literal_password_is_not_self_reference_exempt"
+    },
+    {
+      "priority": "P2",
+      "file": "ui/src/components/screens/ApprovalCenter.tsx / ui/src/components/screens/MissionWorkspace.tsx",
+      "finding": "Dashboard approval flow exposed no way to execute missions after approval.",
+      "resolution": "Mission Workspace now provides an explicit run action for Execution missions using the existing runMission API."
+    },
+    {
+      "priority": "P2",
+      "file": "ui/src/components/screens/MissionWorkspace.tsx / src/nexara_prime/runtime.py",
+      "finding": "Plan panel ignored saved mission.plan.steps.",
+      "resolution": "Mission snapshots now include plan, and the workspace renders mission.plan.steps.",
+      "validation": "tests/test_pr21_review_closure.py::test_api_mutations_return_snapshots_with_plan"
+    },
+    {
+      "priority": "P2",
+      "file": "src/nexara_prime/evidence.py",
+      "finding": "Receipt-chain checks trusted raw tool payloads without verifying tool record envelopes.",
+      "resolution": "Receipt-chain verification now audits tool record envelopes and fails chain_intact on corrupt tool records.",
+      "validation": "tests/test_pr21_review_closure.py::test_receipt_chain_fails_when_tool_envelope_is_corrupt"
+    },
+    {
+      "priority": "P2",
+      "file": "src/nexara_prime/api.py / ui/src/components/screens/MissionWorkspace.tsx",
+      "finding": "Mission mutation endpoints returned raw Mission objects, causing the UI to lose snapshot-only fields after pause/resume/rollback/safe-mode.",
+      "resolution": "Mission mutation endpoints now return inspect_mission snapshots; the workspace reloads the complete mission snapshot after each mutation.",
+      "validation": "tests/test_pr21_review_closure.py::test_api_mutations_return_snapshots_with_plan"
+    }
+  ],
+  "additional_determinism_fix": {
+    "file": "src/nexara_prime/network_policy.py",
+    "reason": "Full pytest exposed DNS-dependent nondeterminism in an allowlisted-domain authorization test.",
+    "resolution": "Explicitly allowlisted domains no longer require ambient DNS when no resolved_ip is supplied; caller-supplied resolved_ip still receives IP safety validation."
+  },
+  "validation": {
+    "python_syntax": "PASS",
+    "focused_pytest": "91 passed; 46 targeted network/review tests passed",
+    "full_pytest_host_permission": "898 passed",
+    "default_sandbox_full_pytest": "895 passed / 3 environment-sensitive sandbox failures",
+    "ruff": "PASS",
+    "nsec_validation": "PASS",
+    "drift_detection": "PASS / NO DRIFT",
+    "secret_scan": "CLEAN",
+    "git_diff_check": "PASS",
+    "frontend_lint": "PASS",
+    "frontend_type_check": "PASS"
+  },
+  "ci": {
+    "github_actions_result": "BLOCKED_BY_GITHUB_BILLING",
+    "runner_started": false,
+    "code_result": "NOT_FAILED_BY_CI",
+    "merge_allowed": false
+  },
+  "boundaries": {
+    "push": "PENDING_AFTER_LOCAL_COMMIT",
+    "merge": "NOT_EXECUTED",
+    "deploy": "NOT_EXECUTED"
+  }
+}

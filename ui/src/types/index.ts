@@ -343,6 +343,7 @@ export interface MissionSnapshot {
   current_state: MissionState;
   risk_level: RiskLevel;
   spec: MissionSpec;
+  plan: MissionPlan | null;
   title: string;
   objective: string;
   created_at: string;

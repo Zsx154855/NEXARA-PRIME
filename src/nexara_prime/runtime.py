@@ -897,6 +897,7 @@ class NexaraRuntime:
             "state": mission.state, "current_state": mission.state,
             "risk_level": mission.spec.risk_level.value if mission.spec.risk_level else "R0",
             "spec": mission.spec.model_dump(mode="json"),
+            "plan": mission.plan.model_dump(mode="json") if mission.plan else None,
             "title": mission.spec.title, "objective": mission.spec.objective,
             "created_at": mission.created_at, "started_at": mission.created_at,
             "updated_at": mission.updated_at,

@@ -27,12 +27,17 @@ def redact_secrets(value: Any) -> Any:
         return value
     value = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._-]+", r"\1[REDACTED]", value)
     value = re.sub(r"(?i)(sk-[A-Za-z0-9_-]{8,})", "[REDACTED]", value)
-    value = re.sub(r"(?i)(api[_-]?key|token|password)\s*[:=]\s*[^\s,]+", r"\1=[REDACTED]", value)
+    value = re.sub(r"(?i)(api[_-]?key|client[_-]?secret|secret[_-]?key|token|password)\s*[:=]\s*[^\s,]+", r"\1=[REDACTED]", value)
     return value
 
 
 def estimate_tokens(text: str) -> int:
     return max(1, (len(text.encode("utf-8")) + 3) // 4)
+
+
+def _flat_provider_metadata(context_hash: str) -> dict[str, str]:
+    """Return provider metadata that is valid for strict Chat Completions APIs."""
+    return {"nexara_context_hash": context_hash} if context_hash else {}
 
 
 @dataclass(frozen=True)
@@ -144,10 +149,9 @@ class _HTTPProvider:
                 + json.dumps(redact_secrets(model_visible_context), ensure_ascii=False, sort_keys=True),
             })
         payload = {"model": self.model, "messages": messages, "temperature": 0}
-        if context:
-            payload["metadata"] = redact_secrets(context)
-            if context_hash:
-                payload["metadata"]["nexara_context_hash"] = context_hash
+        metadata = _flat_provider_metadata(context_hash)
+        if metadata:
+            payload["metadata"] = metadata
         headers = {"Content-Type": "application/json", "X-NEXARA-Trace-ID": trace_id}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"

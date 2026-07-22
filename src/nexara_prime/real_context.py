@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .git_adapter import RealReadOnlyGitDriver
+from .model_gateway import redact_secrets
 
 
 class ContextCollectionError(RuntimeError):
@@ -133,7 +134,8 @@ class RealRepositoryContext:
             digest = hashlib.sha256(data).hexdigest()
             files.append({"path": relative, "bytes": len(data), "sha256": digest})
             if len(excerpts) < self.max_excerpt_files and Path(relative).suffix.lower() in _TEXT_SUFFIXES:
-                excerpts[relative] = data[: self.max_excerpt_bytes].decode("utf-8", errors="replace")
+                text = data[: self.max_excerpt_bytes].decode("utf-8", errors="replace")
+                excerpts[relative] = str(redact_secrets(text))
 
         canonical = {
             "version": 1,

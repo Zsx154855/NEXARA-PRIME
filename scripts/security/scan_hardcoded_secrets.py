@@ -141,6 +141,8 @@ def is_allowed(line: str) -> bool:
 def is_self_referential(match: re.Match) -> bool:
     """Return True when the matched value equals the key name (enum self-reference)."""
     key_name = match.group(1)
+    if not key_name.isupper():
+        return False
     matched_text = match.group(0).strip().rstrip(",")
     variants = {
         f'{key_name} = "{key_name}"',

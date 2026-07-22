@@ -200,6 +200,14 @@ class SecretScannerNewTests(unittest.TestCase):
         finally:
             path.unlink(missing_ok=True)
 
+    def test_weak_literal_password_is_not_self_reference_exempt(self):
+        path = self._write_temp("password = \"" + "pass" + "word" + "\"\n")
+        try:
+            findings = scan_file(path)
+            self.assertTrue(any(item["key"] == "password" for item in findings))
+        finally:
+            path.unlink(missing_ok=True)
+
     def test_self_scan_clean(self):
         self.assertEqual(scan_file(Path(__file__)), [])
 

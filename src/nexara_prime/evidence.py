@@ -543,7 +543,10 @@ class EvidenceStore:
         Returns a structured report with chain integrity status.
         """
 
-        invocations = self.store.list_records("tool", mission_id)
+        tool_envelopes, corrupt_tool_records = self.store.audit_record_envelopes(
+            "tool", mission_id
+        )
+        invocations = [envelope["payload"] for envelope in tool_envelopes]
         evidence_records = self.store.list_records("evidence", mission_id)
 
         evidence_by_tool: dict[str, list[dict[str, Any]]] = {}
@@ -557,6 +560,7 @@ class EvidenceStore:
         unverifiable = 0
         fail_closed_violations = 0
         total = len(invocations)
+        corrupt_tool_count = len(corrupt_tool_records)
 
         for inv in invocations:
             iid = str(inv.get("invocation_id"))
@@ -593,15 +597,17 @@ class EvidenceStore:
                 "receipt_evidence_id": receipt_id,
                 "has_receipt": has_receipt,
                 "receipt_verifiable": receipt_verifiable,
+                "tool_record_verifiable": True,
             })
 
         return {
             "mission_id": mission_id,
-            "total_invocations": total,
+            "total_invocations": total + corrupt_tool_count,
             "chain_gaps": gaps,
             "unverifiable_receipts": unverifiable,
+            "corrupt_tool_records": corrupt_tool_records,
             "fail_closed_violations": fail_closed_violations,
-            "chain_intact": gaps == 0 and unverifiable == 0 and fail_closed_violations == 0,
+            "chain_intact": gaps == 0 and unverifiable == 0 and fail_closed_violations == 0 and corrupt_tool_count == 0,
             "chain": chain,
         }
 

@@ -68,11 +68,13 @@ const LABELS = {
   pause: "暂停",
   resume: "恢复",
   rollback: "回滚",
+  run: "执行任务",
   enableSafeMode: "启用安全模式",
   disableSafeMode: "禁用安全模式",
   confirmPause: "确定要暂停此任务吗？",
   confirmResume: "确定要恢复此任务吗？",
   confirmRollback: "确定要回滚此任务吗？回滚后任务将不可执行。",
+  confirmRun: "确定要执行此任务吗？",
   confirmSafeMode: "确定要{action}安全模式吗？",
   confirm: "确认",
   cancel: "取消",
@@ -466,13 +468,7 @@ export function MissionWorkspace({
       setMission(missionData);
       setEvents(eventData);
       setTools(toolData);
-
-      // Try to load plan steps from mission data
-      if (missionData.spec?.risks) {
-        // In a real implementation, this would come from a plan endpoint
-        // For now, derive from mission state
-        setPlanSteps([]);
-      }
+      setPlanSteps(missionData.plan?.steps ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -509,8 +505,8 @@ export function MissionWorkspace({
       async () => {
         setActionLoading(true);
         try {
-          const res = await api.pauseMission(missionId);
-          setMission(res);
+          await api.pauseMission(missionId);
+          await loadAll();
         } catch (err) {
           console.error(err);
         } finally {
@@ -529,8 +525,28 @@ export function MissionWorkspace({
       async () => {
         setActionLoading(true);
         try {
-          const res = await api.resumeMission(missionId);
-          setMission(res);
+          await api.resumeMission(missionId);
+          await loadAll();
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setActionLoading(false);
+          setConfirmOpen(false);
+        }
+      }
+    );
+
+  const handleRun = () =>
+    showConfirm(
+      LABELS.confirmRun,
+      LABELS.confirmRun,
+      LABELS.run,
+      "default",
+      async () => {
+        setActionLoading(true);
+        try {
+          await api.runMission(missionId);
+          await loadAll();
         } catch (err) {
           console.error(err);
         } finally {
@@ -549,8 +565,8 @@ export function MissionWorkspace({
       async () => {
         setActionLoading(true);
         try {
-          const res = await api.rollbackMission(missionId);
-          setMission(res);
+          await api.rollbackMission(missionId);
+          await loadAll();
         } catch (err) {
           console.error(err);
         } finally {
@@ -571,8 +587,8 @@ export function MissionWorkspace({
       async () => {
         setActionLoading(true);
         try {
-          const res = await api.setSafeMode(missionId, { enabled: !current });
-          setMission(res);
+          await api.setSafeMode(missionId, { enabled: !current });
+          await loadAll();
         } catch (err) {
           console.error(err);
         } finally {
@@ -702,6 +718,15 @@ export function MissionWorkspace({
         <div className="flex flex-wrap gap-2">
           {!isStateTerminal(currentState) && (
             <>
+              {currentState === "Execution" && !mission.paused && (
+                <button
+                  onClick={handleRun}
+                  className="flex items-center gap-1.5 rounded-lg border border-moss-green/30 bg-moss-green/5 px-3 py-1.5 text-xs font-medium text-moss-green transition-colors hover:bg-moss-green/10"
+                >
+                  <PlayCircle className="h-3.5 w-3.5" />
+                  {LABELS.run}
+                </button>
+              )}
               {mission.paused ? (
                 <button
                   onClick={handleResume}

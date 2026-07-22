@@ -72,7 +72,8 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     @app.post("/api/missions")
     def create_mission(body: MissionCreateRequest) -> dict[str, Any]:
         try:
-            return runtime.create_mission(body.objective, body.source_dir).model_dump(mode="json")
+            mission = runtime.create_mission(body.objective, body.source_dir)
+            return runtime.inspect_mission(mission.mission_id)
         except (ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -86,42 +87,49 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     @app.post("/api/missions/{mission_id}/plan")
     def plan(mission_id: str) -> dict[str, Any]:
         try:
-            return runtime.plan_mission(mission_id).model_dump(mode="json")
+            runtime.plan_mission(mission_id)
+            return runtime.inspect_mission(mission_id)
         except (KeyError, ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/approve")
     def approve(mission_id: str, body: ApprovalRequestBody) -> dict[str, Any]:
         try:
-            return runtime.approve_mission(mission_id, bool(body.approved), body.actor, body.note, body.decision, body.scope).model_dump(mode="json")
+            runtime.approve_mission(mission_id, bool(body.approved), body.actor, body.note, body.decision, body.scope)
+            return runtime.inspect_mission(mission_id)
         except (KeyError, ValueError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/run")
     def run(mission_id: str) -> dict[str, Any]:
         try:
-            return runtime.run_mission(mission_id).model_dump(mode="json")
+            runtime.run_mission(mission_id)
+            return runtime.inspect_mission(mission_id)
         except (KeyError, ValueError, RuntimeError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/pause")
     def pause(mission_id: str) -> dict[str, Any]:
-        return runtime.pause(mission_id).model_dump(mode="json")
+        runtime.pause(mission_id)
+        return runtime.inspect_mission(mission_id)
 
     @app.post("/api/missions/{mission_id}/resume")
     def resume(mission_id: str) -> dict[str, Any]:
-        return runtime.resume(mission_id).model_dump(mode="json")
+        runtime.resume(mission_id)
+        return runtime.inspect_mission(mission_id)
 
     @app.post("/api/missions/{mission_id}/rollback")
     def rollback(mission_id: str) -> dict[str, Any]:
         try:
-            return runtime.rollback(mission_id).model_dump(mode="json")
+            runtime.rollback(mission_id)
+            return runtime.inspect_mission(mission_id)
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/safe-mode")
     def safe_mode(mission_id: str, body: SafeModeBody) -> dict[str, Any]:
-        return runtime.safe_mode(mission_id, body.enabled).model_dump(mode="json")
+        runtime.safe_mode(mission_id, body.enabled)
+        return runtime.inspect_mission(mission_id)
 
     @app.get("/api/approvals")
     def approvals(mission_id: str | None = None) -> list[dict[str, Any]]:
