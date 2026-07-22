@@ -110,11 +110,13 @@ class ProtectionAdapter:
                 return None
             rulesets = json.loads(r.stdout)
             for rs in rulesets:
-                conditions = rs.get("conditions", {})
-                ref_name = conditions.get("ref_name", {})
+                if rs.get("target") != "branch":
+                    continue
+                conditions = rs.get("conditions") or {}
+                ref_name = conditions.get("ref_name") or {}
                 includes = ref_name.get("include", [])
-                if f"refs/heads/{branch}" in includes:
-                    # Fetch full ruleset
+                # Null/empty include means applies to ALL branches
+                if not includes or f"refs/heads/{branch}" in includes:
                     r2 = subprocess.run(
                         ["gh", "api", f"/repos/{self.repo}/rulesets/{rs['id']}"],
                         capture_output=True, text=True, timeout=10,

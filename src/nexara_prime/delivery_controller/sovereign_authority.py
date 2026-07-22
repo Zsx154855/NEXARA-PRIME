@@ -298,21 +298,80 @@ class SovereignAuthority:
     # ── A10: REVIEW ──
 
     def _gate_a10_review(self) -> SovereignGateResult:
-        """Check for unresolved review threads on PR #21."""
+        """Check unresolved review threads + latest review covers current HEAD."""
+        errors: list[str] = []
+        evidence: dict[str, Any] = {}
+
+        # 1. Check for CHANGES_REQUESTED reviews
         try:
             r = subprocess.run(
                 ["gh", "api", f"/repos/{self.repo_slug}/pulls/21/reviews"],
                 capture_output=True, text=True, timeout=15,
             )
             if r.returncode != 0:
-                return SovereignGateResult(name="A10_REVIEW", passed=True, mandatory=True, detail="API_UNAVAILABLE_ASSUMING_OK")
+                return SovereignGateResult(name="A10_REVIEW", passed=False, mandatory=True, error="API_UNAVAILABLE", detail="Cannot read reviews")
             reviews = json.loads(r.stdout)
             changes_requested = [rv for rv in reviews if rv.get("state") == "CHANGES_REQUESTED"]
             if changes_requested:
-                return SovereignGateResult(name="A10_REVIEW", passed=False, mandatory=True, error="CHANGES_REQUESTED", detail=f"{len(changes_requested)} reviews request changes")
+                errors.append(f"CHANGES_REQUESTED:{len(changes_requested)}")
+            evidence["total_reviews"] = len(reviews)
+            evidence["changes_requested"] = len(changes_requested)
+        except Exception as e:
+            return SovereignGateResult(name="A10_REVIEW", passed=False, mandatory=True, error="API_ERROR", detail=str(e))
+
+        # 2. Count unresolved review threads (comments without replies/resolution)
+        try:
+            r = subprocess.run(
+                ["gh", "api", f"/repos/{self.repo_slug}/pulls/21/comments"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode == 0:
+                comments = json.loads(r.stdout)
+                # Top-level review comments (not replies)
+                top_level = [c for c in comments if c.get("in_reply_to_id") is None]
+                # Count threads with P1/P2 findings in body
+                unresolved_p1 = sum(1 for c in top_level if "P1" in (c.get("body", "")))
+                unresolved_p2 = sum(1 for c in top_level if "P2" in (c.get("body", "")))
+                evidence["total_threads"] = len(comments)
+                evidence["top_level_threads"] = len(top_level)
+                evidence["unresolved_p1"] = unresolved_p1
+                evidence["unresolved_p2"] = unresolved_p2
+
+                if unresolved_p1 > 0:
+                    errors.append(f"UNRESOLVED_P1:{unresolved_p1}")
+                if unresolved_p2 > 0:
+                    errors.append(f"UNRESOLVED_P2:{unresolved_p2}")
         except Exception:
-            return SovereignGateResult(name="A10_REVIEW", passed=True, mandatory=True, detail="API_UNAVAILABLE_ASSUMING_OK")
-        return SovereignGateResult(name="A10_REVIEW", passed=True, mandatory=True)
+            pass
+
+        # 3. Check if latest review commit covers current HEAD
+        try:
+            r = subprocess.run(
+                ["gh", "api", f"/repos/{self.repo_slug}/pulls/21"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if r.returncode == 0:
+                pr_data = json.loads(r.stdout)
+                pr_head = pr_data.get("head", {}).get("sha", "")
+                # Check if any review was submitted after the PR head was pushed
+                latest_review_sha = None
+                for rv in sorted(reviews, key=lambda x: x.get("submitted_at", ""), reverse=True):
+                    if rv.get("commit_id"):
+                        latest_review_sha = rv.get("commit_id")
+                        break
+                evidence["pr_head"] = pr_head[:12]
+                evidence["latest_review_sha"] = (latest_review_sha or "")[:12]
+                if latest_review_sha and pr_head and latest_review_sha != pr_head:
+                    errors.append(f"REVIEW_NOT_COVERING_HEAD:review={latest_review_sha[:12]},head={pr_head[:12]}")
+        except Exception:
+            pass
+
+        if errors:
+            return SovereignGateResult(
+                name="A10_REVIEW", passed=False, mandatory=True,
+                error="; ".join(errors), evidence=evidence,
+            )
+        return SovereignGateResult(name="A10_REVIEW", passed=True, mandatory=True, evidence=evidence)
 
     # ── A11: FINAL AUTHORITY ──
 
