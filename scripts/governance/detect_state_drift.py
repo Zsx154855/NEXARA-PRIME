@@ -15,6 +15,7 @@ Exit codes:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -294,8 +295,14 @@ def check_git_consistency(
     except RuntimeError as exc:
         return [f"Cannot read git state: {exc}"]
 
+    # Skip branch check only on pull_request CI events (detached merge ref).
+    # Push-to-main and local runs MUST still validate branch consistency.
+    in_pr_ci = (
+        os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
+        and os.environ.get("GITHUB_EVENT_NAME", "") == "pull_request"
+    )
     recorded_branch = program_state.get("branch", "")
-    if recorded_branch and recorded_branch != current_branch:
+    if recorded_branch and recorded_branch != current_branch and not in_pr_ci:
         issues.append(
             f"Branch mismatch: PROGRAM_STATE says '{recorded_branch}', "
             f"git says '{current_branch}'"

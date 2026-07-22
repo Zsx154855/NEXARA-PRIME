@@ -22,6 +22,34 @@ from typing import Any
 
 REPO_ROOT = Path(os.environ.get("NEXARA_ROOT", Path(__file__).resolve().parent.parent.parent))
 
+# ── Scan boundary: directories excluded from recursive scans ──────────────────
+IGNORED_DIR_NAMES = {".git", ".worktrees", ".venv", "node_modules", "__pycache__", "dist", "build"}
+
+
+def _is_ignored_path(path: Path) -> bool:
+    """True if any parent directory (or the path itself) is in the ignore set.
+
+    Paths are checked relative to REPO_ROOT to avoid false matches when
+    the checkout directory itself contains an ignored directory name.
+    """
+    try:
+        rel = path.resolve().relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        for part in path.parts:
+            if part in IGNORED_DIR_NAMES:
+                return True
+        return False
+    for part in rel.parts:
+        if part in IGNORED_DIR_NAMES:
+            return True
+    return False
+
+
+def _filter_scan_files(files: list) -> list:
+    """Filter out files under ignored directories (e.g. .worktrees)."""
+    return [f for f in files if not _is_ignored_path(f)]
+
+
 # ── Canonical paths ───────────────────────────────────────────────────────────
 NSEC_CANONICAL = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md"
 NSEC_CANONICAL_V1_SUPERSEDED = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
@@ -344,9 +372,9 @@ def check_no_duplicate_supreme_authority() -> list[str]:
     scan_files: list[Path] = []
     for scan_dir in scan_dirs:
         if scan_dir.exists():
-            scan_files.extend(scan_dir.rglob("*.md"))
-            scan_files.extend(scan_dir.rglob("*.yaml"))
-            scan_files.extend(scan_dir.rglob("*.yml"))
+            scan_files.extend(_filter_scan_files(list(scan_dir.rglob("*.md"))))
+            scan_files.extend(_filter_scan_files(list(scan_dir.rglob("*.yaml"))))
+            scan_files.extend(_filter_scan_files(list(scan_dir.rglob("*.yml"))))
     scan_files.extend(REPO_ROOT.glob("*.md"))
     scan_files.extend(REPO_ROOT.glob("*.yaml"))
 
@@ -453,7 +481,7 @@ def check_copy_drift() -> list[str]:
     for scan_dir in scan_dirs:
         if not scan_dir.exists():
             continue
-        for md_file in scan_dir.rglob("*.md"):
+        for md_file in _filter_scan_files(list(scan_dir.rglob("*.md"))):
             if md_file.resolve() == NSEC_CANONICAL.resolve():
                 continue
             if md_file.resolve() == NSEC_CANONICAL_V1_SUPERSEDED.resolve():

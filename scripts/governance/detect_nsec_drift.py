@@ -29,6 +29,51 @@ from typing import Any
 
 REPO_ROOT = Path(os.environ.get("NEXARA_ROOT", Path(__file__).resolve().parent.parent.parent))
 
+# ── Scan boundary: directories excluded from recursive scans ──────────────────
+IGNORED_DIR_NAMES = {".git", ".worktrees", ".venv", "node_modules", "__pycache__", "dist", "build"}
+
+
+def _is_ignored_path(path: Path) -> bool:
+    """True if any parent directory (or the path itself) is in the ignore set.
+
+    Paths are checked relative to REPO_ROOT to avoid false matches when
+    the checkout directory itself contains an ignored directory name.
+    """
+    try:
+        rel = path.resolve().relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        # Path outside repo — check all parts as fallback
+        for part in path.parts:
+            if part in IGNORED_DIR_NAMES:
+                return True
+        return False
+    for part in rel.parts:
+        if part in IGNORED_DIR_NAMES:
+            return True
+    return False
+
+
+def _filter_scan_files(files: list) -> list:
+    """Filter out files under ignored directories (e.g. .worktrees)."""
+    return [f for f in files if not _is_ignored_path(f)]
+
+
+def _rglob_filtered(root: Path, pattern: str) -> list:
+    """rglob with directory-level pruning: skip ignored dirs before descending."""
+    results: list[Path] = []
+    try:
+        for item in root.iterdir():
+            if _is_ignored_path(item):
+                continue
+            if item.is_dir():
+                results.extend(_rglob_filtered(item, pattern))
+            elif item.match(pattern):
+                results.append(item)
+    except (PermissionError, OSError):
+        pass
+    return results
+
+
 # ── Canonical paths ───────────────────────────────────────────────────────────
 NSEC_CANONICAL = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md"
 NSEC_CANONICAL_V1_SUPERSEDED = REPO_ROOT / "governance" / "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V1.md"
@@ -153,7 +198,7 @@ def detect_multiple_supreme_sources() -> list[str]:
         if scan_root.is_file():
             scan_files = [scan_root]
         else:
-            scan_files = list(scan_root.rglob("*.md")) + list(scan_root.rglob("*.yaml")) + list(scan_root.rglob("*.yml"))
+            scan_files = list(_filter_scan_files(list(scan_root.rglob("*.md")))) + list(_filter_scan_files(list(scan_root.rglob("*.yaml")))) + list(_filter_scan_files(list(scan_root.rglob("*.yml"))))
 
         for file_path in scan_files:
             if file_path.resolve() in exclude_paths:
@@ -273,7 +318,7 @@ def detect_body_copy_drift() -> list[str]:
     for scan_root in scan_roots:
         if not scan_root.exists():
             continue
-        for md_file in scan_root.rglob("*.md"):
+        for md_file in _filter_scan_files(list(scan_root.rglob("*.md"))):
             if md_file.resolve() in exclude_paths:
                 continue
 
@@ -318,7 +363,7 @@ def detect_stale_references() -> list[str]:
         if scan_root.is_file():
             scan_files = [scan_root]
         else:
-            scan_files = list(scan_root.rglob("*.md")) + list(scan_root.rglob("*.yaml")) + list(scan_root.rglob("*.yml")) + list(scan_root.rglob("*.json"))
+            scan_files = list(_filter_scan_files(list(scan_root.rglob("*.md")))) + list(_filter_scan_files(list(scan_root.rglob("*.yaml")))) + list(_filter_scan_files(list(scan_root.rglob("*.yml")))) + list(_filter_scan_files(list(scan_root.rglob("*.json"))))
 
         for file_path in scan_files:
             if file_path.resolve() == NSEC_CANONICAL.resolve():
@@ -354,7 +399,7 @@ def detect_old_version_bindings() -> list[str]:
     # Add all .qoder skills
     qoder_skills = REPO_ROOT / ".qoder" / "skills"
     if qoder_skills.exists():
-        for skill_file in qoder_skills.rglob("SKILL.md"):
+        for skill_file in _filter_scan_files(list(qoder_skills.rglob("SKILL.md"))):
             scan_paths.append(skill_file)
 
     old_version_pattern = re.compile(

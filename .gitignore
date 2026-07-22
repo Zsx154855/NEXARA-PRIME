@@ -85,3 +85,4 @@ platform/sdk/typescript/node_modules/
 # ── Session artifacts ──
 Chats/
 platform/sdk/typescript/node_modules/
+.worktrees/
