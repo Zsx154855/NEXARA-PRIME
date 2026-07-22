@@ -17,7 +17,14 @@ import tempfile
 from pathlib import Path
 
 import pytest
-import yaml
+
+# Lazy import: YAML is only needed for WorkflowYamlCompliance tests.
+# This avoids ModuleNotFoundError at collection time when pytest is
+# installed but PyYAML is not (e.g. in CI before the pip install step).
+try:
+    import yaml
+except ImportError:
+    yaml = None  # type: ignore[assignment]
 
 
 # ============================================================================

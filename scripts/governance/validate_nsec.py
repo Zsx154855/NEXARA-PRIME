@@ -27,8 +27,19 @@ IGNORED_DIR_NAMES = {".git", ".worktrees", ".venv", "node_modules", "__pycache__
 
 
 def _is_ignored_path(path: Path) -> bool:
-    """True if any parent directory (or the path itself) is in the ignore set."""
-    for part in path.parts:
+    """True if any parent directory (or the path itself) is in the ignore set.
+
+    Paths are checked relative to REPO_ROOT to avoid false matches when
+    the checkout directory itself contains an ignored directory name.
+    """
+    try:
+        rel = path.resolve().relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        for part in path.parts:
+            if part in IGNORED_DIR_NAMES:
+                return True
+        return False
+    for part in rel.parts:
         if part in IGNORED_DIR_NAMES:
             return True
     return False
