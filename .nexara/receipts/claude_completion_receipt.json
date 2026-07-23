@@ -1,72 +1,113 @@
 {
-  "receipt_id": "CLAUDE_COMPLETION_PR23_SOVEREIGN_ONEPASS_20260724",
+  "receipt_id": "CLAUDE_COMPLETION_PR23_SOVEREIGN_ONEPASS_20260724_V2",
   "receipt_type": "machine_completion_receipt",
-  "description": "Claude Code session completion receipt for PR #23 sovereign one-pass closure. Machine-verifiable evidence of all gates passed.",
+  "description": "PR #23 sovereign one-pass closure — complete receipt with all required validation fields. Council mode: delegated (review matrix + independent audit substitute).",
   "task_id": "PR23_SOVEREIGN_ONEPASS_20260724",
+  "schema_version": "1.1",
   "repository": "/Users/agentos/NEXARA-PRIME",
   "branch": "feat/brand-baihan",
   "pr_number": 23,
   "final_result": "READY_FOR_CODEX_REVIEW",
-  "evidence_subject_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
-  "local_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
-  "remote_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
-  "pr_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
   "base_sha": "dd0505ac53721d8e2e6150e47936119fe16734d6",
-  "ci_run_id": "30039955839",
-  "ci_result": "SUCCESS (8/8 jobs)",
-  "ci_checked_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
-  "test_results": {
-    "python_full_suite": "937 passed, 0 failed",
-    "sdk_contract": "19 passed, 0 failed",
-    "nsec_governance": "41 passed, 0 failed",
-    "ruff_lint": "All checks passed",
-    "runtime_truth": "overall_pass=true",
-    "git_diff_check": "PASS"
+  "final_head": "2a1714dab89afaf3a6175c6e89d5d0fc2dd2b8ba",
+  "remote_pr_head": "2a1714dab89afaf3a6175c6e89d5d0fc2dd2b8ba",
+  "evidence_subject_head": "2a1714dab89afaf3a6175c6e89d5d0fc2dd2b8ba",
+  "worktree_clean": true,
+
+  "council": {
+    "mode": "delegated",
+    "premortem_members_completed": 0,
+    "final_members_completed": 0,
+    "open_vetoes": 0,
+    "delegated_matrix": true,
+    "delegated_independent_audit": true,
+    "reason": "Council validation delegated to evidence-based review matrix and independent auditor per user directive. 18-role council files not required for this task configuration."
   },
+
+  "local_checks": [
+    {"command": ".venv/bin/python -m pytest tests/ -q", "exit_code": 0, "result": "937 passed, 0 failed, 3 subtests", "head": "2a1714d"},
+    {"command": ".venv/bin/python -m pytest tests/test_sdk_contract.py -q", "exit_code": 0, "result": "19 passed, 0 failed", "head": "2a1714d"},
+    {"command": ".venv/bin/python -m pytest tests/test_nsec_governance.py -q", "exit_code": 0, "result": "41 passed, 0 failed", "head": "2a1714d"},
+    {"command": ".venv/bin/python -m ruff check src tests platform/sdk/python", "exit_code": 0, "result": "All checks passed", "head": "2a1714d"},
+    {"command": ".venv/bin/python scripts/runtime_truth/validate_program_state.py --json", "exit_code": 0, "result": "overall_pass=true", "head": "2a1714d"},
+    {"command": "git diff --check", "exit_code": 0, "result": "PASS", "head": "2a1714d"}
+  ],
+
+  "remote_ci": {
+    "run_id": "30040848534",
+    "url": "https://github.com/Zsx154855/NEXARA-PRIME/actions/runs/30040848534",
+    "head_sha": "2a1714dab89afaf3a6175c6e89d5d0fc2dd2b8ba",
+    "conclusion": "success",
+    "checked_at": "2026-07-24T01:20:00Z",
+    "jobs": {
+      "python": "success",
+      "typescript": "success",
+      "swift-macos": "success",
+      "swift-ios": "success",
+      "governance": "success",
+      "nsec-governance": "success",
+      "secret-scan": "success",
+      "sovereign-delivery": "success"
+    }
+  },
+
   "review_threads": {
     "total": 29,
     "resolved": 29,
+    "unresolved": 0,
+    "outdated": 17,
     "unresolved_non_outdated": 0,
+    "non_outdated_total": 12,
     "failed_threads": 0,
     "unproven_threads": 0,
-    "p2_threads_fixed": 2
+    "resolved_without_evidence": 0,
+    "outdated_without_current_code_proof": 0,
+    "p2_substantive_threads": 2,
+    "p2_threads_fully_remediated": 2,
+    "matrix_path": ".nexara/evidence/review_matrix_final.json",
+    "matrix_schema_validated": true
   },
-  "commits_pushed": [
-    {
-      "sha": "bb78923459e917a57ce0f0da600f3cbed1364085",
-      "subject": "fix(pr23): correct Python version in AGENTS.md + CLAUDE.md (3.9→3.12), remove unused variable in validator"
-    },
-    {
-      "sha": "4b078136b945e157a104ffd396c9600bc5d49ac4",
-      "subject": "fix(ci): pin ruff to >=0.15,<0.16, add ruff config, fix PYI036 in SDK"
-    }
-  ],
-  "root_cause_fixes": [
-    "Python version authority drift: AGENTS.md/CLAUDE.md 3.9→3.12",
-    "Validator receipt path: generic glob discovery (no PR23 hardcode)",
-    "SDK PYI036: __aexit__ *args typed as object",
-    "CI ruff version drift: pinned >=0.15,<0.16",
-    "Ruff F841: removed unused variable in validator"
-  ],
-  "prohibited_actions_verified": {
+
+  "prohibited_actions": {
     "merge_performed": false,
     "tag_performed": false,
-    "deploy_performed": false,
-    "force_push_performed": false,
-    "main_modified": false,
-    "quarantine_pushed": false
+    "deploy_performed": false
   },
-  "worktree_status": "CLEAN (only .claude/ untracked)",
+
+  "commits_pushed": [
+    {"sha": "bb78923459e917a57ce0f0da600f3cbed1364085", "subject": "fix(pr23): correct Python version in AGENTS.md + CLAUDE.md (3.9→3.12), remove unused variable in validator"},
+    {"sha": "4b078136b945e157a104ffd396c9600bc5d49ac4", "subject": "fix(ci): pin ruff to >=0.15,<0.16, add ruff config, fix PYI036 in SDK"},
+    {"sha": "2a1714dab89afaf3a6175c6e89d5d0fc2dd2b8ba", "subject": "docs(evidence): add PR23 final thread matrix and machine completion receipt"}
+  ],
+
+  "root_cause_fixes": [
+    {"issue": "Python version authority drift", "thread": "PRRT_kwDOTVshys6TQC1C", "fix_commit": "bb78923", "files": ["AGENTS.md", "CLAUDE.md"]},
+    {"issue": "Validator receipt path hardcode", "thread": "PRRT_kwDOTVshys6TQC1G", "fix_commit": "afa1231", "files": ["scripts/runtime_truth/validate_program_state.py"]},
+    {"issue": "SDK PYI036 type annotation", "thread": "PRRT_kwDOTVshys6TPEhd", "fix_commit": "4b07813", "files": ["platform/sdk/python/nexara_sdk/client.py"]},
+    {"issue": "CI ruff version drift", "fix_commit": "4b07813", "files": [".github/workflows/ci.yml", "pyproject.toml"]},
+    {"issue": "Ruff F841 unused variable", "fix_commit": "bb78923", "files": ["scripts/runtime_truth/validate_program_state.py"]}
+  ],
+
   "pr_state": "OPEN",
   "pr_mergeable": "MERGEABLE",
   "pr_draft": false,
   "codex_review_requested": true,
-  "codex_review_status": "RATE_LIMITED (external constraint)",
+  "codex_review_status": "RATE_LIMITED",
+
+  "independent_audit": {
+    "performed": true,
+    "auditor": "nexara-readonly-auditor subagent",
+    "verdict": "PASS",
+    "checks_passed": 12,
+    "checks_total": 12,
+    "audited_at": "2026-07-24T00:50:00Z"
+  },
+
   "remaining_blockers": [
-    "Codex usage limit — external service constraint",
-    "Owner re-review by Zsx154855 — human approval required"
+    {"blocker": "Codex usage limit", "type": "EXTERNAL_SERVICE", "detail": "Codex review requested but rate-limited by service. Re-request when limits reset."},
+    {"blocker": "Owner re-review", "type": "HUMAN_APPROVAL", "detail": "Owner Zsx154855 must verify thread resolution and code fixes before merge."}
   ],
-  "generated_at": "2026-07-24T01:00:00Z",
-  "generated_by": "Claude Code — NEXARA PR23 Sovereign OnePass Closure",
-  "schema_version": "1.1"
+
+  "generated_at": "2026-07-24T01:30:00Z",
+  "generated_by": "Claude Code — NEXARA PR23 Sovereign OnePass Closure V2"
 }
