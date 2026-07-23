@@ -19,8 +19,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
       - run: pip install pyyaml ruff pytest
-      - run: |
-          python -m pytest tests/ -q --tb=short 2>&1 | tee /tmp/pytest-output.txt
+      - run: python -m pytest tests/ -q --tb=short
       - run: ruff check src tests platform/sdk/python
       - run: |
           if [ -n "$(git status --porcelain)" ]; then
@@ -31,11 +30,6 @@ jobs:
       - run: python scripts/governance/detect_state_drift.py
       - run: python scripts/security/scan_hardcoded_secrets.py
       - run: git diff --check
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pytest-output-${{ github.run_id }}
-          path: /tmp/pytest-output.txt
-          if-no-files-found: warn
 
   typescript:
     runs-on: [self-hosted, macOS, ARM64]
@@ -171,22 +165,6 @@ jobs:
           fi
           echo "SOVEREIGN DELIVERY: ALL GATES PASS"
           echo "READY_FOR_HUMAN_MERGE_APPROVAL"
-      - uses: actions/download-artifact@v4
-        with:
-          name: pytest-output-${{ github.run_id }}
-          path: /tmp
-      - name: Derive test baseline from pytest output
-        run: |
-          PYTEST_FILE="/tmp/pytest-output.txt"
-          if [ -f "${PYTEST_FILE}" ]; then
-            PASSED=$(grep -oE '[0-9]+ passed' "${PYTEST_FILE}" | tail -1 | grep -oE '[0-9]+' || echo "0")
-            FAILED=$(grep -oE '[0-9]+ failed' "${PYTEST_FILE}" | tail -1 | grep -oE '[0-9]+' || echo "0")
-            TEST_RESULT="${PASSED} passed, ${FAILED} failed"
-          else
-            TEST_RESULT="pytest output not available"
-          fi
-          echo "Derived test result: ${TEST_RESULT}"
-          echo "TEST_RESULT=${TEST_RESULT}" >> "${GITHUB_ENV}"
       - name: Generate CI attestation artifact
         if: always() && ( needs.python.result == 'success' && needs.typescript.result == 'success' && needs.swift-macos.result == 'success' && needs.swift-ios.result == 'success' && needs.governance.result == 'success' && needs.nsec-governance.result == 'success' && needs.secret-scan.result == 'success' )
         run: |
@@ -200,7 +178,7 @@ jobs:
             "run_url": "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}",
             "branch": "${GITHUB_REF_NAME}",
             "event": "${GITHUB_EVENT_NAME}",
-            "test_result": "${TEST_RESULT}",
+            "test_result": "all required jobs passed — see individual job logs for details",
             "jobs": {
               "python": "${{ needs.python.result }}",
               "typescript": "${{ needs.typescript.result }}",
@@ -217,6 +195,7 @@ jobs:
           echo "CI attestation written to ${ATTESTATION}"
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: ci-attestation-${{ github.run_id }}
           path: .nexara/receipts/ci_attestation_${{ github.run_id }}.json
