@@ -43,7 +43,7 @@ class NexaraClient:
         self._client = httpx2.AsyncClient(timeout=30.0)
         return self
 
-    async def __aexit__(self, *args: Any):
+    async def __aexit__(self, *args: object):
         if self._client:
             await self._client.aclose()
 
