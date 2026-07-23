@@ -1,0 +1,43 @@
+# Product Experience Contract V1.0 (G7+G8+G9 combined)
+# G7: 三端产品体验 — web-primary, macOS+iOS compile in CI
+# G8: SDK / Plugin Boundary — Python, MCP, OpenAPI, plugin schema
+# G9: Evaluation & Evolution — benchmark, regression, scoring
+
+schema: product_experience_contract
+version: "1.0"
+gates: [G7, G8, G9]
+frozen_at: "2026-07-24T07:30:00Z"
+evidence_head: "2774fa0"
+
+g7_product_experience:
+  files: [experience/NexaraMac, experience/NexaraIOS, experience/NexaraCore]
+  ci_status: "macOS + iOS compile successfully in CI"
+  strategy: "web-primary (Mac/iPhone/iPad bindings via Swift + Runtime Truth API)"
+  status: PASS
+
+g8_sdk_plugin:
+  python_sdk: platform/sdk/python/nexara_sdk/ (10 models, 23 methods)
+  mcp_server: platform/sdk/mcp/server.py
+  openapi: platform/sdk/rest/openapi.yaml
+  plugin_schema: platform/sdk/schemas/plugin_manifest_v1.json
+  typescript: platform/sdk/typescript/ (partial)
+  status: PASS
+
+g9_evaluation:
+  evaluation_engine: evaluation.py (6-dimension scoring)
+  benchmark_runner: benchmark_runner.py
+  improvement_proposals: models.py:ImprovementProposal
+  evolution_pipeline: test_g9_evolution_pipeline.py (9 tests)
+  status: PASS
+
+invariants:
+  - id: EXP_INVARIANT_01
+    rule: "All product experiences route through Runtime API (INVARIANT_02)"
+  - id: EXP_INVARIANT_02
+    rule: "SDK models mirror runtime truth contract"
+  - id: EXP_INVARIANT_03
+    rule: "Evaluation is independent of execution (INVARIANT_03)"
+  - id: EXP_INVARIANT_04
+    rule: "Plugin manifest declares capabilities, not permissions"
+  - id: EXP_INVARIANT_05
+    rule: "Benchmark regression is detected and reported"
