@@ -35,7 +35,7 @@ jobs:
         with:
           name: pytest-output-${{ github.run_id }}
           path: /tmp/pytest-output.txt
-          if-no-files-found: error
+          if-no-files-found: warn
 
   typescript:
     runs-on: [self-hosted, macOS, ARM64]
@@ -220,4 +220,4 @@ jobs:
         with:
           name: ci-attestation-${{ github.run_id }}
           path: .nexara/receipts/ci_attestation_${{ github.run_id }}.json
-          if-no-files-found: ignore
+          if-no-files-found: warn
