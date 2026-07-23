@@ -1,6 +1,6 @@
 # NEXARA PRIME 第一方主权智能体：总体架构蓝图与完整项目开发书 V1.0
 
-**内部代号**：NEXARA Sovereign Agent（正式产品名待品牌 Gate 决定）
+**内部代号**：NEXARA Sovereign Agent（正式产品名：**柏韩 Bǎi Hán**，已于 2026-07-23 品牌 Gate 决定）
 
 **平台**：NEXARA PRIME  |  **第一方 Agent 包**：`nexara_prime.agent`  |  **Hermes 运行依赖**：0
 

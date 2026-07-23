@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "nexara-prime"
 version = "0.1.0"
-description = "Human-Centered Sovereign Agent Kernel"
+description = "柏韩 (Bǎi Hán) — Human-Centered Sovereign Agent Kernel on NEXARA PRIME"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

@@ -20,7 +20,7 @@
       "evidence":["EvaluationEngine 6-dim scoring","BenchmarkRunner compare","9/9 evolution tests"]},
     {"id":"G10","status":"BLOCKED_ACKNOWLEDGED","verified":true,
       "local_release":"LOCAL_RELEASE_READY",
-      "blocked_by":["macOS code signing certificate","macOS notarization","iOS Provisioning Profile","product brand name"],
+      "blocked_by":["macOS code signing certificate","macOS notarization","iOS Provisioning Profile"],
       "resolution":"Requires Apple Developer Program ($99/yr) + human brand decision"}
   ],
   "gates_verified_pass": 10,

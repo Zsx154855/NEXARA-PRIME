@@ -1,7 +1,7 @@
-# NEXARA-PRIME — Agent Instructions
+# 柏韩 · NEXARA-PRIME — Agent Instructions
 
 ## What This Is
-NEXARA-PRIME is a governed first-party AI runtime — not a one-shot codebase. It owns Mission creation, planning, approval, execution, verification, evidence commit, memory patch, evaluation, and completion, all governed by NSEC V2.1 (19 chapters, 55 articles plus V2.1 governance alignment).
+柏韩 (Bǎi Hán) is a governed first-party AI runtime on NEXARA-PRIME — not a one-shot codebase. It owns Mission creation, planning, approval, execution, verification, evidence commit, memory patch, evaluation, and completion, all governed by NSEC V2.1 (19 chapters, 55 articles plus V2.1 governance alignment).
 
 ## Tech Stack
 - **Backend:** Python 3.9, pytest, SQLite (persistent), FastAPI (REST API)

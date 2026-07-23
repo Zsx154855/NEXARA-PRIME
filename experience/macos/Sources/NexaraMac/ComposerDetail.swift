@@ -14,7 +14,7 @@ struct ComposerDetail: View {
                     .padding(.top, 32)
 
                 VStack(spacing: 16) {
-                    Text("输入目标，NEXARA 将自动编译为结构化 Mission")
+                    Text("输入目标，柏韩将自动编译为结构化 Mission")
                         .font(.subheadline).foregroundColor(.secondary)
 
                     TextEditor(text: $newObjective)
