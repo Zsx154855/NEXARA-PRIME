@@ -19,6 +19,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
       - run: pip install pyyaml ruff pytest
+      - run: pip install -e platform/sdk/python
       - run: python -m pytest tests/ -q --tb=short
       - run: ruff check src tests platform/sdk/python
       - run: |
