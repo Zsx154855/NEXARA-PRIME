@@ -145,7 +145,33 @@ def validate_state_consistency(ps: dict, gs: dict, git_truth: dict | None = None
     return results
 
 
-RECEIPT_PATH = STATE_DIR / "receipts" / "pr23_final_attestation.json"
+RECEIPTS_DIR = STATE_DIR / "receipts"
+
+
+def _find_canonical_receipt() -> Path | None:
+    """Discover the canonical superseding receipt in .nexara/receipts/.
+
+    Looks for the most recent *_final_attestation.json that is terminal
+    (superseded_by=null). Returns the path or None.
+    """
+    if not RECEIPTS_DIR.exists():
+        return None
+    candidates = sorted(
+        RECEIPTS_DIR.glob("*_final_attestation.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for path in candidates:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if (
+                data.get("receipt_type") == "superseding_receipt"
+                and data.get("superseded_by") is None
+            ):
+                return path
+        except (json.JSONDecodeError, OSError):
+            continue
+    return None
 
 
 def validate_receipt_provenance(gs: dict, ps: dict) -> list[tuple[bool, str]]:
@@ -153,13 +179,14 @@ def validate_receipt_provenance(gs: dict, ps: dict) -> list[tuple[bool, str]]:
     results: list[tuple[bool, str]] = []
 
     # 1. Canonical receipt must exist
-    if not RECEIPT_PATH.exists():
-        results.append((False, f"Canonical receipt missing: {RECEIPT_PATH}"))
+    receipt_path = _find_canonical_receipt()
+    if receipt_path is None:
+        results.append((False, "No canonical terminal superseding receipt found in .nexara/receipts/"))
         return results
-    results.append((True, f"Canonical receipt exists: {RECEIPT_PATH.name}"))
+    results.append((True, f"Canonical receipt: {receipt_path.name}"))
 
     try:
-        receipt = json.loads(RECEIPT_PATH.read_text(encoding="utf-8"))
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         results.append((False, f"Canonical receipt unreadable: {exc}"))
         return results

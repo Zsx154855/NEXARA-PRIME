@@ -1,7 +1,6 @@
 """NEXARA Runtime Truth API client — complete SDK."""
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import httpx2
@@ -11,7 +10,6 @@ from .models import (
     EvidenceArtifact,
     MemoryRecord,
     Mission,
-    MissionSpec,
     RuntimeOverview,
 )
 

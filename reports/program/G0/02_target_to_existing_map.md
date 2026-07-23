@@ -119,7 +119,7 @@ Blueprint §7 规定的 Target Architecture vs 实际实现映射。
 | ExecutionRun | `ToolInvocation` + runtime.py ExecutionContext | ✅ |
 | EvidenceEnvelope | `EvidenceArtifact` dataclass | ✅ |
 | MemoryItem | `MemoryRecord` dataclass | ✅ |
-| ImprovementProposal | ❌ 无专用模型 | ❌ Missing |
+| ImprovementProposal | `product_reality/models.py` — ImprovementProposal dataclass | ✅ |
 
 ---
 

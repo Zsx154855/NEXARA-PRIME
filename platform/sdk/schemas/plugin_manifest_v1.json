@@ -4,7 +4,7 @@
   "title": "NEXARA Plugin Manifest Schema V1",
   "description": "Plugin capability declaration — declaring a capability does NOT authorize execution. Policy must grant permission separately.",
   "type": "object",
-  "required": ["plugin_id", "name", "version", "capabilities"],
+  "required": ["plugin_id", "name", "version", "capabilities", "entry_point"],
   "properties": {
     "plugin_id": {
       "type": "string",

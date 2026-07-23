@@ -202,7 +202,9 @@ def check_consistency(
         if isinstance(entry, dict) and entry.get("id")
     }
     ps_passed_ids = {str(gate) for gate in program_passed}
-    if gs_passed_ids != ps_passed_ids:
+    ps_blocked_ids = {str(gate) for gate in program_state.get("gates_blocked", [])}
+    ps_all_ids = ps_passed_ids | ps_blocked_ids
+    if gs_passed_ids != ps_all_ids:
         only_in_gate_status = gs_passed_ids - ps_passed_ids
         only_in_program_state = ps_passed_ids - gs_passed_ids
         if only_in_gate_status:

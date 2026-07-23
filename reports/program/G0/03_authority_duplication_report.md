@@ -51,7 +51,7 @@ Tier 8: Model Judgment (AI outputs — lowest)
 | Source | Python Version |
 |--------|---------------|
 | `CLAUDE.md` | Python 3.9 |
-| `AGENTS.md` | Python 3.12 |
+| `AGENTS.md` (current) | Python 3.12 |
 | `pyproject.toml` | >=3.12 |
 | `.venv` actual | 3.12.13 |
 
