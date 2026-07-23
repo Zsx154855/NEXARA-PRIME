@@ -33,7 +33,7 @@
   "gates_verified_pass": 10,
   "gates_blocked": 1,
   "previous_false_pass_corrected": ["G7","G8","G9","G10"],
-  "test_baseline": "918 passed, 0 failed (remote CI); local 917/918 — ui/out test-isolation on console route mount",
+  "test_baseline": "918 passed, 0 failed (clean worktree + remote CI)",
   "local_release_artifacts": [
     "dist/nexara_prime-0.1.0-py3-none-any.whl",
     "dist/nexara_prime-0.1.0.tar.gz",

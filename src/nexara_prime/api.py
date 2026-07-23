@@ -215,7 +215,7 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     def adaptive_triage(mission_id: str) -> dict[str, Any]:
         return runtime.adaptive_triage(mission_id)
 
-    ui_root = Path(__file__).resolve().parents[2] / "ui"
+    ui_root = runtime.settings.ui_root or (Path(__file__).resolve().parents[2] / "ui")
     if ui_root.exists():
         # Serve only the built Next.js static export. Missing builds should be
         # visible instead of silently falling back to legacy UI assets.

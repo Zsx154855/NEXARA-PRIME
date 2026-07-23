@@ -59,6 +59,9 @@ def test_openai_compatible_provider_sends_excerpts_as_model_visible_message(monk
 
 
 def test_console_route_is_not_mounted_without_next_export() -> None:
+    ui_root = Path(tempfile.mkdtemp()) / "ui"
+    ui_root.mkdir(parents=True, exist_ok=True)
+    # No ui/out/ directory — simulates clean checkout without Next.js build
     settings = Settings(
         db_path=Path(tempfile.mkdtemp()) / "test.db",
         workspace_root=Path(tempfile.mkdtemp()),
@@ -67,6 +70,7 @@ def test_console_route_is_not_mounted_without_next_export() -> None:
         mock_model=True,
         api_host="127.0.0.1",
         api_port=8765,
+        ui_root=ui_root,
     )
     settings.ensure_dirs()
     app = create_app(NexaraRuntime(settings))

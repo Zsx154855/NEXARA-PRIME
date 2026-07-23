@@ -6,7 +6,7 @@
   "repo": "/Users/agentos/NEXARA-PRIME",
   "branch": "feat/brand-baihan",
   "python": "3.12.13",
-  "test_baseline": "918 passed, 0 failed (remote CI); local 917/918 — ui/out test-isolation on console route mount",
+  "test_baseline": "918 passed, 0 failed (clean worktree + remote CI)",
   "current_program_gate": "G10",
   "gate_status": "LOCAL_RELEASE_READY",
   "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9","G10"],
@@ -43,7 +43,7 @@
   "orchestration_status": {
     "phase": "POST_MERGE_VALIDATED",
     "test_results": "87 passed, 0 failed",
-    "full_suite": "918 passed, 0 failed (remote CI); 917/918 local (1 pre-existing test-isolation)",
+    "full_suite": "918 passed, 0 failed (clean worktree + remote CI)",
     "next": "READY_FOR_HUMAN_APPROVAL"
   },
   "pr8_orchestration": {
@@ -97,6 +97,6 @@
     "verified_pr_head": "b1084c6fec69a3199e6ad5e1f4527f67e58f0e44",
     "superseded_by": ".nexara/receipts/pr23_final_attestation.json"
   },
-  "updated_at": "2026-07-23T11:20:00Z",
-  "updated_by": "PR #23 final remediation — runtime-truth validation PASS, HEAD: 0341d73"
+  "updated_at": "2026-07-23T12:30:00Z",
+  "updated_by": "PR #23 final remediation — test-isolation fix, 918/918 clean worktree"
 }

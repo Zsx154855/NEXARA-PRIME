@@ -37,10 +37,9 @@
   },
 
   "local_test_baseline": {
-    "result": "917 passed, 1 failed",
-    "failing_test": "test_console_route_is_not_mounted_without_next_export",
-    "root_cause": "api.py hardcodes ui_root relative to __file__. In production, ui/out/index.html exists and /console mounts correctly. Test creates temp directory without ui/out, but the hardcoded path resolves to the real project ui/out/ which exists. Test-isolation defect, not a product bug.",
-    "classification": "ENVIRONMENT_SPECIFIC"
+    "result": "918 passed, 0 failed",
+    "fix_applied": "test_console_route_is_not_mounted_without_next_export — added Settings.ui_root configurable path. Test now creates temp ui/ dir without out/. api.py uses settings.ui_root with hardcoded fallback for production.",
+    "classification": "RESOLVED"
   },
 
   "governance_verification": {
