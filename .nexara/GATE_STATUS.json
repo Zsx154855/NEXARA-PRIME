@@ -46,7 +46,6 @@
   "updated_at": "2026-07-23T11:20:00Z",
   "completed_at": "2026-07-23T11:20:00Z",
   "completed_by": "G0→G10 Continuous Execution — Claude Code",
-  "verified_pr_head": "b1084c6fec69a3199e6ad5e1f4527f67e58f0e44",
   "superseded_by": ".nexara/receipts/pr23_final_attestation.json",
   "brand": "柏韩 (Bǎi Hán) — resolved 2026-07-23"
 }

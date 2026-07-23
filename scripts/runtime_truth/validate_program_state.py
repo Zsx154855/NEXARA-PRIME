@@ -145,6 +145,84 @@ def validate_state_consistency(ps: dict, gs: dict, git_truth: dict | None = None
     return results
 
 
+RECEIPT_PATH = STATE_DIR / "receipts" / "pr23_final_attestation.json"
+
+
+def validate_receipt_provenance(gs: dict, ps: dict) -> list[tuple[bool, str]]:
+    """Validate canonical receipt: existence, evidence_subject_head, linkage, CI attestation."""
+    results: list[tuple[bool, str]] = []
+
+    # 1. Canonical receipt must exist
+    if not RECEIPT_PATH.exists():
+        results.append((False, f"Canonical receipt missing: {RECEIPT_PATH}"))
+        return results
+    results.append((True, f"Canonical receipt exists: {RECEIPT_PATH.name}"))
+
+    try:
+        receipt = json.loads(RECEIPT_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        results.append((False, f"Canonical receipt unreadable: {exc}"))
+        return results
+
+    # 2. Receipt type must be superseding
+    rtype = receipt.get("receipt_type", "")
+    if rtype != "superseding_receipt":
+        results.append((False, f"Receipt type must be 'superseding_receipt', got '{rtype}'"))
+    else:
+        results.append((True, "Receipt type: superseding_receipt"))
+
+    # 3. evidence_subject_head must be a valid 40-char SHA
+    esh = receipt.get("evidence_subject_head", "")
+    ok, msg = validate_sha_full(esh, "evidence_subject_head")
+    results.append((ok, msg))
+
+    # 4. superseded_by must be null (terminal receipt)
+    sb = receipt.get("superseded_by")
+    if sb is not None:
+        results.append((False, f"Terminal receipt must have superseded_by=null, got '{sb}'"))
+    else:
+        results.append((True, "Receipt is terminal (superseded_by=null)"))
+
+    # 5. CI verification must have run_id and result
+    ci = receipt.get("ci_verification", {})
+    if not ci.get("run_id"):
+        results.append((False, "Receipt ci_verification.run_id is missing"))
+    else:
+        results.append((True, f"CI run_id: {ci['run_id']}"))
+    if not ci.get("result"):
+        results.append((False, "Receipt ci_verification.result is missing"))
+    else:
+        results.append((True, f"CI result: {ci['result']}"))
+
+    # 6. State superseded_by must link to the receipt
+    gs_link = gs.get("superseded_by", "")
+    ps_link = ps.get("pr23_brand_remediation", {}).get("superseded_by", "")
+    expected = ".nexara/receipts/pr23_final_attestation.json"
+    if gs_link != expected:
+        results.append((False, f"GATE_STATUS.superseded_by='{gs_link}', expected '{expected}'"))
+    else:
+        results.append((True, "GATE_STATUS.superseded_by links to receipt"))
+    if ps_link != expected:
+        results.append((False, f"PROGRAM_STATE.pr23_brand_remediation.superseded_by='{ps_link}', expected '{expected}'"))
+    else:
+        results.append((True, "PROGRAM_STATE superseded_by links to receipt"))
+
+    # 7. evidence_subject_head must be a reachable git commit
+    try:
+        result = subprocess.run(
+            ["git", "cat-file", "-t", esh],
+            cwd=REPO_ROOT, capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip() == "commit":
+            results.append((True, f"evidence_subject_head {esh[:12]} is a reachable commit"))
+        else:
+            results.append((False, f"evidence_subject_head {esh[:12]} is not a reachable git commit"))
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        results.append((False, f"Cannot verify evidence_subject_head: {exc}"))
+
+    return results
+
+
 def validate_all(
     git_truth: dict[str, Any] | None = None,
     github_truth: dict[str, Any] | None = None,
@@ -158,6 +236,7 @@ def validate_all(
         "sha_validation": [],
         "temporal": [],
         "state_consistency": [],
+        "receipt_provenance": [],
         "github_match": [],
         "overall_pass": True,
     }
@@ -179,6 +258,12 @@ def validate_all(
         # Temporal order
         for ok, msg in validate_temporal_order(ps):
             report["temporal"].append({"pass": ok, "message": msg})
+            if not ok:
+                report["overall_pass"] = False
+
+        # Receipt provenance
+        for ok, msg in validate_receipt_provenance(gs, ps):
+            report["receipt_provenance"].append({"pass": ok, "message": msg})
             if not ok:
                 report["overall_pass"] = False
 
@@ -222,6 +307,9 @@ if __name__ == "__main__":
             status = "PASS" if val["valid"] else "FAIL"
             print(f"  JSON {key}: {status}")
         for item in report.get("state_consistency", []):
+            status = "PASS" if item["pass"] else "FAIL"
+            print(f"  {status}: {item['message']}")
+        for item in report.get("receipt_provenance", []):
             status = "PASS" if item["pass"] else "FAIL"
             print(f"  {status}: {item['message']}")
         for item in report.get("temporal", []):
