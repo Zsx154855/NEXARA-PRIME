@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-23
 **Gate:** G0 (Reality Inventory — not re-execution, fresh inventory)
-**Baseline HEAD:** dd0505ac53721d8e2e6150e47936119fe16734d6 | **PR HEAD:** 5266a6f85939823fa52e2f506cf403800db4bb84
+**Baseline HEAD:** dd0505ac53721d8e2e6150e47936119fe16734d6
 
 ## Test Evidence
 

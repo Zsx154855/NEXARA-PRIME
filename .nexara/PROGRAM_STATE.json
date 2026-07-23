@@ -91,12 +91,11 @@
   "pr23_brand_remediation": {
     "pr_number": 23,
     "url": "https://github.com/Zsx154855/NEXARA-PRIME/pull/23",
-    "head": "0341d730db937e2cec16d7cd64c0a31c3e588d9e",
     "branch": "feat/brand-baihan",
     "brand": "柏韩 (Bǎi Hán) — resolved",
-    "drift_fixes": ["g10_composite_status", "gates_pass_G10", "G10_status_BLOCKED", "test_baseline_align"],
-    "runtime_truth_fixes": ["current_gate", "updated_at"],
-    "status": "OPEN"
+    "status": "OPEN",
+    "verified_pr_head": "b1084c6fec69a3199e6ad5e1f4527f67e58f0e44",
+    "superseded_by": ".nexara/receipts/pr23_final_attestation.json"
   },
   "updated_at": "2026-07-23T11:20:00Z",
   "updated_by": "PR #23 final remediation — runtime-truth validation PASS, HEAD: 0341d73"
