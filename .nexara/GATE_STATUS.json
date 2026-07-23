@@ -4,6 +4,7 @@
   "inventory": "G0_REALITY_INVENTORY_V2_20260723",
   "inventory_head": "dd0505ac53721d8e2e6150e47936119fe16734d6",
   "program_status": "READY_FOR_HUMAN_APPROVAL",
+  "current_gate": "G10",
   "g10_composite_status": {
     "local_release": "LOCAL_RELEASE_READY",
     "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
@@ -32,7 +33,7 @@
   "gates_verified_pass": 10,
   "gates_blocked": 1,
   "previous_false_pass_corrected": ["G7","G8","G9","G10"],
-  "test_baseline": "917 passed, 1 failed (pre-existing test-isolation defect)",
+  "test_baseline": "918 passed, 0 failed (remote CI); local 917/918 — ui/out test-isolation on console route mount",
   "local_release_artifacts": [
     "dist/nexara_prime-0.1.0-py3-none-any.whl",
     "dist/nexara_prime-0.1.0.tar.gz",
@@ -42,7 +43,9 @@
     "dist/checksums-0.1.0.txt"
   ],
   "supersedes": "GATE_STATUS.json from 2026-07-15 (false G7-G9 PASS claims)",
-  "completed_at": "2026-07-23T00:00:00Z",
+  "updated_at": "2026-07-23T11:20:00Z",
+  "completed_at": "2026-07-23T11:20:00Z",
   "completed_by": "G0→G10 Continuous Execution — Claude Code",
-  "pr_remediation_head": "5266a6f85939823fa52e2f506cf403800db4bb84"
+  "pr_remediation_head": "0341d730db937e2cec16d7cd64c0a31c3e588d9e",
+  "brand": "柏韩 (Bǎi Hán) — resolved 2026-07-23"
 }

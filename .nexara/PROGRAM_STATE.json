@@ -6,7 +6,7 @@
   "repo": "/Users/agentos/NEXARA-PRIME",
   "branch": "feat/brand-baihan",
   "python": "3.12.13",
-  "test_baseline": "917 passed, 1 failed (pre-existing test-isolation defect)",
+  "test_baseline": "918 passed, 0 failed (remote CI); local 917/918 — ui/out test-isolation on console route mount",
   "current_program_gate": "G10",
   "gate_status": "LOCAL_RELEASE_READY",
   "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9","G10"],
@@ -43,8 +43,8 @@
   "orchestration_status": {
     "phase": "POST_MERGE_VALIDATED",
     "test_results": "87 passed, 0 failed",
-    "full_suite": "682 passed, 0 failed",
-    "next": "READY_FOR_NEXT_GATE_SELECTION"
+    "full_suite": "918 passed, 0 failed (remote CI); 917/918 local (1 pre-existing test-isolation)",
+    "next": "READY_FOR_HUMAN_APPROVAL"
   },
   "pr8_orchestration": {
     "pr_number": 8,
@@ -88,6 +88,16 @@
     "status": "MERGED",
     "scope": "post-merge evidence + state sync"
   },
-  "updated_at": "2026-07-23T00:00:00Z",
-  "updated_by": "PR #23 remediation — drift fixes, brand: 柏韩, HEAD: 5266a6f"
+  "pr23_brand_remediation": {
+    "pr_number": 23,
+    "url": "https://github.com/Zsx154855/NEXARA-PRIME/pull/23",
+    "head": "0341d730db937e2cec16d7cd64c0a31c3e588d9e",
+    "branch": "feat/brand-baihan",
+    "brand": "柏韩 (Bǎi Hán) — resolved",
+    "drift_fixes": ["g10_composite_status", "gates_pass_G10", "G10_status_BLOCKED", "test_baseline_align"],
+    "runtime_truth_fixes": ["current_gate", "updated_at"],
+    "status": "OPEN"
+  },
+  "updated_at": "2026-07-23T11:20:00Z",
+  "updated_by": "PR #23 final remediation — runtime-truth validation PASS, HEAD: 0341d73"
 }
