@@ -1,0 +1,32 @@
+{
+  "receipt_id": "G2_CLOSURE_RECEIPT_V1",
+  "gate": "G2",
+  "status": "PASS",
+  "evidence_path": ".nexara/evidence/g2_closure_evidence.md",
+  "evidence_sha256": "f4ac87a74324c8202e4b36001f5e4e9d7ddcf48b96d6e13d30191a1254f2b86c",
+  "evidence_subject_head": "35c6612",
+  "sub_gates": {
+    "G2-A": "PASS (Kernel Boundary Mapping)",
+    "G2-B": "PASS (24 contract tests)",
+    "G2-C": "PASS (ChiefBrainKernel wrapper)",
+    "G2-D": "PASS (14 integration tests)"
+  },
+  "tests": "982 passed, 0 failed",
+  "ruff": "All checks passed",
+  "nsec": "PASS",
+  "program_state": "overall_pass=true",
+  "no_second_runtime": true,
+  "no_second_state_machine": true,
+  "kernel_bypass_governance": false,
+  "kernel_bypass_evidence": false,
+  "kernel_bypass_receipt": false,
+  "files_created": [
+    "src/nexara_prime/chief_brain_kernel.py",
+    "tests/test_g2_kernel_contract.py",
+    "tests/test_g2_first_controlled_mission.py",
+    ".nexara/contracts/chief_brain_kernel_contract_v1.yaml",
+    ".nexara/evidence/g2a_kernel_boundary_mapping.md",
+    ".nexara/evidence/g2_closure_evidence.md"
+  ],
+  "generated_at": "2026-07-24T05:30:00Z"
+}
