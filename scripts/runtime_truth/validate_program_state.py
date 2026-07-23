@@ -325,7 +325,6 @@ def validate_all(
     # GitHub truth comparison
     if github_truth:
         for pr_num, truth in github_truth.items():
-            key = f"pr{pr_num}"
             block = ps.get(f"pr{pr_num}_orchestration") or ps.get(f"pr{pr_num}_state_sync") or {}
             actual_merged = block.get("merged_at", "")
             expected_merged = truth.get("merged_at_utc", "")
