@@ -1,0 +1,169 @@
+# NEXARA Canonical Domain Model V1.0
+# G1 Contract Freeze — derived from repository reality at HEAD 14ec6e3
+# All entities mirror actual implementations in src/nexara_prime/models.py + runtime.py
+# This document FREEZES the existing model, does NOT create new architecture.
+
+schema: canonical_domain_model
+version: "1.0"
+gate: G1
+frozen_at: "2026-07-24T04:00:00Z"
+evidence_head: "14ec6e3"
+source_files:
+  - src/nexara_prime/models.py
+  - src/nexara_prime/runtime.py
+  - src/nexara_prime/orchestration.py
+  - src/nexara_prime/memory.py
+  - src/nexara_prime/evidence.py
+  - src/nexara_prime/mission_triage.py
+  - src/nexara_prime/state_machine.py
+  - platform/sdk/python/nexara_sdk/models.py
+
+# ── 12 Canonical Entities ──
+
+# 1. Human Intent — entry point, always external
+human_intent:
+  description: "Human-originated instruction that initiates the mission lifecycle"
+  fields:
+    owner: { type: string, required: true, source: "external (human)" }
+    objective: { type: string, required: true }
+    constraints: { type: "list[string]", required: false }
+    priority: { type: "R0|R1|R2|R3|R4", required: false, default: "R2" }
+    authority: { type: string, required: true, source: "human approval chain" }
+  implemented_in: mission_triage.py:MissionTriageEngine
+  lifecycle: "Intent → Triage → Mission"
+
+# 2. Strategy — program-level direction
+strategy:
+  description: "Program-wide vision, goals, and governing principles"
+  fields:
+    vision: { type: string, required: true }
+    goals: { type: "list[string]", required: true }
+    principles: { type: "list[string]", required: true }
+  implemented_in: NSEC V2.1 + PROGRAM_STATE.json + GATE_STATUS.json
+  authority: "NSEC V2.1 Article 5 (Optimal Strategy)"
+
+# 3. Mission — the core unit of work
+mission:
+  description: "A governed unit of work with full lifecycle"
+  fields:
+    mission_id: { type: string, required: true, format: "uuid" }
+    spec: { type: MissionSpec, required: true }
+    state: { type: MissionState, required: true, default: "Created" }
+    contract: { type: WorkContract, required: false }
+    plan: { type: MissionPlan, required: false }
+    paused: { type: boolean, required: true, default: false }
+    safe_mode: { type: boolean, required: true, default: false }
+    pending_approval_id: { type: "string | null", required: false }
+    rollback_point: { type: "string | null", required: false }
+    trace_id: { type: string, required: false }
+    result: { type: dict, required: false }
+    created_at: { type: string, required: false }
+    updated_at: { type: string, required: false }
+    adaptive_mode: { type: string, required: false, default: "S0" }
+    triage_result: { type: "dict | null", required: false }
+  implemented_in: models.py:Mission, runtime.py:NexaraRuntime
+  states: 29 (Intent → Context → Contract → Plan → Simulation → Approval → Execution → Verification → Evidence → MemoryPatch → Evaluation → Completed | Blocked | Failed | RolledBack | ...)
+
+# 4. Task — a unit of execution within a Mission
+task:
+  description: "Atomic execution step within a mission"
+  fields:
+    task_id: { type: string, required: true }
+    mission_id: { type: string, required: true }
+    capability: { type: string, required: true }
+    owner: { type: RuntimeRole, required: false }
+    status: { type: string, required: false, default: "pending" }
+  implemented_in: models.py:PlanStep, orchestration.py:WorkerScheduler
+
+# 5. Agent — identity and role assignment
+agent:
+  description: "An assigned executor with role, model, and permissions"
+  fields:
+    agent_id: { type: string, required: true }
+    role: { type: RuntimeRole, required: true }
+    model: { type: string, required: false }
+    persona: { type: Persona, required: false, default: "Nexara" }
+    skill_binding: { type: "list[string]", required: false }
+    permission: { type: "list[string]", required: false }
+  implemented_in: models.py:AgentAssignment, identity.py:AgentIdentity
+
+# 6. Skill — a bound capability with evaluation
+skill:
+  description: "A named, versioned capability binding"
+  fields:
+    skill_id: { type: string, required: true }
+    version: { type: string, required: true }
+    capability_binding: { type: "list[string]", required: true }
+    evaluation: { type: dict, required: false }
+  implemented_in: capabilities.py:CapabilityRegistry
+  constraint: "Skill CANNOT grant permission. Permission is always external."
+
+# 7. Capability — an executable action
+capability:
+  description: "A registered action with permission and external-effect classification"
+  fields:
+    capability_id: { type: string, required: true }
+    action: { type: string, required: true }
+    permission: { type: string, required: true }
+    external_effect: { type: boolean, required: true, default: false }
+  implemented_in: capabilities.py, capability_registry_v2.py, tools.py:ToolRuntime
+  constraint: "External-effect capabilities require Approval before execution."
+
+# 8. Execution — a completed task run
+execution:
+  description: "A record of task execution with result"
+  fields:
+    execution_id: { type: string, required: true }
+    task_id: { type: string, required: true }
+    runtime: { type: string, required: true }
+    result: { type: dict, required: false }
+  implemented_in: orchestration.py:RuntimeOrchestrator, runtime.py:NexaraRuntime._execute_stage
+
+# 9. Evidence — verified observation
+evidence:
+  description: "An immutable record of observed truth with cryptographic verification"
+  fields:
+    evidence_id: { type: string, required: true }
+    source: { type: string, required: true }
+    artifact: { type: dict, required: true }
+    sha256: { type: string, required: false }
+    verification: { type: string, required: false, default: "unverified" }
+    parent_evidence: { type: "list[string]", required: false }
+  implemented_in: evidence.py:EvidenceStore, models.py:EvidenceArtifact
+  constraint: "Evidence is the SINGLE SOURCE OF TRUTH for completed work. Memory cannot contradict Evidence."
+
+# 10. Receipt — machine-verifiable completion proof
+receipt:
+  description: "A signed, verifiable attestation that binds evidence to a verdict"
+  fields:
+    receipt_id: { type: string, required: true }
+    evidence_refs: { type: "list[string]", required: true }
+    evidence_subject_head: { type: string, required: true, format: "40-char SHA" }
+    verdict: { type: "PASS|FAIL|BLOCKED", required: true }
+    prohibited_actions: { type: dict, required: true }
+    generated_at: { type: string, required: true, format: "ISO-8601 UTC" }
+  implemented_in: .nexara/receipts/, evidence.py
+  constraint: "Receipt MUST NOT reference its own future commit SHA. Receipt is created AFTER evidence, not before."
+
+# 11. Reflection — post-mission learning
+reflection:
+  description: "Post-completion analysis capturing lessons and improvement proposals"
+  fields:
+    mission_id: { type: string, required: true }
+    lessons: { type: "list[string]", required: true }
+    improvement: { type: string, required: false }
+  implemented_in: evaluation.py:EvaluationEngine, models.py:ImprovementProposal
+
+# 12. Memory Patch — an approved modification to persistent memory
+memory_patch:
+  description: "A governed modification to the memory kernel, requiring evidence and approval"
+  fields:
+    source: { type: string, required: true }
+    target: { type: MemoryKind, required: true }
+    content: { type: string, required: true }
+    source_evidence_id: { type: "string | null", required: false }
+    evidence: { type: string, required: true, description: "Evidence reference backing this patch" }
+    approval: { type: string, required: false }
+    confidence: { type: float, required: false, default: 1.0 }
+  implemented_in: memory.py:MemoryKernel, models.py:MemoryRecord
+  constraint: "Memory patch MUST have evidence backing. Confidence < 1.0 when evidence is indirect. Memory cannot overwrite Evidence."

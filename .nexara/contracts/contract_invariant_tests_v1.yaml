@@ -1,0 +1,101 @@
+# NEXARA Contract Invariant Tests V1.0
+# G1 Contract Freeze — 5 canonical invariants that MUST hold for any Chief Brain implementation
+# These are NOT implementation tests; they are CONTRACT TESTS that define the boundary.
+
+schema: contract_invariant_tests
+version: "1.0"
+gate: G1
+frozen_at: "2026-07-24T04:00:00Z"
+evidence_head: "14ec6e3"
+
+# ── 5 Canonical Invariants ──
+
+invariants:
+
+  - id: INVARIANT_01
+    name: "Skill Cannot Grant Permission"
+    description: >
+      A Skill is a capability binding. It describes WHAT can be done, not WHO can do it.
+      Permission to invoke a skill is ALWAYS external — granted by the governance layer.
+      A skill definition MUST NOT contain or imply permission grants.
+      This prevents self-escalation and privilege confusion.
+    contract: "Skill.permission is NEVER present. Permission is managed by Authority Matrix."
+    verification: "Scan all skill definitions for inline permission fields — must be absent."
+    severity: "CRITICAL — self-escalation vector"
+    source: "NSEC V2.1 Article 21 (Least Privilege), authority_matrix_v1.yaml rule R6"
+    current_implementation: "capabilities.py:CapabilityRegistry — skills registered with capability binding, permissions checked externally"
+
+  - id: INVARIANT_02
+    name: "Canvas Cannot Bypass Runtime"
+    description: >
+      A Canvas is a UI or interaction surface. It renders state and captures input.
+      A Canvas MUST NOT execute missions, modify state, or create evidence directly.
+      All state-changing operations flow through the Runtime, which enforces governance.
+      This prevents UI-level bypass of the approval chain.
+    contract: "Canvas operations: read-only render + input capture → Runtime → governance → execution"
+    verification: "Scan canvas/UI code for direct db writes, mission creation, or evidence writes — must route through Runtime API."
+    severity: "CRITICAL — governance bypass vector"
+    source: "NSEC V2.1 Article 9 (Single Source of Truth), architecture: api.py endpoints"
+    current_implementation: "api.py: FastAPI endpoints — all state changes route through NexaraRuntime methods"
+
+  - id: INVARIANT_03
+    name: "Executor Cannot Create PASS Verdict"
+    description: >
+      The agent that EXECUTES a task MUST NOT be the same agent that VERIFIES it.
+      A PASS verdict (receipt, evidence acceptance, gate pass) MUST be created by
+      an independent auditor — a different agent, a different model, or a human.
+      This prevents self-certification and false closure.
+    contract: "Executor != Auditor. Receipt creator != Mission executor."
+    verification: "For any PASS receipt, verify creator agent_id != executor agent_id."
+    severity: "CRITICAL — self-certification vector"
+    source: "NSEC V2.1 Article 37 (Independent Verification), authority_matrix_v1.yaml: receipt.create"
+    current_implementation: "independent_review.py: exports independent review capability; orchestration.py: EvidenceQueue with checksum verification"
+
+  - id: INVARIANT_04
+    name: "Memory Cannot Overwrite Evidence"
+    description: >
+      Evidence is the SINGLE SOURCE OF TRUTH for what actually happened.
+      Memory is a DERIVED record — it summarizes, learns from, and patches based on evidence.
+      A memory record MUST have an evidence reference (source_evidence_id).
+      A memory patch that contradicts evidence MUST be rejected.
+      This prevents memory corruption and false history.
+    contract: "MemoryRecord.source_evidence_id is required for committed records. Evidence is append-only. Memory is derived."
+    verification: |
+      For each committed memory record:
+        - source_evidence_id must be non-null
+        - Referenced evidence must exist and be verified
+        - Memory content must not contradict evidence content
+    severity: "CRITICAL — truth corruption vector"
+    source: "NSEC V2.1 Article 9 (Single Source of Truth), Article 33 (Evidence & Receipt)"
+    current_implementation: "memory.py:MemoryKernel with evidence-backed commit; models.py:MemoryRecord.source_evidence_id (str | None)"
+
+  - id: INVARIANT_05
+    name: "Mission Completion Requires Full Chain"
+    description: >
+      A Mission is NOT complete just because execution finished.
+      Completion requires the FULL chain:
+        Success Criteria (all met)
+        + Evidence (verified, immutable)
+        + Audit (independent verification)
+        + Receipt (machine-verifiable)
+        + Reflection (lessons captured)
+      Any missing link means the mission is NOT complete.
+      This prevents premature closure and incomplete delivery.
+    contract: "Mission.completed state requires all 5 links. Missing any link → NOT complete."
+    verification: |
+      For each mission in Completed state:
+        - All success criteria passed
+        - Evidence records exist and are verified
+        - Independent audit PASS
+        - Receipt created with PASS verdict
+        - Reflection record exists
+    severity: "CRITICAL — premature closure vector"
+    source: "NSEC V2.1 Article 55 (Complete Delivery Responsibility)"
+    current_implementation: "runtime.py:NexaraRuntime — mission stages: _verify_stage → _commit_evidence_stage → _update_memory_stage → _evaluate_stage; evaluation.py:EvaluationEngine"
+
+# ── Test Execution Contract ──
+test_execution:
+  when: "Before any G2 Chief Brain Kernel Integration"
+  how: "Each invariant must have at least one automated test that fails when violated"
+  format: "pytest test functions in tests/test_g1_contract_invariants.py"
+  blocking: "ALL 5 invariants must have passing tests before G2 proceeds"
