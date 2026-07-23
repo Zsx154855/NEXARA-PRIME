@@ -12,10 +12,12 @@ from .models import (
     MissionPlan,
     MissionSpec,
     MissionState,
+    Persona,
     PlanStep,
     PluginManifest,
     RiskLevel,
     RuntimeOverview,
+    RuntimeRole,
     WorkContract,
 )
 
@@ -33,9 +35,11 @@ __all__ = [
     "MissionPlan",
     "MissionSpec",
     "MissionState",
+    "Persona",
     "PlanStep",
     "PluginManifest",
     "RiskLevel",
     "RuntimeOverview",
+    "RuntimeRole",
     "WorkContract",
 ]

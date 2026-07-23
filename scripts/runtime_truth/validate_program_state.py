@@ -149,101 +149,129 @@ RECEIPTS_DIR = STATE_DIR / "receipts"
 
 
 def _find_canonical_receipt() -> Path | None:
-    """Discover the canonical superseding receipt in .nexara/receipts/.
+    """Discover the canonical terminal superseding receipt.
 
-    Looks for the most recent *_final_attestation.json that is terminal
-    (superseded_by=null). Returns the path or None.
+    Selection priority (deterministic):
+    1. If exactly one terminal superseding receipt exists, return it.
+    2. If zero or multiple terminal receipts exist, return None
+       (caller must fail — ambiguity is not tolerated).
     """
     if not RECEIPTS_DIR.exists():
         return None
-    candidates = sorted(
-        RECEIPTS_DIR.glob("*_final_attestation.json"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    for path in candidates:
+    terminal: list[Path] = []
+    for path in sorted(RECEIPTS_DIR.glob("*_final_attestation.json")):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             if (
                 data.get("receipt_type") == "superseding_receipt"
                 and data.get("superseded_by") is None
             ):
-                return path
+                terminal.append(path)
         except (json.JSONDecodeError, OSError):
             continue
+    if len(terminal) == 1:
+        return terminal[0]
     return None
 
 
 def validate_receipt_provenance(gs: dict, ps: dict) -> list[tuple[bool, str]]:
-    """Validate canonical receipt: existence, evidence_subject_head, linkage, CI attestation."""
+    """Validate canonical receipt generically — no PR-specific hardcoded paths."""
     results: list[tuple[bool, str]] = []
 
-    # 1. Canonical receipt must exist
-    receipt_path = _find_canonical_receipt()
-    if receipt_path is None:
-        results.append((False, "No canonical terminal superseding receipt found in .nexara/receipts/"))
+    # 1. Exactly one terminal superseding receipt must exist
+    if not RECEIPTS_DIR.exists():
+        results.append((False, "Receipts directory .nexara/receipts/ missing"))
         return results
+
+    all_terminal: list[Path] = []
+    for path in sorted(RECEIPTS_DIR.glob("*_final_attestation.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if (
+                data.get("receipt_type") == "superseding_receipt"
+                and data.get("superseded_by") is None
+            ):
+                all_terminal.append(path)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    if len(all_terminal) == 0:
+        results.append((False, "No canonical terminal superseding receipt found"))
+        return results
+    if len(all_terminal) > 1:
+        names = ", ".join(p.name for p in all_terminal)
+        results.append((False, f"Multiple active terminal receipts ({len(all_terminal)}): {names}"))
+        return results
+
+    receipt_path = all_terminal[0]
     results.append((True, f"Canonical receipt: {receipt_path.name}"))
 
+    # 2. Receipt must be readable
     try:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         results.append((False, f"Canonical receipt unreadable: {exc}"))
         return results
 
-    # 2. Receipt type must be superseding
+    # 3. Receipt type
     rtype = receipt.get("receipt_type", "")
     if rtype != "superseding_receipt":
         results.append((False, f"Receipt type must be 'superseding_receipt', got '{rtype}'"))
     else:
         results.append((True, "Receipt type: superseding_receipt"))
 
-    # 3. evidence_subject_head must be a valid 40-char SHA
+    # 4. evidence_subject_head: valid 40-char SHA
     esh = receipt.get("evidence_subject_head", "")
     ok, msg = validate_sha_full(esh, "evidence_subject_head")
     results.append((ok, msg))
 
-    # 4. superseded_by must be null (terminal receipt)
+    # 5. Terminal (superseded_by=null)
     sb = receipt.get("superseded_by")
     if sb is not None:
-        results.append((False, f"Terminal receipt must have superseded_by=null, got '{sb}'"))
+        results.append((False, f"Terminal receipt superseded_by must be null, got '{sb}'"))
     else:
         results.append((True, "Receipt is terminal (superseded_by=null)"))
 
-    # 5. CI verification must have run_id and result
+    # 6. CI verification fields
     ci = receipt.get("ci_verification", {})
     if not ci.get("run_id"):
-        results.append((False, "Receipt ci_verification.run_id is missing"))
+        results.append((False, "Receipt ci_verification.run_id missing"))
     else:
         results.append((True, f"CI run_id: {ci['run_id']}"))
     if not ci.get("result"):
-        results.append((False, "Receipt ci_verification.result is missing"))
+        results.append((False, "Receipt ci_verification.result missing"))
     else:
         results.append((True, f"CI result: {ci['result']}"))
 
-    # 6. State superseded_by must link to the receipt
+    # 7. Cross-file linkage: state superseded_by must point to receipt
+    receipt_rel = str(receipt_path.relative_to(REPO_ROOT))
     gs_link = gs.get("superseded_by", "")
-    ps_link = ps.get("pr23_brand_remediation", {}).get("superseded_by", "")
-    expected = ".nexara/receipts/pr23_final_attestation.json"
-    if gs_link != expected:
-        results.append((False, f"GATE_STATUS.superseded_by='{gs_link}', expected '{expected}'"))
+    if gs_link != receipt_rel:
+        results.append((False, f"GATE_STATUS.superseded_by='{gs_link}', expected '{receipt_rel}'"))
     else:
-        results.append((True, "GATE_STATUS.superseded_by links to receipt"))
-    if ps_link != expected:
-        results.append((False, f"PROGRAM_STATE.pr23_brand_remediation.superseded_by='{ps_link}', expected '{expected}'"))
-    else:
-        results.append((True, "PROGRAM_STATE superseded_by links to receipt"))
+        results.append((True, "GATE_STATUS.superseded_by links to canonical receipt"))
 
-    # 7. evidence_subject_head must be a reachable git commit
+    # PROGRAM_STATE: check all top-level keys that contain 'superseded_by'
+    ps_linked = False
+    for key, val in ps.items():
+        if isinstance(val, dict) and val.get("superseded_by") == receipt_rel:
+            ps_linked = True
+            break
+    if ps_linked:
+        results.append((True, "PROGRAM_STATE superseded_by links to canonical receipt"))
+    else:
+        results.append((False, f"PROGRAM_STATE has no subsection with superseded_by='{receipt_rel}'"))
+
+    # 8. evidence_subject_head reachable in git
     try:
         result = subprocess.run(
             ["git", "cat-file", "-t", esh],
             cwd=REPO_ROOT, capture_output=True, text=True, timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip() == "commit":
-            results.append((True, f"evidence_subject_head {esh[:12]} is a reachable commit"))
+            results.append((True, f"evidence_subject_head {esh[:12]} reachable"))
         else:
-            results.append((False, f"evidence_subject_head {esh[:12]} is not a reachable git commit"))
+            results.append((False, f"evidence_subject_head {esh[:12]} not a reachable commit"))
     except (subprocess.TimeoutExpired, OSError) as exc:
         results.append((False, f"Cannot verify evidence_subject_head: {exc}"))
 

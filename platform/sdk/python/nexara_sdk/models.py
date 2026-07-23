@@ -1,9 +1,7 @@
-"""Runtime Truth data models — mirrors NEXARA API contracts.
+"""Runtime Truth data models — mirrors NEXARA API contracts authoritatively.
 
-All enum values match the runtime's wire format exactly:
-- MissionState: PascalCase ("Intent", "Completed", "Running", ...)
-- ApprovalStatus: lowercase ("pending", "approved", ...)
-- MemoryKind: snake_case ("short_term", "fact", ...)
+All enum values and field shapes match runtime wire format exactly.
+Nullable runtime fields are nullable here. No silent field discard.
 """
 from __future__ import annotations
 
@@ -77,6 +75,29 @@ class MemoryKind(str, Enum):
     UNVERIFIED_INFERENCE = "unverified_inference"
 
 
+class RuntimeRole(str, Enum):
+    ORCHESTRATOR = "orchestrator"
+    PLANNER = "planner"
+    ANALYST = "analyst"
+    RESEARCHER = "researcher"
+    EXECUTOR = "executor"
+    REVIEWER = "reviewer"
+    AUDITOR = "auditor"
+    ARCHIVIST = "archivist"
+
+
+class Persona(str, Enum):
+    NEXARA = "Nexara"
+    SOLACE = "Solace"
+    NYX = "Nyx"
+    ORION = "Orion"
+    VERTEX = "Vertex"
+    LUMEN = "Lumen"
+    ATLAS = "Atlas"
+    ECHO = "Echo"
+    KAIROS = "Kairos"
+
+
 # ── Core Models ──
 
 
@@ -101,41 +122,58 @@ class MissionSpec(BaseModel):
 
 class PlanStep(BaseModel):
     step_id: str = ""
+    title: str = ""
     description: str = ""
-    dependencies: list[str] = Field(default_factory=list)
-    assigned_role: str = ""
-    estimated_tokens: int = 0
-    estimated_duration_ms: int = 0
+    role: RuntimeRole = RuntimeRole.EXECUTOR
+    persona: Persona = Persona.NEXARA
+    required_capabilities: list[str] = Field(default_factory=list)
+    status: str = "pending"
 
 
 class MissionPlan(BaseModel):
     plan_id: str = ""
     mission_id: str = ""
     steps: list[PlanStep] = Field(default_factory=list)
+    simulated: bool = False
+    created_at: str = ""
 
 
 class WorkContract(BaseModel):
     contract_id: str = ""
     mission_id: str = ""
-    inputs: dict[str, Any] = Field(default_factory=dict)
-    outputs: dict[str, Any] = Field(default_factory=dict)
+    version: int = 1
+    status: str = "draft"
+    objective: str = ""
+    boundaries: list[str] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)
+    deliverables: list[str] = Field(default_factory=list)
     acceptance_criteria: list[str] = Field(default_factory=list)
-    allowed_side_effects: list[str] = Field(default_factory=list)
-    approvals: list[dict[str, Any]] = Field(default_factory=list)
-    rollback_plan: dict[str, Any] | None = None
+    risk_level: RiskLevel = RiskLevel.R2
+    change_log: list[str] = Field(default_factory=list)
+    approved_at: str | None = None
+    created_at: str = ""
+    schema_version: int = 1
+    mission_run_id: str | None = None
+    correlation_id: str | None = None
+    provenance: str | None = None
 
 
 class Mission(BaseModel):
     mission_id: str
     spec: MissionSpec | None = None
     state: MissionState = MissionState.CREATED
-    plan: MissionPlan | None = None
     contract: WorkContract | None = None
+    plan: MissionPlan | None = None
+    paused: bool = False
+    safe_mode: bool = False
+    pending_approval_id: str | None = None
+    rollback_point: str | None = None
+    trace_id: str = ""
+    result: dict[str, Any] = Field(default_factory=dict)
     created_at: str = ""
     updated_at: str = ""
-    is_paused: bool = False
-    is_safe_mode: bool = False
+    adaptive_mode: str = "S0"
+    triage_result: dict[str, Any] | None = None
 
 
 # ── Approval ──
@@ -145,16 +183,25 @@ class ApprovalRequest(BaseModel):
     approval_id: str = ""
     mission_id: str = ""
     action: str = ""
-    resource: str = ""
     risk_level: RiskLevel = RiskLevel.R2
-    status: ApprovalStatus = ApprovalStatus.PENDING
-    reason: str = ""
+    rationale: str = ""
+    reason: str | None = None
     affected_resources: list[str] = Field(default_factory=list)
     external_effect: bool = False
     reversible: bool = True
-    requested_at: str = ""
-    expires_at: str = ""
-    decided_at: str = ""
+    rollback_plan: dict[str, Any] = Field(default_factory=dict)
+    estimated_cost: float = 0.0
+    approval_scope: str = "single_action"
+    executor_id: str | None = None
+    proposal_sha256: str | None = None
+    expires_at: str | None = None
+    status: ApprovalStatus = ApprovalStatus.PENDING
+    decided_by: str | None = None
+    decision_note: str | None = None
+    decision_action: str | None = None
+    created_at: str = ""
+    decided_at: str | None = None
+    schema_version: int = 1
 
 
 # ── Evidence ──
@@ -163,13 +210,20 @@ class ApprovalRequest(BaseModel):
 class EvidenceArtifact(BaseModel):
     evidence_id: str = ""
     mission_id: str = ""
-    title: str = ""
     kind: str = ""
+    title: str = ""
+    content: str = ""
     sha256: str = ""
-    source: str = ""
-    verification_status: str = ""
-    confidence: float = 1.0
-    content_preview: str = ""
+    task_id: str | None = None
+    tool_invocation_id: str | None = None
+    actor: str = "system"
+    timestamp: str = ""
+    mime_type: str = "text/plain"
+    source: str = "runtime"
+    verification_status: str = "unverified"
+    parent_evidence: list[str] = Field(default_factory=list)
+    idempotency_key: str | None = None
+    source_event_id: str | None = None
     created_at: str = ""
 
 
@@ -178,23 +232,25 @@ class EvidenceArtifact(BaseModel):
 
 class MemoryRecord(BaseModel):
     memory_id: str = ""
+    mission_id: str | None = None
     kind: MemoryKind = MemoryKind.FACT
+    key: str = ""
     content: str = ""
-    source_evidence_id: str = ""
+    source_evidence_id: str | None = None
     confidence: float = 1.0
     status: str = "committed"
+    verified: bool = False
+    canonical: bool = False
+    conflict_keys: list[str] = Field(default_factory=list)
     created_at: str = ""
+    schema_version: int = 1
 
 
 # ── Plugin ──
 
 
 class PluginManifest(BaseModel):
-    """Plugin manifest schema — capability declaration != authorization.
-
-    Declaring a capability does NOT authorize execution.
-    Policy must grant permission separately.
-    """
+    """Plugin manifest schema — capability declaration != authorization."""
     plugin_id: str
     name: str
     version: str
@@ -211,7 +267,7 @@ class PluginManifest(BaseModel):
     health_check: str = ""
 
 
-# ── Improvement Proposal (Evolution) ──
+# ── Evolution ──
 
 
 class ImprovementProposal(BaseModel):
