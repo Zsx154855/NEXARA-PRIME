@@ -1,0 +1,72 @@
+{
+  "receipt_id": "CLAUDE_COMPLETION_PR23_SOVEREIGN_ONEPASS_20260724",
+  "receipt_type": "machine_completion_receipt",
+  "description": "Claude Code session completion receipt for PR #23 sovereign one-pass closure. Machine-verifiable evidence of all gates passed.",
+  "task_id": "PR23_SOVEREIGN_ONEPASS_20260724",
+  "repository": "/Users/agentos/NEXARA-PRIME",
+  "branch": "feat/brand-baihan",
+  "pr_number": 23,
+  "final_result": "READY_FOR_CODEX_REVIEW",
+  "evidence_subject_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
+  "local_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
+  "remote_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
+  "pr_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
+  "base_sha": "dd0505ac53721d8e2e6150e47936119fe16734d6",
+  "ci_run_id": "30039955839",
+  "ci_result": "SUCCESS (8/8 jobs)",
+  "ci_checked_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
+  "test_results": {
+    "python_full_suite": "937 passed, 0 failed",
+    "sdk_contract": "19 passed, 0 failed",
+    "nsec_governance": "41 passed, 0 failed",
+    "ruff_lint": "All checks passed",
+    "runtime_truth": "overall_pass=true",
+    "git_diff_check": "PASS"
+  },
+  "review_threads": {
+    "total": 29,
+    "resolved": 29,
+    "unresolved_non_outdated": 0,
+    "failed_threads": 0,
+    "unproven_threads": 0,
+    "p2_threads_fixed": 2
+  },
+  "commits_pushed": [
+    {
+      "sha": "bb78923459e917a57ce0f0da600f3cbed1364085",
+      "subject": "fix(pr23): correct Python version in AGENTS.md + CLAUDE.md (3.9→3.12), remove unused variable in validator"
+    },
+    {
+      "sha": "4b078136b945e157a104ffd396c9600bc5d49ac4",
+      "subject": "fix(ci): pin ruff to >=0.15,<0.16, add ruff config, fix PYI036 in SDK"
+    }
+  ],
+  "root_cause_fixes": [
+    "Python version authority drift: AGENTS.md/CLAUDE.md 3.9→3.12",
+    "Validator receipt path: generic glob discovery (no PR23 hardcode)",
+    "SDK PYI036: __aexit__ *args typed as object",
+    "CI ruff version drift: pinned >=0.15,<0.16",
+    "Ruff F841: removed unused variable in validator"
+  ],
+  "prohibited_actions_verified": {
+    "merge_performed": false,
+    "tag_performed": false,
+    "deploy_performed": false,
+    "force_push_performed": false,
+    "main_modified": false,
+    "quarantine_pushed": false
+  },
+  "worktree_status": "CLEAN (only .claude/ untracked)",
+  "pr_state": "OPEN",
+  "pr_mergeable": "MERGEABLE",
+  "pr_draft": false,
+  "codex_review_requested": true,
+  "codex_review_status": "RATE_LIMITED (external constraint)",
+  "remaining_blockers": [
+    "Codex usage limit — external service constraint",
+    "Owner re-review by Zsx154855 — human approval required"
+  ],
+  "generated_at": "2026-07-24T01:00:00Z",
+  "generated_by": "Claude Code — NEXARA PR23 Sovereign OnePass Closure",
+  "schema_version": "1.1"
+}

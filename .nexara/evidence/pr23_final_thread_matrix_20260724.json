@@ -1,0 +1,71 @@
+{
+  "matrix_version": "2.0",
+  "generated_at": "2026-07-24T00:45:00Z",
+  "repository": "/Users/agentos/NEXARA-PRIME",
+  "branch": "feat/brand-baihan",
+  "pr_number": 23,
+  "evidence_subject_head": "4b078136b945e157a104ffd396c9600bc5d49ac4",
+  "ci_run_id": "30039955839",
+  "ci_result": "SUCCESS (8/8 jobs)",
+  "local_test_result": "937 passed, 0 failed",
+  "summary": {
+    "total_threads": 29,
+    "resolved_total": 29,
+    "unresolved_total": 0,
+    "unresolved_non_outdated": 0,
+    "outdated_total": 17,
+    "non_outdated_total": 12,
+    "historically_resolved_with_template": 27,
+    "p2_substantive_threads": 2,
+    "failed_threads": 0,
+    "unproven_threads": 0
+  },
+  "verification_results": {
+    "python_full_suite": "937 passed, 0 failed",
+    "sdk_contract_tests": "19 passed, 0 failed",
+    "ruff_lint": "All checks passed (ruff 0.15.x)",
+    "runtime_truth_validation": "overall_pass=true",
+    "nsec_governance": "41 passed, 0 failed",
+    "secret_scan": "CLEAN",
+    "ci_python": "PASS",
+    "ci_secret_scan": "PASS",
+    "ci_nsec_governance": "PASS",
+    "ci_typescript": "PASS",
+    "ci_governance": "PASS",
+    "ci_swift_ios": "PASS",
+    "ci_swift_macos": "PASS",
+    "ci_sovereign_delivery": "PASS"
+  },
+  "root_cause_fixes": [
+    {
+      "thread_id": "PRRT_kwDOTVshys6TQC1C",
+      "file": "reports/program/G0/03_authority_duplication_report.md",
+      "issue": "Python version authority drift: AGENTS.md/CLAUDE.md claimed Python 3.9 but pyproject.toml requires >=3.12",
+      "actual_fix_commit": "bb78923",
+      "fix_description": "Corrected AGENTS.md and CLAUDE.md from Python 3.9 to Python 3.12 to match pyproject.toml requirement and actual venv (3.12.13)",
+      "current_code_proof": "AGENTS.md line 7: Python 3.12; CLAUDE.md line 6: Python 3.12",
+      "test_evidence": "ruff clean, all 937 tests pass"
+    },
+    {
+      "thread_id": "PRRT_kwDOTVshys6TQC1G",
+      "file": "scripts/runtime_truth/validate_program_state.py",
+      "issue": "Validator hard-coded PR23 receipt path",
+      "actual_fix_commit": "afa1231",
+      "fix_description": "Replaced hardcoded path with glob-based discovery: _find_canonical_receipt() scans *_final_attestation.json for receipt_type=superseding_receipt and superseded_by=null. Multiple-terminal-receipt rejection.",
+      "current_code_proof": "validate_program_state.py lines 151-174: generic glob discovery",
+      "test_evidence": "19/19 SDK contract tests pass including TestGenericReceiptDiscovery"
+    }
+  ],
+  "code_fixes_summary": [
+    {
+      "commit": "bb78923",
+      "subject": "fix(pr23): correct Python version in AGENTS.md + CLAUDE.md (3.9→3.12), remove unused variable in validator",
+      "files": ["AGENTS.md", "CLAUDE.md", "scripts/runtime_truth/validate_program_state.py"]
+    },
+    {
+      "commit": "4b07813",
+      "subject": "fix(ci): pin ruff to >=0.15,<0.16, add ruff config, fix PYI036 in SDK",
+      "files": [".github/workflows/ci.yml", "pyproject.toml", "platform/sdk/python/nexara_sdk/client.py"]
+    }
+  ]
+}
