@@ -1,0 +1,49 @@
+# Governance & Evidence Hardening Contract V1.0
+# G6: R0-R4, E0-E2, approval binding, audit chain, secret, rollback, red-team
+
+schema: governance_evidence_hardening_contract
+version: "1.0"
+gate: G6
+frozen_at: "2026-07-24T07:20:00Z"
+evidence_head: "e074eae"
+
+components:
+  governance:
+    file: governance.py (~550 lines)
+    features: [PolicyEngine (R0-R4), ApprovalEngine, WriterLeaseManager]
+  escalation:
+    file: escalation.py (~275 lines)
+    features: [EscalationEngine, adaptive mode escalation/de-escalation]
+  security_audit:
+    file: security_audit.py (~165 lines)
+    features: [SecurityAuditLedger, access audit trail]
+  recovery:
+    file: recovery.py (~85 lines)
+    features: [DurableRecovery, checkpoint/restore]
+  repair_loop:
+    file: repair_loop.py (~570 lines)
+    features: [FailureType classification, repair pipeline]
+  secret_management:
+    files: secrets/ (4 modules)
+    features: [Keychain, env, memory backends]
+
+invariants:
+  - id: GOV_INVARIANT_01
+    rule: "R0-R4 risk levels enforced at policy boundary"
+    description: "PolicyEngine.requires_approval() gates R2+. PolicyEngine.allows_tool() gates R4."
+
+  - id: GOV_INVARIANT_02
+    rule: "All approvals generate audit trail entries"
+    description: "SecurityAuditLedger records every approval decision"
+
+  - id: GOV_INVARIANT_03
+    rule: "Secrets are never hardcoded"
+    description: "All secrets routed through secrets/ backends; scan_hardcoded_secrets.py passes"
+
+  - id: GOV_INVARIANT_04
+    rule: "Recovery preserves mission state"
+    description: "DurableRecovery will checkpoint before risky operations"
+
+  - id: GOV_INVARIANT_05
+    rule: "Red-team findings produce repair loop entries"
+    description: "RepairLoop classifies failures and routes to fix pipelines"
