@@ -11,7 +11,7 @@
   "base_sha": "dd0505ac53721d8e2e6150e47936119fe16734d6",
   "final_result": "READY_FOR_CODEX_REVIEW",
 
-  "qualification_subject_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "evidence_subject_head": "82b1211213932cba71be68bf894dca0b8764e964",
   "ci_head": "82b1211213932cba71be68bf894dca0b8764e964",
   "receipt_commit_head": null,
 

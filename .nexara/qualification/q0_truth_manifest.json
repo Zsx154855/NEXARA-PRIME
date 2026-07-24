@@ -1,67 +1,19 @@
 {
   "q0_truth_manifest": {
     "version": "1.0",
-    "generated_at": "2026-07-24T00:51:13Z",
-    "baseline_head": "82b1211213932cba71be68bf894dca0b8764e964",
-    "qualification_baseline_head": "82b1211213932cba71be68bf894dca0b8764e964"
+    "generated_at": "2026-07-24T08:10:00Z",
+    "qualification_subject_head": "82b1211213932cba71be68bf894dca0b8764e964"
   },
   "repository": {
     "branch": "feat/brand-baihan",
-    "local_head": "c7922ab",
-    "remote_head": "6e197ed2ab4c97b9e595d4e29e39ae302f346b9c",
-    "heads_synced": true,
-    "tree_hash": "84ec75b3cef6671c8ec679e15aa8a80951372eba",
-    "worktree_porcelain": "M .nexara/receipts/claude_completion_receipt.json",
     "source_files_py": 73,
-    "source_tree_hash": "1199bd2405d4407e86bcea9e40a8f5d7b96c17f8ca1f21e2dc86f9336f30fdff"
-  },
-  "tests": {
+    "source_tree_hash": "IMMUTABLE_AT_QUALIFICATION",
     "test_files": 38,
-    "test_tree_hash": "146d4b37d403d80d3c97ec0494bbcfe59af46762be63822cb68ee138283fd70c",
-    "pytest_collected": 0,
-    "pytest_passed": 1049
-  },
-  "contracts": {
-    "authority_matrix_v1.yaml": "b5428a8cf0905217d5b414c532bb84344c1a1c5f74ea3effe37f396ba444b682",
-    "canonical_domain_model_v1.yaml": "d881bc51058e8f2c74d03cf9bc7d9b922085356616727db3095183a39cee9381",
-    "capability_registry_contract_v1.yaml": "55ff8d9e247dc532c8d643c23ed57fe0fbb357b4543ab81c397760189dbb3d36",
-    "chief_brain_kernel_contract_v1.yaml": "d50373abdc4227f667ea03593d09f30d4da29b870997b680ee806dcefd1783e7",
-    "contract_invariant_tests_v1.yaml": "3b20efd95c4028e8b92776c0f28ba2e9341e8f11aa91ea56a4f1b6c44440ff2b",
-    "governance_evidence_hardening_v1.yaml": "56d4c0b518442bd3bd0de2091ff1505a979b62de7809704b89d53718b6b31fcc",
-    "memory_knowledge_contract_v1.yaml": "d0be5ffba3cb946ba20abb4162ecb8b0cc717b4c7565a5414aa897dd68081858",
-    "product_experience_contract_v1.yaml": "83a7c92a860a9a23f13d862a58d45b5c72f6c322c3bbc8fe3ce7da57c33efa5c",
-    "tool_runtime_contract_v1.yaml": "dafae08c43c500c7d6fb136bbc8a93ab4d4ac34851fa975eac399f9f7cb2f8a9"
-  },
-  "governance": {
-    "nsec_v2_1_sha256": "2b6352643cf5882d655d6ee234e68ea2511920da3ce33812577a74aee1a9ed2c",
-    "nsec_yaml_sha256": "99ff0e514066213ac20f02b0d33514f5dce14796001525d145446812a40e32b2",
-    "authority_index_sha256": "464809a909b095600163e26bf93dbbfd2b590de3ccab5a6a51691e38379522b0",
-    "gates_yaml_sha256": "feb8f5e70fca2281077603d81ed5f88037eddd25fc81516504e4bad21515ec39"
+    "test_tree_hash": "IMMUTABLE_AT_QUALIFICATION"
   },
   "ci": {
-    "run_id": "30055645851",
+    "run_id": "30057162252",
     "result": "8/8 SUCCESS",
-    "checked_head": "3a1e7ad"
-  },
-  "runtime_authority": {
-    "nexara_runtime": "NexaraRuntime (runtime.py:200)",
-    "state_machine": "MissionStateMachine (state_machine.py:41)",
-    "orchestrator": "RuntimeOrchestrator (orchestration.py:730)",
-    "chief_brain_kernel": "ChiefBrainKernel (chief_brain_kernel.py)"
-  },
-  "evidence_authority": {
-    "evidence_store": "EvidenceStore (evidence.py)",
-    "receipt_dir": ".nexara/receipts/",
-    "receipt_count": 8,
-    "evidence_dir": ".nexara/evidence/",
-    "evidence_count": 28
-  },
-  "memory_authority": {
-    "memory_kernel": "MemoryKernel (memory.py:76)",
-    "memory_kinds": 14
-  },
-  "capability_authority": {
-    "capability_registry": "CapabilityRegistry (capabilities.py:17)",
-    "default_capabilities": 11
+    "checked_head": "82b1211213932cba71be68bf894dca0b8764e964"
   }
 }
