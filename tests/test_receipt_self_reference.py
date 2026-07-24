@@ -30,7 +30,7 @@ def _minimal_receipt(evidence_head: str, result: str = "WAITING_APPROVAL") -> di
         "base_sha": "dd0505ac53721d8e2e6150e47936119fe16734d6",
         "evidence_subject_head": evidence_head,
         "receipt_commit_head": None,
-        "worktree_clean": False,
+        "worktree_clean": True,  # temp files outside repo → git worktree is clean
         "council": {
             "mode": "delegated",
             "delegated_matrix": True,
