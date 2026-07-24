@@ -1,0 +1,146 @@
+# NEXARA Authority Matrix V1.0
+# G1 Contract Freeze — derived from NSEC V2.1 + authority_index.yaml + repository reality
+# Defines WHO can CREATE, MODIFY, and READ each domain object.
+
+schema: authority_matrix
+version: "1.0"
+gate: G1
+frozen_at: "2026-07-24T04:00:00Z"
+evidence_head: "14ec6e3"
+source_documents:
+  - governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md
+  - governance/authority_index.yaml
+  - src/nexara_prime/governance.py
+  - src/nexara_prime/orchestration.py
+
+# ── Authority Levels (from authority_index.yaml) ──
+# 0 = Reality Override
+# 1 = Human Explicit Instruction
+# 2 = NSEC V2.1
+# 3 = Project Charter
+# 4 = Governance Contracts
+# 5 = Program State
+# 6 = Evidence
+# 7 = Implementation
+# 8 = Model Judgment
+
+# ── Object Authority Matrix ──
+
+authority:
+  human_intent:
+    create: { level: 1, actor: "Human (external)" }
+    modify: { level: 1, actor: "Human (external)" }
+    read: { level: 8, actor: "All" }
+    notes: "Human Intent is always external. The runtime CANNOT originate intent."
+
+  mission:
+    create: { level: 7, actor: "Kernel (NexaraRuntime)" }
+    modify: { level: 7, actor: "Writer (with lease)" }
+    read: { level: 8, actor: "All" }
+    delete: { level: 1, actor: "Human only" }
+    notes: "Mission creation is the kernel's core responsibility. Modification requires Writer Lease."
+
+  mission_spec:
+    create: { level: 7, actor: "MissionCompiler" }
+    modify: { level: 4, actor: "ContractEngine (within constraints)" }
+    read: { level: 8, actor: "All" }
+    notes: "Spec is derived from intent + constraints. Cannot deviate from approved contract."
+
+  task:
+    create: { level: 7, actor: "Orchestrator (MissionPlan)" }
+    modify: { level: 7, actor: "RuntimeOrchestrator" }
+    read: { level: 8, actor: "All" }
+    notes: "Tasks are created during plan phase. Runtime manages execution."
+
+  agent_assignment:
+    create: { level: 7, actor: "AdaptiveScheduler" }
+    modify: { level: 7, actor: "AdaptiveScheduler" }
+    read: { level: 8, actor: "All" }
+    notes: "Agent assignment is dynamic and capability-based."
+
+  execution:
+    create: { level: 7, actor: "Runtime (NexaraRuntime._execute_stage)" }
+    modify: { level: 1, actor: "Human only (rollback)" }
+    read: { level: 8, actor: "All" }
+    notes: "Executions are immutable once created. Only humans can rollback."
+
+  skill:
+    create: { level: 4, actor: "Governance (ApprovalEngine)" }
+    modify: { level: 4, actor: "Governance" }
+    read: { level: 8, actor: "All" }
+    notes: "Skills require governance approval. Skills CANNOT self-grant permissions."
+
+  capability:
+    create: { level: 4, actor: "CapabilityRegistry (registered)" }
+    modify: { level: 4, actor: "CapabilityRegistry" }
+    read: { level: 8, actor: "All" }
+    notes: "External-effect capabilities require explicit Approval."
+
+  evidence:
+    create: { level: 6, actor: "Observer (any agent with evidence scope)" }
+    modify: { level: 0, actor: "REALITY ONLY — evidence is immutable" }
+    read: { level: 8, actor: "All" }
+    delete: { level: 0, actor: "NEVER — evidence is append-only" }
+    notes: "Evidence is the SINGLE SOURCE OF TRUTH. Cannot be modified or deleted after creation."
+
+  receipt:
+    create: { level: 6, actor: "Auditor (independent, non-executor)" }
+    modify: { level: 0, actor: "REALITY ONLY — receipt is immutable after creation" }
+    read: { level: 8, actor: "All" }
+    notes: "Receipt MUST be created by an independent auditor, NOT the executor. Executor cannot create PASS verdict."
+
+  memory_record:
+    create: { level: 6, actor: "Memory Writer (with evidence backing)" }
+    modify: { level: 4, actor: "Approved Flow (requires Approval for R3+)" }
+    read: { level: 8, actor: "All" }
+    notes: "Memory requires evidence backing. High-risk (R3+) memory patches require Approval."
+
+  permission:
+    create: { level: 1, actor: "Human only" }
+    modify: { level: 1, actor: "Human only" }
+    read: { level: 8, actor: "All" }
+    notes: "Permissions are ALWAYS external. No agent can grant its own permissions."
+
+  program_state:
+    create: { level: 5, actor: "Program Compiler" }
+    modify: { level: 5, actor: "Writer (with lease)" }
+    read: { level: 8, actor: "All" }
+    notes: "Program State is the canonical machine-readable truth. Must match Git reality."
+
+  gate_status:
+    create: { level: 4, actor: "Governance (Gate Validator)" }
+    modify: { level: 4, actor: "Governance" }
+    read: { level: 8, actor: "All" }
+    notes: "Gate status changes require verification evidence."
+
+  nsec_constitution:
+    create: { level: 1, actor: "Human (with NSEC amendment process)" }
+    modify: { level: 1, actor: "Human (with NSEC amendment process)" }
+    read: { level: 8, actor: "All" }
+    notes: "NSEC is SUPREME governance. Modification requires NSEC Article 51 amendment process."
+
+# ── Operational Rules ──
+rules:
+  - id: "R1"
+    rule: "Writer Lease is REQUIRED for any modification to Program State, Gate Status, or Mission fields."
+    source: orchestration.py:WriterLeaseManager
+
+  - id: "R2"
+    rule: "Approval is REQUIRED for any R3+ risk level action or external-effect capability."
+    source: governance.py:ApprovalEngine
+
+  - id: "R3"
+    rule: "Evidence is APPEND-ONLY. No modification or deletion after creation."
+    source: evidence.py:EvidenceStore
+
+  - id: "R4"
+    rule: "Receipt MUST be created by an independent auditor, not the executor."
+    source: NSEC V2.1 Article 37
+
+  - id: "R5"
+    rule: "Memory patches require evidence backing. R3+ patches require Approval."
+    source: memory.py:MemoryKernel
+
+  - id: "R6"
+    rule: "Permission grant is ALWAYS external. No self-escalation."
+    source: NSEC V2.1 Article 21 (Least Privilege)

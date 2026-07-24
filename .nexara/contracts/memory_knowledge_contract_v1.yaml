@@ -1,0 +1,43 @@
+# Memory & Knowledge Fabric Contract V1.0
+# G5: Evidence-backed memory, knowledge graph, retrieval, conflict, retention
+
+schema: memory_knowledge_contract
+version: "1.0"
+gate: G5
+frozen_at: "2026-07-24T07:20:00Z"
+evidence_head: "e074eae"
+
+components:
+  evidence_store:
+    file: evidence.py (~650 lines)
+    features: [append-only, sha256 verification, provenance chain, immutable records]
+  memory_kernel:
+    file: memory.py (~680 lines)
+    features: [4-layer architecture, evidence-backed writes, patch proposals, candidate review]
+  rag_pipeline:
+    file: rag_pipeline.py (~600 lines)
+    features: [retrieval-augmented generation, context embedding, knowledge retrieval]
+  knowledge_service:
+    file: knowledge.py (G3-D wrapper)
+    features: [unified query, kind filtering, candidate review]
+
+invariants:
+  - id: MEM_INVARIANT_01
+    rule: "Evidence is the single source of truth for memory"
+    description: "MemoryRecord.source_evidence_id must reference verified evidence"
+
+  - id: MEM_INVARIANT_02
+    rule: "Memory patches require evidence backing"
+    description: "patch() requires evidence_ids; confidence < 1.0 without direct evidence"
+
+  - id: MEM_INVARIANT_03
+    rule: "Evidence is append-only and immutable"
+    description: "EvidenceStore has no update/delete API"
+
+  - id: MEM_INVARIANT_04
+    rule: "Knowledge retrieval is read-only"
+    description: "Knowledge queries do not modify memory or evidence"
+
+  - id: MEM_INVARIANT_05
+    rule: "Conflict resolution requires human approval"
+    description: "Conflicting memory records require propose() → human approve → commit_candidate()"

@@ -1,0 +1,19 @@
+{
+  "receipt_id": "G0_REALITY_INVENTORY_V3_20260724",
+  "gate": "G0",
+  "status": "PASS",
+  "evidence_path": ".nexara/evidence/g0_reality_inventory_v3_20260724.md",
+  "evidence_sha256": "ff838ebcfbb5a4038e8c146131f2e5c02f92690d247f38287fc8cecf9cc2439c",
+  "baseline_head": "abe277ddc9416fcdedec65db3c930e80029c39af",
+  "total_modules": 67,
+  "sub_packages": 7,
+  "test_count": 944,
+  "api_endpoints": 27,
+  "ci_jobs": 8,
+  "gates_pass": 10,
+  "gates_blocked": 1,
+  "blueprint_v2_found": false,
+  "architecture_conflicts": 0,
+  "implantations": "COMPLETE",
+  "generated_at": "2026-07-24T03:30:00Z"
+}

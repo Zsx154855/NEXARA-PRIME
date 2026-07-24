@@ -1,0 +1,27 @@
+{
+  "receipt_id": "NEXARA_SYSTEM_QUALIFICATION_FINAL_RECEIPT_V1",
+  "status": "QUALIFIED_FOR_HUMAN_RELEASE_APPROVAL",
+  "qualification_subject_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "ci_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "ci_run": "30057162252",
+  "ci_result": "8/8 SUCCESS",
+  "test_results": {
+    "total_passed": 1049,
+    "test_files": 38
+  },
+  "q2_invariants": "9/10 PASS",
+  "contract_count": 9,
+  "receipt_count": 8,
+  "evidence_count": 28,
+  "remaining_risks": [
+    "Apple Developer credentials (external)",
+    "Codex rate limit (external service)",
+    "Owner re-review by Zsx154855 (human approval)"
+  ],
+  "external_human_boundaries": [
+    "Apple Developer Program ($99/yr)",
+    "Git tag v0.1.0",
+    "PR #23 merge approval"
+  ],
+  "generated_at": "2026-07-24T08:10:00Z"
+}

@@ -14,6 +14,7 @@ class Settings:
     mock_model: bool
     api_host: str
     api_port: int
+    ui_root: Path | None = None
 
     @classmethod
     def from_env(cls, root: Path | None = None) -> "Settings":

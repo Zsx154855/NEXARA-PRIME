@@ -1,0 +1,19 @@
+{
+  "q0_truth_manifest": {
+    "version": "1.0",
+    "generated_at": "2026-07-24T08:10:00Z",
+    "qualification_subject_head": "82b1211213932cba71be68bf894dca0b8764e964"
+  },
+  "repository": {
+    "branch": "feat/brand-baihan",
+    "source_files_py": 73,
+    "source_tree_hash": "IMMUTABLE_AT_QUALIFICATION",
+    "test_files": 38,
+    "test_tree_hash": "IMMUTABLE_AT_QUALIFICATION"
+  },
+  "ci": {
+    "run_id": "30057162252",
+    "result": "8/8 SUCCESS",
+    "checked_head": "82b1211213932cba71be68bf894dca0b8764e964"
+  }
+}

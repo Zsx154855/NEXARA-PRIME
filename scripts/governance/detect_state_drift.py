@@ -196,25 +196,40 @@ def check_consistency(
         inconsistencies.append("PROGRAM_STATE.gates_pass must be an array")
         program_passed = []
 
-    gs_passed_ids = {
-        entry.get("id", "")
-        for entry in gate_entries
-        if isinstance(entry, dict) and entry.get("id")
-    }
+    # Build GATE_STATUS gate_id -> status map
+    gs_gate_status: dict[str, str] = {}
+    for entry in gate_entries:
+        if isinstance(entry, dict) and entry.get("id"):
+            gs_gate_status[str(entry["id"])] = str(entry.get("status", ""))
+
     ps_passed_ids = {str(gate) for gate in program_passed}
-    if gs_passed_ids != ps_passed_ids:
-        only_in_gate_status = gs_passed_ids - ps_passed_ids
-        only_in_program_state = ps_passed_ids - gs_passed_ids
-        if only_in_gate_status:
+    ps_blocked_ids = {str(gate) for gate in program_state.get("gates_blocked", [])}
+
+    # Check gate ID coverage
+    ps_all_ids = ps_passed_ids | ps_blocked_ids
+    if gs_gate_status.keys() != ps_all_ids:
+        only_in_gs = set(gs_gate_status.keys()) - ps_all_ids
+        only_in_ps = ps_all_ids - set(gs_gate_status.keys())
+        if only_in_gs:
             inconsistencies.append(
-                "Gates present only in GATE_STATUS: "
-                f"{sorted(only_in_gate_status)}"
-            )
-        if only_in_program_state:
+                "Gates present only in GATE_STATUS.gates: {}".format(sorted(only_in_gs)))
+        if only_in_ps:
             inconsistencies.append(
-                "Gates present only in PROGRAM_STATE.gates_pass: "
-                f"{sorted(only_in_program_state)}"
-            )
+                "Gates present only in PROGRAM_STATE: {}".format(sorted(only_in_ps)))
+
+    # Check gate STATUS consistency (PASS vs BLOCKED) — the REAL fix
+    for gate_id, gs_status in sorted(gs_gate_status.items()):
+        in_ps_pass = gate_id in ps_passed_ids
+        in_ps_blocked = gate_id in ps_blocked_ids
+        if in_ps_pass and in_ps_blocked:
+            inconsistencies.append(
+                "Gate {} is in BOTH PROGRAM_STATE.gates_pass AND gates_blocked".format(gate_id))
+        elif in_ps_pass and gs_status != "PASS":
+            inconsistencies.append(
+                "Gate {}: GATE_STATUS={} but PROGRAM_STATE lists it as PASS".format(gate_id, gs_status))
+        elif in_ps_blocked and gs_status != "BLOCKED":
+            inconsistencies.append(
+                "Gate {}: GATE_STATUS={} but PROGRAM_STATE lists it as BLOCKED".format(gate_id, gs_status))
 
     # Top-level gates_pass validation (GATE_STATUS)
     gs_gates_pass = gate_status.get("gates_pass")
@@ -223,9 +238,10 @@ def check_consistency(
             inconsistencies.append("GATE_STATUS.gates_pass must be an array")
         else:
             gs_top_level_ids = {str(g) for g in gs_gates_pass}
-            if gs_top_level_ids != gs_passed_ids:
-                extra = gs_top_level_ids - gs_passed_ids
-                missing = gs_passed_ids - gs_top_level_ids
+            gs_passed_key_set = set(gs_gate_status.keys())
+            if gs_top_level_ids != gs_passed_key_set:
+                extra = gs_top_level_ids - gs_passed_key_set
+                missing = gs_passed_key_set - gs_top_level_ids
                 if extra:
                     inconsistencies.append(
                         "GATE_STATUS.gates_pass contains gates not present in gates array: "

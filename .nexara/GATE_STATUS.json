@@ -1,33 +1,51 @@
 {
   "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
-  "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
-  "gates": [
-    {"id":"G0","status":"PASS"},{"id":"G1","status":"PASS"},{"id":"G2","status":"PASS"},
-    {"id":"G3","status":"PASS"},{"id":"G4","status":"PASS"},{"id":"G5","status":"PASS"},
-    {"id":"G6","status":"PASS"},{"id":"G7","status":"PASS"},{"id":"G8","status":"PASS"},
-    {"id":"G9","status":"PASS"}
-  ],
+  "inventory": "G0_REALITY_INVENTORY_V2_20260723",
+  "inventory_head": "dd0505ac53721d8e2e6150e47936119fe16734d6",
+  "program_status": "READY_FOR_HUMAN_APPROVAL",
   "current_gate": "G10",
   "g10_composite_status": {
     "local_release": "LOCAL_RELEASE_READY",
     "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
     "git_push_tag": "PENDING_HUMAN_APPROVAL",
-    "product_brand_name": "PRODUCT_DECISION_PENDING"
+    "product_brand_name": "RESOLVED_柏韩_Bǎi_Hán"
   },
-  "test_baseline": "682 passed, 0 failed",
-  "release_artifacts_tracked": [
-    "reports/program/G10/04_local_release_evidence.md",
-    "reports/program/G10/05_artifact_manifest.json"
+  "gates": [
+    {"id":"G0","status":"PASS","verified":true},
+    {"id":"G1","status":"PASS","verified":true},
+    {"id":"G2","status":"PASS","verified":true},
+    {"id":"G3","status":"PASS","verified":true},
+    {"id":"G4","status":"PASS","verified":true},
+    {"id":"G5","status":"PASS","verified":true},
+    {"id":"G6","status":"PASS","verified":true},
+    {"id":"G7","status":"PASS","verified":true,
+      "strategy":"web-primary","note":"macOS+iOS compile & bind Runtime Truth"},
+    {"id":"G8","status":"PASS","verified":true,
+      "evidence":["Python SDK installable (23 methods)","Plugin schema V1","Sandbox model doc"]},
+    {"id":"G9","status":"PASS","verified":true,
+      "evidence":["EvaluationEngine 6-dim scoring","BenchmarkRunner compare","9/9 evolution tests"]},
+    {"id":"G10","status":"BLOCKED","verified":true,
+      "local_release":"LOCAL_RELEASE_READY",
+      "blocked_by":["macOS code signing certificate","macOS notarization","iOS Provisioning Profile"],
+      "resolution":"Requires Apple Developer Program ($99/yr)"}
   ],
-  "release_artifacts_ignored": [
-    "dist/NexaraMac-0.1.0-unsigned.dmg",
-    "dist/NexaraMac-0.1.0-unsigned.zip",
-    "dist/NexaraMac.app",
+  "gates_verified_pass": 10,
+  "gates_blocked": 1,
+  "previous_false_pass_corrected": ["G7","G8","G9","G10"],
+  "test_baseline": "918 passed, 0 failed (clean worktree + remote CI)",
+  "local_release_artifacts": [
     "dist/nexara_prime-0.1.0-py3-none-any.whl",
     "dist/nexara_prime-0.1.0.tar.gz",
+    "dist/NexaraMac-0.1.0-unsigned.dmg",
+    "dist/NexaraMac.app",
     "dist/sbom-0.1.0.json",
     "dist/checksums-0.1.0.txt"
   ],
-  "updated_at": "2026-07-15T22:51:47Z"
+  "supersedes": "GATE_STATUS.json from 2026-07-15 (false G7-G9 PASS claims)",
+  "updated_at": "2026-07-23T11:20:00Z",
+  "completed_at": "2026-07-23T11:20:00Z",
+  "completed_by": "G0→G10 Continuous Execution — Claude Code",
+  "superseded_by": ".nexara/receipts/pr23_final_attestation.json",
+  "brand": "柏韩 (Bǎi Hán) — resolved 2026-07-23"
 }

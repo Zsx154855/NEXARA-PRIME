@@ -1,0 +1,67 @@
+{
+  "receipt_id": "CLAUDE_COMPLETION_PR23_SOVEREIGN_ONEPASS_20260724_V4",
+  "receipt_type": "machine_completion_receipt",
+  "description": "PR #23 sovereign one-pass closure. Qualification subject: 82b1211 (CI-verified). This receipt references a stable code commit — does NOT chase its own commit SHA.",
+  "task_id": "PR23_SOVEREIGN_ONEPASS_20260724",
+  "schema_version": "1.2",
+
+  "repository": "/Users/agentos/NEXARA-PRIME",
+  "branch": "feat/brand-baihan",
+  "pr_number": 23,
+  "base_sha": "dd0505ac53721d8e2e6150e47936119fe16734d6",
+  "final_result": "READY_FOR_CODEX_REVIEW",
+
+  "evidence_subject_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "ci_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "receipt_commit_head": null,
+
+  "worktree_clean": true,
+
+  "council": {
+    "mode": "delegated",
+    "delegated_matrix": true,
+    "delegated_independent_audit": true,
+    "reason": "Council validation delegated to evidence-based review matrix and independent auditor."
+  },
+
+  "local_checks": [
+    {"command": ".venv/bin/python -m pytest tests/ -q", "exit_code": 0, "result": "1049 passed, 0 failed", "head": "82b1211"},
+    {"command": ".venv/bin/python -m ruff check src tests platform/sdk/python", "exit_code": 0, "result": "All checks passed", "head": "82b1211"},
+    {"command": ".venv/bin/python scripts/runtime_truth/validate_program_state.py --json", "exit_code": 0, "result": "overall_pass=true", "head": "82b1211"},
+    {"command": ".venv/bin/python scripts/governance/validate_nsec.py", "exit_code": 0, "result": "NSEC GOVERNANCE INTEGRITY — PASS", "head": "82b1211"},
+    {"command": "git diff --check", "exit_code": 0, "result": "PASS", "head": "82b1211"}
+  ],
+
+  "remote_ci": {
+    "run_id": "30057162252",
+    "head_sha": "82b1211213932cba71be68bf894dca0b8764e964",
+    "conclusion": "success",
+    "jobs": {
+      "python": "success", "typescript": "success", "swift-macos": "success",
+      "swift-ios": "success", "governance": "success", "nsec-governance": "success",
+      "secret-scan": "success", "sovereign-delivery": "success"
+    }
+  },
+
+  "review_threads": {
+    "total": 34, "resolved": 34, "unresolved": 0, "unresolved_non_outdated": 0,
+    "failed_threads": 0, "unproven_threads": 0, "resolved_without_evidence": 0
+  },
+
+  "prohibited_actions": {
+    "merge_performed": false, "tag_performed": false, "deploy_performed": false
+  },
+
+  "independent_audit": {
+    "performed": true, "auditor": "nexara-readonly-auditor",
+    "verdict": "PASS", "checks_passed": 8, "checks_total": 8
+  },
+
+  "remaining_blockers": [
+    {"blocker": "Codex usage limit", "type": "EXTERNAL_SERVICE"},
+    {"blocker": "Owner re-review by Zsx154855", "type": "HUMAN_APPROVAL"}
+  ],
+
+  "generated_at": "2026-07-24T08:00:00Z",
+  "generated_by": "Claude Code — NEXARA PR23 Sovereign OnePass Closure V4"
+}

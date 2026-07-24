@@ -1,0 +1,21 @@
+{
+  "receipt_id": "G3_CLOSURE_RECEIPT_V1",
+  "gate": "G3",
+  "status": "PASS",
+  "evidence_subject_head": "93daf01",
+  "sub_gates": {
+    "G3-A": "PASS (Capability Registry V2, 14 tests)",
+    "G3-B": "PASS (PolicyService, 12 tests)",
+    "G3-C": "PASS (TelemetryService, 6 tests)",
+    "G3-D": "PASS (KnowledgeService, 7 tests)"
+  },
+  "tests": "1022 passed (+39 G3)",
+  "services_created": [
+    "capability_registry_v2 (converged)",
+    "policy_service.py",
+    "telemetry.py",
+    "knowledge.py"
+  ],
+  "existing_modules_unchanged": true,
+  "generated_at": "2026-07-24T07:00:00Z"
+}
