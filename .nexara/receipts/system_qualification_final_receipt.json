@@ -1,8 +1,9 @@
 {
   "receipt_id": "NEXARA_SYSTEM_QUALIFICATION_FINAL_RECEIPT_V1",
   "status": "QUALIFIED_FOR_HUMAN_RELEASE_APPROVAL",
-  "baseline_head": "c7922ab",
-  "qualified_head": "c7922ab",
+  "qualification_subject_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "ci_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "ci_run": "30057162252",
   "heads_synced": true,
   "test_results": {
     "total_passed": 1049,

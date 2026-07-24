@@ -2,7 +2,7 @@
   "receipt_id": "FINAL_PROGRAM_BOUNDARY_RECEIPT_V1",
   "program": "NEXARA_SOVEREIGN_COGNITIVE_OS_V2",
   "status": "READY_FOR_HUMAN_RELEASE_APPROVAL",
-  "evidence_subject_head": "c7922ab",
+  "evidence_subject_head": "82b1211213932cba71be68bf894dca0b8764e964",
   "ci_run": "30057162252",
   "ci_result": "8/8 SUCCESS",
   "tests": "1049 passed, 0 failed",
