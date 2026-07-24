@@ -59,32 +59,32 @@ capability_score:
 registry_api:
 
   v1:
-    - method: register(capability: Capability) -> Capability
-      description: "Register a capability object"
-    - method: resolve(required: list[str]) -> list[Capability]
-      description: "Resolve capability names/IDs to enabled Capability objects"
-    - method: mount_for(worker_id, required) -> list[str]
-      description: "Load capabilities for a worker"
-    - method: unmount_for(worker_id) -> None
-      description: "Unmount all capabilities for a worker"
-    - method: mounted(worker_id) -> list[str]
-      description: "List mounted capability IDs"
-    - method: list() -> list[dict]
-      description: "List all registered capabilities as dicts"
+    - method: register
+      description: "Register a capability object (register(capability) -> Capability)"
+    - method: resolve
+      description: "Resolve capability names/IDs to enabled Capability objects (resolve(required) -> list)"
+    - method: mount_for
+      description: "Load capabilities for a worker (mount_for(worker_id, required) -> list)"
+    - method: unmount_for
+      description: "Unmount all capabilities for a worker (unmount_for(worker_id))"
+    - method: mounted
+      description: "List mounted capability IDs (mounted(worker_id) -> list)"
+    - method: list
+      description: "List all registered capabilities as dicts (list() -> list)"
 
   v2:
-    - method: register_v2(capability_id, name, ...) -> CapabilityScore
-      description: "Register evidence-scored capability"
-    - method: update_score(capability_id, mission_success, latency_ms, token_cost, evidence_ids) -> CapabilityScore | None
-      description: "Update capability score from real mission outcomes"
-    - method: get_score(capability_id) -> CapabilityScore | None
-      description: "Get scored capability with decay applied"
-    - method: list_capable(task_type, min_confidence=0.5) -> list[CapabilityScore]
-      description: "List capabilities capable of task type above confidence threshold"
-    - method: list_all() -> list[CapabilityScore]
-      description: "List all scored capabilities"
-    - method: get_mission_history(capability_id) -> list[dict]
-      description: "Get mission outcome history for a capability"
+    - method: register_v2
+      description: "Register evidence-scored capability (register_v2(capability_id, name, ...) -> CapabilityScore)"
+    - method: update_score
+      description: "Update capability score from real mission outcomes (update_score(...) -> CapabilityScore | None)"
+    - method: get_score
+      description: "Get scored capability with decay applied (get_score(capability_id) -> CapabilityScore | None)"
+    - method: list_capable
+      description: "List capabilities capable of task type above confidence threshold (list_capable(task_type, min_confidence) -> list)"
+    - method: list_all
+      description: "List all scored capabilities (list_all() -> list)"
+    - method: get_mission_history
+      description: "Get mission outcome history for a capability (get_mission_history(capability_id) -> list)"
 
 # ── Default Capabilities (11 registered on init) ──
 
