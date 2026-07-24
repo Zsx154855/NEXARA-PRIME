@@ -1,13 +1,13 @@
 {
   "q0_truth_manifest": {
     "version": "1.0",
-    "generated_at": "2026-07-24T00:42:57Z",
-    "baseline_head": "6e197ed2ab4c97b9e595d4e29e39ae302f346b9c",
-    "qualification_baseline_head": "6e197ed2ab4c97b9e595d4e29e39ae302f346b9c"
+    "generated_at": "2026-07-24T00:51:13Z",
+    "baseline_head": "c7922ab",
+    "qualification_baseline_head": "c7922ab"
   },
   "repository": {
     "branch": "feat/brand-baihan",
-    "local_head": "6e197ed2ab4c97b9e595d4e29e39ae302f346b9c",
+    "local_head": "c7922ab",
     "remote_head": "6e197ed2ab4c97b9e595d4e29e39ae302f346b9c",
     "heads_synced": true,
     "tree_hash": "84ec75b3cef6671c8ec679e15aa8a80951372eba",
