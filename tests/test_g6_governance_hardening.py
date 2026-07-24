@@ -50,7 +50,15 @@ class TestRecoveryAndRepair:
 
     def test_durable_recovery_has_checkpoint(self) -> None:
         from nexara_prime.recovery import DurableRecovery
-        assert "checkpoint" in dir(DurableRecovery).__str__().lower() or hasattr(DurableRecovery, "checkpoint") or True
+        import inspect
+        methods = [m for m in dir(DurableRecovery) if not m.startswith("_")]
+        has_checkpoint_like = any(
+            "checkpoint" in m.lower() or "save" in m.lower() or "snapshot" in m.lower()
+            for m in methods
+        )
+        assert has_checkpoint_like, (
+            "DurableRecovery must have checkpoint/save/snapshot capability. Methods: {}".format(methods)
+        )
 
     def test_repair_loop_exists(self) -> None:
         from nexara_prime.repair_loop import RepairLoop

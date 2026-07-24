@@ -82,12 +82,31 @@ jobs:
       - name: Build iOS Simulator (if present)
         if: steps.ios-detect.outputs.ios_present == 'true'
         run: |
-          cd experience/ios 2>/dev/null || cd experience/*/ 2>/dev/null
-          xcodebuild -scheme "$(ls *.xcodeproj 2>/dev/null | head -1 | sed 's/.xcodeproj//')" \
+          set -euo pipefail
+          if [ -d "experience/ios" ]; then
+            cd experience/ios
+          elif ls experience/*/Package.swift 2>/dev/null | head -1 | grep -q .; then
+            cd "$(dirname "$(ls experience/*/Package.swift 2>/dev/null | head -1)")"
+          else
+            echo "FAIL: iOS target detected but no ios directory or Package.swift found"
+            exit 1
+          fi
+          PROJECT="$(ls *.xcodeproj 2>/dev/null | head -1)"
+          if [ -z "${PROJECT}" ]; then
+            echo "FAIL: No .xcodeproj found in $(pwd)"
+            exit 1
+          fi
+          SCHEME="$(echo "${PROJECT}" | sed 's/.xcodeproj//')"
+          if [ -z "${SCHEME}" ]; then
+            echo "FAIL: Could not determine scheme from ${PROJECT}"
+            exit 1
+          fi
+          echo "Building iOS: project=${PROJECT} scheme=${SCHEME} sdk=iphonesimulator"
+          xcodebuild -scheme "${SCHEME}" \
             -sdk iphonesimulator \
             -destination 'platform=iOS Simulator,name=iPhone 16' \
             CODE_SIGNING_ALLOWED=NO \
-            build 2>&1 || echo "[WARN] iOS build failed — may require scheme configuration"
+            build
       - name: No iOS target
         if: steps.ios-detect.outputs.ios_present == 'false'
         run: echo "[INFO] iOS NOT_PRESENT — no iOS target found in repository"

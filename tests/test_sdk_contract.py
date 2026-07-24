@@ -97,7 +97,7 @@ class TestPlanStepPreservation:
         )
         d = ps.model_dump()
         assert d["title"] == "Analyze"
-        assert d["role"] == "analyst"
+        assert d["role"] == "Analyst"
         assert d["persona"] == "Nyx"
         assert d["required_capabilities"] == ["tool.file_read"]
         assert d["status"] == "pending"

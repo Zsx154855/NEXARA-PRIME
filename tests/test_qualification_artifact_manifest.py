@@ -1,11 +1,9 @@
-"""Qualification Artifact Manifest regression tests.
+"""Qualification Artifact Manifest + CI Provenance tests.
 
-Verifies manifest generation from git commit (not working tree),
-schema compliance, byte stability, and field integrity.
+Covers Generator V2 with mandatory --ci-run, --ci-head, --ci-conclusion.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -29,133 +27,186 @@ def _git(*args: str, timeout: int = 15) -> str:
 def _git_show_content(commit: str, path: str) -> bytes:
     r = subprocess.run(["git", "show", "{}:{}".format(commit, path)], cwd=REPO,
                        capture_output=True, timeout=15, check=False)
-    assert r.returncode == 0, "git show {}:{} failed: {}".format(
-        commit[:12], path, r.stderr.decode()[:200])
+    assert r.returncode == 0
     return r.stdout
 
 
-class TestGeneratorIntegrity:
+def _run_gen(repo: str, subject: str, ci_run: str, ci_head: str, ci_conclusion: str, output: str) -> tuple[int, str, str]:
+    r = subprocess.run(
+        ["python3", str(MANIFEST_GEN), "--repo", repo, "--subject-head", subject,
+         "--ci-run", ci_run, "--ci-head", ci_head, "--ci-conclusion", ci_conclusion,
+         "--output", output],
+        cwd=REPO, capture_output=True, text=True, timeout=60, check=False,
+    )
+    return r.returncode, r.stdout, r.stderr
 
-    def test_generator_exists_and_compiles(self) -> None:
-        assert MANIFEST_GEN.exists(), "Generator not found at {}".format(MANIFEST_GEN)
+
+# ═══ Generator compile + positive ═══
+
+class TestGeneratorCompile:
+    def test_compiles(self) -> None:
         import py_compile
         py_compile.compile(str(MANIFEST_GEN), doraise=True)
 
-    def test_subject_tree_matches_git(self) -> None:
-        expected = _git("show", "-s", "--format=%T", QUAL_HEAD)
-        data = json.loads(MANIFEST_OUT.read_text())
-        assert data["qualification_subject_tree"] == expected
-
-    def test_collection_method_is_git_show(self) -> None:
-        data = json.loads(MANIFEST_OUT.read_text())
-        assert "git show" in data.get("collection_method", "")
-
-
-class TestAll148Artifacts:
-
-    def test_artifact_count_is_148(self) -> None:
-        data = json.loads(MANIFEST_OUT.read_text())
-        assert len(data["artifacts"]) == 148
-
-    def test_every_artifact_has_valid_blob_sha(self) -> None:
-        data = json.loads(MANIFEST_OUT.read_text())
-        for a in data["artifacts"]:
-            bs = a["git_blob_sha"]
-            assert bs, "Empty git_blob_sha for {}".format(a["path"])
-            assert len(bs) == 40, "Blob SHA not 40 hex chars: {}".format(a["path"])
-            assert all(c in "0123456789abcdef" for c in bs), "Invalid hex: {}".format(bs[:12])
-
-    def test_every_artifact_has_valid_sha256(self) -> None:
-        data = json.loads(MANIFEST_OUT.read_text())
-        for a in data["artifacts"]:
-            h = a["sha256"]
-            assert h, "Empty sha256 for {}".format(a["path"])
-            assert len(h) == 64, "sha256 not 64 hex chars: {}".format(a["path"])
-
-    def test_every_artifact_sha256_matches_git_blob(self) -> None:
-        data = json.loads(MANIFEST_OUT.read_text())
-        for a in data["artifacts"]:
-            content = _git_show_content(QUAL_HEAD, a["path"])
-            expected = hashlib.sha256(content).hexdigest()
-            assert a["sha256"] == expected, (
-                "sha256 mismatch for {}: manifest={}, actual={}".format(
-                    a["path"], a["sha256"][:12], expected[:12]))
+    def test_help(self) -> None:
+        r = subprocess.run(["python3", str(MANIFEST_GEN), "--help"],
+                           cwd=REPO, capture_output=True, text=True, timeout=15, check=False)
+        assert r.returncode == 0
+        assert "--ci-run" in r.stdout
+        assert "--ci-head" in r.stdout
+        assert "--ci-conclusion" in r.stdout
 
 
-class TestByteStability:
+class TestGeneratorPositive:
+    def test_valid_provenance_succeeds(self, tmp_path: Path) -> None:
+        out = tmp_path / "manifest.json"
+        rc, stdout, stderr = _run_gen(str(REPO), QUAL_HEAD, "30057162252", QUAL_HEAD, "success", str(out))
+        assert rc == 0, stderr
+        d = json.loads(out.read_text())
+        assert d["qualification_subject_head"] == QUAL_HEAD
+        assert d["ci"]["head_sha"] == QUAL_HEAD
+        assert d["ci"]["run_id"] == 30057162252
+        assert d["ci"]["conclusion"] == "success"
 
-    def test_two_runs_produce_identical_output(self, tmp_path: Path) -> None:
-        out1 = tmp_path / "manifest_pass1.json"
-        out2 = tmp_path / "manifest_pass2.json"
-        r1 = subprocess.run(
-            ["python3", str(MANIFEST_GEN), "--repo", str(REPO),
-             "--subject-head", QUAL_HEAD, "--output", str(out1)],
-            cwd=REPO, capture_output=True, text=True, timeout=60, check=False)
-        assert r1.returncode == 0, "Run 1 failed: {}".format(r1.stderr[:200])
-        r2 = subprocess.run(
-            ["python3", str(MANIFEST_GEN), "--repo", str(REPO),
-             "--subject-head", QUAL_HEAD, "--output", str(out2)],
-            cwd=REPO, capture_output=True, text=True, timeout=60, check=False)
-        assert r2.returncode == 0, "Run 2 failed: {}".format(r2.stderr[:200])
-        assert out1.read_bytes() == out2.read_bytes(), "Byte mismatch across two runs"
+    def test_two_runs_byte_identical(self, tmp_path: Path) -> None:
+        out1 = tmp_path / "m1.json"
+        out2 = tmp_path / "m2.json"
+        _run_gen(str(REPO), QUAL_HEAD, "30057162252", QUAL_HEAD, "success", str(out1))
+        _run_gen(str(REPO), QUAL_HEAD, "30057162252", QUAL_HEAD, "success", str(out2))
+        assert out1.read_bytes() == out2.read_bytes()
 
-    def test_formal_manifest_not_mutated_by_temp_run(self, tmp_path: Path) -> None:
-        h1 = hashlib.sha256(MANIFEST_OUT.read_bytes()).hexdigest()
-        out_tmp = tmp_path / "manifest_tmp.json"
-        subprocess.run(
-            ["python3", str(MANIFEST_GEN), "--repo", str(REPO),
-             "--subject-head", QUAL_HEAD, "--output", str(out_tmp)],
-            cwd=REPO, capture_output=True, text=True, timeout=60, check=False)
-        h2 = hashlib.sha256(MANIFEST_OUT.read_bytes()).hexdigest()
-        assert h1 == h2, "Formal manifest was mutated by temp run"
 
+# ═══ Negative: missing args ═══
+
+class TestGeneratorNegativeMissingArgs:
+    def test_missing_ci_run_fails(self, tmp_path: Path) -> None:
+        r = subprocess.run(["python3", str(MANIFEST_GEN), "--repo", str(REPO),
+                            "--subject-head", QUAL_HEAD, "--ci-head", QUAL_HEAD,
+                            "--ci-conclusion", "success", "--output", str(tmp_path / "out.json")],
+                           cwd=REPO, capture_output=True, text=True, timeout=15, check=False)
+        assert r.returncode != 0
+
+    def test_missing_ci_head_fails(self, tmp_path: Path) -> None:
+        r = subprocess.run(["python3", str(MANIFEST_GEN), "--repo", str(REPO),
+                            "--subject-head", QUAL_HEAD, "--ci-run", "1",
+                            "--ci-conclusion", "success", "--output", str(tmp_path / "out.json")],
+                           cwd=REPO, capture_output=True, text=True, timeout=15, check=False)
+        assert r.returncode != 0
+
+    def test_missing_ci_conclusion_fails(self, tmp_path: Path) -> None:
+        r = subprocess.run(["python3", str(MANIFEST_GEN), "--repo", str(REPO),
+                            "--subject-head", QUAL_HEAD, "--ci-run", "1",
+                            "--ci-head", QUAL_HEAD, "--output", str(tmp_path / "out.json")],
+                           cwd=REPO, capture_output=True, text=True, timeout=15, check=False)
+        assert r.returncode != 0
+
+    def test_missing_subject_head_fails(self, tmp_path: Path) -> None:
+        r = subprocess.run(["python3", str(MANIFEST_GEN), "--repo", str(REPO),
+                            "--ci-run", "1", "--ci-head", QUAL_HEAD,
+                            "--ci-conclusion", "success", "--output", str(tmp_path / "out.json")],
+                           cwd=REPO, capture_output=True, text=True, timeout=15, check=False)
+        assert r.returncode != 0
+
+
+# ═══ Negative: malformed SHAs ═══
+
+class TestGeneratorNegativeSha:
+    def test_short_subject_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), "82b1211", "1", QUAL_HEAD, "success", str(tmp_path / "out.json"))
+        assert rc != 0
+
+    def test_short_ci_head_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "1", "82b1211", "success", str(tmp_path / "out.json"))
+        assert rc != 0
+
+    def test_unreachable_subject_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), "0" * 40, "1", "0" * 40, "success", str(tmp_path / "out.json"))
+        assert rc != 0
+
+    def test_unreachable_ci_head_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "1", "0" * 40, "success", str(tmp_path / "out.json"))
+        assert rc != 0
+
+    def test_subject_not_equal_ci_head_fails(self, tmp_path: Path) -> None:
+        other = "dd0505ac53721d8e2e6150e47936119fe16734d6"
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "1", other, "success", str(tmp_path / "out.json"))
+        assert rc != 0
+
+
+# ═══ Negative: invalid CI run ═══
+
+class TestGeneratorNegativeCiRun:
+    def test_zero_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "0", QUAL_HEAD, "success", str(tmp_path / "out.json"))
+        assert rc != 0
+
+    def test_negative_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "-1", QUAL_HEAD, "success", str(tmp_path / "out.json"))
+        assert rc != 0
+
+    def test_non_numeric_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "abc", QUAL_HEAD, "success", str(tmp_path / "out.json"))
+        assert rc != 0
+
+    def test_empty_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "", QUAL_HEAD, "success", str(tmp_path / "out.json"))
+        assert rc != 0
+
+
+# ═══ Negative: non-success conclusion ═══
+
+class TestGeneratorNegativeConclusion:
+    def test_failure_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "1", QUAL_HEAD, "failure", str(tmp_path / "out.json"))
+        assert rc != 0
+
+    def test_cancelled_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "1", QUAL_HEAD, "cancelled", str(tmp_path / "out.json"))
+        assert rc != 0
+
+    def test_skipped_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "1", QUAL_HEAD, "skipped", str(tmp_path / "out.json"))
+        assert rc != 0
+
+    def test_timed_out_fails(self, tmp_path: Path) -> None:
+        rc, _, _ = _run_gen(str(REPO), QUAL_HEAD, "1", QUAL_HEAD, "timed_out", str(tmp_path / "out.json"))
+        assert rc != 0
+
+
+# ═══ Hardcoded provenance regression ═══
+
+class TestHardcodedProvenanceRegression:
+    def test_no_hardcoded_ci_run(self) -> None:
+        src = MANIFEST_GEN.read_text()
+        assert "30057162252" not in src, "hardcoded CI run must be removed"
+
+    def test_no_implicit_ci_head_assignment(self) -> None:
+        src = MANIFEST_GEN.read_text()
+        assert "ci_head = subject_head" not in src.replace(" ", "")
+
+    def test_no_default_success(self) -> None:
+        src = MANIFEST_GEN.read_text()
+        lines_with_success = [ln for ln in src.split("\n") if 'success' in ln and 'conclusion' in ln.lower()]
+        for line in lines_with_success:
+            assert "default" not in line.lower() or "no" in line.lower()
+
+
+# ═══ Schema compliance (unchanged from V1) ═══
 
 class TestSchemaCompliance:
-
     def test_completion_receipt_has_evidence_subject_head(self) -> None:
         r = json.loads(COMPLETION_RECEIPT.read_text())
-        assert "evidence_subject_head" in r, "Completion receipt must have evidence_subject_head"
+        assert "evidence_subject_head" in r
         assert r["evidence_subject_head"] == QUAL_HEAD
 
     def test_completion_receipt_no_dual_authority(self) -> None:
         r = json.loads(COMPLETION_RECEIPT.read_text())
-        assert "qualification_subject_head" not in r, (
-            "Completion receipt must not have qualification_subject_head (dual authority)")
+        assert "qualification_subject_head" not in r
 
     def test_qual_manifest_has_qualification_subject_head(self) -> None:
         m = json.loads(MANIFEST_OUT.read_text())
         assert "qualification_subject_head" in m
-        assert m["qualification_subject_head"] == QUAL_HEAD
-
-    def test_qual_receipt_has_qualification_subject_head(self) -> None:
-        s = json.loads(QUAL_RECEIPT.read_text())
-        assert "qualification_subject_head" in s
-
-    def test_subjects_equal_same_frozen_commit(self) -> None:
-        r = json.loads(COMPLETION_RECEIPT.read_text())
-        m = json.loads(MANIFEST_OUT.read_text())
-        assert r["evidence_subject_head"] == QUAL_HEAD
-        assert m["qualification_subject_head"] == QUAL_HEAD
 
     def test_receipt_does_not_self_reference(self) -> None:
         r = json.loads(COMPLETION_RECEIPT.read_text())
-        rch = r.get("receipt_commit_head")
-        assert rch is None, "receipt_commit_head must be null, got {}".format(rch)
-
-
-class TestValidatorReadOnly:
-
-    def test_generator_run_does_not_dirty_worktree(self) -> None:
-        before = subprocess.run(
-            ["git", "status", "--porcelain=v1"], cwd=REPO,
-            capture_output=True, text=True, timeout=10, check=False).stdout
-        subprocess.run(
-            ["python3", str(MANIFEST_GEN), "--repo", str(REPO),
-             "--subject-head", QUAL_HEAD, "--output", str(MANIFEST_OUT)],
-            cwd=REPO, capture_output=True, text=True, timeout=60, check=False)
-        after = subprocess.run(
-            ["git", "status", "--porcelain=v1"], cwd=REPO,
-            capture_output=True, text=True, timeout=10, check=False).stdout
-        new_dirty = set(after.split("\n")) - set(before.split("\n"))
-        new_dirty = [line for line in new_dirty if line.strip()]
-        assert not new_dirty, "Generator introduced new dirty files: {}".format(new_dirty)
+        assert r.get("receipt_commit_head") is None

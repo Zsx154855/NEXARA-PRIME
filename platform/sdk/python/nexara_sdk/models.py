@@ -76,14 +76,14 @@ class MemoryKind(str, Enum):
 
 
 class RuntimeRole(str, Enum):
-    ORCHESTRATOR = "orchestrator"
-    PLANNER = "planner"
-    ANALYST = "analyst"
-    RESEARCHER = "researcher"
-    EXECUTOR = "executor"
-    REVIEWER = "reviewer"
-    AUDITOR = "auditor"
-    ARCHIVIST = "archivist"
+    ORCHESTRATOR = "Orchestrator"
+    PLANNER = "Planner"
+    ANALYST = "Analyst"
+    RESEARCHER = "Researcher"
+    EXECUTOR = "Executor"
+    REVIEWER = "Reviewer"
+    AUDITOR = "Auditor"
+    ARCHIVIST = "Archivist"
 
 
 class Persona(str, Enum):

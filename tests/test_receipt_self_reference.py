@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
-VALIDATOR = REPO / ".claude/plugins/nexara-claude-truth-guardian/skills/nexara-claude-truth-first-onepass/scripts/validate_completion_receipt.py"
+VALIDATOR = REPO / "scripts/qualification/validate_completion_receipt.py"
 RECEIPT = REPO / ".nexara/receipts/claude_completion_receipt.json"
 
-# Validator script may not exist in CI (repo excludes .claude/ via gitignore)
-_HAS_VALIDATOR = VALIDATOR.exists()
+# Validator is now tracked in repo — always available
+_HAS_VALIDATOR = True
 
 
 def _minimal_receipt(evidence_head: str, result: str = "WAITING_APPROVAL") -> dict:
@@ -78,7 +78,6 @@ def _run_validator(receipt_path: Path, repo: Path = REPO) -> tuple[int, str]:
 class TestReceiptSelfReferenceFix:
     """V1.2 contract: evidence_subject_head is the stable code commit. receipt_commit_head is separate."""
 
-    @pytest.mark.skipif(not _HAS_VALIDATOR, reason="Validator script not available (repo excludes .claude/)")
     def test_evidence_subject_head_binds_to_reachable_commit(self) -> None:
         """evidence_subject_head must be a reachable commit in git."""
         head = subprocess.run(
