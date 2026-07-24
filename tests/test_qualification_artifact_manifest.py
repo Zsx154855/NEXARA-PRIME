@@ -10,7 +10,8 @@ import subprocess
 from pathlib import Path
 
 REPO = Path(os.environ.get("NEXARA_REPO", Path(__file__).resolve().parents[1])).resolve()
-QUAL_HEAD = "82b1211213932cba71be68bf894dca0b8764e964"
+QUAL_HEAD = "82b1211213932cba71be68bf894dca0b8764e964"  # immutable qualification subject
+EVIDENCE_HEAD = "01bbc0e1b360fc1509042e5041d25a7f62207be8"  # current CI-verified HEAD
 MANIFEST_GEN = REPO / "scripts/qualification/build_artifact_manifest.py"
 MANIFEST_OUT = REPO / ".nexara/qualification/qualification_artifact_manifest.json"
 COMPLETION_RECEIPT = REPO / ".nexara/receipts/claude_completion_receipt.json"
@@ -197,7 +198,7 @@ class TestSchemaCompliance:
     def test_completion_receipt_has_evidence_subject_head(self) -> None:
         r = json.loads(COMPLETION_RECEIPT.read_text())
         assert "evidence_subject_head" in r
-        assert r["evidence_subject_head"] == QUAL_HEAD
+        assert r["evidence_subject_head"] == EVIDENCE_HEAD
 
     def test_completion_receipt_no_dual_authority(self) -> None:
         r = json.loads(COMPLETION_RECEIPT.read_text())
@@ -206,6 +207,7 @@ class TestSchemaCompliance:
     def test_qual_manifest_has_qualification_subject_head(self) -> None:
         m = json.loads(MANIFEST_OUT.read_text())
         assert "qualification_subject_head" in m
+        assert m["qualification_subject_head"] == QUAL_HEAD
 
     def test_receipt_does_not_self_reference(self) -> None:
         r = json.loads(COMPLETION_RECEIPT.read_text())
