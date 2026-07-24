@@ -80,7 +80,7 @@ def main() -> int:
 
     # Q2.4: Kernel Cannot Execute Tools
     kernel_src = (REPO / "src/nexara_prime/chief_brain_kernel.py").read_text()
-    has_exec = any("def execute" in l or "def invoke" in l for l in kernel_src.split("\n"))
+    has_exec = any("def execute" in ln or "def invoke" in ln for ln in kernel_src.split("\n"))
     results.append({
         "invariant": "Q2.4 Kernel Cannot Execute Tools",
         "status": "PASS" if not has_exec else "FAIL",
