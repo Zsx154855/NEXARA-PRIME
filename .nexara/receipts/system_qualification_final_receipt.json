@@ -1,0 +1,46 @@
+{
+  "receipt_id": "NEXARA_SYSTEM_QUALIFICATION_FINAL_RECEIPT_V1",
+  "status": "QUALIFIED_FOR_HUMAN_RELEASE_APPROVAL",
+  "baseline_head": "6e197ed2ab4c97b9e595d4e29e39ae302f346b9c",
+  "qualified_head": "6e197ed2ab4c97b9e595d4e29e39ae302f346b9c",
+  "heads_synced": true,
+  "test_results": {
+    "total_passed": 1049,
+    "test_files": 38
+  },
+  "q2_invariants": "9/10 PASS",
+  "contract_hashes": {
+    "authority_matrix_v1.yaml": "b5428a8cf0905217d5b414c532bb84344c1a1c5f74ea3effe37f396ba444b682",
+    "canonical_domain_model_v1.yaml": "d881bc51058e8f2c74d03cf9bc7d9b922085356616727db3095183a39cee9381",
+    "capability_registry_contract_v1.yaml": "3e858e5e3c5dbfc013c741a6eb7e84b1101ca258a080543d8538bb3a4678a4e5",
+    "chief_brain_kernel_contract_v1.yaml": "d50373abdc4227f667ea03593d09f30d4da29b870997b680ee806dcefd1783e7",
+    "contract_invariant_tests_v1.yaml": "3b20efd95c4028e8b92776c0f28ba2e9341e8f11aa91ea56a4f1b6c44440ff2b",
+    "governance_evidence_hardening_v1.yaml": "56d4c0b518442bd3bd0de2091ff1505a979b62de7809704b89d53718b6b31fcc",
+    "memory_knowledge_contract_v1.yaml": "d0be5ffba3cb946ba20abb4162ecb8b0cc717b4c7565a5414aa897dd68081858",
+    "product_experience_contract_v1.yaml": "83a7c92a860a9a23f13d862a58d45b5c72f6c322c3bbc8fe3ce7da57c33efa5c",
+    "tool_runtime_contract_v1.yaml": "dafae08c43c500c7d6fb136bbc8a93ab4d4ac34851fa975eac399f9f7cb2f8a9"
+  },
+  "receipt_hashes": {
+    "claude_completion_receipt.json": "90f0e35d4ead21e64dd569bcdb095ef93935b27468c9e6d337417601dc7c5b7c",
+    "final_program_boundary_receipt.json": "307990e5f3a96d295280e43aedf3752f4f2b9cd84d6aec2ea2d78e6d85cb5c75",
+    "g0_reality_inventory_v3.json": "ecaf5d16ca59f492d4a4be27ac4dbe0fc35be7b32383d06eec279dae66c66d97",
+    "g2_closure_receipt.json": "e8193eccc94cd53536b747e2d62075e5c4eceb8e9f5434c837ebbbed776d0f23",
+    "g3_closure_receipt.json": "4f736c816e2bb5c079b5c5a4dd23a2e186ae151a51af75955e192b8c442194ff",
+    "nexara_program_final_receipt.json": "13754a11044e6f386cd92bb639eda52e6e21492c79bb6d29fe2247d5ab45cf95",
+    "nsec_governance_baseline_v1.json": "30606a666024ec363f758e06e438867db9e78f73d81fb77579e5823c46923099",
+    "pr23_final_attestation.json": "f4bec9078cade6ee16aa9c872ebf448caa3ad7e5a09390763c1270a8c86ce5af"
+  },
+  "evidence_count": 28,
+  "qualification_count": 2,
+  "remaining_risks": [
+    "Apple Developer credentials",
+    "Codex rate limit",
+    "Owner re-review"
+  ],
+  "external_human_boundaries": [
+    "Apple Developer Program",
+    "Git tag v0.1.0",
+    "PR merge approval"
+  ],
+  "generated_at": "2026-07-24T00:49:33Z"
+}
