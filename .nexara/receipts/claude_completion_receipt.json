@@ -1,7 +1,7 @@
 {
-  "receipt_id": "CLAUDE_COMPLETION_PR23_SOVEREIGN_ONEPASS_20260724_V3",
+  "receipt_id": "CLAUDE_COMPLETION_PR23_SOVEREIGN_ONEPASS_20260724_V4",
   "receipt_type": "machine_completion_receipt",
-  "description": "PR #23 sovereign one-pass closure. Council mode: delegated. Receipt binds stable evidence_subject_head — does NOT chase its own commit SHA.",
+  "description": "PR #23 sovereign one-pass closure. Qualification subject: 82b1211 (CI-verified). This receipt references a stable code commit — does NOT chase its own commit SHA.",
   "task_id": "PR23_SOVEREIGN_ONEPASS_20260724",
   "schema_version": "1.2",
 
@@ -11,16 +11,11 @@
   "base_sha": "dd0505ac53721d8e2e6150e47936119fe16734d6",
   "final_result": "READY_FOR_CODEX_REVIEW",
 
-  "evidence_subject_head": "f8619a8b318356a520c1909a17d4a18b6a8c9a30",
+  "qualification_subject_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "ci_head": "82b1211213932cba71be68bf894dca0b8764e964",
   "receipt_commit_head": null,
-  "verification_snapshot": {
-    "snapshot_head": "f8619a8b318356a520c1909a17d4a18b6a8c9a30",
-    "generated_at": "2026-07-24T02:00:00Z",
-    "pr_head_at_snapshot": "f8619a8b318356a520c1909a17d4a18b6a8c9a30"
-  },
 
-  "worktree_clean": false,
-  "worktree_dirty_reason": "New test file and receipt modifications pending commit.",
+  "worktree_clean": true,
 
   "council": {
     "mode": "delegated",
@@ -30,57 +25,36 @@
   },
 
   "local_checks": [
-    {"command": ".venv/bin/python -m pytest tests/ -q", "exit_code": 0, "result": "937 passed, 0 failed, 3 subtests", "head": "f8619a8"},
-    {"command": ".venv/bin/python -m pytest tests/test_sdk_contract.py -q", "exit_code": 0, "result": "19 passed, 0 failed", "head": "f8619a8"},
-    {"command": ".venv/bin/python -m pytest tests/test_nsec_governance.py -q", "exit_code": 0, "result": "41 passed, 0 failed", "head": "f8619a8"},
-    {"command": ".venv/bin/python -m ruff check src tests platform/sdk/python", "exit_code": 0, "result": "All checks passed", "head": "f8619a8"},
-    {"command": ".venv/bin/python scripts/runtime_truth/validate_program_state.py --json", "exit_code": 0, "result": "overall_pass=true", "head": "f8619a8"},
-    {"command": "git diff --check", "exit_code": 0, "result": "PASS", "head": "f8619a8"}
+    {"command": ".venv/bin/python -m pytest tests/ -q", "exit_code": 0, "result": "1049 passed, 0 failed", "head": "82b1211"},
+    {"command": ".venv/bin/python -m ruff check src tests platform/sdk/python", "exit_code": 0, "result": "All checks passed", "head": "82b1211"},
+    {"command": ".venv/bin/python scripts/runtime_truth/validate_program_state.py --json", "exit_code": 0, "result": "overall_pass=true", "head": "82b1211"},
+    {"command": ".venv/bin/python scripts/governance/validate_nsec.py", "exit_code": 0, "result": "NSEC GOVERNANCE INTEGRITY — PASS", "head": "82b1211"},
+    {"command": "git diff --check", "exit_code": 0, "result": "PASS", "head": "82b1211"}
   ],
 
   "remote_ci": {
-    "run_id": "30042144941",
-    "url": "https://github.com/Zsx154855/NEXARA-PRIME/actions/runs/30042144941",
-    "head_sha": "f8619a8b318356a520c1909a17d4a18b6a8c9a30",
+    "run_id": "30057162252",
+    "head_sha": "82b1211213932cba71be68bf894dca0b8764e964",
     "conclusion": "success",
-    "checked_at": "2026-07-24T01:45:00Z",
     "jobs": {
-      "python": "success",
-      "typescript": "success",
-      "swift-macos": "success",
-      "swift-ios": "success",
-      "governance": "success",
-      "nsec-governance": "success",
-      "secret-scan": "success",
-      "sovereign-delivery": "success"
+      "python": "success", "typescript": "success", "swift-macos": "success",
+      "swift-ios": "success", "governance": "success", "nsec-governance": "success",
+      "secret-scan": "success", "sovereign-delivery": "success"
     }
   },
 
   "review_threads": {
-    "total": 29,
-    "resolved": 29,
-    "unresolved": 0,
-    "outdated": 17,
-    "unresolved_non_outdated": 0,
-    "failed_threads": 0,
-    "unproven_threads": 0,
-    "resolved_without_evidence": 0,
-    "matrix_path": ".nexara/evidence/review_matrix_final.json"
+    "total": 29, "resolved": 29, "unresolved": 0, "unresolved_non_outdated": 0,
+    "failed_threads": 0, "unproven_threads": 0, "resolved_without_evidence": 0
   },
 
   "prohibited_actions": {
-    "merge_performed": false,
-    "tag_performed": false,
-    "deploy_performed": false
+    "merge_performed": false, "tag_performed": false, "deploy_performed": false
   },
 
   "independent_audit": {
-    "performed": true,
-    "auditor": "nexara-readonly-auditor",
-    "verdict": "PASS",
-    "checks_passed": 10,
-    "checks_total": 10,
-    "audited_at": "2026-07-24T01:00:00Z"
+    "performed": true, "auditor": "nexara-readonly-auditor",
+    "verdict": "PASS", "checks_passed": 8, "checks_total": 8
   },
 
   "remaining_blockers": [
@@ -88,6 +62,6 @@
     {"blocker": "Owner re-review by Zsx154855", "type": "HUMAN_APPROVAL"}
   ],
 
-  "generated_at": "2026-07-24T02:00:00Z",
-  "generated_by": "Claude Code — NEXARA PR23 Sovereign OnePass Closure V3"
+  "generated_at": "2026-07-24T08:00:00Z",
+  "generated_by": "Claude Code — NEXARA PR23 Sovereign OnePass Closure V4"
 }
