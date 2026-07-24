@@ -9,10 +9,13 @@
   "branch": "feat/brand-baihan",
   "pr_number": 23,
   "base_sha": "dd0505ac53721d8e2e6150e47936119fe16734d6",
-  "final_result": "READY_FOR_CODEX_REVIEW",
+  "final_result": "READY_FOR_HUMAN_APPROVAL",
+  "human_approval": true,
 
   "evidence_subject_head": "82b1211213932cba71be68bf894dca0b8764e964",
-  "ci_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "final_head": "01bbc0e1b360fc1509042e5041d25a7f62207be8",
+  "remote_pr_head": "01bbc0e1b360fc1509042e5041d25a7f62207be8",
+  "ci_head": "01bbc0e1b360fc1509042e5041d25a7f62207be8",
   "receipt_commit_head": null,
 
   "worktree_clean": true,
@@ -33,8 +36,8 @@
   ],
 
   "remote_ci": {
-    "run_id": "30057162252",
-    "head_sha": "82b1211213932cba71be68bf894dca0b8764e964",
+    "run_id": "30090917965",
+    "head_sha": "01bbc0e1b360fc1509042e5041d25a7f62207be8",
     "conclusion": "success",
     "jobs": {
       "python": "success", "typescript": "success", "swift-macos": "success",
