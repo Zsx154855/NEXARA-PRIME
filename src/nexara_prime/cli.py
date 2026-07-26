@@ -162,16 +162,21 @@ def cmd_status() -> int:
         finally:
             store.close()
 
+    # Canonical PROGRAM_STATE fields
+    orchestration = state.get("orchestration_status", {})
+    orch_phase = orchestration.get("phase", "?") if isinstance(orchestration, dict) else "?"
     lines = [
         "",
-        f"  {state.get('project', 'NEXARA PRIME')}",
+        f"  Program           {state.get('program', '?')}",
         "  " + "─" * 40,
         f"  Repository        {root}",
         f"  Branch            {actual_branch}",
-        f"  Recorded Gate     {state.get('current_gate', '?')}",
-        f"  Recorded Status   {state.get('gate_status', '?')}",
+        f"  Program Gate      {state.get('current_program_gate', '?')}",
+        f"  Gate Status       {state.get('gate_status', '?')}",
+        f"  Orchestration     {orch_phase}",
+        f"  Test Baseline     {state.get('test_baseline', '?')}",
         "",
-        f"  Runtime DB       {settings.db_path}",
+        f"  Runtime DB        {settings.db_path}",
         f"  Missions          {len(missions)}",
         f"  Latest Mission    {latest_mission_id}",
         f"  Latest Evidence   {latest_evidence}",
@@ -187,8 +192,6 @@ def cmd_status() -> int:
         f"  Self-Evolution    {prog.get('self_evolution_loop', '?')}%",
         f"  Product Delivery  {prog.get('product_delivery', '?')}%",
         "",
-        "  Next Gate",
-        f"  {state.get('next_gate', '?')}",
         f"  Updated           {state.get('updated_at', '?')}",
         "",
     ]

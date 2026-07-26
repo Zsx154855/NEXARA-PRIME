@@ -58,7 +58,10 @@ class TestCapabilityRegistryReality:
         registry.register_v2("test.score", "Scored Test")
         score = registry.update_score("test.score", True, 100.0, 50.0, ["ev_1", "ev_2"])
         assert score is not None
-        assert score.evidence_count == 2
+        # invocation count: one call, regardless of evidence count
+        assert score.evidence_count == 1
+        # evidence references tracked separately
+        assert len(score.source_evidence) >= 2
         assert score.historical_success_rate == 1.0
 
     def test_v2_confidence_increases_with_evidence(self, registry: CapabilityRegistry) -> None:

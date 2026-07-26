@@ -873,7 +873,25 @@ class NexaraRuntime:
         provider_unavailable = runtime_unavailable or mission_unavailable
         # Receipt status: delegate to EvidenceStore.receipt_status() — single authority.
         # No independent receipt_present judgment (KMA_INVARIANT_10).
-        receipt = self.evidence.receipt_status(mission_id)
+        # Bind to expected report-receipt tool types and verify mission ID match.
+        receipt = self.evidence.receipt_status(
+            mission_id,
+            tool_names=["file_write_report", "write_workspace_file"],
+        )
+        # Cross-check: every receipt_id must belong to this mission
+        receipt_ids = receipt.get("receipt_ids", [])
+        verified_receipts: list[str] = []
+        for rid in receipt_ids:
+            try:
+                env = self.evidence.get_envelope(rid)
+                if env and env.get("mission_id") == mission_id:
+                    verified_receipts.append(rid)
+            except Exception:
+                pass
+        receipt_status_value = (
+            "present" if verified_receipts
+            else "missing"
+        )
         return {
             "mission_id": mission.mission_id,
             "state": mission.state, "current_state": mission.state,
@@ -888,7 +906,7 @@ class NexaraRuntime:
             "approval_status": approval_status, "pending_action": mission.pending_approval_id or None,
             "evidence_count": len(evidence_list),
             "latest_evidence": evidence_list[-1] if evidence_list else None,
-            "receipt_status": receipt.get("status", "missing"),
+            "receipt_status": receipt_status_value,
             "memory_patch_status": "patched" if mission.result.get("memory_patch_id") else "not_patched",
             "evaluation_status": "passed" if mission.result.get("evaluation_passed") else ("failed" if "evaluation_id" in (mission.result or {}) else "not_evaluated"),
             "retry_count": mission.result.get("retry_count", 0) if isinstance(mission.result, dict) else 0,

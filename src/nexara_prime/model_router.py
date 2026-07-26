@@ -83,7 +83,14 @@ class CircuitBreaker:
         cooldown_seconds: float | None = None,
     ) -> None:
         self._threshold = failure_threshold if failure_threshold is not None else threshold
-        self._timeout_s = int(cooldown_seconds) if cooldown_seconds is not None else timeout_s
+        if cooldown_seconds is not None:
+            if cooldown_seconds < 0:
+                raise ValueError(
+                    f"cooldown_seconds must be non-negative, got {cooldown_seconds}"
+                )
+            self._timeout_s = float(cooldown_seconds)
+        else:
+            self._timeout_s = float(timeout_s)
         self._states: dict[str, CircuitBreakerState] = {}
 
     def _get(self, provider: str) -> CircuitBreakerState:

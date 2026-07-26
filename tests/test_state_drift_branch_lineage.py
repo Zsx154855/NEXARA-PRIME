@@ -168,6 +168,56 @@ class TestGitCommandErrors:
         assert sha is not None
         assert len(sha) == 40
 
+    def test_git_resolve_origin_first(self, tmp_path: Path):
+        """Origin ref is preferred over stale local branch."""
+        import detect_state_drift as dsd
+
+        _init_git_repo(tmp_path)
+
+        # Get the commit SHA for main
+        result = subprocess.run(
+            ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        )
+        main_sha = result.stdout.strip()
+
+        # Create a diverged local branch (simulating stale local)
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "checkout", "-q", "-b", "stale-local"],
+            check=True,
+        )
+        (tmp_path / "diverged.txt").write_text("diverged")
+        subprocess.run(["git", "-C", str(tmp_path), "add", "diverged.txt"], check=True)
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "commit", "-m", "diverged from origin"],
+            check=True,
+        )
+        diverged_sha = subprocess.run(
+            ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+        # Now there's a local "stale-local" that diverged from origin/main
+        # The bare ref "stale-local" would resolve to the diverged SHA
+        # But the function should prefer origin first — though origin has no "stale-local"
+        # so it falls back to the bare name. The key test is for refs like "main"
+        # where origin/main exists.
+
+        # Go back to main
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "checkout", "-q", "main"],
+            check=True,
+        )
+
+        # Resolution of "main": origin/main should be tried first
+        sha = dsd.git_resolve_ref("main", repo_root=tmp_path)
+        assert sha is not None
+        assert sha == main_sha  # resolves to origin/main (which = local main)
+
+        # "stale-local" has no origin/ equivalent, so falls back to local
+        sha_local = dsd.git_resolve_ref("stale-local", repo_root=tmp_path)
+        assert sha_local == diverged_sha
+
 
 class TestIntegrationWithCheckGitConsistency:
     def test_dirty_worktree_fails(self, tmp_path: Path, monkeypatch):

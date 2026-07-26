@@ -160,41 +160,50 @@ class TestKnowledgeRecall:
 class TestKnowledgeCommit:
     def test_create_minimal(self):
         kc = KnowledgeCommit(
-            kind=MemoryKind.FACT, key="k1", content="test content", trace_id="t1"
+            kind=MemoryKind.FACT, key="k1", content="test content",
+            trace_id="t1", idempotency_key="ik-min",
         )
         assert kc.kind == MemoryKind.FACT
         assert kc.key == "k1"
         assert kc.auto_commit is False
+        assert kc.idempotency_key == "ik-min"
 
     def test_rejects_empty_key(self):
         with pytest.raises(Exception):
-            KnowledgeCommit(kind=MemoryKind.FACT, key="", content="c", trace_id="t1")
+            KnowledgeCommit(kind=MemoryKind.FACT, key="", content="c",
+                            trace_id="t1", idempotency_key="ik1")
 
     def test_rejects_empty_content(self):
         with pytest.raises(Exception):
-            KnowledgeCommit(kind=MemoryKind.FACT, key="k", content="", trace_id="t1")
+            KnowledgeCommit(kind=MemoryKind.FACT, key="k", content="",
+                            trace_id="t1", idempotency_key="ik1")
+
+    def test_rejects_missing_idempotency_key(self):
+        with pytest.raises(Exception):
+            KnowledgeCommit(kind=MemoryKind.FACT, key="k", content="c", trace_id="t1")
 
     def test_all_memory_kinds(self):
         for kind in MemoryKind:
-            kc = KnowledgeCommit(kind=kind, key="k", content="c", trace_id="t1")
+            kc = KnowledgeCommit(kind=kind, key="k", content="c",
+                                 trace_id="t1", idempotency_key="ik-ak")
             assert kc.kind == kind
 
     def test_confidence_range(self):
         with pytest.raises(Exception):
             KnowledgeCommit(
                 kind=MemoryKind.FACT, key="k", content="c",
-                trace_id="t1", confidence=-0.1,
+                trace_id="t1", confidence=-0.1, idempotency_key="ik1",
             )
         with pytest.raises(Exception):
             KnowledgeCommit(
                 kind=MemoryKind.FACT, key="k", content="c",
-                trace_id="t1", confidence=1.1,
+                trace_id="t1", confidence=1.1, idempotency_key="ik1",
             )
 
     def test_receipt_id_optional(self):
         kc = KnowledgeCommit(
             kind=MemoryKind.PATCH, key="k", content="c",
-            trace_id="t1", receipt_id="r1",
+            trace_id="t1", receipt_id="r1", idempotency_key="ik-r",
         )
         assert kc.receipt_id == "r1"
 
@@ -251,6 +260,36 @@ class TestCapabilityHistory:
         assert ch1.record_id != ch2.record_id
 
 
+class TestKnowledgeObjectStatusEnum:
+    def test_valid_statuses(self):
+        valid = [
+            "committed", "candidate", "conflict", "superseded",
+            "pending_review", "cleared", "unverified", "verified", "corrupt",
+        ]
+        for status in valid:
+            ko = KnowledgeObject(object_type="evidence", status=status)
+            assert ko.status == status
+
+    def test_rejects_invalid_status(self):
+        with pytest.raises(Exception):
+            KnowledgeObject(object_type="evidence", status="invalid_status")
+
+    def test_default_status(self):
+        ko = KnowledgeObject(object_type="evidence")
+        assert ko.status == "committed"
+
+    def test_schema_enum_matches(self):
+        schema_path = (
+            Path(__file__).parent.parent
+            / "contracts/kma/KNOWLEDGE_OBJECT_SCHEMA_V1.json"
+        )
+        schema = json.loads(schema_path.read_text())
+        schema_statuses = set(schema["properties"]["status"]["enum"])
+        from typing import get_args
+        model_statuses = set(get_args(KnowledgeObject.model_fields["status"].annotation))
+        assert schema_statuses == model_statuses
+
+
 class TestMemoryRecordReceiptId:
     def test_receipt_id_field_added(self):
         mr = MemoryRecord(kind=MemoryKind.FACT, key="k", content="c", receipt_id="r1")
@@ -259,3 +298,44 @@ class TestMemoryRecordReceiptId:
     def test_receipt_id_default_none(self):
         mr = MemoryRecord(kind=MemoryKind.FACT, key="k", content="c")
         assert mr.receipt_id is None
+
+    def test_write_propagates_receipt_id(self):
+        """receipt_id passed to write() is stored on the MemoryRecord."""
+        import tempfile
+        from nexara_prime.db import SQLiteStore
+        from nexara_prime.events import EventBus
+        from nexara_prime.memory import MemoryKernel
+
+        db_path = Path(tempfile.mkdtemp()) / "test.db"
+        store = SQLiteStore(db_path)
+        try:
+            events = EventBus(store)
+            kernel = MemoryKernel(store, events)
+            record = kernel.write(
+                MemoryKind.FACT, "test_key", "test_content",
+                trace_id="t1", receipt_id="r123",
+            )
+            assert record.receipt_id == "r123"
+        finally:
+            store.close()
+
+    def test_propose_propagates_receipt_id(self):
+        """receipt_id passed to propose() is stored on the MemoryRecord."""
+        import tempfile
+        from nexara_prime.db import SQLiteStore
+        from nexara_prime.events import EventBus
+        from nexara_prime.memory import MemoryKernel
+
+        db_path = Path(tempfile.mkdtemp()) / "test.db"
+        store = SQLiteStore(db_path)
+        try:
+            events = EventBus(store)
+            kernel = MemoryKernel(store, events)
+            record = kernel.propose(
+                MemoryKind.FACT, "pk", "propose_content",
+                trace_id="t2", source_evidence_id="ev1",
+                receipt_id="r456",
+            )
+            assert record.receipt_id == "r456"
+        finally:
+            store.close()

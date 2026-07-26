@@ -22,7 +22,7 @@ def registry(store):
 
 
 class TestCapabilityPersistence:
-    def test_record_history_persists(self, registry):
+    def test_record_history_persists(self, registry, store):
         record = registry.record_history(
             capability_id="skill.test",
             mission_id="m1",
@@ -38,6 +38,11 @@ class TestCapabilityPersistence:
         assert record.record_id.startswith("caphist_")
         history = registry.get_history("skill.test")
         assert len(history) >= 1
+        # Verify actual store persistence
+        store_records = store.list_records("capability_history")
+        assert any(
+            r.get("capability_id") == "skill.test" for r in store_records
+        ), "Record not persisted to SQLiteStore"
 
     def test_record_history_idempotent(self, registry):
         _r1 = registry.record_history(
@@ -94,3 +99,53 @@ class TestRestartRecovery:
         assert score is not None
         assert score.historical_success_rate == 1.0
         assert score.evidence_count >= 0
+
+
+class TestInvocationCounting:
+    """Each invocation counts once regardless of evidence count."""
+
+    def test_single_invocation_with_multiple_evidence(self, store):
+        reg = CapabilityRegistry(store=store)
+        reg.register_v2("skill.multi", "Multi Evidence Cap")
+        score = reg.update_score(
+            "skill.multi", True, 100.0, 0.005,
+            evidence_ids=["e1", "e2", "e3"],
+            provider="mock", model="mock-v1",
+            mission_id="m_multi", idempotency_key="multi-key",
+        )
+        assert score is not None
+        history = reg.get_history("skill.multi")
+        # Only one history entry per invocation, regardless of evidence count
+        assert len(history) == 1
+        # Evidence references stored in the outcome dict
+        assert history[0].get("evidence_ids") == ["e1", "e2", "e3"]
+
+    def test_invocation_without_evidence(self, store):
+        reg = CapabilityRegistry(store=store)
+        reg.register_v2("skill.noev", "No Evidence Cap")
+        score = reg.update_score(
+            "skill.noev", True, 50.0, 0.001,
+            provider="mock", model="mock-v1",
+            mission_id="m_noev", idempotency_key="noev-key",
+        )
+        assert score is not None
+        history = reg.get_history("skill.noev")
+        assert len(history) == 1
+
+    def test_multiple_invocations_count_separately(self, store):
+        reg = CapabilityRegistry(store=store)
+        reg.register_v2("skill.seq", "Sequential Cap")
+        reg.update_score(
+            "skill.seq", True, 80.0, 0.002,
+            evidence_ids=["a1"],
+            provider="mock", model="mock-v1",
+            mission_id="m_seq", idempotency_key="seq1",
+        )
+        reg.update_score(
+            "skill.seq", True, 90.0, 0.003,
+            evidence_ids=["a2", "a3"],
+            provider="mock", model="mock-v1",
+            mission_id="m_seq", idempotency_key="seq2",
+        )
+        history = reg.get_history("skill.seq")
+        assert len(history) == 2  # each invocation is one record

@@ -146,6 +146,9 @@ class KnowledgeService:
         if commit.confidence < 0.0 or commit.confidence > 1.0:
             errors.append("confidence_out_of_range")
 
+        if not (commit.idempotency_key or "").strip():
+            errors.append("idempotency_key_required")
+
         supersession = {}
         if not errors:
             supersession = self.detect_supersession(
@@ -154,10 +157,10 @@ class KnowledgeService:
             supersession_check = self.detect_conflicts(
                 commit.key, commit.content, commit.mission_id
             )
-            if supersession_check["has_conflicts"] and not commit.auto_commit:
-                # Conflicts don't block validation, but they are noted.
-                # auto_commit will still require evidence backing.
-                pass
+            if supersession_check["has_conflicts"]:
+                if commit.auto_commit:
+                    errors.append("auto_commit_blocked_by_canonical_conflict")
+                # For manual commits, conflicts are noted but don't block validation
 
         return {
             "valid": len(errors) == 0,

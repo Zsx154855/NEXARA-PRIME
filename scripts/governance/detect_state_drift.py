@@ -305,7 +305,7 @@ def git_resolve_ref(ref: str, repo_root: Path | None = None) -> str | None:
     Returns the resolved SHA, or None if unresolvable.
     """
     root = repo_root or REPO_ROOT
-    for candidate in (ref, f"refs/remotes/origin/{ref}", f"refs/heads/{ref}"):
+    for candidate in (f"refs/remotes/origin/{ref}", ref, f"refs/heads/{ref}"):
         result = subprocess.run(
             ["git", "rev-parse", "--verify", "--quiet", candidate],
             cwd=root, capture_output=True, text=True, timeout=15,

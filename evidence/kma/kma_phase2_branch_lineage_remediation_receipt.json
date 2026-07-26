@@ -5,7 +5,7 @@
   "blockers": [],
   "branch_lineage_status": "PASS",
   "commit_sha": null,
-  "evidence_hash": "cc7e61e60331ec725d7246c1dde7456146ef6f1046fdb882819a10f2c85a6f8b",
+  "evidence_hash": "f7ff5eaa18072e99f863184068e1b41ba3b0e15fce0b94fe95758b832baed289",
   "evidence_id": "kma_phase2_branch_lineage_remediation_v1",
   "generated_at": "2026-07-26T07:53:10Z",
   "judgment": "READY_FOR_COMMIT",
