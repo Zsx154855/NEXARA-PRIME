@@ -1,0 +1,19 @@
+{
+  "allowed_files": [
+    ".nexara/PROGRAM_STATE.json",
+    "contracts/kma/KMA_PHASE2_IMPLEMENTATION_SCOPE_V1.json",
+    "evidence/kma/kma_phase2_post_parent_merge_state_sync_evidence.json",
+    "evidence/kma/kma_phase2_post_parent_merge_state_sync_receipt.json"
+  ],
+  "amendment_id": "KMA_PHASE2_POST_PARENT_MERGE_STATE_SYNC_AMENDMENT_V1",
+  "corrected_program_state_branch": "main",
+  "evidence_id": "kma_phase2_post_parent_merge_state_sync_v1",
+  "evidence_type": "post_parent_merge_state_sync",
+  "generated_at": "2026-07-26T09:00:54Z",
+  "merge_parent_sha": "c95ff62b40bdaeb5abeaacff202f5ad94326c8a5",
+  "original_program_state_branch": "feat/brand-baihan",
+  "pr23_merge_sha": "c95ff62b40bdaeb5abeaacff202f5ad94326c8a5",
+  "previous_head_sha": "ca08abad58e1f0b770094e36181003c00a38004c",
+  "run_238_classification": "PRE_EXISTING_POST_MERGE_STALE_BRANCH",
+  "run_238_failure_sig": "PROGRAM_STATE.branch=feat/brand-baihan vs git=main"
+}
