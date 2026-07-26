@@ -40,11 +40,11 @@ class TestCapabilityPersistence:
         assert len(history) >= 1
 
     def test_record_history_idempotent(self, registry):
-        r1 = registry.record_history(
+        _r1 = registry.record_history(
             capability_id="skill.dup", success=True,
             idempotency_key="dup-key",
         )
-        r2 = registry.record_history(
+        _r2 = registry.record_history(
             capability_id="skill.dup", success=True,
             idempotency_key="dup-key",
         )

@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from .memory import MemoryKernel
-from .models import KnowledgeCommit, MemoryKind, now_iso, new_id
+from .models import KnowledgeCommit, MemoryKind, now_iso
 
 
 class KnowledgeService:

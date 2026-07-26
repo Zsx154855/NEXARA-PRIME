@@ -78,7 +78,7 @@ class TestKnowledgeServiceIntegration:
         from nexara_prime.knowledge import KnowledgeService
         ks = KnowledgeService(runtime.memory)
         ks.start()
-        result = ks.validate_commit(
+        _ = ks.validate_commit(
             type("KC", (), {
                 "kind": MemoryKind.FACT,
                 "key": "k1",

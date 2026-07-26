@@ -5,22 +5,18 @@ Validates all 4 Pydantic models against their JSON schemas.
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from nexara_prime.models import (
     CapabilityHistory,
-    EvidenceArtifact,
     KnowledgeCommit,
     KnowledgeObject,
     KnowledgeRecall,
     KnowledgeRelation,
     MemoryKind,
     MemoryRecord,
-    new_id,
-    now_iso,
 )
 
 

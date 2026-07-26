@@ -8,6 +8,8 @@ from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from .model_router import CircuitBreaker
+
 
 class ProviderError(RuntimeError):
     """A provider failure that is safe to retry or route to a fallback."""
@@ -187,7 +189,6 @@ class FallbackProvider:
         raise ProviderUnavailable("all_providers_failed:" + "|".join(errors))
 
 
-from .model_router import CircuitBreaker
 
 
 class ModelGateway:

@@ -155,57 +155,6 @@ class CapabilityRegistry:
         self._mission_history[capability_id] = []
         return score
 
-    def update_score(
-        self,
-        capability_id: str,
-        mission_success: bool,
-        latency_ms: float,
-        token_cost: float,
-        evidence_ids: list[str] | None = None,
-    ) -> CapabilityScore | None:
-        """Update capability score from real mission outcomes."""
-        score = self._scores.get(capability_id)
-        if score is None:
-            return None
-
-        evidence_ids = evidence_ids or []
-
-        outcome: dict[str, Any] = {
-            "success": mission_success,
-            "latency_ms": latency_ms,
-            "token_cost": token_cost,
-            "evidence_ids": evidence_ids,
-            "timestamp": now_iso(),
-        }
-        self._mission_history.setdefault(capability_id, []).append(outcome)
-
-        history = self._mission_history[capability_id]
-        total_missions = len(history)
-        successes = sum(1 for o in history if o["success"])
-        score.historical_success_rate = successes / total_missions if total_missions > 0 else 0.0
-
-        recent = history[-10:]
-        recent_failures = sum(1 for o in recent if not o["success"])
-        score.recent_failure_rate = recent_failures / len(recent) if recent else 0.0
-
-        all_latencies = [o["latency_ms"] for o in history]
-        score.average_latency_ms = sum(all_latencies) / len(all_latencies) if all_latencies else 0.0
-
-        all_costs = [o["token_cost"] for o in history]
-        score.average_token_cost = sum(all_costs) / len(all_costs) if all_costs else 0.0
-
-        new_evidence = [eid for eid in evidence_ids if eid not in score.source_evidence]
-        score.evidence_count += len(new_evidence)
-        score.source_evidence.extend(new_evidence)
-
-        if score.evidence_count >= 3:
-            score.confidence = min(score.evidence_count / 10.0, 1.0)
-        else:
-            score.confidence = max(0.3, score.evidence_count * 0.1)
-
-        score.last_updated = now_iso()
-        return score
-
     def _apply_decay(self, score: CapabilityScore) -> None:
         try:
             last = datetime.fromisoformat(score.last_updated)

@@ -1,16 +1,11 @@
 """KMA Phase 2 — CircuitBreaker Convergence Tests."""
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
-import pytest
-
 from nexara_prime.model_gateway import (
     MockProvider,
     ModelGateway,
 )
-from nexara_prime.model_router import CircuitBreaker, ModelRouter
+from nexara_prime.model_router import CircuitBreaker
 
 
 class TestCircuitBreakerConsolidation:

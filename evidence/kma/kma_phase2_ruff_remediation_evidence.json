@@ -1,0 +1,170 @@
+{
+  "amendment_id": "KMA_PHASE2_RUFF_SCOPE_AMENDMENT_V1",
+  "authority_checks": {
+    "circuit_breaker_single_authority": true,
+    "circular_import_free": true,
+    "knowledge_imports_ok": true,
+    "update_score_definitions": 1
+  },
+  "base_sha": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "changes": {
+    "changed_files": [
+      "src/nexara_prime/capabilities.py",
+      "src/nexara_prime/knowledge.py",
+      "src/nexara_prime/model_gateway.py",
+      "tests/test_kma_capability_persistence.py",
+      "tests/test_kma_circuitbreaker.py",
+      "tests/test_kma_runtime_integration.py",
+      "tests/test_kma_types.py"
+    ],
+    "deletions": 66,
+    "files_modified": 7,
+    "insertions": 7
+  },
+  "evidence_id": "kma_phase2_ruff_remediation_v1",
+  "evidence_type": "kma_ruff_remediation",
+  "generated_at": "2026-07-26T07:12:18Z",
+  "governance": {
+    "diff_check": "PASS",
+    "nsec_drift": "PASS",
+    "nsec_validate": "PASS",
+    "secret_scan": "CLEAN"
+  },
+  "parent_head_sha": "1704e235d0fbd784f1da46e24c3d8fffc0fb692d",
+  "pr_status": {
+    "base": "feat/brand-baihan",
+    "base_sha": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+    "files": 40,
+    "is_draft": true,
+    "pr_number": 24
+  },
+  "ruff": {
+    "errors_after": 0,
+    "errors_before": 14,
+    "original_signatures": [
+      {
+        "col": 9,
+        "file": "src/nexara_prime/capabilities.py",
+        "line": 375,
+        "msg": "Redefinition of unused update_score",
+        "rule": "F811"
+      },
+      {
+        "col": 59,
+        "file": "src/nexara_prime/knowledge.py",
+        "line": 11,
+        "msg": ".models.new_id imported but unused",
+        "rule": "F401"
+      },
+      {
+        "col": 1,
+        "file": "src/nexara_prime/model_gateway.py",
+        "line": 190,
+        "msg": "Module level import not at top of file",
+        "rule": "E402"
+      },
+      {
+        "col": 9,
+        "file": "tests/test_kma_capability_persistence.py",
+        "line": 43,
+        "msg": "Local variable r1 assigned but never used",
+        "rule": "F841"
+      },
+      {
+        "col": 9,
+        "file": "tests/test_kma_capability_persistence.py",
+        "line": 47,
+        "msg": "Local variable r2 assigned but never used",
+        "rule": "F841"
+      },
+      {
+        "col": 8,
+        "file": "tests/test_kma_circuitbreaker.py",
+        "line": 4,
+        "msg": "tempfile imported but unused",
+        "rule": "F401"
+      },
+      {
+        "col": 21,
+        "file": "tests/test_kma_circuitbreaker.py",
+        "line": 5,
+        "msg": "pathlib.Path imported but unused",
+        "rule": "F401"
+      },
+      {
+        "col": 8,
+        "file": "tests/test_kma_circuitbreaker.py",
+        "line": 7,
+        "msg": "pytest imported but unused",
+        "rule": "F401"
+      },
+      {
+        "col": 55,
+        "file": "tests/test_kma_circuitbreaker.py",
+        "line": 13,
+        "msg": "nexara_prime.model_router.ModelRouter imported but unused",
+        "rule": "F401"
+      },
+      {
+        "col": 9,
+        "file": "tests/test_kma_runtime_integration.py",
+        "line": 81,
+        "msg": "Local variable result assigned but never used",
+        "rule": "F841"
+      },
+      {
+        "col": 8,
+        "file": "tests/test_kma_types.py",
+        "line": 8,
+        "msg": "tempfile imported but unused",
+        "rule": "F401"
+      },
+      {
+        "col": 5,
+        "file": "tests/test_kma_types.py",
+        "line": 15,
+        "msg": "EvidenceArtifact imported but unused",
+        "rule": "F401"
+      },
+      {
+        "col": 5,
+        "file": "tests/test_kma_types.py",
+        "line": 22,
+        "msg": "new_id imported but unused",
+        "rule": "F401"
+      },
+      {
+        "col": 5,
+        "file": "tests/test_kma_types.py",
+        "line": 23,
+        "msg": "now_iso imported but unused",
+        "rule": "F401"
+      }
+    ],
+    "signatures_hash": "2d00de5026883a3a",
+    "version": "ruff 0.15.22"
+  },
+  "stale_run": {
+    "base_in_merge": "dd0505ac53721d8e2e6150e47936119fe16734d6",
+    "bound_to_current_base": false,
+    "checkout_sha": "394d0b6ab86621941ec80d3f4799b3b173f4db70",
+    "classification": "old-base merge, not authoritative for current PR",
+    "run_id": 30188952578,
+    "run_number": 235,
+    "stale_base_run": true
+  },
+  "tests": {
+    "full_regression_fail": 14,
+    "full_regression_pass": 1166,
+    "full_regression_total": 1180,
+    "kma_fail": 0,
+    "kma_pass": 93,
+    "kma_tests": 93,
+    "new_test_regressions": 0,
+    "pre_existing_failures": [
+      "test_wire_truth_enums.py (9: nexara_sdk not installed in local env)",
+      "test_receipt_self_reference.py (5: pre-existing receipt issues on e38aae4)"
+    ]
+  },
+  "workflow_status": "unchanged (.github/workflows/ci.yml)"
+}
