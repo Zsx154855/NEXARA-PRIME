@@ -165,8 +165,8 @@ class ModelRouter:
         router.track_result(decision.selected_provider, success=True, ...)
     """
 
-    def __init__(self, circuit_breaker_threshold: int = 3, circuit_breaker_timeout_s: int = 60) -> None:
-        self.breaker = CircuitBreaker(
+    def __init__(self, circuit_breaker_threshold: int = 3, circuit_breaker_timeout_s: int = 60, breaker: CircuitBreaker | None = None) -> None:
+        self.breaker = breaker if breaker is not None else CircuitBreaker(
             threshold=circuit_breaker_threshold,
             timeout_s=circuit_breaker_timeout_s,
         )

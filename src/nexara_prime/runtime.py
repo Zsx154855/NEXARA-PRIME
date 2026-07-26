@@ -152,13 +152,20 @@ _adaptive_router = None
 _adaptive_budgets = None
 _adaptive_escalation = None
 _adaptive_tokens_v2 = None
+# Shared CircuitBreaker — single authority for ModelGateway + ModelRouter
+_shared_breaker = None
 
 def _ensure_adaptive_imports():
     global _ADAPTIVE_IMPORTS_DONE, _adaptive_triage, _adaptive_scheduler_v2
     global _adaptive_capabilities_v2, _adaptive_router, _adaptive_budgets
-    global _adaptive_escalation, _adaptive_tokens_v2
+    global _adaptive_escalation, _adaptive_tokens_v2, _shared_breaker
     if _ADAPTIVE_IMPORTS_DONE:
         return
+    try:
+        from .model_router import CircuitBreaker
+        _shared_breaker = CircuitBreaker()
+    except ImportError:
+        pass
     try:
         from .mission_triage import MissionTriageEngine
         _adaptive_triage = MissionTriageEngine()
@@ -176,7 +183,7 @@ def _ensure_adaptive_imports():
         _adaptive_capabilities_v2 = None
     try:
         from .model_router import ModelRouter
-        _adaptive_router = ModelRouter()
+        _adaptive_router = ModelRouter(breaker=_shared_breaker)
     except ImportError:
         _adaptive_router = None
     try:
@@ -308,7 +315,7 @@ class NexaraRuntime:
             self._provider_unavailable = True
             return ModelGateway(UnavailableProvider())
         self._provider_unavailable = False
-        return ModelGateway(provider, fallback=None)
+        return ModelGateway(provider, fallback=None, breaker=_shared_breaker)
 
     @staticmethod
     def _resolve_api_key(secret_name: str, env_var: str) -> str | None:
