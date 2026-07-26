@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/kma/knowledge_recall_schema_v1.json",
+  "title": "Knowledge Recall Schema V1",
+  "description": "Canonical schema for Knowledge Recall — the input/output contract for querying the Knowledge-Memory Authority system.",
+  "type": "object",
+  "required": [
+    "query"
+  ],
+  "properties": {
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Natural language query string."
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["working", "episodic", "semantic", "procedural"]
+      },
+      "description": "Optional memory layer filter. Omit to search all layers."
+    },
+    "top_k": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 10,
+      "description": "Maximum number of results to return."
+    },
+    "mission_id": {
+      "type": "string",
+      "description": "Optional mission scope. When provided, only results within this mission are returned."
+    },
+    "min_confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.3,
+      "description": "Minimum confidence threshold for results."
+    },
+    "include_candidates": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether to include candidate (uncommitted) memory records in results."
+    },
+    "include_superseded": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether to include superseded records in results."
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "Distributed trace identifier for this recall request."
+    }
+  }
+}

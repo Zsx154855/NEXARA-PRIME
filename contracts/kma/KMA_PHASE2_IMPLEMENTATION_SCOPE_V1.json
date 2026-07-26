@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/kma/phase2_implementation_scope_v1.json",
+  "title": "KMA Phase 2 Implementation Scope V1",
+  "description": "Precise file-level allowlist and denylist for KMA Phase 2 implementation. Allowed files must be modified only for the stated purpose. Prohibited files must not be touched.",
+  "frozen_at": "2026-07-26",
+  "evidence_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "branch": "work/nexara-knowledge-memory-authority-convergence-v1",
+  "allowlist": [
+    {
+      "file": "src/nexara_prime/chief_brain_kernel.py",
+      "purpose": "Wire into NexaraRuntime mission lifecycle; add recall() method delegating to MemoryLayerManager",
+      "blocks": ["B1: CBK no Recall Runtime", "G1: ChiefBrainKernel Not Wired"],
+      "expected_test": "tests/test_kma_cbk_recall.py",
+      "rollback": "Remove recall() method; remove CBK wiring from runtime.py"
+    },
+    {
+      "file": "src/nexara_prime/runtime.py",
+      "purpose": "Integrate ChiefBrainKernel.submit(); consolidate CapabilityRegistry+TokenCompiler instances; delegate receipt to EvidenceStore.receipt_status(); replace EvidenceStore bypass calls",
+      "blocks": ["B2: Evidence Raw Store Bypass", "C1: Receipt Dual Judgment", "D1+D2: Duplicate Instances", "G1: CBK Not Wired"],
+      "expected_test": "tests/test_kma_runtime_integration.py",
+      "rollback": "Remove CBK wiring; restore dual instances; restore self-judged receipt"
+    },
+    {
+      "file": "src/nexara_prime/evidence.py",
+      "purpose": "Add get_by_id(), get_by_idempotency_key(), get_envelope(), receipt_status(), find_by_idempotency() public API methods",
+      "blocks": ["B2: Evidence Raw Store Bypass", "C1: Receipt Dual Judgment"],
+      "expected_test": "tests/test_kma_evidence_api.py",
+      "rollback": "Remove new methods; no existing callers modified"
+    },
+    {
+      "file": "src/nexara_prime/memory.py",
+      "purpose": "Add idempotency_key parameter to write() and propose(); replace SQLiteStore bypass calls with EvidenceStore.get_envelope(); add receipt_id enforcement",
+      "blocks": ["B2: Evidence Raw Store Bypass", "G4: Memory Lacks Receipt Association", "G5: Write Not Idempotent"],
+      "expected_test": "tests/test_kma_memory_idempotency.py",
+      "rollback": "Remove idempotency_key param (backward compat); restore bypass calls"
+    },
+    {
+      "file": "src/nexara_prime/models.py",
+      "purpose": "Add KnowledgeObject, KnowledgeRelation, KnowledgeRecall, KnowledgeCommit Pydantic models; add CapabilityHistory model; add receipt_id field to MemoryRecord",
+      "blocks": ["B3: Capability History In-Memory", "B4: KMA Schemas No Types", "G2: No Canonical Receipt Model"],
+      "expected_test": "tests/test_kma_types.py",
+      "rollback": "Remove new types; remove receipt_id from MemoryRecord"
+    },
+    {
+      "file": "src/nexara_prime/capabilities.py",
+      "purpose": "Add SQLiteStore dependency; persist capability_history records; add _recompute_scores(); add get_history() and get_aggregates(); use single instance",
+      "blocks": ["B3: Capability History In-Memory", "D1: Duplicate CapabilityRegistry Instances"],
+      "expected_test": "tests/test_kma_capability_persistence.py",
+      "rollback": "Remove SQLiteStore dependency; revert to in-memory-only"
+    },
+    {
+      "file": "src/nexara_prime/knowledge.py",
+      "purpose": "Add supersession detection to query(); add KnowledgeCommit validation helper",
+      "blocks": ["B4: KMA Schemas No Types", "G6: Supersession Detection Missing"],
+      "expected_test": "tests/test_kma_knowledge.py",
+      "rollback": "Remove supersession detection (additive change)"
+    },
+    {
+      "file": "src/nexara_prime/model_gateway.py",
+      "purpose": "Remove local CircuitBreaker class (lines 63-91); accept optional breaker from constructor parameter",
+      "blocks": ["B5: CircuitBreaker Triple Implementation"],
+      "expected_test": "tests/test_kma_circuitbreaker.py",
+      "rollback": "Restore local CircuitBreaker class"
+    },
+    {
+      "file": "src/nexara_prime/model_router.py",
+      "purpose": "Expose breaker property for injection into ModelGateway; ensure single breaker instance per runtime",
+      "blocks": ["B5: CircuitBreaker Triple Implementation"],
+      "expected_test": "tests/test_kma_circuitbreaker.py",
+      "rollback": "Remove exposed breaker property"
+    },
+    {
+      "file": "src/nexara_prime/cli.py",
+      "purpose": "Replace all references to deprecated PROJECT_STATE.json with PROGRAM_STATE.json",
+      "blocks": ["A1: cli.py Reads Deprecated PROJECT_STATE"],
+      "expected_test": "Existing CLI tests",
+      "rollback": "Revert to PROJECT_STATE references"
+    },
+    {
+      "file": "tests/test_kma_cbk_recall.py",
+      "purpose": "NEW: Test ChiefBrainKernel recall delegation and admission gate wiring",
+      "blocks": ["B1"],
+      "expected_test": "self-testing",
+      "rollback": "Delete file"
+    },
+    {
+      "file": "tests/test_kma_runtime_integration.py",
+      "purpose": "NEW: Test runtime integration with CBK, consolidated instances, EvidenceStore delegation",
+      "blocks": ["B2", "C1", "D1", "D2", "G1"],
+      "expected_test": "self-testing",
+      "rollback": "Delete file"
+    },
+    {
+      "file": "tests/test_kma_evidence_api.py",
+      "purpose": "NEW: Test EvidenceStore extended API (get_by_id, receipt_status, etc.)",
+      "blocks": ["B2", "C1"],
+      "expected_test": "self-testing",
+      "rollback": "Delete file"
+    },
+    {
+      "file": "tests/test_kma_memory_idempotency.py",
+      "purpose": "NEW: Test MemoryKernel idempotent writes, receipt linking",
+      "blocks": ["G4", "G5"],
+      "expected_test": "self-testing",
+      "rollback": "Delete file"
+    },
+    {
+      "file": "tests/test_kma_types.py",
+      "purpose": "NEW: Test KMA 4 Pydantic types against JSON schemas",
+      "blocks": ["B4"],
+      "expected_test": "self-testing",
+      "rollback": "Delete file"
+    },
+    {
+      "file": "tests/test_kma_capability_persistence.py",
+      "purpose": "NEW: Test CapabilityRegistry persistence and restart recovery",
+      "blocks": ["B3", "D1"],
+      "expected_test": "self-testing",
+      "rollback": "Delete file"
+    },
+    {
+      "file": "tests/test_kma_knowledge.py",
+      "purpose": "NEW: Test KnowledgeService supersession detection",
+      "blocks": ["B4", "G6"],
+      "expected_test": "self-testing",
+      "rollback": "Delete file"
+    },
+    {
+      "file": "tests/test_kma_circuitbreaker.py",
+      "purpose": "NEW: Test consolidated CircuitBreaker, ModelGateway integration",
+      "blocks": ["B5"],
+      "expected_test": "self-testing",
+      "rollback": "Delete file"
+    },
+    {
+      "file": "schemas/evidence_artifact.json",
+      "purpose": "Sync with EvidenceArtifact Pydantic model (add missing fields: task_id, tool_invocation_id, actor, mime_type, source, verification_status, parent_evidence, idempotency_key, source_event_id)",
+      "blocks": ["C2: JSON Schema Outdated"],
+      "expected_test": "Schema validation against EvidenceArtifact.model_json_schema()",
+      "rollback": "Revert schema"
+    },
+    {
+      "file": "contracts/kma/",
+      "purpose": "Phase 1.5 architecture convergence deliverables (read-only reference)",
+      "blocks": [],
+      "expected_test": "N/A",
+      "rollback": "N/A"
+    },
+    {
+      "file": "reports/kma/",
+      "purpose": "Phase 2 implementation reports",
+      "blocks": [],
+      "expected_test": "N/A",
+      "rollback": "N/A"
+    },
+    {
+      "file": "evidence/kma/",
+      "purpose": "Phase 2 implementation evidence",
+      "blocks": [],
+      "expected_test": "N/A",
+      "rollback": "N/A"
+    }
+  ],
+  "denylist": [
+    ".nexara/contracts/",
+    ".nexara/evidence/",
+    ".nexara/receipts/",
+    "docs/",
+    "governance/",
+    "experience/",
+    "platform/",
+    "scripts/",
+    "src/nexara_prime/db.py",
+    "src/nexara_prime/orchestration.py",
+    "src/nexara_prime/api.py",
+    "src/nexara_prime/governance.py",
+    "src/nexara_prime/connectors/",
+    "src/nexara_prime/product_reality/",
+    "src/nexara_prime/secrets/",
+    "src/nexara_prime/delivery_controller/",
+    "ui/",
+    "extensions/",
+    "workspace/",
+    "config/",
+    "skills/"
+  ],
+  "total_allowed_files": 22,
+  "new_files": 11,
+  "modified_existing_files": 11
+}

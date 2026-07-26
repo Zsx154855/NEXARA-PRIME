@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "evidence_id": "evidence_kma_phase1_asset_inventory",
+  "mission_id": "kma-phase1",
+  "kind": "asset_inventory",
+  "title": "KMA Phase 1 Asset Inventory Evidence",
+  "content": "Complete census evidence for NEXARA Knowledge-Memory Authority Phase 1 read-only asset inventory. All data verified against repository at HEAD e38aae49dc545162e3cc652e554ea26c0b8278e5 on branch work/nexara-knowledge-memory-authority-convergence-v1.",
+  "source": "kma_phase1_census",
+  "actor": "claude",
+  "verification_status": "verified",
+  "git_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "git_branch": "work/nexara-knowledge-memory-authority-convergence-v1",
+  "timestamp": "2026-07-26T00:00:00Z",
+  "findings": {
+    "phase_0": {
+      "git_root": "/Users/agentos/Worktrees/NEXARA-PRIME-kma-v1",
+      "branch": "work/nexara-knowledge-memory-authority-convergence-v1",
+      "head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+      "status": "CLEAN",
+      "worktree": true
+    },
+    "phase_1a_obsidian": {
+      "total_md_files": 55,
+      "dirs_with_md": 20,
+      "frontmatter_coverage_pct": 94.5,
+      "files_without_frontmatter": 3,
+      "wiki_links": 48,
+      "broken_links": 0,
+      "orphan_docs": 15,
+      "duplicate_titles": 1
+    },
+    "phase_1b_memory": {
+      "status": "IMPLEMENTED",
+      "lines": 634,
+      "architecture": "4-layer (Working, Episodic, Semantic, Procedural)",
+      "persistence": "SQLite",
+      "gaps": 9,
+      "receipt_association": false,
+      "write_idempotency": "PARTIAL",
+      "expiry_support": false,
+      "version_support": false,
+      "conflict_detection": true
+    },
+    "phase_1c_evidence_receipt": {
+      "evidence_status": "IMPLEMENTED",
+      "receipt_status": "PARTIAL",
+      "multiple_evidence_stores": true,
+      "multiple_receipt_stores": true,
+      "file_based_disconnected": true,
+      "end_to_end_verifiable": "PARTIAL"
+    },
+    "phase_1d_capability": {
+      "status": "IMPLEMENTED",
+      "registry_version": "CONVERGED_V1_V2",
+      "code_fields": 7,
+      "contract_fields": 18,
+      "contract_only_fields": 11,
+      "instance_duplication": true,
+      "history_tracking": "PARTIAL"
+    },
+    "phase_1e_chief_brain": {
+      "status": "PARTIAL",
+      "class_exists": true,
+      "wired_to_runtime": false,
+      "supersession_detection": "MISSING",
+      "intent_normalization": "PARTIAL",
+      "planning": "PARTIAL"
+    },
+    "phase_1f_duplicates": {
+      "duplicate_system_count": 3,
+      "authority_conflict_count": 3,
+      "duplicates": [
+        "CapabilityRegistry: 2 instances in runtime.py",
+        "TokenCompiler: 2 instances in runtime.py",
+        "Governance: PolicyService creates separate instances"
+      ],
+      "conflicts": [
+        "cli.py reads deprecated PROJECT_STATE.json",
+        "Deprecated files coexist with active ones",
+        "Legacy .bak files in evidence directory"
+      ]
+    }
+  },
+  "files_created": [
+    "reports/kma/KMA_PHASE1_ASSET_INVENTORY.md",
+    "reports/kma/KMA_PHASE1_GAP_AND_DUPLICATION_REPORT.md",
+    "reports/kma/KMA_PHASE1_AUTHORITY_MAP.md",
+    "contracts/kma/KNOWLEDGE_MEMORY_AUTHORITY_CONTRACT_V1.md",
+    "contracts/kma/KNOWLEDGE_OBJECT_SCHEMA_V1.json",
+    "contracts/kma/KNOWLEDGE_RELATION_SCHEMA_V1.json",
+    "contracts/kma/KNOWLEDGE_RECALL_SCHEMA_V1.json",
+    "contracts/kma/KNOWLEDGE_COMMIT_SCHEMA_V1.json",
+    "evidence/kma/kma_phase1_asset_inventory_evidence.json",
+    "evidence/kma/kma_phase1_contract_freeze_receipt.json"
+  ],
+  "files_modified_existing": []
+}

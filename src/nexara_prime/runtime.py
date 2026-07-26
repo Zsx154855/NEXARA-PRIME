@@ -821,16 +821,14 @@ class NexaraRuntime:
     def _get_evidence_by_idempotency(
         self, key: str, mission_id: str
     ) -> dict[str, Any] | None:
-        """Return an integrity-checked evidence projection for one replay key."""
-        raw_evidence = self.store.find_record("evidence", "idempotency_key", key)
-        evidence_envelope = self.store.find_record_envelope("evidence", "idempotency_key", key)
-        if raw_evidence and not evidence_envelope:
-            raise ValueError("evidence_integrity_invalid")
-        if evidence_envelope:
-            if evidence_envelope.get("mission_id") != mission_id:
-                raise ValueError("evidence_mission_mismatch")
-            return evidence_envelope["payload"]
-        return None
+        """Return an integrity-checked evidence projection for one replay key.
+
+        Phase 2: delegates to EvidenceStore.find_by_idempotency() — no raw store access.
+        """
+        result = self.evidence.find_by_idempotency(key)
+        if result and result.get("mission_id") != mission_id:
+            raise ValueError("evidence_mission_mismatch")
+        return result
 
     def pause(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)
@@ -873,25 +871,9 @@ class NexaraRuntime:
         mission_recovery = mission.result.get("recovery", {}) if isinstance(mission.result, dict) else {}
         mission_unavailable = mission_recovery.get("provider_unavailable", False)
         provider_unavailable = runtime_unavailable or mission_unavailable
-        # A report receipt must bind to this mission's file_write_report tool;
-        # an unrelated code execution receipt cannot satisfy completion truth.
-        tool_by_id = {
-            item.get("invocation_id"): item
-            for item in self.tools.list_invocations(mission_id)
-        }
-        expected_receipt_id = mission.result.get("receipt_evidence_id")
-        receipt_present = any(
-            evidence.get("kind") == "execution_receipt"
-            and (
-                not expected_receipt_id
-                or evidence.get("evidence_id") == expected_receipt_id
-            )
-            and tool_by_id.get(evidence.get("tool_invocation_id"), {}).get(
-                "tool_name"
-            )
-            == "file_write_report"
-            for evidence in evidence_list
-        )
+        # Receipt status: delegate to EvidenceStore.receipt_status() — single authority.
+        # No independent receipt_present judgment (KMA_INVARIANT_10).
+        receipt = self.evidence.receipt_status(mission_id)
         return {
             "mission_id": mission.mission_id,
             "state": mission.state, "current_state": mission.state,
@@ -906,7 +888,7 @@ class NexaraRuntime:
             "approval_status": approval_status, "pending_action": mission.pending_approval_id or None,
             "evidence_count": len(evidence_list),
             "latest_evidence": evidence_list[-1] if evidence_list else None,
-            "receipt_status": "present" if receipt_present else "missing",
+            "receipt_status": receipt.get("status", "missing"),
             "memory_patch_status": "patched" if mission.result.get("memory_patch_id") else "not_patched",
             "evaluation_status": "passed" if mission.result.get("evaluation_passed") else ("failed" if "evaluation_id" in (mission.result or {}) else "not_evaluated"),
             "retry_count": mission.result.get("retry_count", 0) if isinstance(mission.result, dict) else 0,

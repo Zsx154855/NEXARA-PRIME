@@ -650,3 +650,178 @@ class EvidenceStore:
 
     def list(self, mission_id: str | None = None) -> list[dict]:
         return self.store.list_records("evidence", mission_id)
+
+    # ── Phase 2 Public API (KMA Block B2 resolution) ──
+
+    def get_by_id(self, evidence_id: str) -> EvidenceArtifact:
+        """Return validated EvidenceArtifact by ID. Raises on missing/corrupt."""
+        envelope = self.store.get_record_envelope(evidence_id)
+        if not envelope or envelope.get("record_type") != "evidence":
+            raise KeyError(f"evidence_not_found:{evidence_id}")
+        if envelope.get("record_id") != evidence_id:
+            raise ValueError("evidence_idempotency_record_invalid")
+        payload = envelope["payload"]
+        if payload.get("evidence_id") != evidence_id:
+            raise ValueError("evidence_idempotency_record_invalid")
+        content = str(payload.get("content", ""))
+        expected_digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        if payload.get("sha256") != expected_digest:
+            raise ValueError("evidence_integrity_invalid")
+        if payload.get("envelope_sha256") != self._envelope_sha256(payload):
+            raise ValueError("evidence_integrity_invalid")
+        return EvidenceArtifact.model_validate(self._artifact_payload(payload))
+
+    def get_by_idempotency_key(self, key: str) -> EvidenceArtifact | None:
+        """Return evidence by idempotency key.
+
+        Uses the deterministic evidence_id derived from the key, then
+        loads the record if it exists. Returns None if not found.
+        """
+        if not key:
+            return None
+        evidence_id = self._idempotent_evidence_id(key)
+        envelope = self.store.get_record_envelope(evidence_id)
+        if not envelope or envelope.get("record_type") != "evidence":
+            return None
+        payload = envelope["payload"]
+        if payload.get("evidence_id") != evidence_id:
+            return None
+        return EvidenceArtifact.model_validate(self._artifact_payload(payload))
+
+    def get_envelope(self, evidence_id: str) -> dict[str, Any] | None:
+        """Return integrity envelope for an evidence record.
+
+        Public wrapper around store.get_record_envelope(). Returns None if
+        not found. Replaces all raw store.get_record_envelope calls for
+        evidence-type records in non-EvidenceStore modules.
+        """
+        envelope = self.store.get_record_envelope(evidence_id)
+        if not envelope or envelope.get("record_type") != "evidence":
+            return None
+        return dict(envelope)
+
+    def receipt_status(
+        self,
+        mission_id: str,
+        *,
+        tool_names: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Single authority for receipt presence judgment.
+
+        Returns structured status: {status, receipt_id, verifiable, gaps,
+        total_invocations, corrupt_tool_records}.
+
+        Only tool invocations whose tool_name is in `tool_names` count
+        toward receipt presence. Default: ["file_write_report",
+        "write_workspace_file"]. Code execution receipts do NOT satisfy
+        report receipt requirements.
+
+        Prohibits any other code path from independently judging receipt
+        presence.
+        """
+        if tool_names is None:
+            tool_names = ["file_write_report", "write_workspace_file"]
+
+        chain = self.verify_receipt_chain(mission_id)
+        receipt_ids: list[str] = []
+
+        # Filter chain to only relevant tool names
+        relevant_links = [
+            link for link in chain.get("chain", [])
+            if link.get("tool_name") in tool_names
+        ]
+        for link in relevant_links:
+            rid = link.get("receipt_evidence_id")
+            if rid:
+                receipt_ids.append(str(rid))
+
+        verifiable_count = sum(
+            1 for link in relevant_links
+            if link.get("receipt_verifiable")
+        )
+        total_relevant = len(relevant_links)
+        gaps = sum(
+            1 for link in relevant_links
+            if not link.get("has_receipt")
+        )
+
+        if total_relevant == 0:
+            status = "missing"
+        elif gaps == 0 and all(link.get("receipt_verifiable") for link in relevant_links if link.get("has_receipt")):
+            status = "present"
+        elif gaps > 0:
+            status = "missing"
+        else:
+            status = "unverifiable"
+
+        return {
+            "status": status,
+            "chain_intact": chain.get("chain_intact", False),
+            "receipt_ids": receipt_ids,
+            "verifiable_count": verifiable_count,
+            "total_invocations": chain.get("total_invocations", 0),
+            "chain_gaps": chain.get("chain_gaps", 0),
+            "unverifiable_receipts": chain.get("unverifiable_receipts", 0),
+            "corrupt_tool_records": chain.get("corrupt_tool_records", 0),
+            "fail_closed_violations": chain.get("fail_closed_violations", 0),
+        }
+
+    def find_by_idempotency(self, key: str) -> dict[str, Any] | None:
+        """Public idempotency-key lookup replacing runtime bypass.
+
+        Returns the evidence payload dict or None. Uses internal
+        find_record_envelope with integrity check.
+        """
+        if not key:
+            return None
+        raw_evidence = self.store.find_record(
+            "evidence", "idempotency_key", key
+        )
+        envelope = self.store.find_record_envelope(
+            "evidence", "idempotency_key", key
+        )
+        if raw_evidence and not envelope:
+            raise ValueError("evidence_integrity_invalid")
+        if not envelope:
+            return None
+        if envelope.get("record_type") != "evidence":
+            return None
+        return dict(envelope["payload"])
+
+    def verify_artifact(self, evidence_id: str) -> EvidenceArtifact:
+        """Single public entry for evidence integrity verification.
+
+        Unifies ID validation, envelope integrity, content hash, and
+        origin projection checks. Returns the validated EvidenceArtifact.
+        Raises on any integrity failure.
+
+        Callers (Memory, Runtime, Brain, Tools) MUST use this instead of
+        direct store access for evidence validation.
+        """
+        envelope = self.store.get_record_envelope(evidence_id)
+        if not envelope or envelope.get("record_type") != "evidence":
+            raise KeyError(f"evidence_not_found:{evidence_id}")
+        if envelope.get("record_id") != evidence_id:
+            raise ValueError("evidence_idempotency_record_invalid")
+
+        payload = envelope["payload"]
+        if payload.get("evidence_id") != evidence_id:
+            raise ValueError("evidence_idempotency_record_invalid")
+        if payload.get("mission_id") != envelope.get("mission_id"):
+            raise ValueError("evidence_idempotency_record_invalid")
+
+        # Content integrity
+        content = str(payload.get("content", ""))
+        expected_digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        if payload.get("sha256") != expected_digest:
+            raise ValueError("evidence_integrity_invalid")
+
+        # Envelope integrity
+        if payload.get("envelope_sha256") != self._envelope_sha256(payload):
+            raise ValueError("evidence_integrity_invalid")
+
+        # Origin projection must be valid (catches legacy corruption)
+        if not self._origin_is_valid(envelope, payload):
+            raise ValueError("evidence_integrity_invalid")
+
+        return EvidenceArtifact.model_validate(self._artifact_payload(payload))

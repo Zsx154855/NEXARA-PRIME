@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "kma_phase1_contract_freeze",
+  "evidence_refs": [
+    "evidence_kma_phase1_asset_inventory"
+  ],
+  "evidence_subject_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "verdict": "PASS",
+  "generated_at": "2026-07-26T00:00:00Z",
+  "branch": "work/nexara-knowledge-memory-authority-convergence-v1",
+  "worktree_path": "/Users/agentos/Worktrees/NEXARA-PRIME-kma-v1",
+  "prohibited_actions": {
+    "commit": false,
+    "push": false,
+    "merge": false,
+    "tag": false,
+    "release": false,
+    "deploy": false,
+    "delete_obsidian_docs": false,
+    "modify_existing_product_code": false
+  },
+  "phase_1_outcome": {
+    "result": "PASS",
+    "reason": "All 10 deliverables created. Asset inventory complete. Contract unambiguous. Schemas valid. Zero existing files modified. No commits, pushes, or deploys performed."
+  },
+  "contracts_frozen": [
+    "contracts/kma/KNOWLEDGE_MEMORY_AUTHORITY_CONTRACT_V1.md",
+    "contracts/kma/KNOWLEDGE_OBJECT_SCHEMA_V1.json",
+    "contracts/kma/KNOWLEDGE_RELATION_SCHEMA_V1.json",
+    "contracts/kma/KNOWLEDGE_RECALL_SCHEMA_V1.json",
+    "contracts/kma/KNOWLEDGE_COMMIT_SCHEMA_V1.json"
+  ],
+  "validation_results": {
+    "git_diff_check": "PASS",
+    "secret_scan": "PASS",
+    "nsec_validation": "PASS",
+    "json_parse": "ALL_VALID",
+    "markdown_non_empty": "ALL_NON_EMPTY",
+    "no_existing_code_modified": "PASS",
+    "no_second_store_declared": "PASS"
+  },
+  "blocking_issues": [],
+  "phase_2_allowed_scope": [
+    "src/nexara_prime/chief_brain_kernel.py",
+    "src/nexara_prime/runtime.py",
+    "src/nexara_prime/memory.py",
+    "src/nexara_prime/models.py",
+    "src/nexara_prime/knowledge.py",
+    "src/nexara_prime/capabilities.py",
+    "src/nexara_prime/cli.py",
+    "contracts/kma/",
+    "schemas/",
+    "tests/",
+    "reports/kma/",
+    "evidence/kma/"
+  ],
+  "phase_2_prohibited_scope": [
+    ".nexara/contracts/",
+    ".nexara/evidence/",
+    ".nexara/receipts/",
+    "docs/",
+    "governance/",
+    "experience/",
+    "platform/",
+    "scripts/",
+    "* (everything not in allowed scope)"
+  ]
+}

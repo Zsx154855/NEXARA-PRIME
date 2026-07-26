@@ -50,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     evaluation.add_argument("run", nargs="?")
     evaluation.add_argument("--mission-id")
     sub.add_parser("runtime-status")
-    sub.add_parser("status", help="display project state from .nexara/PROJECT_STATE.json")
+    sub.add_parser("status", help="display project state from .nexara/PROGRAM_STATE.json")
     sub.add_parser("doctor", help="run repository health checks")
 
     # secrets
@@ -101,20 +101,33 @@ def _resolve_repo_root() -> Path:
     """Walk up from cwd to find the NEXARA-PRIME repo root (.nexara marker)."""
     candidate = Path.cwd().resolve()
     for _ in range(8):
-        if (candidate / ".nexara" / "PROJECT_STATE.json").exists():
+        if (candidate / ".nexara" / "PROGRAM_STATE.json").exists():
             return candidate
+        if (candidate / ".nexara" / "PROJECT_STATE.json").exists():
+            return candidate  # legacy fallback
         if candidate.parent == candidate:
             break
         candidate = candidate.parent
     return Path.cwd().resolve()
 
 
+def _resolve_state_path(root: Path) -> Path | None:
+    """Return canonical PROGRAM_STATE.json path, falling back to legacy PROJECT_STATE.json."""
+    canonical = root / ".nexara" / "PROGRAM_STATE.json"
+    legacy = root / ".nexara" / "PROJECT_STATE.json"
+    if canonical.exists():
+        return canonical
+    if legacy.exists():
+        return legacy
+    return None
+
+
 def cmd_status() -> int:
     """Render project metadata together with live runtime facts."""
     root = _resolve_repo_root()
-    state_path = root / ".nexara" / "PROJECT_STATE.json"
-    if not state_path.exists():
-        print(f"ERROR: PROJECT_STATE.json not found at {state_path}", file=sys.stderr)
+    state_path = _resolve_state_path(root)
+    if state_path is None:
+        print(f"ERROR: PROGRAM_STATE.json not found at {root / '.nexara'}", file=sys.stderr)
         return 1
     try:
         state = json.loads(state_path.read_text())
@@ -139,7 +152,10 @@ def cmd_status() -> int:
             if missions:
                 latest = missions[-1]
                 latest_mission_id = str(latest.get("mission_id", "unknown"))
-                latest_evidence = len(store.list_records("evidence", latest_mission_id))
+                from .evidence import EvidenceStore
+                from .events import EventBus
+                evidence_store = EvidenceStore(store, EventBus(store))
+                latest_evidence = len(evidence_store.list(latest_mission_id))
             from .security_audit import SecurityAuditLedger
             ok, audit_detail = SecurityAuditLedger(store).verify_with_mission_check(bool(missions))
             audit_status = "PASS" if ok else "FAIL"
@@ -223,9 +239,9 @@ def cmd_doctor() -> int:
     vault = root / "docs"
     check("docs vault exists", vault.is_dir(), str(vault))
 
-    # 5. PROJECT_STATE.json
-    state_path = root / ".nexara" / "PROJECT_STATE.json"
-    state_ok = state_path.exists()
+    # 5. PROGRAM_STATE.json (canonical) / PROJECT_STATE.json (legacy fallback)
+    state_path = _resolve_state_path(root)
+    state_ok = state_path is not None
     check("PROJECT_STATE.json", state_ok, str(state_path))
 
     # 6. src/tests/scripts

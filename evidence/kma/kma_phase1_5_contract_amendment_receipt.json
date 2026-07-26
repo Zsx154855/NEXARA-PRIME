@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "kma_phase1_5_contract_amendment",
+  "evidence_refs": [
+    "evidence_kma_phase1_5_architecture_convergence"
+  ],
+  "evidence_subject_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "verdict": "PASS",
+  "generated_at": "2026-07-26T00:00:00Z",
+  "branch": "work/nexara-knowledge-memory-authority-convergence-v1",
+  "worktree_path": "/Users/agentos/Worktrees/NEXARA-PRIME-kma-v1",
+  "prohibited_actions": {
+    "commit": false,
+    "push": false,
+    "merge": false,
+    "tag": false,
+    "release": false,
+    "deploy": false,
+    "modify_product_code": false
+  },
+  "phase_1_5_outcome": {
+    "result": "PASS",
+    "reason": "All 7 blockers resolved. Architecture frozen. Contract V1.1 amendment created. Phase 2 scope precisely bounded. Zero product code modified."
+  },
+  "blocker_resolution": {
+    "B1_CBK_no_recall": "RESOLVED — inject MemoryLayerManager, add recall() method",
+    "B2_evidence_bypass": "RESOLVED — 5 new EvidenceStore API methods, 6 bypass deletions",
+    "B3_capability_memory_only": "RESOLVED — SQLiteStore persistence, capability_history record type",
+    "B4_kma_no_types": "RESOLVED — 4 Pydantic models added to models.py",
+    "B5_circuitbreaker_triple": "RESOLVED — consolidate model CBs, keep connectors CB",
+    "C1_receipt_dual": "RESOLVED — EvidenceStore.receipt_status() single authority",
+    "C2_evidence_init": "RESOLVED — all access through EvidenceStore public API"
+  },
+  "deliverables_created": [
+    "reports/kma/KMA_PHASE1_5_ARCHITECTURE_CONVERGENCE_REPORT.md",
+    "reports/kma/KMA_PHASE1_5_UNIQUE_AUTHORITY_MAP.md",
+    "contracts/kma/KNOWLEDGE_MEMORY_AUTHORITY_CONTRACT_V1_1_AMENDMENT.md",
+    "contracts/kma/KMA_RUNTIME_TYPE_MAPPING_V1.md",
+    "contracts/kma/KMA_PHASE2_IMPLEMENTATION_SCOPE_V1.json",
+    "evidence/kma/kma_phase1_5_architecture_convergence_evidence.json",
+    "evidence/kma/kma_phase1_5_contract_amendment_receipt.json"
+  ],
+  "phase1_files_preserved": [
+    "reports/kma/KMA_PHASE1_ASSET_INVENTORY.md",
+    "reports/kma/KMA_PHASE1_GAP_AND_DUPLICATION_REPORT.md",
+    "reports/kma/KMA_PHASE1_AUTHORITY_MAP.md",
+    "contracts/kma/KNOWLEDGE_MEMORY_AUTHORITY_CONTRACT_V1.md",
+    "contracts/kma/KNOWLEDGE_OBJECT_SCHEMA_V1.json",
+    "contracts/kma/KNOWLEDGE_RELATION_SCHEMA_V1.json",
+    "contracts/kma/KNOWLEDGE_RECALL_SCHEMA_V1.json",
+    "contracts/kma/KNOWLEDGE_COMMIT_SCHEMA_V1.json",
+    "evidence/kma/kma_phase1_asset_inventory_evidence.json",
+    "evidence/kma/kma_phase1_contract_freeze_receipt.json"
+  ],
+  "validation": {
+    "json_parse": "ALL_VALID",
+    "markdown_non_empty": "ALL_NON_EMPTY",
+    "git_diff_check": "PASS",
+    "secret_scan": "PASS",
+    "nsec_validation": "PASS",
+    "product_code_modified": 0,
+    "no_second_store": true,
+    "no_commit_push": true
+  }
+}

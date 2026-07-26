@@ -12,7 +12,7 @@ This is NOT a second runtime. It is the enforcement layer for:
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from .adaptive_scheduler import AdaptiveMultiAgentScheduler
 from .contract_engine import ContractEngine
@@ -25,8 +25,12 @@ from .kernel_boundary import (
 )
 from .mission_compiler import MissionCompiler
 from .mission_triage import MissionTriageEngine
+from .models import KnowledgeRecall
 from .orchestration import RuntimeOrchestrator
 from .state_machine import MissionStateMachine
+
+if TYPE_CHECKING:
+    from .memory import MemoryLayerManager
 
 
 class ChiefBrainKernel:
@@ -53,6 +57,8 @@ class ChiefBrainKernel:
         scheduler: AdaptiveMultiAgentScheduler,
         policy: PolicyEngine,
         approvals: ApprovalEngine,
+        *,
+        memory_layer_manager: "MemoryLayerManager | None" = None,
     ) -> None:
         self._triage = triage
         self._compiler = compiler
@@ -63,6 +69,7 @@ class ChiefBrainKernel:
         self._policy = policy
         self._approvals = approvals
         self._guard = KernelExecutionGuard()
+        self._memory_layer_manager = memory_layer_manager
 
     # ═══ Admission ═══
 
@@ -196,6 +203,76 @@ class ChiefBrainKernel:
     def guard(self) -> KernelExecutionGuard:
         return self._guard
 
+    # ═══ Recall (Phase 2) ═══
+
+    def recall(
+        self,
+        query: str,
+        *,
+        layers: list[str] | None = None,
+        top_k: int = 10,
+        mission_id: str | None = None,
+        min_confidence: float = 0.3,
+        include_candidates: bool = False,
+        include_superseded: bool = False,
+        trace_id: str = "",
+    ) -> KnowledgeRecall:
+        """Delegate knowledge recall to MemoryLayerManager.
+
+        ChiefBrainKernel does NOT access SQLiteStore directly. All recall
+        flows through the injected MemoryLayerManager. If no manager is
+        configured, returns an empty recall result.
+
+        The returned KnowledgeRecall is an INPUT model (not persisted).
+        Callers should consume the structured recall result for evidence
+        binding and conflict detection.
+        """
+        if self._memory_layer_manager is None:
+            return KnowledgeRecall(
+                query=query,
+                layers=layers,
+                top_k=0,  # type: ignore[call-arg]  # No results when no manager
+                mission_id=mission_id,
+                min_confidence=min_confidence,
+                include_candidates=include_candidates,
+                include_superseded=include_superseded,
+                trace_id=trace_id,
+            )
+
+        results = self._memory_layer_manager.search(
+            query,
+            layers=layers,
+            top_k=top_k,
+            mission_id=mission_id,
+        )
+        # Filter by confidence and candidate/superseded flags
+        filtered = [
+            r for r in results
+            if r.get("score", 0.0) >= min_confidence
+        ]
+        if not include_candidates:
+            filtered = [
+                r for r in filtered
+                if r.get("status") != "candidate"
+            ]
+        if not include_superseded:
+            filtered = [
+                r for r in filtered
+                if r.get("status") != "superseded"
+            ]
+        filtered = filtered[:top_k]
+
+        return KnowledgeRecall(
+            query=query,
+            layers=layers,
+            top_k=len(filtered),
+            mission_id=mission_id,
+            min_confidence=min_confidence,
+            include_candidates=include_candidates,
+            include_superseded=include_superseded,
+            trace_id=trace_id,
+        )
+
     # ═══ Health ═══
 
     def health(self) -> dict[str, Any]:
@@ -210,5 +287,6 @@ class ChiefBrainKernel:
                 "scheduler": self._scheduler is not None,
                 "policy": self._policy is not None,
                 "approvals": self._approvals is not None,
+                "recall": self._memory_layer_manager is not None,
             },
         }

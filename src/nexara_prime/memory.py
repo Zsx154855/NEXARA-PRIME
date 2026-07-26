@@ -125,7 +125,7 @@ class MemoryKernel:
             evidence_valid = False
             if evidence_id and self.evidence is not None:
                 try:
-                    envelope = self.store.get_record_envelope(evidence_id)
+                    envelope = self.evidence.get_envelope(evidence_id)
                     evidence_valid = bool(
                         envelope
                         and envelope.get("mission_id") == r.get("mission_id")
@@ -134,7 +134,7 @@ class MemoryKernel:
                 except (KeyError, ValueError, RuntimeError):
                     evidence_valid = False
             elif evidence_id:
-                envelope = self.store.get_record_envelope(evidence_id)
+                envelope = self.evidence.get_envelope(evidence_id)
                 evidence_valid = bool(envelope and envelope.get("mission_id") == r.get("mission_id"))
             requires_evidence = bool(r.get("mission_id")) and kind in EVIDENCE_REQUIRED_KINDS
             is_exempt = not requires_evidence

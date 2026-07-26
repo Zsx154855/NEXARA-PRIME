@@ -68,11 +68,22 @@ class CircuitBreakerState:
 class CircuitBreaker:
     """Tracks failure counts per provider.  When a provider exceeds
     `threshold` consecutive failures the breaker opens and stays open for
-    `timeout_s` seconds, after which it auto-resets on the next check."""
+    `timeout_s` seconds, after which it auto-resets on the next check.
 
-    def __init__(self, threshold: int = 3, timeout_s: int = 60) -> None:
-        self._threshold = threshold
-        self._timeout_s = timeout_s
+    Backward-compatible aliases: `failure_threshold` → `threshold`,
+    `cooldown_seconds` → `timeout_s`.
+    """
+
+    def __init__(
+        self,
+        threshold: int = 3,
+        timeout_s: int = 60,
+        *,
+        failure_threshold: int | None = None,
+        cooldown_seconds: float | None = None,
+    ) -> None:
+        self._threshold = failure_threshold if failure_threshold is not None else threshold
+        self._timeout_s = int(cooldown_seconds) if cooldown_seconds is not None else timeout_s
         self._states: dict[str, CircuitBreakerState] = {}
 
     def _get(self, provider: str) -> CircuitBreakerState:
@@ -102,6 +113,24 @@ class CircuitBreaker:
         if state.failure_count >= self._threshold:
             state.open = True
             state.opened_at = time.monotonic()
+
+    # ── Backward-compatible aliases (Phase 2: model_gateway CB migration) ──
+
+    _DEFAULT_PROVIDER = "default"
+
+    def failure(self) -> None:
+        """Backward-compat: deprecated, use record_failure(provider)."""
+        self.record_failure(self._DEFAULT_PROVIDER)
+
+    def success(self) -> None:
+        """Backward-compat: deprecated, use record_success(provider)."""
+        self.record_success(self._DEFAULT_PROVIDER)
+
+    def before_call(self) -> None:
+        """Backward-compat: deprecated, use is_open(provider) check."""
+        from .model_gateway import ProviderUnavailable
+        if self.is_open(self._DEFAULT_PROVIDER):
+            raise ProviderUnavailable("provider_circuit_open")
 
 
 # ── Model Router ─────────────────────────────────────────────────────────────
