@@ -1,0 +1,20 @@
+{
+  "amendment_id": "KMA_PHASE2_BRANCH_LINEAGE_AMENDMENT_V1",
+  "base_sha": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "blocker_count": 0,
+  "blockers": [],
+  "branch_lineage_status": "PASS",
+  "commit_sha": null,
+  "evidence_hash": "cc7e61e60331ec725d7246c1dde7456146ef6f1046fdb882819a10f2c85a6f8b",
+  "evidence_id": "kma_phase2_branch_lineage_remediation_v1",
+  "generated_at": "2026-07-26T07:53:10Z",
+  "judgment": "READY_FOR_COMMIT",
+  "new_regression_count": 0,
+  "parent_head_sha": "6dd3fa06b1315ac5ebc0509d16147cb1858f860b",
+  "parent_receipt": "kma_phase2_ruff_remediation_receipt",
+  "receipt_id": "kma_phase2_branch_lineage_remediation_v1",
+  "receipt_type": "kma_branch_lineage_remediation",
+  "signature_mode": "unsigned_dry_run",
+  "supersedes": null,
+  "supplements": "kma_phase2_ruff_remediation_receipt"
+}

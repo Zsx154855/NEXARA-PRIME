@@ -5,9 +5,10 @@
   "description": "Precise file-level allowlist and denylist for KMA Phase 2 implementation. Allowed files must be modified only for the stated purpose. Prohibited files must not be touched.",
   "frozen_at": "2026-07-26",
   "amended_at": "2026-07-26",
-  "amendment_id": "KMA_PHASE2_RUFF_SCOPE_AMENDMENT_V1",
-  "amendment_reason": "14 KMA-introduced Ruff regressions detected by authoritative self-hosted CI (Run #235). Remediation closes all 14 errors across 7 existing files, adds 2 evidence files. Total changed files: 42 (40 original + 2 evidence). Workflow file NOT modified.",
+  "amendment_id": "KMA_PHASE2_BRANCH_LINEAGE_AMENDMENT_V1",
+  "amendment_reason": "14 KMA-introduced Ruff regressions detected by authoritative self-hosted CI (Run #235). Remediation closes all 14 errors across 7 existing files, adds 2 evidence files. SECOND AMENDMENT: State drift detection adding stacked-branch lineage validation for work/* branches. Governance CI checkout now uses fetch-depth:0. Total changed files: 47.",
   "parent_head": "1704e235d0fbd784f1da46e24c3d8fffc0fb692d",
+  "lineage_amend_parent_head": "6dd3fa06b1315ac5ebc0509d16147cb1858f860b",
   "evidence_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
   "branch": "work/nexara-knowledge-memory-authority-convergence-v1",
   "allowlist": [
