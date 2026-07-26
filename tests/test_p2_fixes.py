@@ -346,5 +346,39 @@ class SecretScannerTests(unittest.TestCase):
         self.assertEqual(scan_file(Path(__file__)), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
+class DriftCLICanonicalFieldsTests(unittest.TestCase):
+    """CLI renders canonical PROGRAM_STATE fields, not legacy keys."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.python_bin = str(ROOT / ".venv" / "bin" / "python3")
+
+    def test_status_uses_program_not_project(self):
+        import subprocess
+        result = subprocess.run(
+            [self.python_bin, "-m", "nexara_prime.cli", "status"],
+            cwd=ROOT, capture_output=True, text=True, timeout=30,
+            env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+        )
+        output = result.stdout
+        self.assertIn("Program", output)
+        self.assertNotIn("Recorded Gate", output)
+        self.assertNotIn("Next Gate", output)
+
+    def test_status_includes_test_baseline(self):
+        import subprocess
+        result = subprocess.run(
+            [self.python_bin, "-m", "nexara_prime.cli", "status"],
+            cwd=ROOT, capture_output=True, text=True, timeout=30,
+            env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+        )
+        self.assertIn("Test Baseline", result.stdout)
+
+    def test_status_includes_orchestration(self):
+        import subprocess
+        result = subprocess.run(
+            [self.python_bin, "-m", "nexara_prime.cli", "status"],
+            cwd=ROOT, capture_output=True, text=True, timeout=30,
+            env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+        )
+        self.assertIn("Orchestration", result.stdout)

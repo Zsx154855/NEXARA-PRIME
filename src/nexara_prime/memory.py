@@ -79,9 +79,9 @@ class MemoryKernel:
         self.events = events
         self.evidence = evidence
 
-    def write(self, kind: MemoryKind, key: str, content: str, trace_id: str, mission_id: str | None = None, source_evidence_id: str | None = None, confidence: float = 1.0) -> MemoryRecord:
+    def write(self, kind: MemoryKind, key: str, content: str, trace_id: str, mission_id: str | None = None, source_evidence_id: str | None = None, confidence: float = 1.0, *, receipt_id: str | None = None) -> MemoryRecord:
         if kind == MemoryKind.UNVERIFIED_INFERENCE:
-            return self.propose(kind, key, content, trace_id, mission_id, source_evidence_id, confidence)
+            return self.propose(kind, key, content, trace_id, mission_id, source_evidence_id, confidence, receipt_id=receipt_id)
         # Evidence-binding enforcement: mission-scoped committed memories SHOULD have
         # evidence linkage per NSEC 第四十三条. DECISION/FAILURE/FAILURE_EXPERIENCE/PATCH
         # require evidence when tied to a mission. System-level kinds and working memory
@@ -96,6 +96,7 @@ class MemoryKernel:
             memory_id=new_id("memory"), mission_id=mission_id, kind=kind, key=key,
             content=content, source_evidence_id=source_evidence_id, confidence=confidence,
             status="committed", verified=evidence_bound, canonical=evidence_bound,
+            receipt_id=receipt_id,
         )
         self.store.save_record(record.memory_id, "memory", record.model_dump(mode="json"), record.created_at, mission_id)
         self.events.publish("memory.written", mission_id or "global", "mission" if mission_id else "memory", "memory_kernel", trace_id, {"memory_id": record.memory_id, "kind": kind.value, "evidence_bound": evidence_bound})
@@ -133,7 +134,7 @@ class MemoryKernel:
                     )
                 except (KeyError, ValueError, RuntimeError):
                     evidence_valid = False
-            elif evidence_id:
+            elif evidence_id and self.evidence is not None:
                 envelope = self.evidence.get_envelope(evidence_id)
                 evidence_valid = bool(envelope and envelope.get("mission_id") == r.get("mission_id"))
             requires_evidence = bool(r.get("mission_id")) and kind in EVIDENCE_REQUIRED_KINDS
@@ -220,6 +221,7 @@ class MemoryKernel:
         confidence: float = 1.0,
         *,
         auto_commit: bool = False,
+        receipt_id: str | None = None,
     ) -> MemoryRecord:
         """Candidate → Validate → Deduplicate → Conflict Check → Commit.
 
@@ -241,6 +243,7 @@ class MemoryKernel:
             memory_id=new_id("memory"), mission_id=mission_id, kind=kind, key=key, content=content,
             source_evidence_id=source_evidence_id, confidence=confidence, status=status,
             verified=should_commit, canonical=should_commit, conflict_keys=conflict_keys,
+            receipt_id=receipt_id,
         )
         target_type = "memory" if should_commit else "memory_candidate"
         self.store.save_record(record.memory_id, target_type, record.model_dump(mode="json"), record.created_at, mission_id)

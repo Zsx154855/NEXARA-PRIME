@@ -54,6 +54,7 @@ class TestCBKRecall:
         assert isinstance(result, KnowledgeRecall)
         assert result.query == "test query"
         assert result.top_k >= 0
+        assert isinstance(result.results, list)
 
     def test_recall_without_manager_returns_empty(self, kernel_deps):
         store, events, evidence = kernel_deps
@@ -67,6 +68,16 @@ class TestCBKRecall:
         result = kernel.recall("query", trace_id="t1")
         assert isinstance(result, KnowledgeRecall)
         assert result.top_k >= 0
+        assert result.results == []
+
+    def test_recall_results_contain_content_score(self, kernel_with_recall):
+        """Verify recalled records carry content, score, and citation fields."""
+        result = kernel_with_recall.recall("test query", top_k=3, trace_id="t1")
+        for record in result.results:
+            assert isinstance(record, dict)
+            # Records from MemoryLayerManager always carry key, content, score
+            assert "score" in record
+            assert "content" in record or "key" in record
 
     def test_admission_still_works(self, kernel_with_recall):
         ctx = kernel_with_recall.submit(

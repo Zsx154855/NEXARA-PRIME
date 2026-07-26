@@ -686,7 +686,13 @@ class EvidenceStore:
         payload = envelope["payload"]
         if payload.get("evidence_id") != evidence_id:
             return None
-        return EvidenceArtifact.model_validate(self._artifact_payload(payload))
+        # Run full verify_artifact (digest, envelope, mission projection)
+        try:
+            return EvidenceArtifact.model_validate(
+                self.verify_artifact(evidence_id).model_dump(mode="json")
+            )
+        except (KeyError, ValueError):
+            return None
 
     def get_envelope(self, evidence_id: str) -> dict[str, Any] | None:
         """Return integrity envelope for an evidence record.

@@ -63,7 +63,8 @@ class TestConflictDetection:
 class TestCommitValidation:
     def test_valid_commit(self, knowledge_service):
         kc = KnowledgeCommit(
-            kind=MemoryKind.FACT, key="k", content="c", trace_id="t1",
+            kind=MemoryKind.FACT, key="k", content="c",
+            trace_id="t1", idempotency_key="ik-valid",
         )
         result = knowledge_service.validate_commit(kc)
         assert result["valid"] is True
@@ -72,23 +73,47 @@ class TestCommitValidation:
         # Pydantic validation catches empty key at construction time
         with pytest.raises(Exception):
             KnowledgeCommit(
-                kind=MemoryKind.FACT, key="", content="c", trace_id="t1",
+                kind=MemoryKind.FACT, key="", content="c",
+                trace_id="t1", idempotency_key="ik1",
             )
 
     def test_missing_trace_id_invalid(self, knowledge_service):
         kc = KnowledgeCommit(
-            kind=MemoryKind.FACT, key="k", content="c", trace_id="",
+            kind=MemoryKind.FACT, key="k", content="c",
+            trace_id="", idempotency_key="ik1",
         )
         result = knowledge_service.validate_commit(kc)
         assert result["valid"] is False
 
-    def test_unverified_inference_cannot_auto_commit(self, knowledge_service):
+    def test_whitespace_idempotency_key_invalid(self, knowledge_service):
         kc = KnowledgeCommit(
-            kind=MemoryKind.UNVERIFIED_INFERENCE, key="k", content="c",
-            trace_id="t1", auto_commit=True,
+            kind=MemoryKind.FACT, key="k", content="c",
+            trace_id="t1", idempotency_key="   ",
         )
         result = knowledge_service.validate_commit(kc)
         assert result["valid"] is False
+        assert "idempotency_key_required" in result["errors"]
+
+    def test_unverified_inference_cannot_auto_commit(self, knowledge_service):
+        kc = KnowledgeCommit(
+            kind=MemoryKind.UNVERIFIED_INFERENCE, key="k", content="c",
+            trace_id="t1", auto_commit=True, idempotency_key="ik1",
+        )
+        result = knowledge_service.validate_commit(kc)
+        assert result["valid"] is False
+
+    def test_auto_commit_blocked_by_canonical_conflict(self, knowledge_service):
+        # First, write a canonical record
+        knowledge_service._memory.write(
+            MemoryKind.FACT, "conflict-key", "canonical-content", "t1",
+        )
+        kc = KnowledgeCommit(
+            kind=MemoryKind.FACT, key="conflict-key", content="new-content",
+            trace_id="t2", auto_commit=True, idempotency_key="ik-conflict",
+        )
+        result = knowledge_service.validate_commit(kc)
+        assert result["valid"] is False
+        assert "auto_commit_blocked_by_canonical_conflict" in result["errors"]
 
 
 class TestNonSupersededQuery:

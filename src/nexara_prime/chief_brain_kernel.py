@@ -237,6 +237,7 @@ class ChiefBrainKernel:
                 include_candidates=include_candidates,
                 include_superseded=include_superseded,
                 trace_id=trace_id,
+                results=[],
             )
 
         results = self._memory_layer_manager.search(
@@ -271,6 +272,7 @@ class ChiefBrainKernel:
             include_candidates=include_candidates,
             include_superseded=include_superseded,
             trace_id=trace_id,
+            results=filtered,
         )
 
     # ═══ Health ═══

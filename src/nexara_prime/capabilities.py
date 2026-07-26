@@ -197,7 +197,12 @@ class CapabilityRegistry:
     # ── Phase 2: Persistence ──
 
     def _load_history(self) -> None:
-        """Load persisted capability_history records from SQLiteStore."""
+        """Load persisted capability_history records from SQLiteStore.
+
+        Normalizes persisted field names (cost → token_cost, evidence_id →
+        evidence_ids) to a single canonical representation used by
+        _recompute_single and _recompute_scores.
+        """
         if self._store is None:
             return
         records = self._store.list_records("capability_history")
@@ -205,6 +210,13 @@ class CapabilityRegistry:
             try:
                 cap_id = str(raw.get("capability_id", ""))
                 if cap_id:
+                    # Normalize: cost → token_cost (canonical)
+                    if "cost" in raw and "token_cost" not in raw:
+                        raw["token_cost"] = raw.pop("cost")
+                    # Normalize: evidence_id → evidence_ids (canonical list)
+                    if "evidence_id" in raw and "evidence_ids" not in raw:
+                        eid = raw.pop("evidence_id")
+                        raw["evidence_ids"] = [eid] if eid else []
                     self._mission_history.setdefault(cap_id, []).append(dict(raw))
             except (TypeError, ValueError):
                 continue
@@ -219,9 +231,9 @@ class CapabilityRegistry:
             recent = history[-100:]
             recent_failures = sum(1 for o in recent if not o.get("success", False))
             latencies = [float(o.get("latency_ms", 0.0)) for o in history]
-            costs = [float(o.get("cost", 0.0)) for o in history]
+            costs = [float(o.get("token_cost", 0.0)) for o in history]
             evidence_count = sum(
-                1 for o in history if o.get("evidence_id")
+                len(o.get("evidence_ids", [])) for o in history
             )
             confidence = min(evidence_count / 10.0, 1.0) if evidence_count >= 3 else max(0.3, evidence_count * 0.1)
 
@@ -346,23 +358,25 @@ class CapabilityRegistry:
 
         evidence_ids = evidence_ids or []
 
-        # Persist one raw record per evidence_id (or one record if no evidence)
-        ids_to_record = evidence_ids if evidence_ids else [None]
-        for idx, ev_id in enumerate(ids_to_record):
-            idem_key = f"{idempotency_key}:ev{idx}" if idempotency_key and evidence_ids else idempotency_key or ""
-            self.record_history(
-                capability_id=capability_id,
-                mission_id=mission_id,
-                provider=provider,
-                model=model,
-                success=mission_success,
-                latency_ms=latency_ms,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost=token_cost,
-                evidence_id=ev_id,
-                idempotency_key=idem_key,
-            )
+        # Record history exactly once per invocation (not per evidence_id).
+        # Evidence references are stored alongside the single history entry.
+        self.record_history(
+            capability_id=capability_id,
+            mission_id=mission_id,
+            provider=provider,
+            model=model,
+            success=mission_success,
+            latency_ms=latency_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost=token_cost,
+            evidence_id=evidence_ids[0] if evidence_ids else None,
+            idempotency_key=idempotency_key,
+        )
+        # Store all evidence references in the in-memory outcome dict
+        history = self._mission_history.get(capability_id, [])
+        if history:
+            history[-1]["evidence_ids"] = evidence_ids
 
         # Then recompute derived score
         return self._recompute_single(capability_id)

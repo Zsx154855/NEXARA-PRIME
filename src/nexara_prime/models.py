@@ -426,7 +426,10 @@ class KnowledgeObject(NModel):
     source_event_id: str | None = None
     trace_id: str = ""
     provenance: str = "runtime"
-    status: str = "committed"
+    status: Literal[
+        "committed", "candidate", "conflict", "superseded",
+        "pending_review", "cleared", "unverified", "verified", "corrupt",
+    ] = "committed"
     superseded_by: str | None = None
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     verified: bool = False
@@ -457,9 +460,12 @@ class KnowledgeRelation(NModel):
 
 
 class KnowledgeRecall(NModel):
-    """Query input for knowledge retrieval. Ephemeral — not persisted.
+    """Query output for knowledge retrieval. Ephemeral — not persisted.
 
     Maps to: contracts/kma/KNOWLEDGE_RECALL_SCHEMA_V1.json
+
+    Includes the actual recalled records (with content, score, citation)
+    alongside the query metadata.
     """
     query: str = Field(..., min_length=1)
     layers: list[Literal["working", "episodic", "semantic", "procedural"]] | None = None
@@ -470,6 +476,7 @@ class KnowledgeRecall(NModel):
     include_superseded: bool = False
     trace_id: str = ""
     schema_version: int = 1
+    results: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class KnowledgeCommit(NModel):
@@ -483,7 +490,7 @@ class KnowledgeCommit(NModel):
     trace_id: str
     mission_id: str | None = None
     source_evidence_id: str | None = None
-    idempotency_key: str | None = None
+    idempotency_key: str = Field(..., min_length=1)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     receipt_id: str | None = None
     auto_commit: bool = False
