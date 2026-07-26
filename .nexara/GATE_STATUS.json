@@ -12,28 +12,90 @@
     "product_brand_name": "RESOLVED_柏韩_Bǎi_Hán"
   },
   "gates": [
-    {"id":"G0","status":"PASS","verified":true},
-    {"id":"G1","status":"PASS","verified":true},
-    {"id":"G2","status":"PASS","verified":true},
-    {"id":"G3","status":"PASS","verified":true},
-    {"id":"G4","status":"PASS","verified":true},
-    {"id":"G5","status":"PASS","verified":true},
-    {"id":"G6","status":"PASS","verified":true},
-    {"id":"G7","status":"PASS","verified":true,
-      "strategy":"web-primary","note":"macOS+iOS compile & bind Runtime Truth"},
-    {"id":"G8","status":"PASS","verified":true,
-      "evidence":["Python SDK installable (23 methods)","Plugin schema V1","Sandbox model doc"]},
-    {"id":"G9","status":"PASS","verified":true,
-      "evidence":["EvaluationEngine 6-dim scoring","BenchmarkRunner compare","9/9 evolution tests"]},
-    {"id":"G10","status":"BLOCKED","verified":true,
-      "local_release":"LOCAL_RELEASE_READY",
-      "blocked_by":["macOS code signing certificate","macOS notarization","iOS Provisioning Profile"],
-      "resolution":"Requires Apple Developer Program ($99/yr)"}
+    {
+      "id": "G0",
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "id": "G1",
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "id": "G2",
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "id": "G3",
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "id": "G4",
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "id": "G5",
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "id": "G6",
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "id": "G7",
+      "status": "PASS",
+      "verified": true,
+      "strategy": "web-primary",
+      "note": "macOS+iOS compile & bind Runtime Truth"
+    },
+    {
+      "id": "G8",
+      "status": "PASS",
+      "verified": true,
+      "evidence": [
+        "Python SDK installable (23 methods)",
+        "Plugin schema V1",
+        "Sandbox model doc"
+      ]
+    },
+    {
+      "id": "G9",
+      "status": "PASS",
+      "verified": true,
+      "evidence": [
+        "EvaluationEngine 6-dim scoring",
+        "BenchmarkRunner compare",
+        "9/9 evolution tests"
+      ]
+    },
+    {
+      "id": "G10",
+      "status": "BLOCKED",
+      "verified": true,
+      "local_release": "LOCAL_RELEASE_READY",
+      "blocked_by": [
+        "macOS code signing certificate",
+        "macOS notarization",
+        "iOS Provisioning Profile"
+      ],
+      "resolution": "Requires Apple Developer Program ($99/yr)"
+    }
   ],
   "gates_verified_pass": 10,
   "gates_blocked": 1,
-  "previous_false_pass_corrected": ["G7","G8","G9","G10"],
-  "test_baseline": "918 passed, 0 failed (clean worktree + remote CI)",
+  "previous_false_pass_corrected": [
+    "G7",
+    "G8",
+    "G9",
+    "G10"
+  ],
+  "test_baseline": "1211 passed, 17 failed, 1228 collected (KMA suites: +~310 tests; 1 SDK contract import error)",
   "local_release_artifacts": [
     "dist/nexara_prime-0.1.0-py3-none-any.whl",
     "dist/nexara_prime-0.1.0.tar.gz",
