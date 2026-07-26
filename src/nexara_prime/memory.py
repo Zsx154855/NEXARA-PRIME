@@ -80,7 +80,7 @@ class MemoryKernel:
         self.evidence = evidence
 
     def write(self, kind: MemoryKind, key: str, content: str, trace_id: str, mission_id: str | None = None, source_evidence_id: str | None = None, confidence: float = 1.0, *, receipt_id: str | None = None, idempotency_key: str | None = None) -> MemoryRecord:
-        # Idempotency check: if this key was already written, return the existing record
+        # Idempotency check: if this key was already written, compare all fields.
         if idempotency_key:
             existing = self.store.find_record_envelope("memory_idempotency", "idempotency_key", idempotency_key)
             if existing and existing.get("mission_id") == mission_id:
@@ -89,7 +89,16 @@ class MemoryKernel:
                 if mem_id:
                     mem_env = self.store.get_record_envelope(mem_id)
                     if mem_env and mem_env.get("mission_id") == mission_id:
-                        return MemoryRecord.model_validate(mem_env["payload"])
+                        existing_record = MemoryRecord.model_validate(mem_env["payload"])
+                        # Compare all fields — same → return original, different → conflict
+                        if (existing_record.kind != kind or
+                            existing_record.key != key or
+                            existing_record.content != content or
+                            existing_record.source_evidence_id != source_evidence_id or
+                            existing_record.confidence != confidence or
+                            existing_record.receipt_id != receipt_id):
+                            raise ValueError("memory_idempotency_conflict")
+                        return existing_record
         if kind == MemoryKind.UNVERIFIED_INFERENCE:
             return self.propose(kind, key, content, trace_id, mission_id, source_evidence_id, confidence, receipt_id=receipt_id, idempotency_key=idempotency_key)
         # Evidence-binding enforcement: mission-scoped committed memories SHOULD have
@@ -102,11 +111,35 @@ class MemoryKernel:
                 f"memory_requires_evidence: kind={kind.value} requires "
                 f"source_evidence_id when bound to a mission"
             )
+        new_memory_id = new_id("memory")
+        # Supersession: mark existing committed records with same key /
+        # different content as superseded before writing the new record.
+        supersedes_id: str | None = None
+        if mission_id:
+            existing_scope = self.inspect(mission_id)
+        else:
+            existing_scope = self.inspect(None)
+        for old in existing_scope:
+            if (
+                old.get("key") == key
+                and old.get("status") == "committed"
+                and old.get("content") != content
+            ):
+                old_id = old["memory_id"]
+                old_payload = dict(old)
+                old_payload["status"] = "superseded"
+                old_payload["superseded_by"] = new_memory_id
+                self.store.save_record(
+                    old_id, "memory", old_payload,
+                    old.get("created_at", now_iso()), old.get("mission_id"),
+                )
+                supersedes_id = old_id
         record = MemoryRecord(
-            memory_id=new_id("memory"), mission_id=mission_id, kind=kind, key=key,
+            memory_id=new_memory_id, mission_id=mission_id, kind=kind, key=key,
             content=content, source_evidence_id=source_evidence_id, confidence=confidence,
             status="committed", verified=evidence_bound, canonical=evidence_bound,
             receipt_id=receipt_id, idempotency_key=idempotency_key,
+            supersedes=supersedes_id,
         )
         self.store.save_record(record.memory_id, "memory", record.model_dump(mode="json"), record.created_at, mission_id)
         if idempotency_key:
@@ -241,7 +274,7 @@ class MemoryKernel:
         Unverified inferences remain candidates and are never written to canonical memory.
         Safe patches may use the explicit auto policy when backed by evidence.
         """
-        # Idempotency check: if this key was already proposed, return existing
+        # Idempotency check: if this key was already proposed, compare all fields.
         if idempotency_key:
             existing = self.store.find_record_envelope("memory_idempotency", "idempotency_key", idempotency_key)
             if existing and existing.get("mission_id") == mission_id:
@@ -250,7 +283,20 @@ class MemoryKernel:
                 if mem_id:
                     mem_env = self.store.get_record_envelope(mem_id)
                     if mem_env and mem_env.get("mission_id") == mission_id:
-                        return MemoryRecord.model_validate(mem_env["payload"])
+                        existing_record = MemoryRecord.model_validate(mem_env["payload"])
+                        # Compare all fields — same → return original, different → conflict
+                        if (existing_record.kind != kind or
+                            existing_record.key != key or
+                            existing_record.content != content or
+                            existing_record.source_evidence_id != source_evidence_id or
+                            existing_record.confidence != confidence or
+                            existing_record.receipt_id != receipt_id):
+                            raise ValueError("memory_idempotency_conflict")
+                        # Detect auto_commit mismatch by checking record type
+                        was_auto_committed = mem_env.get("record_type") == "memory"
+                        if was_auto_committed != auto_commit:
+                            raise ValueError("memory_idempotency_conflict")
+                        return existing_record
         if not key.strip() or not content.strip():
             raise ValueError("memory_candidate_requires_key_and_content")
         if not 0.0 <= confidence <= 1.0:
@@ -452,9 +498,17 @@ class MemoryLayerManager:
                 "citation": r.citation,
                 "evidence_ref": r.evidence_ref,
                 "layer": r.chunk.metadata.get("layer", ""),
+                "mission_id": r.chunk.metadata.get("mission_id", ""),
+                "status": r.chunk.metadata.get("status", "committed"),
             }
             for r in result.results
         ]
+        # Post-filter: enforce mission isolation when mission_id is provided
+        if mission_id:
+            rag_results = [
+                r for r in rag_results
+                if r.get("mission_id") == mission_id
+            ]
         # Fallback to keyword search when RAG returns nothing
         if not rag_results:
             return self._keyword_search(query, layers, top_k, mission_id=mission_id)
@@ -470,6 +524,9 @@ class MemoryLayerManager:
         all_records = self.kernel.inspect(None)
         scored: list[tuple[dict[str, Any], int]] = []
         for r in all_records:
+            # Skip superseded records by default
+            if r.get("status") == "superseded":
+                continue
             # Filter by mission_id when supplied
             if mission_id and r.get("mission_id") != mission_id:
                 continue

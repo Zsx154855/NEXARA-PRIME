@@ -149,3 +149,90 @@ class TestInvocationCounting:
         )
         history = reg.get_history("skill.seq")
         assert len(history) == 2  # each invocation is one record
+
+
+class TestCapabilityIdempotentReplay:
+    """P2 Codex: replay returns original record, count unchanged, no score side effects."""
+
+    def test_replay_returns_original_record(self, store):
+        """Write A, write B, replay A → returns A, B untouched."""
+        reg = CapabilityRegistry(store=store)
+        reg.register_v2("skill.replay", "Replay Cap")
+
+        # Write A
+        a1 = reg.record_history(
+            capability_id="skill.replay",
+            mission_id="m_replay",
+            success=True,
+            latency_ms=100.0,
+            cost=0.005,
+            idempotency_key="replay-key-A",
+        )
+        assert a1.record_id.startswith("caphist_")
+
+        # Write B
+        b1 = reg.record_history(
+            capability_id="skill.replay",
+            mission_id="m_replay",
+            success=False,
+            latency_ms=200.0,
+            cost=0.010,
+            idempotency_key="replay-key-B",
+        )
+        assert b1.record_id.startswith("caphist_")
+
+        history_before = reg.get_history("skill.replay")
+        assert len(history_before) == 2
+
+        # Replay A — must return the original record
+        a2 = reg.record_history(
+            capability_id="skill.replay",
+            mission_id="m_replay",
+            success=True,
+            latency_ms=100.0,
+            cost=0.005,
+            idempotency_key="replay-key-A",
+        )
+        # Replay returns the same record_id, not a new one
+        assert a2.record_id == a1.record_id
+        assert a2.success == a1.success
+        assert a2.latency_ms == a1.latency_ms
+        assert a2.cost == a1.cost
+
+        # Count unchanged — B is still there, no extra entries
+        history_after = reg.get_history("skill.replay")
+        assert len(history_after) == 2
+        assert history_after[0].get("idempotency_key") == "replay-key-A"
+        assert history_after[1].get("idempotency_key") == "replay-key-B"
+
+    def test_replay_no_score_side_effects(self, store):
+        """update_score replay must not change count or score."""
+        reg = CapabilityRegistry(store=store)
+        reg.register_v2("skill.noside", "No Side Effect Cap")
+
+        # First update
+        s1 = reg.update_score(
+            "skill.noside", True, 120.0, 0.003,
+            provider="mock", model="mock-v1",
+            mission_id="m_noside", idempotency_key="noside-key",
+            evidence_ids=["e_x"],
+        )
+        assert s1 is not None
+        count_before = len(reg.get_history("skill.noside"))
+        assert count_before == 1
+
+        # Replay same key — must not create a new entry
+        s2 = reg.update_score(
+            "skill.noside", True, 120.0, 0.003,
+            provider="mock", model="mock-v1",
+            mission_id="m_noside", idempotency_key="noside-key",
+            evidence_ids=["e_x"],
+        )
+        assert s2 is not None
+        count_after = len(reg.get_history("skill.noside"))
+        assert count_after == 1, "replay must not add a new history entry"
+
+        # Score unchanged
+        assert s2.historical_success_rate == s1.historical_success_rate
+        assert s2.evidence_count == s1.evidence_count
+        assert s2.confidence == s1.confidence

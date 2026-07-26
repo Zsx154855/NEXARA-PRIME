@@ -78,6 +78,144 @@ def runtime():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# P2: Receipt Status Fail-Closed (evidence.py:709)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestReceiptStatusFailClosed:
+    """receipt_status must only return 'present' when ALL conditions met:
+    chain_intact=true, corrupt_tool_records=0, fail_closed_violations=0,
+    applicable invocations all match contract. Otherwise 'missing' or 'invalid'."""
+
+    def test_missing_chain_returns_missing(self, evidence_store):
+        """When no tool invocations exist, receipt_status returns 'missing'."""
+        result = evidence_store.receipt_status("mission-no-tools")
+        assert result["status"] == "missing"
+        # With zero invocations, chain is trivially intact but there's nothing to verify
+
+    def test_corrupt_tool_records_returns_invalid(self, store, events):
+        """When tool records are corrupt, receipt_status returns 'invalid'."""
+        evidence_store = EvidenceStore(store, events)
+
+        # Insert a corrupt tool record directly (bypass save_record)
+        # This simulates a record that fails envelope integrity
+        import json
+        corrupt_payload = json.dumps({"invocation_id": "corrupt-1", "mission_id": "m-corrupt", "tool_name": "file_write_report", "status": "completed"})
+        store._conn.execute(
+            "INSERT INTO records(record_id, record_type, mission_id, payload, created_at, integrity_sha256, origin_sha256) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("corrupt-1", "tool", "m-corrupt", corrupt_payload, "2025-01-01T00:00:00Z", "bad-hash-00000000000000000000000000000000", "bad-hash-00000000000000000000000000000000"),
+        )
+        store._conn.commit()
+
+        result = evidence_store.receipt_status("m-corrupt")
+        assert result["status"] == "invalid"
+        assert len(result["corrupt_tool_records"]) > 0
+
+    def test_all_good_returns_present(self, store, events):
+        """When chain is intact with no corruption or violations,
+        receipt_status returns 'present'."""
+        import json
+        import hashlib
+        evidence_store = EvidenceStore(store, events)
+
+        mission_id = "m-good"
+        timestamp = "2025-01-01T00:00:00Z"
+        invocation_id = "inv-good-1"
+
+        # Create a tool invocation payload with all required fields
+        tool_payload = {
+            "invocation_id": invocation_id,
+            "mission_id": mission_id,
+            "tool_name": "file_write_report",
+            "arguments": {"path": "/tmp/report.md", "content": "report"},
+            "result": {"path": "/tmp/report.md"},
+            "risk_level": "R0",
+            "status": "completed",
+            "failure_code": None,
+            "reason_code": None,
+            "duration_ms": 100,
+            "trace_id": "trace-good-1",
+            "idempotency_key": None,
+            "rollback_point": {"kind": "filesystem_snapshot_placeholder", "reversible": True},
+            "compensation": {"action": "restore_previous_content", "implemented": False},
+            "created_at": timestamp,
+        }
+
+        # First save without receipt_evidence_id, then add evidence, then update
+        store.save_record(invocation_id, "tool", tool_payload, timestamp, mission_id)
+
+        # Create evidence record linked to this invocation
+        evidence_id = "ev-good-1"
+        evidence_content = json.dumps(tool_payload)
+        content_sha256 = hashlib.sha256(evidence_content.encode("utf-8")).hexdigest()
+
+        evidence_payload = {
+            "evidence_id": evidence_id,
+            "mission_id": mission_id,
+            "kind": "execution_receipt",
+            "title": "Tool receipt",
+            "content": evidence_content,
+            "sha256": content_sha256,
+            "task_id": "task-good-1",
+            "tool_invocation_id": invocation_id,
+            "actor": "tool_runtime",
+            "source": "tool_runtime",
+            "source_event_id": None,
+            "verification_status": "verified",
+            "request_sha256": None,
+            "trace_id": "trace-good-1",
+            "timestamp": timestamp,
+        }
+        # Compute the envelope_sha256 properly
+        from nexara_prime.evidence import EvidenceStore as _ES
+        evidence_payload["envelope_sha256"] = _ES._envelope_sha256(evidence_payload)
+        store.save_record(evidence_id, "evidence", evidence_payload, timestamp, mission_id)
+
+        # Now update the tool record to link the receipt
+        tool_payload["receipt_evidence_id"] = evidence_id
+        store.save_record(invocation_id, "tool", tool_payload, timestamp, mission_id)
+
+        result = evidence_store.receipt_status(mission_id)
+        assert result["status"] == "present"
+        assert result["chain_intact"] is True
+        assert len(result["corrupt_tool_records"]) == 0
+        assert result["fail_closed_violations"] == 0
+
+    def test_fail_closed_violations_return_invalid(self, store, events):
+        """Tool invocations with failed status but no failure_code
+        trigger fail_closed_violations, causing 'invalid' status."""
+        evidence_store = EvidenceStore(store, events)
+
+        mission_id = "m-violation"
+        timestamp = "2025-01-01T00:00:00Z"
+        invocation_id = "inv-violation-1"
+
+        # Create a tool invocation that failed without failure_code
+        tool_payload = {
+            "invocation_id": invocation_id,
+            "mission_id": mission_id,
+            "tool_name": "file_write_report",
+            "arguments": {},
+            "result": {},
+            "risk_level": "R1",
+            "status": "failed",
+            "failure_code": None,
+            "reason_code": None,
+            "duration_ms": 50,
+            "trace_id": "trace-violation",
+            "idempotency_key": None,
+            "rollback_point": {},
+            "compensation": {},
+            "created_at": timestamp,
+        }
+        store.save_record(invocation_id, "tool", tool_payload, timestamp, mission_id)
+
+        result = evidence_store.receipt_status(mission_id)
+        assert result["status"] == "invalid"
+        assert result["fail_closed_violations"] > 0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 1. Mission Receipt Binding (runtime.py:876)
 # ══════════════════════════════════════════════════════════════════════════════
 

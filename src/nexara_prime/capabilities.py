@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING
 
 from .models import (
-    Capability, CapabilityHistory, CapabilityScore, CapabilityType, RiskLevel, now_iso,
+    Capability, CapabilityHistory, CapabilityScore, CapabilityType, RiskLevel, new_id, now_iso,
 )
 
 if TYPE_CHECKING:
@@ -303,15 +303,21 @@ class CapabilityRegistry:
             history = self._mission_history.get(capability_id, [])
             for existing in history:
                 if existing.get("idempotency_key") == idempotency_key:
-                    return record  # idempotent — duplicate in memory
+                    # Return the actual persisted record, not a new object
+                    return self._reconstruct_history_from_memory(
+                        capability_id, existing
+                    )
             if self._store is not None:
-                if self._store.find_record(
+                stored = self._store.find_record(
                     "capability_history", "idempotency_key", idempotency_key
-                ):
-                    return record  # idempotent — duplicate in store
+                )
+                if stored:
+                    return CapabilityHistory.model_validate(stored)
 
         # In-memory
         outcome: dict[str, Any] = {
+            "record_id": record.record_id,
+            "mission_id": record.mission_id,
             "success": success,
             "latency_ms": latency_ms,
             "token_cost": cost,
@@ -376,10 +382,40 @@ class CapabilityRegistry:
         # Store all evidence references in the in-memory outcome dict
         history = self._mission_history.get(capability_id, [])
         if history:
-            history[-1]["evidence_ids"] = evidence_ids
+            # Locate the correct entry by idempotency_key, not history[-1]
+            # so that replay of an earlier key does not mutate a later entry.
+            target_entry: dict[str, Any] | None = None
+            if idempotency_key:
+                for entry in history:
+                    if entry.get("idempotency_key") == idempotency_key:
+                        target_entry = entry
+                        break
+            if target_entry is None:
+                target_entry = history[-1]
+            target_entry["evidence_ids"] = evidence_ids
 
         # Then recompute derived score
         return self._recompute_single(capability_id)
+
+    def _reconstruct_history_from_memory(
+        self, capability_id: str, outcome: dict[str, Any]
+    ) -> CapabilityHistory:
+        """Reconstruct a CapabilityHistory from an in-memory outcome dict."""
+        return CapabilityHistory(
+            record_id=outcome.get("record_id", new_id("caphist")),
+            capability_id=capability_id,
+            mission_id=outcome.get("mission_id"),
+            success=outcome.get("success", True),
+            latency_ms=outcome.get("latency_ms", 0.0),
+            cost=float(outcome.get("token_cost", 0.0)),
+            evidence_id=(
+                outcome.get("evidence_ids", [None])[0]
+                if outcome.get("evidence_ids")
+                else None
+            ),
+            timestamp=outcome.get("timestamp", now_iso()),
+            idempotency_key=outcome.get("idempotency_key", ""),
+        )
 
     def _recompute_single(self, capability_id: str) -> CapabilityScore | None:
         """Recompute score for a single capability from history."""

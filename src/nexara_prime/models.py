@@ -406,6 +406,8 @@ class MemoryRecord(NModel):
     evidence_refs: list[str] = Field(default_factory=list)
     receipt_id: str | None = None
     idempotency_key: str | None = None
+    superseded_by: str | None = None
+    supersedes: str | None = None
 
 
 # ── KMA Runtime Types (Phase 2) ──

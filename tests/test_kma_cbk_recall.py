@@ -12,7 +12,7 @@ from nexara_prime.governance import ApprovalEngine, PolicyEngine
 from nexara_prime.memory import MemoryKernel, MemoryLayerManager
 from nexara_prime.mission_compiler import MissionCompiler
 from nexara_prime.mission_triage import MissionTriageEngine
-from nexara_prime.models import KnowledgeRecall
+from nexara_prime.models import KnowledgeRecall, MemoryKind
 from nexara_prime.orchestration import RuntimeOrchestrator
 from nexara_prime.state_machine import MissionStateMachine
 from nexara_prime.adaptive_scheduler import AdaptiveMultiAgentScheduler
@@ -92,3 +92,42 @@ class TestCBKRecall:
     def test_health_shows_recall(self, kernel_with_recall):
         h = kernel_with_recall.health()
         assert h["modules"]["recall"] is True
+
+    def test_mission_isolation_recall_A_only_returns_A_docs(self, kernel_with_recall):
+        """Fix 1: recall(mission_id='A') returns only mission A docs."""
+        mlm = kernel_with_recall._memory_layer_manager
+        kernel = mlm.kernel
+        # Write docs for mission A
+        kernel.write(MemoryKind.FACT, "key_a", "content alpha", "t1",
+                     mission_id="mission-A")
+        kernel.write(MemoryKind.FACT, "key_a2", "content beta", "t1",
+                     mission_id="mission-A")
+        # Write docs for mission B
+        kernel.write(MemoryKind.FACT, "key_b", "content gamma", "t1",
+                     mission_id="mission-B")
+        kernel.write(MemoryKind.FACT, "key_b2", "content delta", "t1",
+                     mission_id="mission-B")
+
+        result_a = kernel_with_recall.recall(
+            "content", mission_id="mission-A", trace_id="t1",
+        )
+        result_b = kernel_with_recall.recall(
+            "content", mission_id="mission-B", trace_id="t1",
+        )
+
+        # All results in A should be from mission-A
+        for r in result_a.results:
+            assert r.get("mission_id") == "mission-A" or r.get("mission_id") is None, \
+                f"Expected mission-A, got {r.get('mission_id')}"
+        # All results in B should be from mission-B
+        for r in result_b.results:
+            assert r.get("mission_id") == "mission-B" or r.get("mission_id") is None, \
+                f"Expected mission-B, got {r.get('mission_id')}"
+        # A results should not contain B docs
+        a_keys = {r.get("key") for r in result_a.results}
+        assert "key_b" not in a_keys
+        assert "key_b2" not in a_keys
+        # B results should not contain A docs
+        b_keys = {r.get("key") for r in result_b.results}
+        assert "key_a" not in b_keys
+        assert "key_a2" not in b_keys

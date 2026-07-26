@@ -751,14 +751,21 @@ class EvidenceStore:
             if not link.get("has_receipt")
         )
 
-        if total_relevant == 0:
+        chain_intact = chain.get("chain_intact", False)
+        corrupt_tool_records = chain.get("corrupt_tool_records", [])
+        corrupt_count = len(corrupt_tool_records) if isinstance(corrupt_tool_records, list) else corrupt_tool_records
+        fail_closed_violations = chain.get("fail_closed_violations", 0)
+
+        # Fail-closed: only return 'present' when ALL integrity conditions met.
+        # Any corruption, violation, or broken chain forces missing/invalid.
+        if corrupt_count > 0 or fail_closed_violations > 0:
+            status = "invalid"
+        elif total_relevant == 0 or not chain_intact or gaps > 0:
             status = "missing"
-        elif gaps == 0 and all(link.get("receipt_verifiable") for link in relevant_links if link.get("has_receipt")):
+        elif all(link.get("receipt_verifiable") for link in relevant_links if link.get("has_receipt")):
             status = "present"
-        elif gaps > 0:
-            status = "missing"
         else:
-            status = "unverifiable"
+            status = "missing"
 
         return {
             "status": status,
