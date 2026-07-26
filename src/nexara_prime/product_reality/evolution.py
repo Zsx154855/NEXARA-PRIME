@@ -147,7 +147,7 @@ class EvolutionPromotionGate:
             return verified, [f"provide {purpose}"]
 
         for evidence_id in refs:
-            envelope = self.evidence.store.get_record_envelope(evidence_id)
+            envelope = self.evidence.get_envelope(evidence_id)
             if not envelope or envelope.get("record_type") != "evidence":
                 errors.append(f"{purpose} integrity envelope invalid: {evidence_id}")
                 continue

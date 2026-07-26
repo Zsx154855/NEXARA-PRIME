@@ -1,0 +1,21 @@
+{
+  "amendment_id": "KMA_PHASE2_RUFF_SCOPE_AMENDMENT_V1",
+  "base_sha": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "blocker_count": 0,
+  "blockers": [],
+  "commit_sha": null,
+  "evidence_hash": "dd0fa08fcae485232cd7b5a63e8661a35e27f8bcb37d16c561755b5021121383",
+  "evidence_id": "kma_phase2_ruff_remediation_v1",
+  "generated_at": "2026-07-26T07:12:18Z",
+  "judgment": "PASS",
+  "new_regression_count": 0,
+  "parent_head_sha": "1704e235d0fbd784f1da46e24c3d8fffc0fb692d",
+  "parent_receipt": "kma_phase2_completion_receipt",
+  "receipt_id": "kma_phase2_ruff_remediation_v1",
+  "receipt_type": "kma_ruff_remediation",
+  "ruff_errors_closed": 14,
+  "ruff_errors_remaining": 0,
+  "signature_mode": "unsigned_dry_run",
+  "supersedes": null,
+  "supplements": "kma_phase2_completion_receipt"
+}

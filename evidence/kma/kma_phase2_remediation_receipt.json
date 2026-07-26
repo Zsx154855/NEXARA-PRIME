@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "kma_phase2_remediation_receipt",
+  "evidence_refs": ["evidence_kma_phase2_remediation"],
+  "evidence_subject_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "amendment_id": "KMA_PHASE2_SCOPE_AMENDMENT_V1",
+  "verdict": "PASS",
+  "generated_at": "2026-07-26T04:00:00Z",
+  "branch": "work/nexara-knowledge-memory-authority-convergence-v1",
+  "working_tree_uncommitted": true,
+  "commit_status": "NOT_COMMITTED",
+  "push_status": "NOT_PUSHED",
+  "prohibited_actions": {
+    "commit": false, "push": false, "merge": false,
+    "tag": false, "release": false, "deploy": false
+  },
+  "remediation_outcome": {
+    "result": "PASS",
+    "reason": "evolution.py bypass cleared. All 6 Phase 2 bypasses resolved. 0 new regressions."
+  },
+  "bypass_resolution": {
+    "target": "src/nexara_prime/product_reality/evolution.py:150",
+    "before": "self.evidence.store.get_record_envelope(evidence_id)",
+    "after": "self.evidence.get_envelope(evidence_id)",
+    "api_used": "EvidenceStore.get_envelope() (Phase 2 public API)"
+  },
+  "validation": {
+    "kma_tests": "83 passed",
+    "full_regression": "1166 passed",
+    "baseline_failures": 14,
+    "new_regressions": 0,
+    "secret_scan": "CLEAN",
+    "nsec_validation": "PASS",
+    "git_diff_check": "PASS",
+    "raw_store_bypass_count": 0
+  }
+}

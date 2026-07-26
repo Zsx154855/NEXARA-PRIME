@@ -68,11 +68,29 @@ class CircuitBreakerState:
 class CircuitBreaker:
     """Tracks failure counts per provider.  When a provider exceeds
     `threshold` consecutive failures the breaker opens and stays open for
-    `timeout_s` seconds, after which it auto-resets on the next check."""
+    `timeout_s` seconds, after which it auto-resets on the next check.
 
-    def __init__(self, threshold: int = 3, timeout_s: int = 60) -> None:
-        self._threshold = threshold
-        self._timeout_s = timeout_s
+    Backward-compatible aliases: `failure_threshold` → `threshold`,
+    `cooldown_seconds` → `timeout_s`.
+    """
+
+    def __init__(
+        self,
+        threshold: int = 3,
+        timeout_s: int = 60,
+        *,
+        failure_threshold: int | None = None,
+        cooldown_seconds: float | None = None,
+    ) -> None:
+        self._threshold = failure_threshold if failure_threshold is not None else threshold
+        if cooldown_seconds is not None:
+            if cooldown_seconds < 0:
+                raise ValueError(
+                    f"cooldown_seconds must be non-negative, got {cooldown_seconds}"
+                )
+            self._timeout_s = float(cooldown_seconds)
+        else:
+            self._timeout_s = float(timeout_s)
         self._states: dict[str, CircuitBreakerState] = {}
 
     def _get(self, provider: str) -> CircuitBreakerState:
@@ -103,6 +121,24 @@ class CircuitBreaker:
             state.open = True
             state.opened_at = time.monotonic()
 
+    # ── Backward-compatible aliases (Phase 2: model_gateway CB migration) ──
+
+    _DEFAULT_PROVIDER = "default"
+
+    def failure(self) -> None:
+        """Backward-compat: deprecated, use record_failure(provider)."""
+        self.record_failure(self._DEFAULT_PROVIDER)
+
+    def success(self) -> None:
+        """Backward-compat: deprecated, use record_success(provider)."""
+        self.record_success(self._DEFAULT_PROVIDER)
+
+    def before_call(self) -> None:
+        """Backward-compat: deprecated, use is_open(provider) check."""
+        from .model_gateway import ProviderUnavailable
+        if self.is_open(self._DEFAULT_PROVIDER):
+            raise ProviderUnavailable("provider_circuit_open")
+
 
 # ── Model Router ─────────────────────────────────────────────────────────────
 
@@ -129,8 +165,8 @@ class ModelRouter:
         router.track_result(decision.selected_provider, success=True, ...)
     """
 
-    def __init__(self, circuit_breaker_threshold: int = 3, circuit_breaker_timeout_s: int = 60) -> None:
-        self.breaker = CircuitBreaker(
+    def __init__(self, circuit_breaker_threshold: int = 3, circuit_breaker_timeout_s: int = 60, breaker: CircuitBreaker | None = None) -> None:
+        self.breaker = breaker if breaker is not None else CircuitBreaker(
             threshold=circuit_breaker_threshold,
             timeout_s=circuit_breaker_timeout_s,
         )

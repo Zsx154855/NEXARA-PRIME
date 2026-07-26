@@ -4,14 +4,22 @@ Single source of truth for capability registration, resolution, scoring,
 and evidence tracking.  Formerly capabilities.py (V1) + capability_registry_v2.py
 were two separate registries.  This module now contains both APIs in one class.
 
-Version: 2.0 (converged from capabilities.py + capability_registry_v2.py)
+Phase 2 (KMA): Adds SQLiteStore persistence for capability_history records.
+Scores are derived from persisted raw records, recomputable on restart.
+
+Version: 2.1 (Phase 2 — persistence added)
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from .models import Capability, CapabilityScore, CapabilityType, RiskLevel, now_iso
+from .models import (
+    Capability, CapabilityHistory, CapabilityScore, CapabilityType, RiskLevel, new_id, now_iso,
+)
+
+if TYPE_CHECKING:
+    from .db import SQLiteStore
 
 
 class CapabilityRegistry:
@@ -23,7 +31,7 @@ class CapabilityRegistry:
     - Decay and confidence gating (merged from V2)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, store: "SQLiteStore | None" = None) -> None:
         # ── V1 fields ──
         self._capabilities: dict[str, Capability] = {}
         self._mounted: dict[str, set[str]] = {}
@@ -31,6 +39,12 @@ class CapabilityRegistry:
         # ── V2 fields (evidence-scored) ──
         self._scores: dict[str, CapabilityScore] = {}
         self._mission_history: dict[str, list[dict[str, Any]]] = {}
+
+        # ── Phase 2: persistence ──
+        self._store = store
+        if self._store is not None:
+            self._load_history()
+            self._recompute_scores()
 
         self._register_defaults()
 
@@ -141,57 +155,6 @@ class CapabilityRegistry:
         self._mission_history[capability_id] = []
         return score
 
-    def update_score(
-        self,
-        capability_id: str,
-        mission_success: bool,
-        latency_ms: float,
-        token_cost: float,
-        evidence_ids: list[str] | None = None,
-    ) -> CapabilityScore | None:
-        """Update capability score from real mission outcomes."""
-        score = self._scores.get(capability_id)
-        if score is None:
-            return None
-
-        evidence_ids = evidence_ids or []
-
-        outcome: dict[str, Any] = {
-            "success": mission_success,
-            "latency_ms": latency_ms,
-            "token_cost": token_cost,
-            "evidence_ids": evidence_ids,
-            "timestamp": now_iso(),
-        }
-        self._mission_history.setdefault(capability_id, []).append(outcome)
-
-        history = self._mission_history[capability_id]
-        total_missions = len(history)
-        successes = sum(1 for o in history if o["success"])
-        score.historical_success_rate = successes / total_missions if total_missions > 0 else 0.0
-
-        recent = history[-10:]
-        recent_failures = sum(1 for o in recent if not o["success"])
-        score.recent_failure_rate = recent_failures / len(recent) if recent else 0.0
-
-        all_latencies = [o["latency_ms"] for o in history]
-        score.average_latency_ms = sum(all_latencies) / len(all_latencies) if all_latencies else 0.0
-
-        all_costs = [o["token_cost"] for o in history]
-        score.average_token_cost = sum(all_costs) / len(all_costs) if all_costs else 0.0
-
-        new_evidence = [eid for eid in evidence_ids if eid not in score.source_evidence]
-        score.evidence_count += len(new_evidence)
-        score.source_evidence.extend(new_evidence)
-
-        if score.evidence_count >= 3:
-            score.confidence = min(score.evidence_count / 10.0, 1.0)
-        else:
-            score.confidence = max(0.3, score.evidence_count * 0.1)
-
-        score.last_updated = now_iso()
-        return score
-
     def _apply_decay(self, score: CapabilityScore) -> None:
         try:
             last = datetime.fromisoformat(score.last_updated)
@@ -230,6 +193,296 @@ class CapabilityRegistry:
 
     def get_mission_history(self, capability_id: str) -> list[dict[str, Any]]:
         return self._mission_history.get(capability_id, [])
+
+    # ── Phase 2: Persistence ──
+
+    def _load_history(self) -> None:
+        """Load persisted capability_history records from SQLiteStore.
+
+        Normalizes persisted field names (cost → token_cost, evidence_id →
+        evidence_ids) to a single canonical representation used by
+        _recompute_single and _recompute_scores.
+        """
+        if self._store is None:
+            return
+        records = self._store.list_records("capability_history")
+        for raw in records:
+            try:
+                cap_id = str(raw.get("capability_id", ""))
+                if cap_id:
+                    # Normalize: cost → token_cost (canonical)
+                    if "cost" in raw and "token_cost" not in raw:
+                        raw["token_cost"] = raw.pop("cost")
+                    # Normalize: evidence_id → evidence_ids (canonical list)
+                    if "evidence_id" in raw and "evidence_ids" not in raw:
+                        eid = raw.pop("evidence_id")
+                        raw["evidence_ids"] = [eid] if eid else []
+                    self._mission_history.setdefault(cap_id, []).append(dict(raw))
+            except (TypeError, ValueError):
+                continue
+
+    def _recompute_scores(self) -> None:
+        """Recompute all CapabilityScore objects from persisted raw records."""
+        for cap_id, history in list(self._mission_history.items()):
+            if not history:
+                continue
+            total = len(history)
+            successes = sum(1 for o in history if o.get("success", False))
+            recent = history[-100:]
+            recent_failures = sum(1 for o in recent if not o.get("success", False))
+            latencies = [float(o.get("latency_ms", 0.0)) for o in history]
+            costs = [float(o.get("token_cost", 0.0)) for o in history]
+            evidence_count = sum(
+                len(o.get("evidence_ids", [])) for o in history
+            )
+            confidence = min(evidence_count / 10.0, 1.0) if evidence_count >= 3 else max(0.3, evidence_count * 0.1)
+
+            score = CapabilityScore(
+                capability_id=cap_id,
+                name=self._scores.get(cap_id, CapabilityScore(capability_id=cap_id, name=cap_id)).name,
+                supported_task_types=self._scores.get(cap_id, CapabilityScore(capability_id=cap_id, name=cap_id)).supported_task_types,
+                tool_permissions=self._scores.get(cap_id, CapabilityScore(capability_id=cap_id, name=cap_id)).tool_permissions,
+                risk_ceiling=self._scores.get(cap_id, CapabilityScore(capability_id=cap_id, name=cap_id)).risk_ceiling,
+                model_requirements=self._scores.get(cap_id, CapabilityScore(capability_id=cap_id, name=cap_id)).model_requirements,
+                historical_success_rate=successes / total if total > 0 else 0.0,
+                average_latency_ms=sum(latencies) / len(latencies) if latencies else 0.0,
+                average_token_cost=sum(costs) / len(costs) if costs else 0.0,
+                recent_failure_rate=recent_failures / len(recent) if recent else 0.0,
+                confidence=confidence,
+                evidence_count=evidence_count,
+                last_updated=now_iso(),
+                source_evidence=[],
+                schema_version=2,
+            )
+            self._scores[cap_id] = score
+
+    def record_history(
+        self,
+        capability_id: str,
+        *,
+        mission_id: str | None = None,
+        provider: str = "",
+        model: str = "",
+        success: bool = True,
+        failure_kind: str | None = None,
+        latency_ms: float = 0.0,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cost: float = 0.0,
+        retry_count: int = 0,
+        recovery: bool = False,
+        evaluation_score: float | None = None,
+        evidence_id: str | None = None,
+        idempotency_key: str = "",
+    ) -> CapabilityHistory:
+        """Persist a single capability invocation outcome.
+
+        Records both to in-memory history AND SQLiteStore (if available).
+        Uses idempotency_key to prevent duplicate writes.
+        """
+        record = CapabilityHistory(
+            capability_id=capability_id,
+            mission_id=mission_id,
+            provider=provider,
+            model=model,
+            success=success,
+            failure_kind=failure_kind,
+            latency_ms=latency_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost=cost,
+            retry_count=retry_count,
+            recovery=recovery,
+            evaluation_score=evaluation_score,
+            evidence_id=evidence_id,
+            idempotency_key=idempotency_key,
+        )
+
+        # Idempotency check first (before in-memory and persistence)
+        if idempotency_key:
+            history = self._mission_history.get(capability_id, [])
+            for existing in history:
+                if existing.get("idempotency_key") == idempotency_key:
+                    # Return the actual persisted record, not a new object
+                    return self._reconstruct_history_from_memory(
+                        capability_id, existing
+                    )
+            if self._store is not None:
+                stored = self._store.find_record(
+                    "capability_history", "idempotency_key", idempotency_key
+                )
+                if stored:
+                    return CapabilityHistory.model_validate(stored)
+
+        # In-memory
+        outcome: dict[str, Any] = {
+            "record_id": record.record_id,
+            "mission_id": record.mission_id,
+            "success": success,
+            "latency_ms": latency_ms,
+            "token_cost": cost,
+            "evidence_ids": [evidence_id] if evidence_id else [],
+            "timestamp": record.timestamp,
+            "idempotency_key": idempotency_key,
+        }
+        self._mission_history.setdefault(capability_id, []).append(outcome)
+
+        # Persistence
+        if self._store is not None:
+            self._store.save_record(
+                record.record_id,
+                "capability_history",
+                record.model_dump(mode="json"),
+                record.timestamp,
+                mission_id,
+            )
+
+        return record
+
+    def update_score(
+        self,
+        capability_id: str,
+        mission_success: bool,
+        latency_ms: float,
+        token_cost: float,
+        evidence_ids: list[str] | None = None,
+        *,
+        provider: str = "",
+        model: str = "",
+        mission_id: str | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        idempotency_key: str = "",
+    ) -> CapabilityScore | None:
+        """Update capability score from real mission outcomes.
+
+        Phase 2: Now also persists the raw history record.
+        """
+        score = self._scores.get(capability_id)
+        if score is None:
+            return None
+
+        evidence_ids = evidence_ids or []
+
+        # Record history exactly once per invocation (not per evidence_id).
+        # Evidence references are stored alongside the single history entry.
+        self.record_history(
+            capability_id=capability_id,
+            mission_id=mission_id,
+            provider=provider,
+            model=model,
+            success=mission_success,
+            latency_ms=latency_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost=token_cost,
+            evidence_id=evidence_ids[0] if evidence_ids else None,
+            idempotency_key=idempotency_key,
+        )
+        # Store all evidence references in the in-memory outcome dict
+        history = self._mission_history.get(capability_id, [])
+        if history:
+            # Locate the correct entry by idempotency_key, not history[-1]
+            # so that replay of an earlier key does not mutate a later entry.
+            target_entry: dict[str, Any] | None = None
+            if idempotency_key:
+                for entry in history:
+                    if entry.get("idempotency_key") == idempotency_key:
+                        target_entry = entry
+                        break
+            if target_entry is None:
+                target_entry = history[-1]
+            target_entry["evidence_ids"] = evidence_ids
+
+        # Then recompute derived score
+        return self._recompute_single(capability_id)
+
+    def _reconstruct_history_from_memory(
+        self, capability_id: str, outcome: dict[str, Any]
+    ) -> CapabilityHistory:
+        """Reconstruct a CapabilityHistory from an in-memory outcome dict."""
+        return CapabilityHistory(
+            record_id=outcome.get("record_id", new_id("caphist")),
+            capability_id=capability_id,
+            mission_id=outcome.get("mission_id"),
+            success=outcome.get("success", True),
+            latency_ms=outcome.get("latency_ms", 0.0),
+            cost=float(outcome.get("token_cost", 0.0)),
+            evidence_id=(
+                outcome.get("evidence_ids", [None])[0]
+                if outcome.get("evidence_ids")
+                else None
+            ),
+            timestamp=outcome.get("timestamp", now_iso()),
+            idempotency_key=outcome.get("idempotency_key", ""),
+        )
+
+    def _recompute_single(self, capability_id: str) -> CapabilityScore | None:
+        """Recompute score for a single capability from history."""
+        history = self._mission_history.get(capability_id, [])
+        score = self._scores.get(capability_id)
+        if not history or score is None:
+            return score
+
+        total = len(history)
+        successes = sum(1 for o in history if o.get("success", False))
+        recent = history[-100:]
+        recent_failures = sum(1 for o in recent if not o.get("success", False))
+        latencies = [float(o.get("latency_ms", 0.0)) for o in history]
+        costs = [float(o.get("token_cost", 0.0)) for o in history]
+        evidence_count = sum(1 for o in history if o.get("evidence_ids"))
+
+        score.historical_success_rate = successes / total if total > 0 else 0.0
+        score.recent_failure_rate = recent_failures / len(recent) if recent else 0.0
+        score.average_latency_ms = sum(latencies) / len(latencies) if latencies else 0.0
+        score.average_token_cost = sum(costs) / len(costs) if costs else 0.0
+
+        new_evidence_ids = [
+            eid for o in history
+            for eid in (o.get("evidence_ids") or [])
+            if eid and eid not in score.source_evidence
+        ]
+        score.evidence_count = evidence_count
+        score.source_evidence.extend(new_evidence_ids)
+
+        if score.evidence_count >= 3:
+            score.confidence = min(score.evidence_count / 10.0, 1.0)
+        else:
+            score.confidence = max(0.3, score.evidence_count * 0.1)
+
+        score.last_updated = now_iso()
+        return score
+
+    def get_history(
+        self, capability_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Get persisted capability history records.
+
+        If capability_id is None, returns all history records.
+        """
+        if capability_id:
+            return self._mission_history.get(capability_id, [])
+        all_records: list[dict[str, Any]] = []
+        for records in self._mission_history.values():
+            all_records.extend(records)
+        return all_records
+
+    def get_aggregates(self) -> dict[str, Any]:
+        """Get aggregate statistics across all capabilities."""
+        all_histories = list(self._mission_history.values())
+        total_records = sum(len(h) for h in all_histories)
+        all_successes = sum(
+            sum(1 for o in h if o.get("success", False)) for h in all_histories
+        )
+        return {
+            "total_capabilities": len(self._scores),
+            "total_history_records": total_records,
+            "overall_success_rate": (
+                all_successes / total_records if total_records > 0 else 0.0
+            ),
+            "capabilities_with_scores": len(self._scores),
+            "persistence_enabled": self._store is not None,
+        }
 
 
 # ── DEPRECATED compat alias (for backwards-compatibility) ──

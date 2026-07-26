@@ -1,0 +1,63 @@
+{
+  "amendment_id": "KMA_PHASE2_BRANCH_LINEAGE_AMENDMENT_V1",
+  "base_sha": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "changes": {
+    "changed_files": [
+      "scripts/governance/detect_state_drift.py",
+      ".github/workflows/ci.yml",
+      "tests/test_state_drift_branch_lineage.py"
+    ],
+    "files_evidence": 2,
+    "files_modified": 2,
+    "files_new": 1
+  },
+  "evidence_id": "kma_phase2_branch_lineage_remediation_v1",
+  "evidence_type": "kma_branch_lineage_remediation",
+  "generated_at": "2026-07-26T07:53:10Z",
+  "governance": {
+    "diff_check": "PASS",
+    "nsec_drift": "PASS",
+    "nsec_validate": "PASS",
+    "secret_scan": "CLEAN",
+    "state_drift": "Branch lineage PASS (dirty worktree only — expected pre-commit)"
+  },
+  "parent_head_sha": "6dd3fa06b1315ac5ebc0509d16147cb1858f860b",
+  "reviewer_route_fix": {
+    "fix": "hermes config set model.name deepseek-v4-pro",
+    "issue": "deepseek-chat alias in Hermes config prevented Claude delegation",
+    "scope": "local Hermes configuration, not repository code"
+  },
+  "root_cause": {
+    "fix": "Added check_branch_lineage() to detect_state_drift.py — for work/* branches, verifies recorded canonical branch is git ancestor of HEAD",
+    "mechanism": "PROGRAM_STATE recorded canonical branch is feat/brand-baihan but CI checks out work/nexara-knowledge-memory-authority-convergence-v1",
+    "problem": "CI governance and python jobs fail with branch mismatch on stacked PRs",
+    "secondary_fix": "Added fetch-depth: 0 to governance job CI checkout so git merge-base can resolve historical refs"
+  },
+  "stale_runs": {
+    "run_235": {
+      "bound_to_current_base": false,
+      "checkout_sha": "394d0b6",
+      "stale_base_run": true
+    },
+    "run_236": {
+      "failed_state_drift": true,
+      "passed_ruff": true,
+      "reason": "pre-existing lineage gap now fixed"
+    }
+  },
+  "test_results": {
+    "full_regression": "1177 pass, 14 fail (all pre-existing)",
+    "new_test_regressions": 0,
+    "ruff_status": "All checks passed!",
+    "state_drift_fail": 0,
+    "state_drift_lineage_tests": 11,
+    "state_drift_pass": 11
+  },
+  "workflow_changes": {
+    "change": "governance job: added fetch-depth: 0",
+    "file": ".github/workflows/ci.yml",
+    "permissions_unchanged": true,
+    "self_hosted_scope_unchanged": true,
+    "triggers_unchanged": true
+  }
+}

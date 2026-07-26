@@ -8,6 +8,8 @@ from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from .model_router import CircuitBreaker
+
 
 class ProviderError(RuntimeError):
     """A provider failure that is safe to retry or route to a fallback."""
@@ -59,36 +61,6 @@ class ModelProvider(Protocol):
     def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None) -> ModelResponse:
         ...
 
-
-class CircuitBreaker:
-    def __init__(self, failure_threshold: int = 3, cooldown_seconds: float = 30.0):
-        self.failure_threshold = failure_threshold
-        self.cooldown_seconds = cooldown_seconds
-        self.failures = 0
-        self.opened_at: float | None = None
-
-    @property
-    def open(self) -> bool:
-        if self.opened_at is None:
-            return False
-        if time.monotonic() - self.opened_at >= self.cooldown_seconds:
-            self.opened_at = None
-            self.failures = 0
-            return False
-        return True
-
-    def before_call(self) -> None:
-        if self.open:
-            raise ProviderUnavailable("provider_circuit_open")
-
-    def success(self) -> None:
-        self.failures = 0
-        self.opened_at = None
-
-    def failure(self) -> None:
-        self.failures += 1
-        if self.failures >= self.failure_threshold:
-            self.opened_at = time.monotonic()
 
 
 class MockProvider:
@@ -217,29 +189,33 @@ class FallbackProvider:
         raise ProviderUnavailable("all_providers_failed:" + "|".join(errors))
 
 
+
+
 class ModelGateway:
-    def __init__(self, provider: ModelProvider | None = None, fallback: ModelProvider | None = None, *, max_attempts: int = 2, retry_delay_seconds: float = 0.02):
+    def __init__(self, provider: ModelProvider | None = None, fallback: ModelProvider | None = None, *, max_attempts: int = 2, retry_delay_seconds: float = 0.02, breaker: "CircuitBreaker | None" = None):
         if provider is None:
             raise ValueError("ModelGateway requires a concrete provider; use UnavailableProvider instead of None")
         self.provider = provider
         self.fallback = fallback
         self.max_attempts = max(1, max_attempts)
         self.retry_delay_seconds = retry_delay_seconds
-        self.breaker = CircuitBreaker()
+        self.breaker = breaker if breaker is not None else CircuitBreaker()
         self.last_usage: dict[str, Any] = {}
 
     def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "") -> ModelResponse:
         last_error: Exception | None = None
+        provider_name = getattr(self.provider, 'name', 'unknown')
         for attempt in range(1, self.max_attempts + 1):
             try:
-                self.breaker.before_call()
+                if self.breaker.is_open(provider_name):
+                    raise ProviderUnavailable("provider_circuit_open")
                 response = self.provider.complete(system, task, context, trace_id=trace_id)
-                self.breaker.success()
+                self.breaker.record_success(provider_name)
                 self.last_usage = {"provider": response.provider, "model": response.model, "input_tokens": response.input_tokens, "output_tokens": response.output_tokens, "cost_usd": response.cost_usd, "trace_id": trace_id}
                 return response
             except (ProviderError, TimeoutError) as exc:
                 last_error = exc
-                self.breaker.failure()
+                self.breaker.record_failure(provider_name)
                 if attempt < self.max_attempts:
                     time.sleep(self.retry_delay_seconds * attempt)
         if self.fallback:

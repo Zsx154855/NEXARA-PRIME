@@ -299,6 +299,78 @@ def check_gate_order(gate_status: dict[str, Any]) -> list[str]:
     return issues
 
 
+def git_resolve_ref(ref: str, repo_root: Path | None = None) -> str | None:
+    """Resolve a branch name to a commit SHA, trying multiple paths.
+
+    Returns the resolved SHA, or None if unresolvable.
+    """
+    root = repo_root or REPO_ROOT
+    for candidate in (f"refs/remotes/origin/{ref}", ref, f"refs/heads/{ref}"):
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", candidate],
+            cwd=root, capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    return None
+
+
+def git_is_ancestor(ancestor_ref: str, descendant_ref: str, repo_root: Path | None = None) -> bool:
+    """True if ancestor_ref is an ancestor of descendant_ref."""
+    root = repo_root or REPO_ROOT
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", ancestor_ref, descendant_ref],
+        cwd=root, capture_output=True, timeout=30,
+    )
+    return result.returncode == 0
+
+
+def check_branch_lineage(
+    recorded_branch: str,
+    current_branch: str,
+    repo_root: Path | None = None,
+) -> list[str]:
+    """Validate current_branch is derived from recorded canonical branch.
+
+    For work/* branches this allows stacked-branch workflows.
+    Fails closed if the canonical ref cannot be resolved.
+    """
+    root = repo_root or REPO_ROOT
+    if not recorded_branch:
+        return []
+
+    if recorded_branch == current_branch:
+        return []
+
+    if not current_branch.startswith("work/"):
+        return [
+            f"Branch mismatch: PROGRAM_STATE says '{recorded_branch}', "
+            f"git says '{current_branch}'"
+        ]
+
+    recorded_ref = git_resolve_ref(recorded_branch, root)
+    if recorded_ref is None:
+        return [
+            f"Branch lineage fail-closed: cannot resolve recorded "
+            f"canonical branch '{recorded_branch}'"
+        ]
+
+    try:
+        if not git_is_ancestor(recorded_ref, "HEAD", root):
+            return [
+                f"Branch lineage mismatch: current work branch "
+                f"'{current_branch}' is not derived from recorded "
+                f"canonical branch '{recorded_branch}'"
+            ]
+    except Exception:
+        return [
+            f"Branch lineage fail-closed: merge-base check failed for "
+            f"'{recorded_branch}' -> HEAD"
+        ]
+
+    return []
+
+
 def check_git_consistency(
     gate_status: dict[str, Any],
     program_state: dict[str, Any],
@@ -319,10 +391,8 @@ def check_git_consistency(
     )
     recorded_branch = program_state.get("branch", "")
     if recorded_branch and recorded_branch != current_branch and not in_pr_ci:
-        issues.append(
-            f"Branch mismatch: PROGRAM_STATE says '{recorded_branch}', "
-            f"git says '{current_branch}'"
-        )
+        lineage_issues = check_branch_lineage(recorded_branch, current_branch)
+        issues.extend(lineage_issues)
 
     if BASELINE_PATH.exists():
         try:

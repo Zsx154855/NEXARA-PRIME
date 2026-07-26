@@ -30,6 +30,10 @@ from .security_audit import SecurityAuditLedger
 from .state_machine import MissionStateMachine
 from .token_compiler import TokenCompiler
 from .tools import ToolRuntime
+from .chief_brain_kernel import ChiefBrainKernel
+from .mission_triage import MissionTriageEngine
+from .orchestration import RuntimeOrchestrator
+from .adaptive_scheduler import AdaptiveMultiAgentScheduler
 
 # ── Runtime Closure v1: Governed Adapters ──
 _ADAPTERS_INITIALIZED = False
@@ -40,6 +44,7 @@ _message_adapter = None
 _deployment_adapter = None
 _rag_pipeline = None
 _memory_layer_manager = None
+_cbk = None
 _repair_loop = None
 _program_loop = None
 _adapters_lock = threading.Lock()
@@ -47,7 +52,7 @@ _adapters_lock = threading.Lock()
 def _ensure_adapters(runtime):
     global _ADAPTERS_INITIALIZED, _browser_adapter, _computer_use_adapter
     global _git_adapter, _message_adapter, _deployment_adapter
-    global _rag_pipeline, _memory_layer_manager, _repair_loop, _program_loop
+    global _rag_pipeline, _memory_layer_manager, _cbk, _repair_loop, _program_loop
     # Fast-path check (no lock needed for already-initialized same runtime)
     if _ADAPTERS_INITIALIZED and getattr(_ensure_adapters, '_last_runtime_id', None) == id(runtime):
         return
@@ -121,6 +126,21 @@ def _ensure_adapters(runtime):
         except ImportError:
             pass
         try:
+            global _cbk
+            _cbk = ChiefBrainKernel(
+                triage=MissionTriageEngine(),
+                compiler=runtime.compiler,
+                contracts=runtime.contracts,
+                state_machine=runtime.state_machine,
+                orchestrator=RuntimeOrchestrator(runtime.store, runtime.events, runtime.evidence),
+                scheduler=AdaptiveMultiAgentScheduler(),
+                policy=runtime.policy,
+                approvals=runtime.approvals,
+                memory_layer_manager=_memory_layer_manager,
+            )
+        except ImportError:
+            pass
+        try:
             from .repair_loop import RepairLoop
             _repair_loop = RepairLoop(
                 evidence_store=runtime.evidence,
@@ -152,13 +172,20 @@ _adaptive_router = None
 _adaptive_budgets = None
 _adaptive_escalation = None
 _adaptive_tokens_v2 = None
+# Shared CircuitBreaker — single authority for ModelGateway + ModelRouter
+_shared_breaker = None
 
 def _ensure_adaptive_imports():
     global _ADAPTIVE_IMPORTS_DONE, _adaptive_triage, _adaptive_scheduler_v2
     global _adaptive_capabilities_v2, _adaptive_router, _adaptive_budgets
-    global _adaptive_escalation, _adaptive_tokens_v2
+    global _adaptive_escalation, _adaptive_tokens_v2, _shared_breaker
     if _ADAPTIVE_IMPORTS_DONE:
         return
+    try:
+        from .model_router import CircuitBreaker
+        _shared_breaker = CircuitBreaker()
+    except ImportError:
+        pass
     try:
         from .mission_triage import MissionTriageEngine
         _adaptive_triage = MissionTriageEngine()
@@ -176,7 +203,7 @@ def _ensure_adaptive_imports():
         _adaptive_capabilities_v2 = None
     try:
         from .model_router import ModelRouter
-        _adaptive_router = ModelRouter()
+        _adaptive_router = ModelRouter(breaker=_shared_breaker)
     except ImportError:
         _adaptive_router = None
     try:
@@ -270,6 +297,12 @@ class NexaraRuntime:
         _ensure_adapters(self)
         return _program_loop
 
+    @property
+    def cbk(self):
+        """ChiefBrainKernel — sole Mission Admission Boundary. Lazy-initialized."""
+        _ensure_adapters(self)
+        return _cbk
+
     def _build_model_gateway(self) -> ModelGateway:
         provider_name = self.settings.model_provider.lower()
         if self.settings.mock_model:
@@ -308,7 +341,7 @@ class NexaraRuntime:
             self._provider_unavailable = True
             return ModelGateway(UnavailableProvider())
         self._provider_unavailable = False
-        return ModelGateway(provider, fallback=None)
+        return ModelGateway(provider, fallback=None, breaker=_shared_breaker)
 
     @staticmethod
     def _resolve_api_key(secret_name: str, env_var: str) -> str | None:
@@ -821,16 +854,14 @@ class NexaraRuntime:
     def _get_evidence_by_idempotency(
         self, key: str, mission_id: str
     ) -> dict[str, Any] | None:
-        """Return an integrity-checked evidence projection for one replay key."""
-        raw_evidence = self.store.find_record("evidence", "idempotency_key", key)
-        evidence_envelope = self.store.find_record_envelope("evidence", "idempotency_key", key)
-        if raw_evidence and not evidence_envelope:
-            raise ValueError("evidence_integrity_invalid")
-        if evidence_envelope:
-            if evidence_envelope.get("mission_id") != mission_id:
-                raise ValueError("evidence_mission_mismatch")
-            return evidence_envelope["payload"]
-        return None
+        """Return an integrity-checked evidence projection for one replay key.
+
+        Phase 2: delegates to EvidenceStore.find_by_idempotency() — no raw store access.
+        """
+        result = self.evidence.find_by_idempotency(key)
+        if result and result.get("mission_id") != mission_id:
+            raise ValueError("evidence_mission_mismatch")
+        return result
 
     def pause(self, mission_id: str) -> Mission:
         mission = self._load_mission(mission_id)
@@ -873,25 +904,16 @@ class NexaraRuntime:
         mission_recovery = mission.result.get("recovery", {}) if isinstance(mission.result, dict) else {}
         mission_unavailable = mission_recovery.get("provider_unavailable", False)
         provider_unavailable = runtime_unavailable or mission_unavailable
-        # A report receipt must bind to this mission's file_write_report tool;
-        # an unrelated code execution receipt cannot satisfy completion truth.
-        tool_by_id = {
-            item.get("invocation_id"): item
-            for item in self.tools.list_invocations(mission_id)
-        }
-        expected_receipt_id = mission.result.get("receipt_evidence_id")
-        receipt_present = any(
-            evidence.get("kind") == "execution_receipt"
-            and (
-                not expected_receipt_id
-                or evidence.get("evidence_id") == expected_receipt_id
-            )
-            and tool_by_id.get(evidence.get("tool_invocation_id"), {}).get(
-                "tool_name"
-            )
-            == "file_write_report"
-            for evidence in evidence_list
+        # Receipt status: delegate to EvidenceStore.receipt_status() — single authority.
+        # No independent receipt_present judgment (KMA_INVARIANT_10).
+        # Bind to expected report-receipt tool types and verify mission ID match.
+        receipt = self.evidence.receipt_status(
+            mission_id,
+            tool_names=["file_write_report", "write_workspace_file"],
         )
+        # Honor EvidenceStore.receipt_status() as single authority (KMA_INVARIANT_10).
+        # No independent judgment — the store's status is the canonical receipt_status.
+        receipt_status_value = receipt.get("status", "missing")
         return {
             "mission_id": mission.mission_id,
             "state": mission.state, "current_state": mission.state,
@@ -906,7 +928,7 @@ class NexaraRuntime:
             "approval_status": approval_status, "pending_action": mission.pending_approval_id or None,
             "evidence_count": len(evidence_list),
             "latest_evidence": evidence_list[-1] if evidence_list else None,
-            "receipt_status": "present" if receipt_present else "missing",
+            "receipt_status": receipt_status_value,
             "memory_patch_status": "patched" if mission.result.get("memory_patch_id") else "not_patched",
             "evaluation_status": "passed" if mission.result.get("evaluation_passed") else ("failed" if "evaluation_id" in (mission.result or {}) else "not_evaluated"),
             "retry_count": mission.result.get("retry_count", 0) if isinstance(mission.result, dict) else 0,

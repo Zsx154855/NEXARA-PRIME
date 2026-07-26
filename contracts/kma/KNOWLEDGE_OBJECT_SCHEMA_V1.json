@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/kma/knowledge_object_schema_v1.json",
+  "title": "Knowledge Object Schema V1",
+  "description": "Canonical schema for a Knowledge Object — the unified representation of any entity stored in the Knowledge-Memory Authority system. Covers Evidence, Memory, and Receipt records.",
+  "type": "object",
+  "required": [
+    "object_id",
+    "object_type",
+    "created_at"
+  ],
+  "properties": {
+    "object_id": {
+      "type": "string",
+      "description": "Unique stable ID. Format: {prefix}_{uuid_hex}. Prefixes: evidence_, memory_, receipt_."
+    },
+    "object_type": {
+      "type": "string",
+      "enum": ["evidence", "memory", "receipt"],
+      "description": "Domain classification of this object."
+    },
+    "mission_id": {
+      "type": "string",
+      "description": "Parent mission ID. Null for global/system objects."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC creation timestamp."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC last-modified timestamp."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of canonical content for integrity verification."
+    },
+    "envelope_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of the full integrity envelope (identity + metadata + payload)."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Client-supplied key for idempotent write semantics."
+    },
+    "source_event_id": {
+      "type": "string",
+      "description": "ID of the event that produced this object."
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "Distributed trace identifier linking this object to its originating request chain."
+    },
+    "provenance": {
+      "type": "string",
+      "description": "Origin descriptor: runtime, human, import, migration, recovery."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "committed",
+        "candidate",
+        "conflict",
+        "superseded",
+        "pending_review",
+        "cleared",
+        "unverified",
+        "verified",
+        "corrupt"
+      ],
+      "description": "Lifecycle status. committed/verified = canonical. candidate = awaiting review. conflict = requires resolution. superseded = replaced by newer version."
+    },
+    "superseded_by": {
+      "type": "string",
+      "description": "Object ID of the record that supersedes this one. Present only when status is 'superseded'."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Confidence score. 1.0 = verified by direct evidence. <1.0 = inferred or indirect evidence. <0.8 = candidate only."
+    },
+    "verified": {
+      "type": "boolean",
+      "description": "Whether this object has passed integrity verification."
+    },
+    "canonical": {
+      "type": "boolean",
+      "description": "Whether this object is the canonical version. Only one canonical object per logical key."
+    }
+  }
+}

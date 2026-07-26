@@ -4,10 +4,10 @@
   "agent_package": "nexara_prime.agent",
   "hermes_runtime_dependency": 0,
   "repo": "/Users/agentos/NEXARA-PRIME",
-  "branch": "feat/brand-baihan",
+  "branch": "main",
   "merge_target_branch": "main",
   "python": "3.12.13",
-  "test_baseline": "918 passed, 0 failed (clean worktree + remote CI)",
+  "test_baseline": "1211 passed, 17 failed, 1228 collected (KMA suites: +~310 tests; 1 SDK contract import error)",
   "current_program_gate": "G10",
   "gate_status": "LOCAL_RELEASE_READY",
   "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
@@ -45,7 +45,7 @@
   "orchestration_status": {
     "phase": "POST_MERGE_VALIDATED",
     "test_results": "87 passed, 0 failed",
-    "full_suite": "918 passed, 0 failed (clean worktree + remote CI)",
+    "full_suite": "1211 passed, 17 failed, 1228 collected (KMA suites: +~310; 1 SDK import error)",
     "next": "READY_FOR_HUMAN_APPROVAL"
   },
   "pr8_orchestration": {
@@ -95,10 +95,14 @@
     "url": "https://github.com/Zsx154855/NEXARA-PRIME/pull/23",
     "branch": "feat/brand-baihan",
     "brand": "柏韩 (Bǎi Hán) — resolved",
-    "status": "OPEN",
+    "status": "MERGED",
+    "merged_at": "2026-07-26T08:44:08Z",
+    "merge_method": "MERGE_COMMIT",
+    "merge_commit_sha": "c95ff62b40bdaeb5abeaacff202f5ad94326c8a5",
+    "head_sha": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
     "verified_pr_head": "b1084c6fec69a3199e6ad5e1f4527f67e58f0e44",
     "superseded_by": ".nexara/receipts/pr23_final_attestation.json"
   },
-  "updated_at": "2026-07-23T12:30:00Z",
-  "updated_by": "PR #23 final remediation — test-isolation fix, 918/918 clean worktree"
+  "updated_at": "2026-07-26T08:50:00Z",
+  "updated_by": "PR23 merge-commit post-merge canonical state sync — branch main, pr23 MERGED"
 }

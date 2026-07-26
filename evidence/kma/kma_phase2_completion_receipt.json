@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "kma_phase2_completion_receipt",
+  "evidence_refs": [
+    "evidence_kma_phase2_implementation"
+  ],
+  "evidence_subject_head": "1704e235d0fbd784f1da46e24c3d8fffc0fb692d",
+  "verdict": "PASS",
+  "generated_at": "2026-07-26T03:10:00Z",
+  "branch": "work/nexara-knowledge-memory-authority-convergence-v1",
+  "prohibited_actions": {
+    "commit": false,
+    "push": false,
+    "merge": false,
+    "tag": false,
+    "release": false,
+    "deploy": false
+  },
+  "phase_2_outcome": {
+    "result": "PASS",
+    "reason": "All 7 implementation targets achieved. Allowlist/denylist compliant. 0 new regressions."
+  },
+  "blocker_resolution": {
+    "A_EvidenceStore_API": "IMPLEMENTED — get_by_id, get_by_idempotency_key, get_envelope, receipt_status, find_by_idempotency added",
+    "B_Receipt_Authority": "IMPLEMENTED — receipt_status single authority, runtime self-judgment removed",
+    "C_KMA_Types": "IMPLEMENTED — KnowledgeObject, KnowledgeRelation, KnowledgeRecall, KnowledgeCommit, CapabilityHistory in models.py",
+    "D_ChiefBrain_Recall": "IMPLEMENTED — recall() method delegates to MemoryLayerManager",
+    "E_Conflict_Supersession": "IMPLEMENTED — detect_supersession, detect_conflicts, validate_commit, query_non_superseded",
+    "F_Capability_History": "IMPLEMENTED — SQLiteStore persistence, record_history, _recompute_scores, restart recovery",
+    "G_CircuitBreaker": "IMPLEMENTED — model_gateway CB removed, model_router CB canonical, connector CB preserved"
+  },
+  "files_modified": [
+    "src/nexara_prime/models.py",
+    "src/nexara_prime/evidence.py",
+    "src/nexara_prime/runtime.py",
+    "src/nexara_prime/memory.py",
+    "src/nexara_prime/knowledge.py",
+    "src/nexara_prime/capabilities.py",
+    "src/nexara_prime/chief_brain_kernel.py",
+    "src/nexara_prime/model_gateway.py",
+    "src/nexara_prime/cli.py"
+  ],
+  "files_created": [
+    "tests/test_kma_types.py",
+    "tests/test_kma_evidence_api.py",
+    "tests/test_kma_capability_persistence.py",
+    "tests/test_kma_cbk_recall.py",
+    "tests/test_kma_knowledge.py",
+    "tests/test_kma_circuitbreaker.py",
+    "tests/test_kma_memory_idempotency.py",
+    "tests/test_kma_runtime_integration.py"
+  ],
+  "validation": {
+    "json_parse": "ALL_VALID",
+    "git_diff_check": "PASS",
+    "secret_scan": "CLEAN",
+    "nsec_validation": "PASS",
+    "kma_tests": "79 passed",
+    "full_regression": "1162 passed, 18 pre-existing failures",
+    "allowlist_compliant": true,
+    "denylist_compliant": true,
+    "product_code_modified": 9,
+    "no_commit_push": true
+  }
+}
