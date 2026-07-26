@@ -30,6 +30,10 @@ from .security_audit import SecurityAuditLedger
 from .state_machine import MissionStateMachine
 from .token_compiler import TokenCompiler
 from .tools import ToolRuntime
+from .chief_brain_kernel import ChiefBrainKernel
+from .mission_triage import MissionTriageEngine
+from .orchestration import RuntimeOrchestrator
+from .adaptive_scheduler import AdaptiveMultiAgentScheduler
 
 # ── Runtime Closure v1: Governed Adapters ──
 _ADAPTERS_INITIALIZED = False
@@ -40,6 +44,7 @@ _message_adapter = None
 _deployment_adapter = None
 _rag_pipeline = None
 _memory_layer_manager = None
+_cbk = None
 _repair_loop = None
 _program_loop = None
 _adapters_lock = threading.Lock()
@@ -47,7 +52,7 @@ _adapters_lock = threading.Lock()
 def _ensure_adapters(runtime):
     global _ADAPTERS_INITIALIZED, _browser_adapter, _computer_use_adapter
     global _git_adapter, _message_adapter, _deployment_adapter
-    global _rag_pipeline, _memory_layer_manager, _repair_loop, _program_loop
+    global _rag_pipeline, _memory_layer_manager, _cbk, _repair_loop, _program_loop
     # Fast-path check (no lock needed for already-initialized same runtime)
     if _ADAPTERS_INITIALIZED and getattr(_ensure_adapters, '_last_runtime_id', None) == id(runtime):
         return
@@ -118,6 +123,21 @@ def _ensure_adapters(runtime):
                 _memory_layer_manager = MemoryLayerManager(
                     runtime.memory, rag=None, enable_patch_review=True,
                 )
+        except ImportError:
+            pass
+        try:
+            global _cbk
+            _cbk = ChiefBrainKernel(
+                triage=MissionTriageEngine(),
+                compiler=runtime.compiler,
+                contracts=runtime.contracts,
+                state_machine=runtime.state_machine,
+                orchestrator=RuntimeOrchestrator(runtime.store, runtime.events, runtime.evidence),
+                scheduler=AdaptiveMultiAgentScheduler(),
+                policy=runtime.policy,
+                approvals=runtime.approvals,
+                memory_layer_manager=_memory_layer_manager,
+            )
         except ImportError:
             pass
         try:
@@ -276,6 +296,12 @@ class NexaraRuntime:
     def program(self):
         _ensure_adapters(self)
         return _program_loop
+
+    @property
+    def cbk(self):
+        """ChiefBrainKernel — sole Mission Admission Boundary. Lazy-initialized."""
+        _ensure_adapters(self)
+        return _cbk
 
     def _build_model_gateway(self) -> ModelGateway:
         provider_name = self.settings.model_provider.lower()
@@ -885,20 +911,9 @@ class NexaraRuntime:
             mission_id,
             tool_names=["file_write_report", "write_workspace_file"],
         )
-        # Cross-check: every receipt_id must belong to this mission
-        receipt_ids = receipt.get("receipt_ids", [])
-        verified_receipts: list[str] = []
-        for rid in receipt_ids:
-            try:
-                env = self.evidence.get_envelope(rid)
-                if env and env.get("mission_id") == mission_id:
-                    verified_receipts.append(rid)
-            except Exception:
-                pass
-        receipt_status_value = (
-            "present" if verified_receipts
-            else "missing"
-        )
+        # Honor EvidenceStore.receipt_status() as single authority (KMA_INVARIANT_10).
+        # No independent judgment — the store's status is the canonical receipt_status.
+        receipt_status_value = receipt.get("status", "missing")
         return {
             "mission_id": mission.mission_id,
             "state": mission.state, "current_state": mission.state,

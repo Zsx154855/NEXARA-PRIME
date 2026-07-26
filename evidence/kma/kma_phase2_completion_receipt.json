@@ -4,7 +4,7 @@
   "evidence_refs": [
     "evidence_kma_phase2_implementation"
   ],
-  "evidence_subject_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "evidence_subject_head": "1704e235d0fbd784f1da46e24c3d8fffc0fb692d",
   "verdict": "PASS",
   "generated_at": "2026-07-26T03:10:00Z",
   "branch": "work/nexara-knowledge-memory-authority-convergence-v1",

@@ -75,6 +75,26 @@ class TestKnowledgeObject:
         for req in required:
             assert req in model_fields, f"Schema required field '{req}' missing from model"
 
+    def test_rejects_invalid_sha256_non_hex(self):
+        """sha256 must match [a-f0-9]{64} — non-hex chars rejected."""
+        with pytest.raises(Exception):
+            KnowledgeObject(object_type="evidence", sha256="g" * 64)
+
+    def test_rejects_invalid_sha256_wrong_length(self):
+        """sha256 must be exactly 64 hex chars — wrong length rejected."""
+        with pytest.raises(Exception):
+            KnowledgeObject(object_type="evidence", sha256="a" * 63)
+
+    def test_rejects_invalid_envelope_sha256_non_hex(self):
+        """envelope_sha256 must match [a-f0-9]{64} — non-hex chars rejected."""
+        with pytest.raises(Exception):
+            KnowledgeObject(object_type="evidence", envelope_sha256="z" * 64)
+
+    def test_rejects_invalid_envelope_sha256_wrong_length(self):
+        """envelope_sha256 must be exactly 64 hex chars — wrong length rejected."""
+        with pytest.raises(Exception):
+            KnowledgeObject(object_type="evidence", envelope_sha256="0" * 63)
+
 
 class TestKnowledgeRelation:
     def test_create_minimal(self):

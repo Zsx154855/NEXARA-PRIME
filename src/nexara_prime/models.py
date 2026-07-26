@@ -405,6 +405,7 @@ class MemoryRecord(NModel):
     provenance: str | None = None
     evidence_refs: list[str] = Field(default_factory=list)
     receipt_id: str | None = None
+    idempotency_key: str | None = None
 
 
 # ── KMA Runtime Types (Phase 2) ──
@@ -420,8 +421,8 @@ class KnowledgeObject(NModel):
     mission_id: str | None = None
     created_at: str = Field(default_factory=now_iso)
     updated_at: str | None = None
-    sha256: str | None = None
-    envelope_sha256: str | None = None
+    sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
+    envelope_sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
     idempotency_key: str | None = None
     source_event_id: str | None = None
     trace_id: str = ""

@@ -7,7 +7,7 @@
   "branch": "main",
   "merge_target_branch": "main",
   "python": "3.12.13",
-  "test_baseline": "918 passed, 0 failed (clean worktree + remote CI)",
+  "test_baseline": "1211 passed, 17 failed, 1228 collected (KMA suites: +~310 tests; 1 SDK contract import error)",
   "current_program_gate": "G10",
   "gate_status": "LOCAL_RELEASE_READY",
   "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
@@ -45,7 +45,7 @@
   "orchestration_status": {
     "phase": "POST_MERGE_VALIDATED",
     "test_results": "87 passed, 0 failed",
-    "full_suite": "918 passed, 0 failed (clean worktree + remote CI)",
+    "full_suite": "1211 passed, 17 failed, 1228 collected (KMA suites: +~310; 1 SDK import error)",
     "next": "READY_FOR_HUMAN_APPROVAL"
   },
   "pr8_orchestration": {

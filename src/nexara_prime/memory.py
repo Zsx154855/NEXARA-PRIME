@@ -79,9 +79,19 @@ class MemoryKernel:
         self.events = events
         self.evidence = evidence
 
-    def write(self, kind: MemoryKind, key: str, content: str, trace_id: str, mission_id: str | None = None, source_evidence_id: str | None = None, confidence: float = 1.0, *, receipt_id: str | None = None) -> MemoryRecord:
+    def write(self, kind: MemoryKind, key: str, content: str, trace_id: str, mission_id: str | None = None, source_evidence_id: str | None = None, confidence: float = 1.0, *, receipt_id: str | None = None, idempotency_key: str | None = None) -> MemoryRecord:
+        # Idempotency check: if this key was already written, return the existing record
+        if idempotency_key:
+            existing = self.store.find_record_envelope("memory_idempotency", "idempotency_key", idempotency_key)
+            if existing and existing.get("mission_id") == mission_id:
+                mapping = existing["payload"]
+                mem_id = mapping.get("memory_id")
+                if mem_id:
+                    mem_env = self.store.get_record_envelope(mem_id)
+                    if mem_env and mem_env.get("mission_id") == mission_id:
+                        return MemoryRecord.model_validate(mem_env["payload"])
         if kind == MemoryKind.UNVERIFIED_INFERENCE:
-            return self.propose(kind, key, content, trace_id, mission_id, source_evidence_id, confidence, receipt_id=receipt_id)
+            return self.propose(kind, key, content, trace_id, mission_id, source_evidence_id, confidence, receipt_id=receipt_id, idempotency_key=idempotency_key)
         # Evidence-binding enforcement: mission-scoped committed memories SHOULD have
         # evidence linkage per NSEC 第四十三条. DECISION/FAILURE/FAILURE_EXPERIENCE/PATCH
         # require evidence when tied to a mission. System-level kinds and working memory
@@ -96,9 +106,11 @@ class MemoryKernel:
             memory_id=new_id("memory"), mission_id=mission_id, kind=kind, key=key,
             content=content, source_evidence_id=source_evidence_id, confidence=confidence,
             status="committed", verified=evidence_bound, canonical=evidence_bound,
-            receipt_id=receipt_id,
+            receipt_id=receipt_id, idempotency_key=idempotency_key,
         )
         self.store.save_record(record.memory_id, "memory", record.model_dump(mode="json"), record.created_at, mission_id)
+        if idempotency_key:
+            self.store.save_record(new_id("memidem"), "memory_idempotency", {"idempotency_key": idempotency_key, "memory_id": record.memory_id}, record.created_at, mission_id)
         self.events.publish("memory.written", mission_id or "global", "mission" if mission_id else "memory", "memory_kernel", trace_id, {"memory_id": record.memory_id, "kind": kind.value, "evidence_bound": evidence_bound})
         return record
 
@@ -222,12 +234,23 @@ class MemoryKernel:
         *,
         auto_commit: bool = False,
         receipt_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> MemoryRecord:
         """Candidate → Validate → Deduplicate → Conflict Check → Commit.
 
         Unverified inferences remain candidates and are never written to canonical memory.
         Safe patches may use the explicit auto policy when backed by evidence.
         """
+        # Idempotency check: if this key was already proposed, return existing
+        if idempotency_key:
+            existing = self.store.find_record_envelope("memory_idempotency", "idempotency_key", idempotency_key)
+            if existing and existing.get("mission_id") == mission_id:
+                mapping = existing["payload"]
+                mem_id = mapping.get("memory_id")
+                if mem_id:
+                    mem_env = self.store.get_record_envelope(mem_id)
+                    if mem_env and mem_env.get("mission_id") == mission_id:
+                        return MemoryRecord.model_validate(mem_env["payload"])
         if not key.strip() or not content.strip():
             raise ValueError("memory_candidate_requires_key_and_content")
         if not 0.0 <= confidence <= 1.0:
@@ -243,10 +266,12 @@ class MemoryKernel:
             memory_id=new_id("memory"), mission_id=mission_id, kind=kind, key=key, content=content,
             source_evidence_id=source_evidence_id, confidence=confidence, status=status,
             verified=should_commit, canonical=should_commit, conflict_keys=conflict_keys,
-            receipt_id=receipt_id,
+            receipt_id=receipt_id, idempotency_key=idempotency_key,
         )
         target_type = "memory" if should_commit else "memory_candidate"
         self.store.save_record(record.memory_id, target_type, record.model_dump(mode="json"), record.created_at, mission_id)
+        if idempotency_key:
+            self.store.save_record(new_id("memidem"), "memory_idempotency", {"idempotency_key": idempotency_key, "memory_id": record.memory_id}, record.created_at, mission_id)
         event_type = "memory.committed" if should_commit else "memory.candidate.created"
         self.events.publish(event_type, mission_id or "global", "mission" if mission_id else "memory", "memory_kernel", trace_id, {"memory_id": record.memory_id, "kind": kind.value, "status": status})
         if conflict_keys:
@@ -411,7 +436,7 @@ class MemoryLayerManager:
         """Semantic search across memory layers using RAG pipeline."""
         if not self.rag:
             # Fallback: keyword search in SQLite
-            return self._keyword_search(query, layers, top_k)
+            return self._keyword_search(query, layers, top_k, mission_id=mission_id)
 
         from .rag_pipeline import MemoryLayer as RAGLayer
         layer_filter = [RAGLayer(layer) for layer in layers] if layers else None
@@ -432,17 +457,22 @@ class MemoryLayerManager:
         ]
         # Fallback to keyword search when RAG returns nothing
         if not rag_results:
-            return self._keyword_search(query, layers, top_k)
+            return self._keyword_search(query, layers, top_k, mission_id=mission_id)
         return rag_results
 
     def _keyword_search(
         self, query: str, layers: list[str] | None, top_k: int,
+        *,
+        mission_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Fallback keyword search in SQLite."""
+        """Fallback keyword search in SQLite. Filters by mission_id when supplied."""
         terms = query.lower().split()
         all_records = self.kernel.inspect(None)
         scored: list[tuple[dict[str, Any], int]] = []
         for r in all_records:
+            # Filter by mission_id when supplied
+            if mission_id and r.get("mission_id") != mission_id:
+                continue
             content = (r.get("content") or "").lower()
             key = (r.get("key") or "").lower()
             score = sum(1 for t in terms if t in content or t in key)
