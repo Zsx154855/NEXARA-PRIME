@@ -1,0 +1,900 @@
+{
+  "artifacts": [
+    {
+      "category": "governance",
+      "git_blob_sha": "672cfb6b0aef09bf8ea07b4ede903b69c9a71bed",
+      "path": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
+      "sha256": "feb8f5e70fca2281077603d81ed5f88037eddd25fc81516504e4bad21515ec39"
+    },
+    {
+      "category": "governance",
+      "git_blob_sha": "8027524b2ecdd8cc7caef6ec0264fc86da6222ad",
+      "path": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md",
+      "sha256": "2b6352643cf5882d655d6ee234e68ea2511920da3ce33812577a74aee1a9ed2c"
+    },
+    {
+      "category": "governance",
+      "git_blob_sha": "465a93b1002ae4ae517c78ec40324e66d98ada04",
+      "path": "governance/authority_index.yaml",
+      "sha256": "464809a909b095600163e26bf93dbbfd2b590de3ccab5a6a51691e38379522b0"
+    },
+    {
+      "category": "governance",
+      "git_blob_sha": "c4434a22217e721d7bded9984709a0e087884f1d",
+      "path": "governance/nsec.yaml",
+      "sha256": "99ff0e514066213ac20f02b0d33514f5dce14796001525d145446812a40e32b2"
+    },
+    {
+      "category": "contract",
+      "git_blob_sha": "4e75f31a9b0af29aa2739f2b1734e07efbb7d28b",
+      "path": ".nexara/contracts/authority_matrix_v1.yaml",
+      "sha256": "b5428a8cf0905217d5b414c532bb84344c1a1c5f74ea3effe37f396ba444b682"
+    },
+    {
+      "category": "contract",
+      "git_blob_sha": "54c5d5458a0f949014055e11cdb3a87e86fcaa54",
+      "path": ".nexara/contracts/canonical_domain_model_v1.yaml",
+      "sha256": "d881bc51058e8f2c74d03cf9bc7d9b922085356616727db3095183a39cee9381"
+    },
+    {
+      "category": "contract",
+      "git_blob_sha": "7a1c4f8439ac01c7ecffce096ea74b58548b9276",
+      "path": ".nexara/contracts/capability_registry_contract_v1.yaml",
+      "sha256": "3e858e5e3c5dbfc013c741a6eb7e84b1101ca258a080543d8538bb3a4678a4e5"
+    },
+    {
+      "category": "contract",
+      "git_blob_sha": "345378d2bb6551f505a231c2623da7e5d437db89",
+      "path": ".nexara/contracts/chief_brain_kernel_contract_v1.yaml",
+      "sha256": "d50373abdc4227f667ea03593d09f30d4da29b870997b680ee806dcefd1783e7"
+    },
+    {
+      "category": "contract",
+      "git_blob_sha": "ef78e7dc1bfb02c9d374729f241dda6bbd807149",
+      "path": ".nexara/contracts/contract_invariant_tests_v1.yaml",
+      "sha256": "3b20efd95c4028e8b92776c0f28ba2e9341e8f11aa91ea56a4f1b6c44440ff2b"
+    },
+    {
+      "category": "contract",
+      "git_blob_sha": "f2299cf00c9f4a39b47cad5ce1650e62bac6c9de",
+      "path": ".nexara/contracts/governance_evidence_hardening_v1.yaml",
+      "sha256": "56d4c0b518442bd3bd0de2091ff1505a979b62de7809704b89d53718b6b31fcc"
+    },
+    {
+      "category": "contract",
+      "git_blob_sha": "58e029508cb92a02bd08719a4ab7e7b993160075",
+      "path": ".nexara/contracts/memory_knowledge_contract_v1.yaml",
+      "sha256": "d0be5ffba3cb946ba20abb4162ecb8b0cc717b4c7565a5414aa897dd68081858"
+    },
+    {
+      "category": "contract",
+      "git_blob_sha": "5ce70d74e8f8363869ea54548b379207e61daf0f",
+      "path": ".nexara/contracts/product_experience_contract_v1.yaml",
+      "sha256": "83a7c92a860a9a23f13d862a58d45b5c72f6c322c3bbc8fe3ce7da57c33efa5c"
+    },
+    {
+      "category": "contract",
+      "git_blob_sha": "36db12c716fb168666b62fb7dd89312d73d5de20",
+      "path": ".nexara/contracts/tool_runtime_contract_v1.yaml",
+      "sha256": "dafae08c43c500c7d6fb136bbc8a93ab4d4ac34851fa975eac399f9f7cb2f8a9"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "15f6c488dd0047c4dbb1ef4e48f169da75a851c4",
+      "path": "src/nexara_prime/__init__.py",
+      "sha256": "2f654e19b3beb787382e3a413173d34778cbddb98c1e85976ef4a75d289d09a2"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "cb15d260f0ed41a0bab59c4ec25e94ef1769883f",
+      "path": "src/nexara_prime/adaptive_runtime.py",
+      "sha256": "b939e1fa086f12124a9c7c9d07f4ef840b90a0fa308bcb23a5a03afd06742179"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "a01bf6bc8239571ef90bcc9611fce8de527664d3",
+      "path": "src/nexara_prime/adaptive_scheduler.py",
+      "sha256": "b27b7499b0dc5d6b7cbbb095d3fbd903fe885dc3fbc0d566e34f28b46d60d727"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "f690656b93f10297d5f7257f0236f3577a34627c",
+      "path": "src/nexara_prime/agent/__init__.py",
+      "sha256": "503cf33016729eae7079099aa8d0c1c67a69fcf3d2e99024765256472aa92cfe"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "1447e6161eb259aa47f4050338ffd006aaaeec86",
+      "path": "src/nexara_prime/api.py",
+      "sha256": "4af585b1b64e963eb85868ea78a8b7182c63837a39aacb25a70e0436d9dfd06f"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "a4ae87d1aff58b8c96ddbea3dba25a2df035c5c4",
+      "path": "src/nexara_prime/benchmark_runner.py",
+      "sha256": "b61574231caf36f2b8e964bb6801777f863d59824e1c44e1a1448793f4c62b32"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "19f0098650facb8581c3934a3563caab298af10c",
+      "path": "src/nexara_prime/browser_adapter.py",
+      "sha256": "229b9953d69330fedaa4a031eedf4143a510a55bd9d019b870573419998fa1b4"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "52fed17531c06b66b4fbe924214cd404457bde27",
+      "path": "src/nexara_prime/capabilities.py",
+      "sha256": "1c7e632627b109baf3d4143811629c49d5ac41b7b52750e85d3664cfb8776286"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "fc094dc900d87a92da8c504c278dd1b4dbc374fe",
+      "path": "src/nexara_prime/capability_registry_v2.py",
+      "sha256": "949f23b9a39e8ad555b859e95a814fe5f225ae419d53e4feb50d8c62b37f56b2"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "4afc911d7cf61434aaa498a9650658c2042a18d8",
+      "path": "src/nexara_prime/chief_brain_kernel.py",
+      "sha256": "85ef4c989e8445ecbbac0c405b527f4446233883ea4b787dfe929580bcfd8c9c"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "e23d91c2f919d50eea2e00a712327396053fcaf8",
+      "path": "src/nexara_prime/cli.py",
+      "sha256": "eaa6d1fe89dac552eaf4d27b685449d6a3baf15919f203ddb7c6e05e7ecaf5d4"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "4215df515ef0da302154e2a861f4cd83101e2b28",
+      "path": "src/nexara_prime/computer_use_adapter.py",
+      "sha256": "037018e5935eaa755163429be3d1dd77e7034c5d3cb85af109b02cb42ad25fd5"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "9fbeeb39fee656b787e31756639ffb97b8a93f02",
+      "path": "src/nexara_prime/config.py",
+      "sha256": "8f761652ac66a3ea3dbcf7971abaa0c1839ecfd162d714cb2aa2ac8d00c99284"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "47a33a95c2e15b27fb15be5cce23d5e1d185ffbb",
+      "path": "src/nexara_prime/connectors/__init__.py",
+      "sha256": "f65d2a521ab940307e781eb5364e89aee09ecedacd712033e64edbdb93190996"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "c2d23b213a82a7039048ec0619461655e109994e",
+      "path": "src/nexara_prime/connectors/audit.py",
+      "sha256": "b7097c9e4dd264d7ab71c25d1e412bcc0fe773e09bdf48adacfe77f1b85719cc"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "c57db870778ec64cf86a393fea0f78ac01f87587",
+      "path": "src/nexara_prime/connectors/base.py",
+      "sha256": "b8e2a848d9b4722330d456e04b5c6928271682d9650bb1d799fea90c855ed002"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "972fc82133628679b78a6923968a18a041d9c99a",
+      "path": "src/nexara_prime/connectors/browser_readonly.py",
+      "sha256": "072412ce24a82d837d87d88dfa556f7eb08ff52f801f7b14b6c581b4c1f67ee7"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "c85fd3a3c055be860c74d5da97848c746ba67a6d",
+      "path": "src/nexara_prime/connectors/health.py",
+      "sha256": "80c1e9094ff5a14a6e21d133ff52831b709b6d73bbb35433ce94124430e84288"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "c81675363f3ef77f5b4ecd2246f27e905fdd952b",
+      "path": "src/nexara_prime/connectors/http_readonly.py",
+      "sha256": "cd19950f370c0ed0dcb06d331cd06978eec0225431b7f7c218bbff5fa39f8f1e"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "e8b307a4ead74fc4dc164e3ae9e18643ecbe8811",
+      "path": "src/nexara_prime/connectors/lifecycle.py",
+      "sha256": "5fbb92482fd4213bd0ac52c0c9dd66faf9653f1f77aa8f53ecef122eca3e63c8"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "6a4aa3ce64d0f8d1e3de5298a9babe808b41de38",
+      "path": "src/nexara_prime/connectors/permissions.py",
+      "sha256": "1869a2881efd39767b7ef490203bb0e5c9796b9ffa2894e38825d5cfe7a3e52c"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "0c15c4e1d699fd60f423706a049366766981a172",
+      "path": "src/nexara_prime/connectors/provider_connector.py",
+      "sha256": "a5d8ba0ef4a928b643af9c328179c24496fc759eecfd5207d9ae7eb49a9f93a4"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "1a379bddbe6e4effda4f37905abb1e0c0cd400c1",
+      "path": "src/nexara_prime/connectors/registry.py",
+      "sha256": "fb045559b43a55620b0c586f5f777b35c9a1f8cd58a2694e8367b71fb36eca99"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "c9fee72930bc2479fe0b71fb1f402c4a71086d18",
+      "path": "src/nexara_prime/contract_engine.py",
+      "sha256": "fc9b97bd53e6d09270e9f340c4a406846f08ba23caac6fb9977c1da767268f5f"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "25406e513e07268ccaca10d05cddebc5f92c61c7",
+      "path": "src/nexara_prime/db.py",
+      "sha256": "911f89ddec1c30ec39438248e8c7b6de6162c4bbc03e0b681bdedb54bb953ef5"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "c18d436c5d21124a971e7eb4d0300a31b4329d91",
+      "path": "src/nexara_prime/delivery_controller/__init__.py",
+      "sha256": "d6b27ac664c60378b5a052c8ca542988eca1a1c4720068767915e470ad2babf3"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "3b79157b4b67f3f8e71af3118cc15fd53c9bac7e",
+      "path": "src/nexara_prime/delivery_controller/migration.py",
+      "sha256": "9974988698af34dc8bba9c6766ef714a3c54b1bb7826e88cefe5bfa0702b2ada"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "489a843285b7da4ab7da210dc0554c6d26c93b85",
+      "path": "src/nexara_prime/deployment_adapter.py",
+      "sha256": "56a47f3be6457ff6ebc4fd8934ab558472c746759a66160cada56123dca4f23a"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "7063e2e5ea4e89c3eab8ea5bfbe5036c87471cde",
+      "path": "src/nexara_prime/escalation.py",
+      "sha256": "a50d7b460c397328707b310abb890afe935a232672681023a9a5359c2fdb36e2"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "cc7638abf260c947c4a2da7cfa1d02abbd87939f",
+      "path": "src/nexara_prime/evaluation.py",
+      "sha256": "d51c9831c98f69f2023e914fbbc91364983d3a469148f736c7a83f815f4f9de3"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "f3c9287ba916b7e66f9c1cd3fc91480d8ee81a4f",
+      "path": "src/nexara_prime/events.py",
+      "sha256": "b97a7dff2ca90515beb059a6ecd96708f2a2ea72285a009d71b6053cfacf64a2"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "d6d7a5b0117d1fcb6d182aff0261f1d255b0f0e0",
+      "path": "src/nexara_prime/evidence.py",
+      "sha256": "846a25f57bd0027425d7ac55a3081ed23ed10dcb8757956999601c91db117737"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "1a1078436be41ccf96f0bc74e28e9a30a3a343b3",
+      "path": "src/nexara_prime/git_adapter.py",
+      "sha256": "3ac6a8bf54a3769f107cd4b54c725e4f6c3fc1c36c25dd528648d2cc023ddc86"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "65ce5eb2429513eea8257eda92eaa7a39a6371f0",
+      "path": "src/nexara_prime/governance.py",
+      "sha256": "c484b17a5655a302ccfc49518cce27f0e972fb90dfd09c9a7f9b4db958827d6a"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "5fcc2c6bec6149ae526b4640c0610d9d5373fa56",
+      "path": "src/nexara_prime/identity.py",
+      "sha256": "99c7955f0922f7ff54b417f6e22e1c9588473431f639df575d1edba1721e8585"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "e2924f54db5de83e281ab65a1b160ee1d918fa8f",
+      "path": "src/nexara_prime/independent_review.py",
+      "sha256": "288ab5394c5a89d461549bb0259dc756d71cd9568953b12cd41b5aa219653fde"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "4874611e5056706edf2fabb15195d2f4f2cba8f5",
+      "path": "src/nexara_prime/knowledge.py",
+      "sha256": "03146081e1a1b266f668fd8ddfeba93cac6051a2b9c360255a9b6bc1403ec798"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "0d8971d56d69fd912621aa7bcff993e60c0ff643",
+      "path": "src/nexara_prime/memory.py",
+      "sha256": "3a912ee1c4ba57a184a4c991527119f1110c19f7be01a4873f1b9853f780a1ce"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "7410256fd487f0362d3e02da020e9a0f1e2e09b6",
+      "path": "src/nexara_prime/message_adapter.py",
+      "sha256": "45f7297b704c70d7e00935d5b2358e6ae11df92aa577b170eb7a71984f64267c"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "bb04871a4216cc7d6564e32fd5562a32f935991f",
+      "path": "src/nexara_prime/mission_compiler.py",
+      "sha256": "53af54587f18415d709f6b1b5f94e6dabac752739ae39115da3e53b929b0c0ca"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "dab43c7170856482657365744ad4c8bf8b6d6bb1",
+      "path": "src/nexara_prime/mission_triage.py",
+      "sha256": "e7150ca9e98881678ef36b37b0c79d92cdefbfc848d43df9e0f945dda996d607"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "5e2ac7d39fcbc59845750480c8ca99ca8b080fc0",
+      "path": "src/nexara_prime/model_gateway.py",
+      "sha256": "90a16eeed87bc0002455c97c0366b4f62be80c0bf342515b93983ba1da71fc02"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "85d6eb06c289b0cb0ecd0c29b16c11750d8a4ae8",
+      "path": "src/nexara_prime/model_router.py",
+      "sha256": "6a846c0b1de347ed7d55e6191dec3375be27730ad119e0f5492846ac0af25166"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "d4261cd18185a12821000aa37a8b54a6baf2545e",
+      "path": "src/nexara_prime/models.py",
+      "sha256": "b8f14c76aa090ccbdf58641c654c10b5b6c76cffa8839f98d4b1d2162d30bda4"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "af816c2e3d9a10d93a6f0cae1a38134b70d8fd14",
+      "path": "src/nexara_prime/network_policy.py",
+      "sha256": "9c7f694ed01001cbbf16270c21e9bb95c9c9be828ba4395e99286803b41a74d4"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "b86c9a052f468f94bad734a21795ce16ae59f57d",
+      "path": "src/nexara_prime/orchestration.py",
+      "sha256": "ad6eff4787fe5c856833c438ef6b518294ee84d909cf80c49ee2aec6a61b156a"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "42a96c573c3d74edda4cb7952e3713dcb69963fa",
+      "path": "src/nexara_prime/platform/__init__.py",
+      "sha256": "839510112a4784b96b2df7224e7e6f86e6595278e6ab4521a15269911f1e165c"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "b2cb1a796b1112f004371dec2914fdfb9a7a333e",
+      "path": "src/nexara_prime/policy_service.py",
+      "sha256": "0ea641378447beb415152cc50f7ae0f83ab3960ad94063cb891a02f58e50117b"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "3831723b07d8daeda3efb59fd57da8dd6a4756a4",
+      "path": "src/nexara_prime/product_reality/__init__.py",
+      "sha256": "f8d0bba2ba72557f4f030123e6c0e7f21127b531448ed5e8fdd17f0f0b7a6f8b"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "b8ec01420f1c5438b702e1dfb79ad228d5129215",
+      "path": "src/nexara_prime/product_reality/evolution.py",
+      "sha256": "f3de0381d0492e1470d314352fe9551a9d326939ecf8bad3584a4a5e5abce8ee"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "e3d85c6abe08bd833c9dba6289117849b6b11d84",
+      "path": "src/nexara_prime/product_reality/genome.py",
+      "sha256": "932ede9871530a63aaddeb9ac1397ec3d6813d393596d309f03f18575a4022ae"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "e63318b97ef21c6241a7a87e3df17186bb6030f4",
+      "path": "src/nexara_prime/product_reality/models.py",
+      "sha256": "74985773aab2e6072cbc6a69663d85fa24c0a3d7436406aeac1e6a092f592d74"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "d9910b3325ad862ab3ce1a83392fedd975ba3911",
+      "path": "src/nexara_prime/product_reality/twin.py",
+      "sha256": "f494eabee8b83db7f1043f3cca182f76053fa7f1eea5c55ce53449438e19e2ec"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "e48857a876c98935fbbe3cc6f969305f9bce529c",
+      "path": "src/nexara_prime/program_loop.py",
+      "sha256": "5a01d7089c13912ef9c8af706afcf270d5e769c90cb9a31afa278b8b6a27113c"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "cd96cb994b8f51fa16efed5d7b851e9a6dda7851",
+      "path": "src/nexara_prime/rag_pipeline.py",
+      "sha256": "119c8dcd4e86658f7f0ec2690abb93e4e725048bea1534deb3de2e79d844505c"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "69c9ed7a1db4f394004098e3a8272ccbd2a5b126",
+      "path": "src/nexara_prime/real_context.py",
+      "sha256": "8f5ff2e3015fd9c0ab3da9445ca5852e27e2aab21bb1c9ffc439081256ae57c3"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "f3ed8c4fa9b9f828bfea88a6e7250a2b6bc7fdc6",
+      "path": "src/nexara_prime/recovery.py",
+      "sha256": "c88add6e7c84ad0887bfd7da50b698fd1ea2d701b9da2c4885ebc3a97b618e12"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "3e48ac3f8ca1939c842e63808c47069f309d91b8",
+      "path": "src/nexara_prime/repair_loop.py",
+      "sha256": "188cbca01c187ac4bec90ba60fa77619850c8e14b275f23536c0a51e1d199f2b"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "9d60eb91d528e37bca6a08833a74bdaf1a36e453",
+      "path": "src/nexara_prime/resource_budget.py",
+      "sha256": "3528ce226338c00b1481fe24e23302064dccf73493b41beb491e7d026f13748c"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "8404ec92849528b52913982ecb791d1ce3ba9791",
+      "path": "src/nexara_prime/runtime.py",
+      "sha256": "61cf61d39574541aa493994dd15fdad416f9a70344bd457bf8474030f859a62b"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "4caa8c5cab593730585683eb1998b8ee8123dae5",
+      "path": "src/nexara_prime/sandbox_v2.py",
+      "sha256": "24c4e67c71437337ce69b838c0ee775a83bcf6e4029c2e788699051da68426c4"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "fb977d1603144050db70a768f0d1ab3aaa91f349",
+      "path": "src/nexara_prime/scheduler.py",
+      "sha256": "282b8be5ec3206715a88b07ad1082c5baa48c565cf46264aad6db3ff813e143d"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "4400d68cdb03d047f1f11b688b9ca4f7aa823172",
+      "path": "src/nexara_prime/secrets/__init__.py",
+      "sha256": "80807edfacbc8b902c5ffc310ca6b624d99c0fe11847c72ff509aa3276cd7237"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "8e97413e82587ff63013ca8ee181062fdcf79850",
+      "path": "src/nexara_prime/secrets/base.py",
+      "sha256": "44fcb4fc7d74ec3b894ea414dd9c47835af710a0dadc687ef98bd6ed768e97de"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "d4f776efa0214a146daef28b0fe7f1bd5d7983fc",
+      "path": "src/nexara_prime/secrets/env.py",
+      "sha256": "ca6d441b64031bfb7a8cbbccf45841cba0e1052512dd7cd038764351af7bd18c"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "870e570dd2d022601d5777d4674b183c2c4b3d2b",
+      "path": "src/nexara_prime/secrets/keychain.py",
+      "sha256": "529efee5460a946c45890b3e20034f3560fb9794a2d7bf95e450d5931f3f9ae1"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "ae944f38dc3337550ba27cdd9d0a6bf835309e2e",
+      "path": "src/nexara_prime/secrets/memory.py",
+      "sha256": "84b58d092548521b51fba3afb50ed9fe2a8dac0a2ad87f350b14fbf0a5b562ce"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "bb7de09fc67db39ff5dffcdebda29249ca0c84f5",
+      "path": "src/nexara_prime/security_audit.py",
+      "sha256": "52a48b8dfdf9197aa24487ae8d0d9d5956e6ed0134c1c2f62e09cf9e0c449f14"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "c0a37aa42c4d48024fa7cf580e7b5dcb84e3398c",
+      "path": "src/nexara_prime/state_machine.py",
+      "sha256": "0b31a5c5ae5b5eb6eb36cba11ecdb27741eb5dc40eb032c1840377ed98bd760f"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "b0ea2c096d4e427b3a8030a57b1db273da019b0f",
+      "path": "src/nexara_prime/telemetry.py",
+      "sha256": "934f8a0ca5080a3d61ae0c4508613bd653a4c4ad2882894bcdd28e9c5c844ad7"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "395eba1134bd20c6481a9f54a7bebf62b0975316",
+      "path": "src/nexara_prime/token_compiler.py",
+      "sha256": "b46199bd7b4da4b21f942c5f4a0e90b846166b5772340bef86ed0bda9c752579"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "41704543a57ea466353fc55b231fc49146f11148",
+      "path": "src/nexara_prime/token_compiler_v2.py",
+      "sha256": "74507de995c476377b68698203ec1d85a9f9e670eef15595613ace1a2061a0d0"
+    },
+    {
+      "category": "source",
+      "git_blob_sha": "478d1552a4203e0d4e8346932e1fad78b0adc235",
+      "path": "src/nexara_prime/tools.py",
+      "sha256": "b8df96effeb1006e149574493ddb9e576c9c3e85021901abddb33fa66fb3bfaa"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "a2d565e7209df88c56a5cab05ae7dc3f49db8c29",
+      "path": "tests/test_adaptive_runtime.py",
+      "sha256": "e4fa0962806564e314faabf6116a4041caed28d0b29dc6d6e5326b74734c5d78"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "9b12c198912a4ce922488430444430e1360878ea",
+      "path": "tests/test_chief_brain_closure_v1.py",
+      "sha256": "299dd9ecda555a6726b3b8c8ab6e4cc59254360e9b3ec11b7a7d53d32fc14428"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "7deb737cd5ef72f1269a91fa32d2408469ddba5d",
+      "path": "tests/test_chief_brain_runtime_convergence.py",
+      "sha256": "498d85104fd7616f22be65c0d896a87e17dcaf14ef20b8e2525fb43ea1dcecf3"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "8fb527ad6801f743af420d7d2520044f28629b81",
+      "path": "tests/test_connectors.py",
+      "sha256": "3f420b43a09a6b8cfd4a4829cdb23b2a84ed5ab48d09bf5d3db4bf4d87aac868"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "467fc896e0021628ff113b40e62517876e0c5934",
+      "path": "tests/test_core.py",
+      "sha256": "9559e0717dc579239b064e1712c042199a92496d7490482191ea9f979621c45a"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "3ae91cedd036b5dd27d2336730c533cfa1e3e8fb",
+      "path": "tests/test_e2e_runtime_closure.py",
+      "sha256": "b6ae24ded9ed07daa9ea26c102a8848ae764ad9ada4245d2008fa674cd3f1ed6"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "5fcf318814ec4f0ee853d779b342a6cc63c12e04",
+      "path": "tests/test_g2_first_controlled_mission.py",
+      "sha256": "406ba6d87479458f01869d3e91a66536e3a53ee499f865ffce7eef209ac9e1ff"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "7c90c5c0e2438cb7168d505b0ee88b4a6105fcd5",
+      "path": "tests/test_g2_kernel_contract.py",
+      "sha256": "8c0797d2b6bfdd44c6bf9c54af05c9dc18c6f20f0b2723fa601f8e630404901b"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "a1f3633ae4b9e0145061d94477dccd76487a7101",
+      "path": "tests/test_g3a_capability_registry.py",
+      "sha256": "ec603cdbb772292ceebe3743f32fa777e8b8e010e2dc0c15bddad1e26d2a4a2c"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "a8a064965df62e01e6c8cf614d76c3545a55aacf",
+      "path": "tests/test_g3b_policy_service.py",
+      "sha256": "beacc9b07805f87784bd336d628e3e11bbdab2b866d1e39091a2aa488325b129"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "0bb8b3282ec90519f0fbc668ad023b7434c17229",
+      "path": "tests/test_g3c_telemetry.py",
+      "sha256": "4b2aeac2bae830554d6f99b392ef7606ed669664366146fcb63f93ac2770d6a3"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "6e920446a8a4d49cb9e69313a879526e8e7eefa8",
+      "path": "tests/test_g3d_knowledge.py",
+      "sha256": "4f96528bac30018191ff719963647d15f02a4d5a1d344aa6e1e481e1d099b40b"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "28a6bb88d8b0061cd5724366ee76358375637c9a",
+      "path": "tests/test_g4_tool_runtime.py",
+      "sha256": "6872dab582eba04e92ae8767b1efa44ffa2fac27bddc7f6d92b69538cea3fe78"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "675535b3abd201fe92c12969de19f1b930b475db",
+      "path": "tests/test_g5_memory_knowledge.py",
+      "sha256": "f575be54fdd7826c143183a0bd5649de0f5e77d268f2d63482892d203a98a22e"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "378ec7358fb2fde2c678f958fb5091b45c372a28",
+      "path": "tests/test_g6_governance_hardening.py",
+      "sha256": "37d814ed841ed7c7d2f27306bbfae01c3a1e121c3b88a8f0af47469b881aae8f"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "406dec17045223907f58d396a636eb1c35347033",
+      "path": "tests/test_g9_evolution_pipeline.py",
+      "sha256": "d94245188bbb41b80a34af22b30fe2df63aadfd716622a2d2ebf100f0d5dfc86"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "3adf173f08aad559c55b2997b84a9c0cc2af4de5",
+      "path": "tests/test_hardening.py",
+      "sha256": "c9585ebade9611c67908ff3990bf4f8aadcf0c5fd69e6774aba8007ce2606c78"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "5b8733f0d254f8ca88208f6c1acfc9c4bd249bdc",
+      "path": "tests/test_nsec_governance.py",
+      "sha256": "c439832c241b469535ec3dab64f545ea9864ae9214113def6210d9f7f1415c06"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "9f4a7ddd9b079475bdb6289dd7038c9afd617b5a",
+      "path": "tests/test_orchestration.py",
+      "sha256": "3ebef98f6dcb0e67cbbba9551e58ca1d471b7fb428ee5198834dcd1856a354ab"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "92c2eb654025bc04fa4cb535d451c180bcc859ed",
+      "path": "tests/test_p0_repairs.py",
+      "sha256": "a4a10768336b8b3e6e3ff06ac4b39421973b2675d700e22836a92b934325ca11"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "06ade4151e81c331e88800d5339a615422507d80",
+      "path": "tests/test_p2_fixes.py",
+      "sha256": "eb0519e628719949209bbc38f0caaf986cd77eb4602b66d88c9e61da97102228"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "51e7eee0de71d4022298350339f5c6cc60fe9403",
+      "path": "tests/test_pr18_review_closure.py",
+      "sha256": "03477364551d371370fe855f323de26ea564aeb632505d9aff58449a9caee34f"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "95d56d72d28f4684549ddd4290b86fad316660e6",
+      "path": "tests/test_pr21_review_closure.py",
+      "sha256": "611151fd594b3b74c7a6c0b1522a9f74426daa35b4f81b59dd768e6b440551c1"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "7e7808f0fe062544dfafdfccc42f5a725db503a1",
+      "path": "tests/test_product_reality_v2.py",
+      "sha256": "a03da82bf3cbce4a76ba8fe1da94bdb70b22b3c9181f82c282ddf7968769f2bd"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "0f3d1d632b9f92204857918a0b76309daccb8178",
+      "path": "tests/test_product_reality_v2_full_audit.py",
+      "sha256": "54c11f048f7f57cbe5b421f0c525452b16b1189c4218c2d94e890081551fa65d"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "c6530c6845e832ffb56d7fec1f4b7da31ec34f1a",
+      "path": "tests/test_product_reality_v2_review_fixes.py",
+      "sha256": "2cdcb59d584a3cac5133e5a055c3cf649ef55802bc87f11b9fdec7f1c42beff9"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "badfba8ec302ec01dde3384ee863bf727f9f64d8",
+      "path": "tests/test_python_ci_contract.py",
+      "sha256": "e8df907a03a7866a0fabb338c31d73a00b691396588c540ed32bfac4e519771a"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "a9481fde43790ec577a6d92882b367a762fafe9c",
+      "path": "tests/test_real_provider_context_closure_v1.py",
+      "sha256": "3c3d39080d4584f1e8775a01e07cdcd66ad34d836b8dacd959e1dbafc469c444"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "6d056dc997e8212c9dbbe2872f2ecd518ab613e5",
+      "path": "tests/test_receipt_api.py",
+      "sha256": "37ac48d1f32a2e55cb1accf65ae0bd5a430638ccb924ed9e0c3bcc14e93d21a7"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "06a5fd5ac86fd41bc030a7fb3e0cb3b839462d14",
+      "path": "tests/test_receipt_self_reference.py",
+      "sha256": "23d8802a904463848d55b8dbbc1965b7f926b34ad096574b0a0c2286e9480a19"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "084a4ec99fe1d0f4d6558f4ab2dec7d15eedf471",
+      "path": "tests/test_runtime_truth.py",
+      "sha256": "870a4bc6002f6923fa87de9e41259c43a05cd046b6d574be571732f4a4a1d156"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "894ebedd0fc1fbbe4675e7d8d83c4dcd14f6ad85",
+      "path": "tests/test_runtime_v2_codex_regression.py",
+      "sha256": "9ec1bbc02228e8efab22ae7cab552461158bcfeb80777aa396fb2371fe08a496"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "7d2bc9cf7bf6797b3973a55945fbca60f61751fe",
+      "path": "tests/test_runtime_v2_crash_recovery.py",
+      "sha256": "31cd69bf67ee183340303ebe299de52ab7a5d2970a93ea2200033a319dfbf56d"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "8e24e9b240fd5a422dd308c290ac92c3d6303e40",
+      "path": "tests/test_runtime_v2_entry_convergence.py",
+      "sha256": "74264fd6b3de18e8e5b7945d6251532c64730d1359903fe4b4baafa34b9d4c37"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "543cae2a4623da70da2b0022f9e06683194c768c",
+      "path": "tests/test_runtime_v2_provider_unavailable.py",
+      "sha256": "9fb08db69bd61e2405f805aee6be331def159ac16d1adfc5ff07d6a8c83963d0"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "0f08c6d7d4c1b4d796769ca79af88f07110da3e3",
+      "path": "tests/test_runtime_v2_stage_recovery.py",
+      "sha256": "25cff9a7a62aa34eacf4a982c41c8c84446083e15f538fd16b7a40504ef40d71"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "41725b35cd9a0d113b499d7e1651b50bda2292b5",
+      "path": "tests/test_sdk_contract.py",
+      "sha256": "d681b0b9199cbecee8189b767fb5bdb20bf2090d9de8e4b973923cdad5b243aa"
+    },
+    {
+      "category": "test",
+      "git_blob_sha": "f62ab7c63496386294c5951a6b3a279c0bc6ab23",
+      "path": "tests/test_security_hardening.py",
+      "sha256": "e1bbe2a5dc4cfd5fa5d795c690abad55730994660223be30c0190daaaa5ac1f2"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "69732bd79d84321fd6b98a60f4e66f2e2dd5e4bf",
+      "path": ".nexara/evidence/g0_reality_inventory_v2_20260723.md",
+      "sha256": "22dd7404822e3fac9e002e145a4649418e8db0506172cc89dc00d9e12c901877"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "5b30fa98a77e53fc34d941ef616573cc86e09151",
+      "path": ".nexara/evidence/g0_reality_inventory_v3_20260724.md",
+      "sha256": "ff838ebcfbb5a4038e8c146131f2e5c02f92690d247f38287fc8cecf9cc2439c"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "36d4f87fe2f0db8436a03e9d21ff1817af91ee15",
+      "path": ".nexara/evidence/g10_final_20260723.md",
+      "sha256": "476caeee1e5efbd8a2d51e652df3a61f771f91f3f8474b625c797bd12db50815"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "8d4d0c528ff1586b27de4f7a294e2d2f355b30b2",
+      "path": ".nexara/evidence/g10_release_boundary_v1.md",
+      "sha256": "c845d84c3b7816b68db6055a6730f553d79b04d96d3007bd44af71fe9583a329"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "3da1b7455cbb80f67d3cb68a801743e0c26183eb",
+      "path": ".nexara/evidence/g1_contract_freeze_v1.md",
+      "sha256": "f258b8281fb50d030b47e33204c58d1ac57730b42a6527cf6fb1f4aace6365bd"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "09bbc62a87f6c4b7d6dd354f7685706384eeb7b3",
+      "path": ".nexara/evidence/g2_closure_evidence.md",
+      "sha256": "f4ac87a74324c8202e4b36001f5e4e9d7ddcf48b96d6e13d30191a1254f2b86c"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "e8aaa5cf3a9459ae6d15b4a7709b2b9a13121a57",
+      "path": ".nexara/evidence/g2a_kernel_boundary_mapping.md",
+      "sha256": "62cd89c226ee69f1f0608e0368a856626a431d1d0571e60202664968514fa13c"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "402e78c92f2d4ca3ac8fb0b49f39bbd158f4aaa6",
+      "path": ".nexara/evidence/g3_reality_mapping.md",
+      "sha256": "f11a6f97f070723b75c13c8a06984dff8d757e10e7259e5af346fdc6346ccd5d"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "c23ac18d40e60ffb517076b0eba0a714c65a040d",
+      "path": ".nexara/evidence/g7_acceptance_v3_20260723.md",
+      "sha256": "aef057e7778677896507a2b72adf842aa494434d8608a341b67fa9672ed5fc4e"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "a34bb810e3ae068dd517f35520fb0a7f20c3f6b0",
+      "path": ".nexara/evidence/g8_acceptance_v3_20260723.md",
+      "sha256": "b8e2e90fbe7f8b9f002ab9cbd5e98ce65d31b456821b29390df904606a0d171a"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "cb954536578a7c60bb07e2dff006e167e515c777",
+      "path": ".nexara/evidence/g9_acceptance_v3_20260723.md",
+      "sha256": "ec68efc87418ef6d5a76268616241e8ffd74e2e7888f413009379e98843dd432"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "1224d55287fe6a8be06eb5052801f669865ab928",
+      "path": ".nexara/evidence/nsec_clean_branch_migration_20260718.md",
+      "sha256": "3d48d9543af8367935eb07cc483ad76b6ba4ffc554d8ce8b9d1e5159a124203e"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "2ded5d4df47dc39336e2815f4d027175f083de3f",
+      "path": ".nexara/evidence/nsec_governance_baseline_v1_20260717.md",
+      "sha256": "f55da58bf629a0245979f4e53cc78aba3ffe5f20e5d700c2f07cffae96888760"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "34f89b481c38959d4ed0848c605a8faaf414e8b3",
+      "path": ".nexara/evidence/pr10_post_merge_validation_20260716.md",
+      "sha256": "d5c0647fbabf16dacc2a938bfc69083cb993dff8a152190f029ad520f005ad8b"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "7bfa693da82dd69f73c581ace7c2a8b2705c1022",
+      "path": ".nexara/evidence/pr10_review_consistency_repair_20260716.md",
+      "sha256": "c2073f6c5e52a4b62c498ca9ec16fcc52a4cc2de190e5aac9a7dfb4d76c3c9c9"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "9edb047c361c9acf1f5767b2d109e54063eccd40",
+      "path": ".nexara/evidence/pr23_final_thread_matrix_20260724.json",
+      "sha256": "a8c7e687815d0a5c98e73a3d972b4da334e1b18450b1f9f13e5e09c1228203b2"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "ac3f06fc890310e3d6a94d203401121dcf44b93b",
+      "path": ".nexara/evidence/pr23_remediation_final_20260723.md",
+      "sha256": "7d4120287e8f96441db559cd0ca25e3fded053da948bfd155a6c2124094f212c"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "0e8df521a0ecacb854a9297bf91db4d335b125bb",
+      "path": ".nexara/evidence/pr8_ci_root_cause_audit_20260716.md",
+      "sha256": "f81defb149ce538c05f8d81dc3a207ddc2a2c6c556c50957220d23f7d3c1f13c"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "d41f0d0130f7369d4d1d859749bb798e79f51d23",
+      "path": ".nexara/evidence/pr8_post_merge_validation_20260716.md",
+      "sha256": "7102f45ca014743bfecdb9b5aa337f9d17edc71d18eec143a687a9d46c911693"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "323d3defac45b2c008553af366dc613c19242242",
+      "path": ".nexara/evidence/pr8_review_closure_20260716.md",
+      "sha256": "7d7d744b1e9528e2d09eb9f0e8dbbf5fea47efe5b8af6a07577bbf5b82fa49c2"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "ada35e7ff0615f66ffb72b747bde656a928bb4a7",
+      "path": ".nexara/evidence/review_matrix_final.json",
+      "sha256": "3090a23fcc702aff0331c62e940dbb795c9aea5fbe6b9c0950dc669db809545c"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "566e94a6f16c6818518d2721158804c10bd93ac1",
+      "path": ".nexara/evidence/test_918_classification_20260723.md",
+      "sha256": "c49f884c583a268bba55fba0b44c8ff14db6bc52641dba3a36b18cbe7065c30c"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "304cf1bf6e4565459bd16d391ac7f1a3a7215609",
+      "path": ".nexara/evidence/v2_closure_8_points_20260718T190652Z.json",
+      "sha256": "2e87fcdb3de333bd3091e389af493b2ac6179a9d40f6e7dac574118373085799"
+    },
+    {
+      "category": "evidence",
+      "git_blob_sha": "190cc3f5c6c8105c0edfe76521fce9fcb16582e1",
+      "path": ".nexara/evidence/v2_final_onepass_20260718T180610Z.json",
+      "sha256": "fc6b2afd91fe588eec9f60d223d6273c7c4037d3673064f650996bb04e53b8a0"
+    }
+  ],
+  "ci_conclusion": "success",
+  "ci_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "ci_run": "30057162252",
+  "collection_method": "git show 82b1211213932cba71be68bf894dca0b8764e964:<path>",
+  "qualification_subject_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "qualification_subject_tree": "bc62ec44429ab8a982301a5833661fa08f8f98ef",
+  "schema_version": "1.0",
+  "subject_commit_timestamp": "2026-07-24T07:46:44+07:00"
+}

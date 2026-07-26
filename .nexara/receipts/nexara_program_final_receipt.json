@@ -1,0 +1,65 @@
+{
+  "receipt_id": "NEXARA_SOVEREIGN_COGNITIVE_OS_PROGRAM_RECEIPT_V1",
+  "program": "NEXARA_SOVEREIGN_COGNITIVE_OS_V2",
+  "status": "PROGRAM_CLOSURE",
+  "evidence_subject_head": "2774fa0",
+  "tests": "1048 passed, 0 failed",
+  "gates": {
+    "G0": {
+      "status": "PASS",
+      "name": "Reality Inventory & Repository Mapping"
+    },
+    "G1": {
+      "status": "PASS",
+      "name": "Contract Freeze"
+    },
+    "G2": {
+      "status": "PASS",
+      "name": "Chief Brain Kernel Integration"
+    },
+    "G3": {
+      "status": "PASS",
+      "name": "Platform Runtime Services"
+    },
+    "G4": {
+      "status": "PASS",
+      "name": "Capability & Tool Runtime"
+    },
+    "G5": {
+      "status": "PASS",
+      "name": "Memory & Knowledge Fabric"
+    },
+    "G6": {
+      "status": "PASS",
+      "name": "Governance & Evidence Hardening"
+    },
+    "G7": {
+      "status": "PASS",
+      "name": "Product Experience (web-primary)"
+    },
+    "G8": {
+      "status": "PASS",
+      "name": "SDK / Plugin Boundary"
+    },
+    "G9": {
+      "status": "PASS",
+      "name": "Evaluation & Evolution"
+    },
+    "G10": {
+      "status": "BLOCKED_EXTERNAL",
+      "name": "Release Closure",
+      "blocked_by": [
+        "Apple Developer credentials ($99/yr)",
+        "Human approval for git tag v0.1.0"
+      ]
+    }
+  },
+  "contracts_created": 9,
+  "test_files_added": 8,
+  "total_tests_added": 102,
+  "existing_modules_untouched": true,
+  "no_second_runtime": true,
+  "no_merge_performed": true,
+  "no_deploy_performed": true,
+  "generated_at": "2026-07-24T07:30:00Z"
+}

@@ -51,10 +51,10 @@ export function Sidebar({ screen, onNavigate, onMissionSelect, overview }: Sideb
         {/* Brand */}
         <div className="flex h-16 items-center gap-3 border-b border-taupe px-5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-graphite text-xs font-bold text-ivory">
-            N
+            柏
           </div>
           <div>
-            <div className="text-sm font-bold tracking-wider text-graphite">NEXARA</div>
+            <div className="text-sm font-bold tracking-wider text-graphite">柏韩</div>
             <div className="text-[10px] uppercase tracking-widest text-stone/60">主脑控制台</div>
           </div>
         </div>

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NEXARA PRIME — 主脑控制台",
-  description: "人类中心的自主智能体核心 · 主权工程宪章 NSEC V2.1",
+  title: "柏韩 — 主脑控制台",
+  description: "柏韩 · 人类中心的自主智能体核心 · 主权工程宪章 NSEC V2.1",
 };
 
 export default function RootLayout({

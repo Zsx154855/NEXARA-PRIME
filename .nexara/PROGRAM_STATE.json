@@ -4,17 +4,19 @@
   "agent_package": "nexara_prime.agent",
   "hermes_runtime_dependency": 0,
   "repo": "/Users/agentos/NEXARA-PRIME",
-  "branch": "main",
+  "branch": "feat/brand-baihan",
+  "merge_target_branch": "main",
   "python": "3.12.13",
-  "test_baseline": "682 passed, 0 failed",
+  "test_baseline": "918 passed, 0 failed (clean worktree + remote CI)",
   "current_program_gate": "G10",
   "gate_status": "LOCAL_RELEASE_READY",
   "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
+  "gates_blocked": ["G10"],
   "g10_composite_status": {
     "local_release": "LOCAL_RELEASE_READY",
     "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
     "git_push_tag": "PENDING_HUMAN_APPROVAL",
-    "product_brand_name": "PRODUCT_DECISION_PENDING"
+    "product_brand_name": "RESOLVED_柏韩_Bǎi_Hán"
   },
   "pr5_squash_merge": {
     "merged_at": "2026-07-15T20:20:36Z",
@@ -37,14 +39,14 @@
   "pending_human_approval": [
     "git tag v0.1.0"
   ],
-  "product_decision_pending": [
-    "product brand name"
+  "product_decision_resolved": [
+    "product brand name: 柏韩 (Bǎi Hán) — decided 2026-07-23"
   ],
   "orchestration_status": {
     "phase": "POST_MERGE_VALIDATED",
     "test_results": "87 passed, 0 failed",
-    "full_suite": "682 passed, 0 failed",
-    "next": "READY_FOR_NEXT_GATE_SELECTION"
+    "full_suite": "918 passed, 0 failed (clean worktree + remote CI)",
+    "next": "READY_FOR_HUMAN_APPROVAL"
   },
   "pr8_orchestration": {
     "pr_number": 8,
@@ -88,6 +90,15 @@
     "status": "MERGED",
     "scope": "post-merge evidence + state sync"
   },
-  "updated_at": "2026-07-15T22:51:47Z",
-  "updated_by": "Claude Code Prime — PR #10 review consistency repair: 5 Codex findings fixed"
+  "pr23_brand_remediation": {
+    "pr_number": 23,
+    "url": "https://github.com/Zsx154855/NEXARA-PRIME/pull/23",
+    "branch": "feat/brand-baihan",
+    "brand": "柏韩 (Bǎi Hán) — resolved",
+    "status": "OPEN",
+    "verified_pr_head": "b1084c6fec69a3199e6ad5e1f4527f67e58f0e44",
+    "superseded_by": ".nexara/receipts/pr23_final_attestation.json"
+  },
+  "updated_at": "2026-07-23T12:30:00Z",
+  "updated_by": "PR #23 final remediation — test-isolation fix, 918/918 clean worktree"
 }

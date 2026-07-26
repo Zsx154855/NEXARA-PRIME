@@ -158,7 +158,7 @@ struct iPadExecutionPanel: View {
             Label("执行流程", systemImage: "arrow.triangle.branch").font(.headline)
             Text("状态：\(mission.state.rawValue)").font(.callout)
             Text("Runtime Truth API 绑定").font(.caption).foregroundColor(.green)
-            Text("实时数据源：本地 NEXARA Runtime").font(.caption).foregroundColor(.secondary)
+            Text("实时数据源：本地 柏韩 Runtime").font(.caption).foregroundColor(.secondary)
             Spacer()
         }
         .padding()

@@ -137,6 +137,171 @@ paths:
         "200":
           description: Mission paused
 
+  /api/missions/{mission_id}/resume:
+    post:
+      operationId: resumeMission
+      summary: Resume a paused mission
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Mission resumed
+
+  /api/missions/{mission_id}/rollback:
+    post:
+      operationId: rollbackMission
+      summary: Rollback a mission to safe state
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Mission rolled back
+
+  /api/missions/{mission_id}/safe-mode:
+    post:
+      operationId: safeModeMission
+      summary: Toggle safe mode (read-only tools only)
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Safe mode toggled
+
+  /api/approvals:
+    get:
+      operationId: listApprovals
+      summary: List all approval requests
+      parameters:
+        - name: mission_id
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Approval list
+
+  /api/evidence:
+    get:
+      operationId: listEvidence
+      summary: List evidence artifacts
+      parameters:
+        - name: mission_id
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Evidence list
+
+  /api/memory:
+    get:
+      operationId: listMemory
+      summary: List committed memory records
+      responses:
+        "200":
+          description: Memory records
+
+  /api/memory/candidates:
+    get:
+      operationId: memoryCandidates
+      summary: List memory promotion candidates
+      responses:
+        "200":
+          description: Memory candidates
+
+  /api/events/{mission_id}:
+    get:
+      operationId: getEvents
+      summary: Get event stream for a mission
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Event list
+
+  /api/receipts:
+    get:
+      operationId: verifyReceipts
+      summary: Verify receipt chains
+      parameters:
+        - name: mission_id
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Receipt verification results
+
+  /api/tools:
+    get:
+      operationId: listTools
+      summary: List tool invocations
+      responses:
+        "200":
+          description: Tool invocation list
+
+  /api/missions/{mission_id}/tools:
+    get:
+      operationId: listMissionTools
+      summary: List tool invocations for a mission
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Mission tool invocations
+
+  /api/recovery/check:
+    post:
+      operationId: recoveryCheck
+      summary: Check and run recovery
+      responses:
+        "200":
+          description: Recovery check result
+
+  /adaptive/status:
+    get:
+      operationId: adaptiveStatus
+      summary: Get adaptive runtime status
+      responses:
+        "200":
+          description: Adaptive status
+
+  /adaptive/missions/{mission_id}/triage:
+    post:
+      operationId: adaptiveTriage
+      summary: Run mission triage
+      parameters:
+        - name: mission_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Triage result
+
 components:
   schemas:
     RuntimeOverview:

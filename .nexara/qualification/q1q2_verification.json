@@ -1,0 +1,57 @@
+{
+  "q1": [],
+  "q2": [
+    {
+      "invariant": "Q2.1 Runtime Authority Unique",
+      "status": "PASS",
+      "detail": "Found 1 NexaraRuntime classes"
+    },
+    {
+      "invariant": "Q2.2 Mission State Authority Unique",
+      "status": "PASS",
+      "detail": "Found 1 MissionStateMachine classes"
+    },
+    {
+      "invariant": "Q2.3 Capability Registry Authority Unique",
+      "status": "PASS",
+      "detail": "Found 1 CapabilityRegistry class definitions (alias-aware)"
+    },
+    {
+      "invariant": "Q2.4 Kernel Cannot Execute Tools",
+      "status": "PASS"
+    },
+    {
+      "invariant": "Q2.5 Skill Cannot Grant Permission",
+      "status": "PASS"
+    },
+    {
+      "invariant": "Q2.6 Executor Cannot Self-Verify",
+      "status": "PASS"
+    },
+    {
+      "invariant": "Q2.7 Memory Cannot Overwrite Evidence",
+      "status": "PASS"
+    },
+    {
+      "invariant": "Q2.8 Canvas Cannot Bypass Runtime",
+      "status": "PASS"
+    },
+    {
+      "invariant": "Q2.9 R3/R4 Requires Approval",
+      "status": "PASS"
+    },
+    {
+      "invariant": "Q2.10 Completion Full Chain",
+      "status": "PASS",
+      "detail": "verify=True, evidence=True, memory=True, evaluate=True"
+    }
+  ],
+  "aggregator": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0,
+    "failed_invariants": [],
+    "overall_status": "PASS",
+    "qualified": true
+  }
+}

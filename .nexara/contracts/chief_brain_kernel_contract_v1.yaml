@@ -1,0 +1,319 @@
+# ChiefBrainKernel Contract V1.0
+# G2-A: Kernel Boundary Mapping — derived from existing Runtime reality
+# This document DEFINES the kernel boundary; it does NOT create new code.
+# All boundary descriptions reference EXISTING implementations.
+
+schema: chief_brain_kernel_contract
+version: "1.0"
+gate: G2-A
+frozen_at: "2026-07-24T05:00:00Z"
+evidence_head: "6ab0630"
+status: BOUNDARY_MAPPING
+
+# ═══════════════════════════════════════════════════════════════
+# 1. KERNEL RESPONSIBILITY BOUNDARY
+# ═══════════════════════════════════════════════════════════════
+# The kernel IS the mission lifecycle engine. Nothing more, nothing less.
+# Everything below "kernel boundary" already exists in the codebase.
+
+kernel_scope:
+
+  # ── IN SCOPE (these ARE the kernel) ──
+  in_scope:
+
+    - component: Mission Lifecycle
+      description: "The complete 29-state mission lifecycle: Intent → Triage → Context → Contract → Plan → Simulation → Approval → Execution → Verification → Evidence → MemoryPatch → Evaluation → Completion"
+      existing_implementation: "runtime.py:NexaraRuntime (1083 lines)"
+      kernel_role: "OWNER — the kernel is the single authority for mission state transitions"
+
+    - component: Mission State Machine
+      description: "Deterministic state transition graph with validation on every transition"
+      existing_implementation: "state_machine.py:MissionStateMachine (115 lines)"
+      kernel_role: "OWNER — validates and enforces all state transitions"
+
+    - component: Mission Triage
+      description: "Intent classification, risk assessment, priority assignment"
+      existing_implementation: "mission_triage.py:MissionTriageEngine (350 lines)"
+      kernel_role: "OWNER — first touchpoint after human intent"
+
+    - component: Mission Compilation
+      description: "Translation of MissionSpec into executable MissionPlan"
+      existing_implementation: "mission_compiler.py:MissionCompiler (65 lines)"
+      kernel_role: "OWNER — spec→plan translation is kernel logic"
+
+    - component: Work Contract Engine
+      description: "Creation and validation of WorkContract with boundaries, constraints, deliverables"
+      existing_implementation: "contract_engine.py:ContractEngine (24 lines)"
+      kernel_role: "OWNER — contract is the binding agreement between intent and execution"
+
+    - component: Orchestration (7 Subsystems)
+      description: "MissionQueue, WorkerScheduler, WriterLease, ApprovalQueue, RecoveryQueue, EvidenceQueue, RuntimeOrchestrator"
+      existing_implementation: "orchestration.py (935 lines)"
+      kernel_role: "OWNER — the kernel orchestrates all mission execution"
+
+    - component: Adaptive Scheduling
+      description: "Multi-agent, multi-model scheduling with capability matching"
+      existing_implementation: "adaptive_scheduler.py:AdaptiveMultiAgentScheduler (480 lines)"
+      kernel_role: "OWNER — agent assignment is kernel logic"
+
+  # ── OUT OF SCOPE (these are NOT the kernel) ──
+  out_of_scope:
+
+    - component: Database / Persistence
+      reason: "Storage is infrastructure. The kernel depends on it but does not own it."
+      existing_implementation: "db.py:SQLiteStore (1400 lines)"
+      relationship: "DEPENDS_ON — kernel calls db for persistence"
+
+    - component: REST API
+      reason: "API is an external interface. The kernel is callable through it but does not own it."
+      existing_implementation: "api.py:FastAPI app factory (236 lines)"
+      relationship: "EXPOSED_BY — API wraps kernel methods"
+
+    - component: CLI
+      reason: "CLI is a human interface. Not kernel logic."
+      existing_implementation: "cli.py (597 lines)"
+      relationship: "EXPOSED_BY — CLI wraps kernel methods"
+
+    - component: Model Gateway / Router
+      reason: "Model selection and provider abstraction is infrastructure."
+      existing_implementation: "model_gateway.py (300 lines), model_router.py (300 lines)"
+      relationship: "DEPENDS_ON — kernel routes work through model gateway"
+
+    - component: Tools / Capability Runtime
+      reason: "Tool execution sandbox is infrastructure, not kernel logic."
+      existing_implementation: "tools.py:ToolRuntime (600 lines), capabilities.py (280 lines)"
+      relationship: "DEPENDS_ON — kernel delegates execution to tool runtime"
+
+    - component: Connectors / Adapters
+      reason: "Browser, Git, message, deployment adapters are external integrations."
+      existing_implementation: "connectors/ (9 modules), *_adapter.py (5 files)"
+      relationship: "DEPENDS_ON — kernel invokes adapters through capability layer"
+
+    - component: Evidence Store
+      reason: "Evidence is a separate domain with its own authority (append-only, immutable)."
+      existing_implementation: "evidence.py:EvidenceStore (650 lines)"
+      relationship: "DEPENDS_ON — kernel creates evidence through evidence store; kernel does not verify its own evidence"
+
+    - component: Memory Kernel
+      reason: "Memory is a separate domain with its own governance (evidence-backed, approved patches)."
+      existing_implementation: "memory.py:MemoryKernel (680 lines)"
+      relationship: "DEPENDS_ON — kernel triggers memory updates; memory enforces its own rules"
+
+    - component: Evaluation Engine
+      reason: "Evaluation is an independent audit function, not kernel self-assessment."
+      existing_implementation: "evaluation.py:EvaluationEngine (170 lines)"
+      relationship: "DEPENDS_ON — kernel triggers evaluation; evaluation is independent"
+
+    - component: Governance / Approval / NSEC
+      reason: "Governance is SUPREME over the kernel. The kernel obeys governance, not the reverse."
+      existing_implementation: "governance.py (550 lines)"
+      relationship: "GOVERNED_BY — kernel operates under governance constraints"
+
+    - component: UI / Experience Layer
+      reason: "macOS, iOS, web are presentation layers. INVARIANT_02: Canvas cannot bypass Runtime."
+      existing_implementation: "experience/ (NexaraMac, NexaraIOS, NexaraCore)"
+      relationship: "EXPOSED_BY — UI renders kernel state, routes input through API"
+
+# ═══════════════════════════════════════════════════════════════
+# 2. KERNEL INPUT/OUTPUT CONTRACT
+# ═══════════════════════════════════════════════════════════════
+
+kernel_contract:
+
+  inputs:
+    - name: HumanIntent
+      type: "mission_triage.MissionDecisionRecord"
+      source: "external (human via API/CLI)"
+      validation: "MissionTriageEngine validates intent before kernel accepts it"
+
+    - name: ApprovedMission
+      type: "models.Mission"
+      source: "ApprovalEngine (governance.py)"
+      precondition: "state in [Approved, Running]"
+
+    - name: AgentCapability
+      type: "capabilities.CapabilityRegistry entry"
+      source: "CapabilityRegistry"
+      precondition: "capability registered, permissions checked"
+
+    - name: ModelResponse
+      type: "model_gateway.ProviderResponse"
+      source: "ModelGateway"
+      precondition: "provider available, token budget remaining"
+
+  outputs:
+    - name: MissionState
+      type: "models.MissionState"
+      constraint: "Only valid transitions per state machine"
+
+    - name: ExecutionResult
+      type: "dict"
+      constraint: "Includes result, evidence_refs, tool_invocations"
+
+    - name: EvidenceRecord
+      type: "models.EvidenceArtifact"
+      constraint: "Immutable after creation. Created through EvidenceStore, not directly."
+
+    - name: MemoryPatchRequest
+      type: "models.MemoryRecord"
+      constraint: "Requires source_evidence_id. Subject to Memory governance."
+
+    - name: EvaluationTrigger
+      type: "evaluation.EvaluationRequest"
+      constraint: "Evaluation is independent — kernel requests, does not self-score."
+
+  errors:
+    - name: MissionBlocked
+      condition: "approval denied, resource exhausted, or external blocker"
+    - name: MissionFailed
+      condition: "execution error, verification failure, or unrecoverable state"
+    - name: KernelPanic
+      condition: "state machine invariant violation, writer lease conflict, or governance block"
+
+# ═══════════════════════════════════════════════════════════════
+# 3. KERNEL ↔ EXISTING BODY MAPPING
+# ═══════════════════════════════════════════════════════════════
+
+existing_body_map:
+
+  kernel_to_runtime:
+    description: "The kernel IS NexaraRuntime + RuntimeOrchestrator + StateMachine. G2 formalizes this identity."
+    current_files:
+      - src/nexara_prime/runtime.py          # NexaraRuntime — the kernel object
+      - src/nexara_prime/orchestration.py    # RuntimeOrchestrator + 7 subsystems
+      - src/nexara_prime/state_machine.py    # MissionStateMachine
+      - src/nexara_prime/mission_triage.py   # MissionTriageEngine
+      - src/nexara_prime/mission_compiler.py # MissionCompiler
+      - src/nexara_prime/contract_engine.py  # ContractEngine
+      - src/nexara_prime/adaptive_scheduler.py # AdaptiveMultiAgentScheduler
+    g2_action: "FORMALIZE — add ChiefBrainKernel class that wraps these 7 modules with explicit boundary enforcement"
+
+  kernel_to_infrastructure:
+    description: "These are infrastructure — kernel depends on them but does not own them."
+    current_files:
+      - src/nexara_prime/db.py              # DEPENDS_ON — storage
+      - src/nexara_prime/api.py             # EXPOSED_BY — REST interface
+      - src/nexara_prime/cli.py             # EXPOSED_BY — CLI interface
+      - src/nexara_prime/config.py          # DEPENDS_ON — configuration
+      - src/nexara_prime/model_gateway.py   # DEPENDS_ON — model access
+      - src/nexara_prime/model_router.py    # DEPENDS_ON — model selection
+    g2_action: "NO CHANGE — these are external to the kernel"
+
+  kernel_to_domains:
+    description: "These are separate domains with their own governance. Kernel triggers but does not control."
+    current_files:
+      - src/nexara_prime/evidence.py        # DEPENDS_ON — evidence is independent
+      - src/nexara_prime/memory.py          # DEPENDS_ON — memory has own rules
+      - src/nexara_prime/evaluation.py      # DEPENDS_ON — evaluation is independent audit
+      - src/nexara_prime/governance.py      # GOVERNED_BY — kernel obeys governance
+      - src/nexara_prime/tools.py           # DEPENDS_ON — sandbox execution
+      - src/nexara_prime/capabilities.py    # DEPENDS_ON — capability registry
+    g2_action: "NO CHANGE — these domains remain independent"
+
+  kernel_to_adapters:
+    description: "External integrations. Kernel invokes through capability layer."
+    current_files:
+      - src/nexara_prime/browser_adapter.py
+      - src/nexara_prime/computer_use_adapter.py
+      - src/nexara_prime/git_adapter.py
+      - src/nexara_prime/message_adapter.py
+      - src/nexara_prime/deployment_adapter.py
+      - src/nexara_prime/connectors/ (9 modules)
+    g2_action: "NO CHANGE — adapters remain external"
+
+  kernel_to_experience:
+    description: "UI layer. INVARIANT_02: Canvas cannot bypass Runtime."
+    current_files:
+      - experience/NexaraMac/
+      - experience/NexaraIOS/
+      - experience/NexaraCore/
+    g2_action: "NO CHANGE — UI routes through API, which routes through kernel"
+
+# ═══════════════════════════════════════════════════════════════
+# 4. PROHIBITED BEHAVIORS
+# ═══════════════════════════════════════════════════════════════
+
+prohibited:
+  - id: PROHIBIT_01
+    rule: "Kernel MUST NOT self-verify"
+    description: "The kernel executes missions. It MUST NOT create PASS verdicts for its own executions."
+    invariant: INVARIANT_03
+    enforcement: "Receipt creation requires independent auditor (different agent/model)"
+
+  - id: PROHIBIT_02
+    rule: "Kernel MUST NOT bypass governance"
+    description: "All R3+ risk actions and external-effect capabilities require ApprovalEngine approval."
+    source: "authority_matrix_v1.yaml rule R2"
+    enforcement: "ApprovalEngine check before every R3+ action"
+
+  - id: PROHIBIT_03
+    rule: "Kernel MUST NOT grant permissions"
+    description: "Permission grant is always external (human). No self-escalation."
+    invariant: INVARIANT_01
+    enforcement: "Permission check at capability invocation; no self-modification of permissions"
+
+  - id: PROHIBIT_04
+    rule: "Kernel MUST NOT overwrite evidence"
+    description: "Evidence is append-only, immutable. Kernel creates evidence through EvidenceStore, never modifies."
+    invariant: INVARIANT_04
+    enforcement: "EvidenceStore.append() only; no update/delete methods exposed to kernel"
+
+  - id: PROHIBIT_05
+    rule: "Kernel MUST NOT declare mission complete without full chain"
+    description: "Completion requires: Success Criteria + Evidence + Audit + Receipt + Reflection."
+    invariant: INVARIANT_05
+    enforcement: "State machine enforces all 5 gates before Completed state"
+
+  - id: PROHIBIT_06
+    rule: "Kernel MUST NOT skip the state machine"
+    description: "All mission state transitions go through state_machine.py validation."
+    enforcement: "No direct state assignment; all transitions through MissionStateMachine.transition()"
+
+  - id: PROHIBIT_07
+    rule: "Kernel MUST NOT modify NSEC or G1 Contracts"
+    description: "NSEC V2.1 is supreme. G1 contracts are frozen. Kernel operates UNDER them."
+    enforcement: "Contract files are read-only at kernel level"
+
+# ═══════════════════════════════════════════════════════════════
+# 5. G2 IMPLEMENTATION DEPENDENCY GRAPH
+# ═══════════════════════════════════════════════════════════════
+
+dependency_graph:
+  g2a_kernel_boundary_mapping:
+    status: IN_PROGRESS
+    outputs:
+      - .nexara/contracts/chief_brain_kernel_contract_v1.yaml
+    depends_on: [G0, G1]
+    blocks: [G2-B]
+
+  g2b_kernel_contract_tests:
+    status: PENDING
+    description: "Write contract tests for kernel boundary — verify each PROHIBIT rule has a failing test"
+    outputs:
+      - tests/test_g2_kernel_contract.py
+    depends_on: [G2-A]
+    blocks: [G2-C]
+
+  g2c_kernel_formalization:
+    status: PENDING
+    description: "Add ChiefBrainKernel class wrapping existing 7 kernel modules with explicit boundary enforcement"
+    outputs:
+      - src/nexara_prime/chief_brain_kernel.py  # NEW — thin wrapper, not new logic
+    depends_on: [G2-B]
+    blocks: [G2-D]
+
+  g2d_kernel_integration_validation:
+    status: PENDING
+    description: "Run full test suite, verify no existing behavior broken, verify all 5 invariants hold"
+    outputs:
+      - .nexara/evidence/g2_kernel_validation.md
+    depends_on: [G2-C]
+    blocks: [G2 Closure]
+
+  g2_closure:
+    status: PENDING
+    description: "G2 gate closure — all integration tests pass, kernel boundary verified"
+    outputs:
+      - .nexara/receipts/g2_closure_receipt.json
+    depends_on: [G2-D]
+    blocks: [G3]

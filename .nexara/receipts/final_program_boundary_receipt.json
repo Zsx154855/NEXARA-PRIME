@@ -1,0 +1,27 @@
+{
+  "receipt_id": "FINAL_PROGRAM_BOUNDARY_RECEIPT_V1",
+  "program": "NEXARA_SOVEREIGN_COGNITIVE_OS_V2",
+  "status": "READY_FOR_HUMAN_RELEASE_APPROVAL",
+  "evidence_subject_head": "82b1211213932cba71be68bf894dca0b8764e964",
+  "ci_run": "30057162252",
+  "ci_result": "8/8 SUCCESS",
+  "tests": "1049 passed, 0 failed",
+  "gates_completed": 10,
+  "gates_blocked": 1,
+  "contracts": 9,
+  "new_tests": 102,
+  "new_source_files": 5,
+  "existing_modules_untouched": 67,
+  "no_second_runtime": true,
+  "no_merge": true,
+  "no_deploy": true,
+  "no_tag": true,
+  "evidence_sha256": "c845d84c3b7816b68db6055a6730f553d79b04d96d3007bd44af71fe9583a329",
+  "generated_at": "2026-07-24T08:10:00Z",
+  "human_actions_required": [
+    "Purchase Apple Developer Program ($99/yr)",
+    "Apply git tag v0.1.0",
+    "Re-request Codex review when limits reset",
+    "Review and approve PR #23 merge"
+  ]
+}

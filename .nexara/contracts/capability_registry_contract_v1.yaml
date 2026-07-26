@@ -1,0 +1,135 @@
+# Capability Registry Contract V1.0
+# G3-A: Capability Registry V2 — formalizes the existing converged registry
+# All definitions derived from src/nexara_prime/capabilities.py (238 lines, V2.0)
+
+schema: capability_registry_contract
+version: "1.0"
+gate: G3-A
+frozen_at: "2026-07-24T06:00:00Z"
+evidence_head: "65bb4a6"
+source: src/nexara_prime/capabilities.py (CapabilityRegistry, V2.0 converged)
+
+# ── Capability Entity ──
+
+capability:
+  fields:
+    capability_id: { type: string, required: true, example: "tool.file_read" }
+    name: { type: string, required: true }
+    description: { type: string, required: false }
+    capability_type: { type: "CapabilityType enum", required: true }
+    risk_level: { type: "RiskLevel (R0-R4)", required: false, default: R1 }
+    enabled: { type: boolean, required: false, default: true }
+    provider: { type: string, required: false }
+    input_schema: { type: dict, required: false }
+    output_schema: { type: dict, required: false }
+    permission_level: { type: string, required: false }
+    external_effect: { type: boolean, required: false, default: false }
+    idempotency: { type: boolean, required: false, default: true }
+    timeout_ms: { type: int, required: false, default: 5000 }
+    retry_policy: { type: dict, required: false }
+    rollback: { type: string, required: false }
+    evidence_policy: { type: string, required: false, default: "required" }
+    health_status: { type: string, required: false, default: "unknown" }
+    model_requirements: { type: "list[string]", required: false }
+  implemented_in: models.py:Capability (NModel)
+
+# ── CapabilityScore Entity (V2 evidence-scored) ──
+
+capability_score:
+  fields:
+    capability_id: { type: string, required: true }
+    name: { type: string, required: true }
+    supported_task_types: { type: "list[string]", required: false }
+    tool_permissions: { type: "list[string]", required: false }
+    risk_ceiling: { type: string, required: false, default: "R1" }
+    model_requirements: { type: "list[string]", required: false }
+    historical_success_rate: { type: float, required: false, default: 0.0 }
+    average_latency_ms: { type: float, required: false, default: 0.0 }
+    average_token_cost: { type: float, required: false, default: 0.0 }
+    recent_failure_rate: { type: float, required: false, default: 0.0 }
+    confidence: { type: float, required: false, default: 0.5 }
+    evidence_count: { type: int, required: false, default: 0 }
+    last_updated: { type: "ISO-8601 UTC string", required: false }
+    source_evidence: { type: "list[string]", required: false }
+    schema_version: { type: int, required: false, default: 2 }
+  implemented_in: models.py:CapabilityScore (NModel)
+
+# ── Registry API ──
+
+registry_api:
+
+  v1:
+    - method: register
+      description: "Register a capability object (register(capability) -> Capability)"
+    - method: resolve
+      description: "Resolve capability names/IDs to enabled Capability objects (resolve(required) -> list)"
+    - method: mount_for
+      description: "Load capabilities for a worker (mount_for(worker_id, required) -> list)"
+    - method: unmount_for
+      description: "Unmount all capabilities for a worker (unmount_for(worker_id))"
+    - method: mounted
+      description: "List mounted capability IDs (mounted(worker_id) -> list)"
+    - method: list
+      description: "List all registered capabilities as dicts (list() -> list)"
+
+  v2:
+    - method: register_v2
+      description: "Register evidence-scored capability (register_v2(capability_id, name, ...) -> CapabilityScore)"
+    - method: update_score
+      description: "Update capability score from real mission outcomes (update_score(...) -> CapabilityScore | None)"
+    - method: get_score
+      description: "Get scored capability with decay applied (get_score(capability_id) -> CapabilityScore | None)"
+    - method: list_capable
+      description: "List capabilities capable of task type above confidence threshold (list_capable(task_type, min_confidence) -> list)"
+    - method: list_all
+      description: "List all scored capabilities (list_all() -> list)"
+    - method: get_mission_history
+      description: "Get mission outcome history for a capability (get_mission_history(capability_id) -> list)"
+
+# ── Default Capabilities (11 registered on init) ──
+
+defaults:
+  skills:
+    - skill.mission_compilation  # Compile human intent into MissionSpec
+    - skill.contracts            # Version and validate WorkContract
+    - skill.evidence             # Attach evidence to state and tool events
+  tools:
+    - tool.file_read             # Read files under workspace root (R0)
+    - tool.file_write_report     # Write bounded report under report root (R2)
+    - tool.code_exec             # Allow-listed Python commands (R1)
+    - tool.browser_readonly      # Read-only browser access (R1)
+  models:
+    - model.mock                 # Deterministic mock model
+    - model.provider             # Configured model provider
+  memory:
+    - memory.sqlite              # SQLite memory (4-layer architecture)
+  policy:
+    - policy.risk                # R0-R4 policy and approval gates
+
+# ── Contract Invariants ──
+
+invariants:
+  - id: CAP_INVARIANT_01
+    rule: "Skill cannot grant permission"
+    description: "A capability registration declares what it NEEDS (tool_permissions), not what it GRANTS. Permission is always external."
+    enforcement: "Permission check at ToolRuntime level, not CapabilityRegistry level"
+
+  - id: CAP_INVARIANT_02
+    rule: "Capability cannot bypass Gateway"
+    description: "Capability execution goes through ToolRuntime → sandbox → evidence. No direct execution path."
+    enforcement: "ToolRuntime.sandbox enforces isolation"
+
+  - id: CAP_INVARIANT_03
+    rule: "Runtime remains single authority"
+    description: "NexaraRuntime is the ONLY place where capabilities are instantiated and mounted. No second runtime."
+    enforcement: "Single CapabilityRegistry instance in NexaraRuntime.__init__"
+
+  - id: CAP_INVARIANT_04
+    rule: "Registry cannot modify execution state"
+    description: "CapabilityRegistry is a READ and REGISTER service. It does not execute, modify missions, or change state."
+    enforcement: "CapabilityRegistry has no mission/execution state fields"
+
+  - id: CAP_INVARIANT_05
+    rule: "Evidence must reference capability execution"
+    description: "When a capability is executed, evidence must include: capability_id, invocation_id, sandbox_result."
+    enforcement: "ToolRuntime creates evidence with capability binding"

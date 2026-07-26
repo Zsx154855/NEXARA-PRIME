@@ -1,6 +1,6 @@
-# NEXARA PRIME
+# 柏韩 · NEXARA PRIME
 
-NEXARA PRIME is a Human-Centered Sovereign Agent Kernel: a self-owned modular-monolith runtime for turning human intent into bounded, auditable work.
+柏韩 (Bǎi Hán) is a Human-Centered Sovereign Agent Kernel: a self-owned modular-monolith runtime on NEXARA PRIME for turning human intent into bounded, auditable work.
 
 The MVP is intentionally provider-free. It uses a deterministic mock model and does not depend on LangChain, AutoGen, CrewAI, or another third-party Agent framework as its core. A future provider adapter may be added behind `ModelGateway` without changing the kernel objects or state machine.
 
