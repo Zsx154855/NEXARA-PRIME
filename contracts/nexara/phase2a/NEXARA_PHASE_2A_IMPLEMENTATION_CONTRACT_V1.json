@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/nexara/phase2a/implementation_contract_v1.json",
+  "title": "NEXARA Phase 2a Implementation Scope Contract V1",
+  "description": "Frozen implementation scope for Phase 2a: Autonomous Improvement Boundary + Personal Knowledge Graph. Absorbs all 5 Claude Phase 2 design recommendations. ZERO Phase 1 modification.",
+  "frozen_at": "2026-07-27T19:00:00Z",
+  "governed_by": "NSEC V2.1 Article 1, 8, 37, 45",
+  "contract_type": "implementation_scope",
+  "phase": "PHASE_2A_SCOPE_FREEZE",
+  "version": "1.0.0",
+  "phase1_baseline": "bd7a9f1acd46deccddb36c9835374d79fa9033ed",
+
+  "claude_recommendations_absorbed": {
+    "rec1_dual_gating": {"status": "RESOLVED", "how": "Capability registration (general) = BLOCKED. Skill formalization (SKILL_IMPROVEMENT→Capability) = APPROVAL_REQUIRED. Separate code paths in boundary.py."},
+    "rec2_violation_response": {"status": "RESOLVED", "how": "3-tier: HALT (immediate stop), LOG_AND_BLOCK (silent block), ALERT_HUMAN (block+notify)."},
+    "rec3_human_veto": {"status": "RESOLVED", "how": "CLI: nexara veto --action=<id>. Config: ~/.nexara/veto_rules.yaml. API: POST /api/brain/veto. Vetoes persisted in human_vetoes table."},
+    "rec4_parallelization": {"status": "ACKNOWLEDGED", "how": "EVO-07 and EVO-02 have no hard dependency. Parallel development OK."},
+    "rec5_evaluation_py": {"status": "RESOLVED", "how": "evaluation.py EXISTS on disk. Claude false negative confirmed."}
+  },
+
+  "mission_scope": {
+    "objective": "Implement Phase 2a: Autonomous Improvement Boundary + Personal Knowledge Graph.",
+    "implemented": ["EVO-07: Autonomous Improvement Boundary", "EVO-02: Personal Knowledge Graph"],
+    "deferred": ["EVO-03 Experience Learning (2b)", "EVO-04 Self Reflection (2c)", "EVO-05 Mission Intelligence (2c)", "EVO-06 Preference Model (2b)", "EVO-01 Brain Evolution (2d)"]
+  },
+
+  "modules": {
+    "EVO-07_boundary": {
+      "file": "src/nexara_prime/brain/evolution/boundary.py",
+      "class": "AutonomousBoundary",
+      "methods": {
+        "check": "check(action_id, context) → BoundaryDecision — 4-point enforcement",
+        "veto": "veto(action_id, reason, source) → VetoRecord — human veto via CLI/config/API",
+        "revoke_veto": "revoke_veto(action_id) → bool",
+        "get_vetoes": "get_vetoes() → list[VetoRecord]"
+      },
+      "violation_responses": {
+        "HALT": "Action in blocked list → immediate stop, error, evidence logged",
+        "LOG_AND_BLOCK": "Blocked but low risk → silent block, evidence logged",
+        "ALERT_HUMAN": "Approval-required without approval → block + notify"
+      },
+      "boundary_rules": {"allowed": 7, "blocked": 8, "approval_required": 5},
+      "new_table": "human_vetoes (veto_id, action_id, reason, source, issued_at, revoked_at)"
+    },
+    "EVO-02_knowledge_graph": {
+      "file": "src/nexara_prime/brain/knowledge_graph.py",
+      "class": "KnowledgeGraph",
+      "methods": {
+        "extract_entities": "extract_entities(memories) → list[Entity] — 6 entity types",
+        "infer_relations": "infer_relations(entities, memories) → list[Relation] — 17 relation types",
+        "traverse": "traverse(start_entity, max_depth, filters) → Subgraph — BFS/DFS",
+        "score_confidence": "score_confidence(entity) → float — Bayesian scoring",
+        "prune": "prune(min_confidence, max_age_days) → PruneResult",
+        "export": "export_graphviz() → str — DOT format"
+      },
+      "relation_types": {"existing": 11, "new": 6, "total": 17},
+      "new_tables": ["knowledge_graph_entities", "knowledge_graph_relations"]
+    }
+  },
+
+  "allowed_files": {
+    "new_python": ["src/nexara_prime/brain/evolution/__init__.py", "src/nexara_prime/brain/evolution/boundary.py", "src/nexara_prime/brain/knowledge_graph.py"],
+    "new_tests": ["tests/brain/phase2a/__init__.py", "tests/brain/phase2a/test_autonomous_boundary.py", "tests/brain/phase2a/test_knowledge_graph.py", "tests/brain/phase2a/test_isolation.py"],
+    "brain_db_additions": ["human_vetoes", "knowledge_graph_entities", "knowledge_graph_relations"]
+  },
+
+  "forbidden_files": {
+    "absolute_prohibition": [
+      "src/nexara_prime/runtime.py", "src/nexara_prime/evidence.py", "src/nexara_prime/memory.py",
+      "src/nexara_prime/brain/memory_controller.py", "src/nexara_prime/brain/long_term_memory.py",
+      "src/nexara_prime/brain/db.py", "src/nexara_prime/brain/reasoning/",
+      "contracts/nexara/NEXARA_IDENTITY_CONTRACT_V1.json"
+    ]
+  },
+
+  "test_requirements": {
+    "minimum_test_count": 60,
+    "areas": [
+      {"area": "Boundary enforcement", "min": 15},
+      {"area": "Human veto", "min": 10},
+      {"area": "KG entities", "min": 10},
+      {"area": "KG relations", "min": 10},
+      {"area": "KG traversal", "min": 5},
+      {"area": "KG pruning", "min": 5},
+      {"area": "Isolation", "min": 5}
+    ]
+  },
+
+  "acceptance_criteria": [
+    "Both modules implemented and testable independently",
+    "60+ tests, all PASS",
+    "ZERO Phase 1 modification",
+    "1315+ tests continue to PASS",
+    "Claude scope review = PASS"
+  ],
+
+  "governance_gates": {
+    "phase1_diff": "MUST_BE_ZERO",
+    "implementation": "FROZEN",
+    "commit": "AWAITING_NSEC_ARTICLE_37",
+    "push": "AWAITING_NSEC_ARTICLE_37",
+    "merge": "DENIED",
+    "deploy": "DENIED"
+  },
+
+  "next_gate": "CLAUDE_INDEPENDENT_PHASE2A_SCOPE_REVIEW_REQUIRED",
+  "stop_condition": "WAITING_NSEC_ARTICLE_37_HUMAN_APPROVAL"
+}

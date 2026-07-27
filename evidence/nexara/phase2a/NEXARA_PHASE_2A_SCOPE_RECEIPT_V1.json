@@ -1,0 +1,17 @@
+{
+  "receipt_id": "receipt_nexara_phase2a_scope_v1",
+  "mission": "NEXARA_PHASE_2A_IMPLEMENTATION_SCOPE_FREEZE_V1",
+  "frozen_artifacts": {
+    "contract": {
+      "sha256": "d581e539fb9df1de11783254a133f60b381d71d72fab85cdd71facd1ba7776f8"
+    },
+    "report": {
+      "sha256": "f51499b544a795ab97f1e54db13fdf741de4b073e569f2e7ef5a9b33c0fd176a"
+    }
+  },
+  "verdict": {
+    "final_result": "PASS"
+  },
+  "next_gate": "CLAUDE_REVIEW_REQUIRED",
+  "stop_condition": "WAITING_NSEC_ARTICLE_37_HUMAN_APPROVAL"
+}

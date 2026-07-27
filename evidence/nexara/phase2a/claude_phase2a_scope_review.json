@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://evidence/nexara/phase2a/claude_phase2a_scope_review.json",
+  "title": "Claude Independent Phase 2a Scope Review",
+  "description": "Independent scope review of NEXARA Phase 2a Implementation Scope Freeze V1. Claude (Independent Reviewer) verifies scope completeness, Claude recommendation absorption, Phase 1 boundary protection, test coverage, and NSEC Article 37 governance.",
+  "reviewed_at": "2026-07-27T19:30:00Z",
+  "reviewer": "Claude (Independent Reviewer, delegated subagent)",
+  "review_type": "SCOPE_REVIEW_ONLY — no implementation",
+
+  "artifacts_reviewed": {
+    "contract": "contracts/nexara/phase2a/NEXARA_PHASE_2A_IMPLEMENTATION_CONTRACT_V1.json",
+    "report": "reports/nexara/phase2a/NEXARA_PHASE_2A_SCOPE_REPORT_V1.json",
+    "receipt": "evidence/nexara/phase2a/NEXARA_PHASE_2A_SCOPE_RECEIPT_V1.json",
+    "nsec_v2_1": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md"
+  },
+
+  "verification_results": {
+    "1_scope_completeness": {
+      "verdict": "PASS",
+      "EVO-07_boundary": {
+        "status": "FULLY_SPECIFIED",
+        "file": "src/nexara_prime/brain/evolution/boundary.py",
+        "class": "AutonomousBoundary",
+        "methods_specified": 4,
+        "methods": [
+          {"name": "check", "signature": "check(action_id, context) → BoundaryDecision", "specified": true},
+          {"name": "veto", "signature": "veto(action_id, reason, source) → VetoRecord", "specified": true},
+          {"name": "revoke_veto", "signature": "revoke_veto(action_id) → bool", "specified": true},
+          {"name": "get_vetoes", "signature": "get_vetoes() → list[VetoRecord]", "specified": true}
+        ],
+        "violation_responses": {
+          "count": 3,
+          "tiers": ["HALT", "LOG_AND_BLOCK", "ALERT_HUMAN"],
+          "fully_described": true
+        },
+        "human_veto_tiers": {
+          "count": 3,
+          "channels": ["CLI (nexara veto --action=<id>)", "Config (~/.nexara/veto_rules.yaml)", "API (POST /api/brain/veto)"],
+          "all_specified": true
+        },
+        "new_db_table": "human_vetoes (veto_id, action_id, reason, source, issued_at, revoked_at)",
+        "boundary_rules": {"allowed": 7, "blocked": 8, "approval_required": 5}
+      },
+      "EVO-02_knowledge_graph": {
+        "status": "FULLY_SPECIFIED",
+        "file": "src/nexara_prime/brain/knowledge_graph.py",
+        "class": "KnowledgeGraph",
+        "methods_specified": 6,
+        "methods": [
+          {"name": "extract_entities", "signature": "extract_entities(memories) → list[Entity]", "specified": true},
+          {"name": "infer_relations", "signature": "infer_relations(entities, memories) → list[Relation]", "specified": true},
+          {"name": "traverse", "signature": "traverse(start_entity, max_depth, filters) → Subgraph", "specified": true},
+          {"name": "score_confidence", "signature": "score_confidence(entity) → float (Bayesian)", "specified": true},
+          {"name": "prune", "signature": "prune(min_confidence, max_age_days) → PruneResult", "specified": true},
+          {"name": "export", "signature": "export_graphviz() → str (DOT format)", "specified": true}
+        ],
+        "entity_types": 6,
+        "relation_types": {"existing": 11, "new": 6, "total": 17},
+        "new_db_tables": ["knowledge_graph_entities", "knowledge_graph_relations"]
+      }
+    },
+
+    "2_claude_recommendations": {
+      "verdict": "PASS",
+      "all_5_absorbed": true,
+      "absorption_details": {
+        "rec1_dual_gating": {
+          "status": "RESOLVED",
+          "verification": "Capability registration (general) → BLOCKED. Skill formalization (SKILL_IMPROVEMENT→Capability) → APPROVAL_REQUIRED. Separate code paths in boundary.py. Dual-gating clarified per Claude's original concern.",
+          "correct": true
+        },
+        "rec2_violation_response": {
+          "status": "RESOLVED",
+          "verification": "3-tier violation-response table defined: HALT (immediate stop), LOG_AND_BLOCK (silent block), ALERT_HUMAN (block+notify). Each tier clearly distinguished by severity and response action.",
+          "correct": true
+        },
+        "rec3_human_veto": {
+          "status": "RESOLVED",
+          "verification": "3-tier human veto specified: CLI (nexara veto --action=<id>), Config (~/.nexara/veto_rules.yaml), API (POST /api/brain/veto). Veto records persisted in human_vetoes table with full lifecycle (issue, revoke, query).",
+          "correct": true
+        },
+        "rec4_parallelization": {
+          "status": "ACKNOWLEDGED",
+          "verification": "EVO-07 and EVO-02 confirmed to have zero hard dependency. Scope contract explicitly states parallel development is acceptable. Deferred modules (EVO-01/03/04/05/06) listed for later phases.",
+          "correct": true
+        },
+        "rec5_evaluation_py": {
+          "status": "RESOLVED",
+          "verification": "evaluation.py confirmed EXISTS on disk at src/nexara_prime/evaluation.py (150 lines, class EvaluationEngine, imports SQLiteStore, EventBus, EvaluationResult, Mission, MissionState). Claude's original Phase 2 false-negative about missing evaluation.py is corrected — file was always present.",
+          "file_exists": true,
+          "file_path": "src/nexara_prime/evaluation.py",
+          "file_size_lines": 150
+        }
+      }
+    },
+
+    "3_phase1_boundary": {
+      "verdict": "PASS",
+      "phase1_baseline_commit": "bd7a9f1acd46deccddb36c9835374d79fa9033ed",
+      "phase1_baseline_verified_in_git": true,
+      "governance_gate_phase1_diff": "MUST_BE_ZERO",
+      "protected_files_count": 9,
+      "protected_files": [
+        {"path": "src/nexara_prime/runtime.py", "exists_on_disk": true, "type": "file"},
+        {"path": "src/nexara_prime/evidence.py", "exists_on_disk": true, "type": "file"},
+        {"path": "src/nexara_prime/memory.py", "exists_on_disk": true, "type": "file"},
+        {"path": "src/nexara_prime/brain/memory_controller.py", "exists_on_disk": true, "type": "file"},
+        {"path": "src/nexara_prime/brain/long_term_memory.py", "exists_on_disk": true, "type": "file"},
+        {"path": "src/nexara_prime/brain/db.py", "exists_on_disk": true, "type": "file"},
+        {"path": "src/nexara_prime/brain/reasoning/", "exists_on_disk": true, "type": "directory", "contains": ["self_check.py", "kernel.py", "decision_framework.py", "context_assembler.py", "__init__.py", "confidence.py", "models.py"]},
+        {"path": "contracts/nexara/NEXARA_IDENTITY_CONTRACT_V1.json", "exists_on_disk": true, "type": "file"}
+      ],
+      "evolution_dir_preexists": false,
+      "knowledge_graph_py_preexists": false,
+      "phase2a_test_dir_preexists": false,
+      "new_files_only": true,
+      "zero_phase1_overlap": true
+    },
+
+    "4_test_coverage": {
+      "verdict": "PASS",
+      "minimum_total": 60,
+      "areas_specified": 7,
+      "area_breakdown": [
+        {"area": "Boundary enforcement", "min": 15, "status": "SPECIFIED"},
+        {"area": "Human veto", "min": 10, "status": "SPECIFIED"},
+        {"area": "KG entities", "min": 10, "status": "SPECIFIED"},
+        {"area": "KG relations", "min": 10, "status": "SPECIFIED"},
+        {"area": "KG traversal", "min": 5, "status": "SPECIFIED"},
+        {"area": "KG pruning", "min": 5, "status": "SPECIFIED"},
+        {"area": "Isolation", "min": 5, "status": "SPECIFIED"}
+      ],
+      "total_minimum_sum": 60,
+      "test_files_planned": [
+        "tests/brain/phase2a/__init__.py",
+        "tests/brain/phase2a/test_autonomous_boundary.py",
+        "tests/brain/phase2a/test_knowledge_graph.py",
+        "tests/brain/phase2a/test_isolation.py"
+      ],
+      "existing_baseline_tests": 1336,
+      "baseline_commit": "bd7a9f1acd46deccddb36c9835374d79fa9033ed",
+      "acceptance_criterion": "1315+ tests continue to PASS (contract says 1315, actual collection is 1336 with 1 import error)"
+    },
+
+    "5_governance_nsec_article_37": {
+      "verdict": "PASS",
+      "nsec_version": "V2.1",
+      "nsec_file": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md",
+      "article_37_content": "第三十七条 高影响操作审批原则 — Push, Merge, Tag, Release, Deploy, Payment, External Send, Secret/credential changes, irreversible deletion, production data modification, privilege escalation, external account operations, real-world high-impact side effects must reach ready-before-approval state then await explicit human approval.",
+      "article_37_respected": true,
+      "governance_gates_compliance": {
+        "implementation": {"value": "FROZEN", "compliant": true, "note": "Scope review only — no code written."},
+        "commit": {"value": "AWAITING_NSEC_ARTICLE_37", "compliant": true, "note": "No commit authorized without human approval."},
+        "push": {"value": "AWAITING_NSEC_ARTICLE_37", "compliant": true, "note": "Push prohibited per Article 37."},
+        "merge": {"value": "DENIED", "compliant": true, "note": "Merge denied per Article 37."},
+        "deploy": {"value": "DENIED", "compliant": true, "note": "Deploy denied per Article 37."}
+      },
+      "stop_condition": "WAITING_NSEC_ARTICLE_37_HUMAN_APPROVAL",
+      "next_gate": "CLAUDE_INDEPENDENT_PHASE2A_SCOPE_REVIEW_REQUIRED (this review = COMPLETE)",
+      "human_approval_required_for": ["commit", "push", "merge", "deploy", "any code change"],
+      "current_state": "Scope frozen. All governance gates in correct pre-approval state. No implementation attempted or permitted."
+    }
+  },
+
+  "cross_cutting_observations": {
+    "scope_report_accuracy": "The scope report (PASS for EVO-07 and EVO-02) is consistent with physical verification. No discrepancies found.",
+    "receipt_integrity": "SHA-256 hashes in receipt match contract and report files. Receipt chain intact.",
+    "git_history": "Phase 1 baseline commit bd7a9f1a is HEAD-1 in the git log, confirming current repo state is post-Phase-1-closure and pre-Phase-2a-implementation.",
+    "evolution_slot_vacant": "The src/nexara_prime/brain/evolution/ directory does NOT exist yet. This scope will create it via __init__.py and boundary.py. No collision with existing code.",
+    "knowledge_graph_slot_vacant": "No knowledge_graph.py exists under src/nexara_prime/brain/. Clean addition.",
+    "test_isolation": "The planned test_isolation.py will be Phase 2a-specific. Existing tests/brain/test_isolation.py is Phase 1 and will NOT be modified."
+  },
+
+  "final_verdict": {
+    "all_areas_pass": true,
+    "scope_review": "PASS",
+    "blocking_issues": 0,
+    "recommendations": [
+      "Proceed to NSEC Article 37 human approval gate.",
+      "Once approved, implementation can proceed with parallel EVO-07 + EVO-02 development.",
+      "Verify git diff against bd7a9f1a after implementation: must show ZERO changes to protected Phase 1 files.",
+      "Confirm 1336+60 ≈ 1396+ tests after implementation."
+    ]
+  }
+}
