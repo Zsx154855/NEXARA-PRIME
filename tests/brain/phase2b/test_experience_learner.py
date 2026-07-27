@@ -84,9 +84,9 @@ class TestLessons:
 
 
 class TestPruning:
-    def test_prune_irrelevant(self, learner):
+    def test_count_low_confidence(self, learner):
         learner.record_outcome("m1", "success", "test", "ok", True)
-        pruned = learner.prune_irrelevant(0.9)
+        pruned = learner.count_low_confidence(0.9)
         assert isinstance(pruned, int)
 
 

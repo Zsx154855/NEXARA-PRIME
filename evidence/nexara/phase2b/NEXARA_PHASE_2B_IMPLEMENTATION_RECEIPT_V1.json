@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_nexara_phase2b_implementation_v1",
+  "head": "78f8c51a92ceaece68dd0f9dbb53c9a3fb29dc66",
+  "contract_sha256": "dbbee8ce472563976a4bab0639d75dcbfdc66f1c6bf9d8dd3d512498afa76e47",
+  "modules": 2,
+  "new_files": 7,
+  "tests": {
+    "phase2b": 28,
+    "full": 1407,
+    "pre_existing": 21
+  },
+  "ruff": "0",
+  "phase1_diff": 0,
+  "phase2a_diff": 0,
+  "frozen_at": "2026-07-27T18:35:00Z"
+}

@@ -59,6 +59,9 @@ class TestDecay:
         model.record_preference("global", "old_pref", "test", "val", weight=1.0, confidence=1.0)
         decayed = model.apply_decay("global", half_life_hours=1)
         assert decayed >= 1
+        pref = model.get_preference("global", "old_pref")
+        assert pref is not None
+        assert pref.weight < 1.0
 
 
 class TestConflictResolution:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -80,6 +80,7 @@ class MemoryKind(str, Enum):
     PATCH = "patch"
     USER_FACT = "user_fact"
     PROJECT_FACT = "project_fact"
+    EXPERIENCE = "experience"
     PREFERENCE = "preference"
     TEMPORARY_CONTEXT = "temporary_context"
     FAILURE_EXPERIENCE = "failure_experience"
@@ -404,127 +405,6 @@ class MemoryRecord(NModel):
     correlation_id: str | None = None
     provenance: str | None = None
     evidence_refs: list[str] = Field(default_factory=list)
-    receipt_id: str | None = None
-    idempotency_key: str | None = None
-    superseded_by: str | None = None
-    supersedes: str | None = None
-
-
-# ── KMA Runtime Types (Phase 2) ──
-
-
-class KnowledgeObject(NModel):
-    """Canonical representation of any entity in the KMA system.
-
-    Maps to: contracts/kma/KNOWLEDGE_OBJECT_SCHEMA_V1.json
-    """
-    object_id: str = Field(default_factory=lambda: new_id("kobj"))
-    object_type: Literal["evidence", "memory", "receipt"]
-    mission_id: str | None = None
-    created_at: str = Field(default_factory=now_iso)
-    updated_at: str | None = None
-    sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
-    envelope_sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
-    idempotency_key: str | None = None
-    source_event_id: str | None = None
-    trace_id: str = ""
-    provenance: str = "runtime"
-    status: Literal[
-        "committed", "candidate", "conflict", "superseded",
-        "pending_review", "cleared", "unverified", "verified", "corrupt",
-    ] = "committed"
-    superseded_by: str | None = None
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    verified: bool = False
-    canonical: bool = False
-    schema_version: int = 1
-
-
-class KnowledgeRelation(NModel):
-    """Edge between two KnowledgeObjects.
-
-    Maps to: contracts/kma/KNOWLEDGE_RELATION_SCHEMA_V1.json
-    """
-    relation_id: str = Field(default_factory=lambda: new_id("rel"))
-    source_id: str
-    target_id: str
-    relation_type: Literal[
-        "evidence_backing", "receipt_attests", "memory_derived_from",
-        "supersedes", "conflicts_with", "references",
-        "parent_of", "child_of", "depends_on", "produced_by", "verified_by"
-    ]
-    mission_id: str | None = None
-    created_at: str = Field(default_factory=now_iso)
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    evidence_id: str | None = None
-    bidirectional: bool = False
-    weight: float = Field(default=1.0, ge=0.0, le=1.0)
-    schema_version: int = 1
-
-
-class KnowledgeRecall(NModel):
-    """Query output for knowledge retrieval. Ephemeral — not persisted.
-
-    Maps to: contracts/kma/KNOWLEDGE_RECALL_SCHEMA_V1.json
-
-    Includes the actual recalled records (with content, score, citation)
-    alongside the query metadata.
-    """
-    query: str = Field(..., min_length=1)
-    layers: list[Literal["working", "episodic", "semantic", "procedural"]] | None = None
-    top_k: int = Field(default=10, ge=0, le=100)
-    mission_id: str | None = None
-    min_confidence: float = Field(default=0.3, ge=0.0, le=1.0)
-    include_candidates: bool = False
-    include_superseded: bool = False
-    trace_id: str = ""
-    schema_version: int = 1
-    results: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class KnowledgeCommit(NModel):
-    """Write input for committing knowledge to memory. Ephemeral — not persisted.
-
-    Maps to: contracts/kma/KNOWLEDGE_COMMIT_SCHEMA_V1.json
-    """
-    kind: MemoryKind
-    key: str = Field(..., min_length=1)
-    content: str = Field(..., min_length=1)
-    trace_id: str
-    mission_id: str | None = None
-    source_evidence_id: str | None = None
-    idempotency_key: str = Field(..., min_length=1)
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    receipt_id: str | None = None
-    auto_commit: bool = False
-    provenance: str = "runtime"
-    schema_version: int = 1
-
-
-class CapabilityHistory(NModel):
-    """Persistent record of a single capability invocation outcome.
-
-    Stored as record_type="capability_history" in SQLiteStore.
-    CapabilityScore objects are DERIVED from these raw records.
-    """
-    record_id: str = Field(default_factory=lambda: new_id("caphist"))
-    capability_id: str
-    mission_id: str | None = None
-    provider: str = ""
-    model: str = ""
-    success: bool = True
-    failure_kind: str | None = None
-    latency_ms: float = 0.0
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cost: float = 0.0
-    retry_count: int = 0
-    recovery: bool = False
-    evaluation_score: float | None = None
-    evidence_id: str | None = None
-    timestamp: str = Field(default_factory=now_iso)
-    schema_version: int = 1
-    idempotency_key: str = ""
 
 
 class EvaluationResult(NModel):

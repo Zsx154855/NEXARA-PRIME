@@ -1,7 +1,7 @@
 """Shared pytest fixtures for Phase 2B brain tests."""
 import pytest
 
-_LAYER_MAP = {"preference": "semantic", "experience": "episodic", "procedural": "procedural", "lesson": "procedural"}
+_LAYER_MAP = {"preference": "semantic", "experience": "episodic", "procedural": "procedural"}
 
 
 class MockMC:

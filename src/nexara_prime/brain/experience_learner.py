@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json  # noqa: F401
+import json
 from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
 
@@ -111,7 +111,7 @@ class ExperienceLearner:
                 lessons.append(data.get("lesson", ""))
         return [x for x in lessons if x]
 
-    def prune_irrelevant(self, threshold: float = 0.2) -> int:
+    def count_low_confidence(self, threshold: float = 0.2) -> int:
         records = self._mc.rank_retrieve(query="experience", top_k=200, layers=["episodic"], min_confidence=0.0)
         return sum(1 for r in records if float(r.get("confidence", 0.5)) < threshold)
 
