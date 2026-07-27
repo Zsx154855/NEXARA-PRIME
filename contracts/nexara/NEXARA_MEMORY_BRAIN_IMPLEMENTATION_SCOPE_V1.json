@@ -1,0 +1,423 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/nexara/memory_brain_implementation_scope_v1.json",
+  "title": "NEXARA Memory Brain — Phase 1 Implementation Scope Contract V1",
+  "description": "Frozen implementation scope for the Memory Foundation layer (Memory Brain + Long-term Memory). Defines exact files, interfaces, schemas, test requirements, evidence requirements, and forbidden modifications. Governed by NSEC V2.1. Implementation starts only after Claude review PASS + human approval.",
+  "frozen_at": "2026-07-27T15:00:00Z",
+  "governed_by": "NSEC V2.1 Article 1 (Fixed Engineering Loop), Article 8 (Maximum Reachable Endpoint), Article 37 (High-Impact Approval), Article 45 (Definition of Done)",
+  "contract_type": "implementation_scope",
+  "phase": "PHASE_1_MEMORY_FOUNDATION",
+  "architecture_reference": "contracts/nexara/NEXARA_PERSONAL_BRAIN_ARCHITECTURE_CONTRACT_V1.json",
+  "parent_components": ["BRAIN-01: Memory Brain", "BRAIN-03: Long-term Memory"],
+  "version": "1.0.0",
+
+  "mission_scope": {
+    "objective": "Implement the Memory Foundation layer: MemoryBrainAPI (enhanced MemoryController with persistence, decay, ranking, health) + LongTermMemoryAPI (consolidation, reinforcement, supersession, GC, provenance).",
+    "phase": "Phase 1 — Memory Foundation",
+    "implementation_strategy": "Enhance existing src/nexara_prime/brain/memory_controller.py with persistence + ranking + decay + health. Add src/nexara_prime/brain/long_term_memory.py as new module. Create brain_state.db schema. ZERO runtime modification.",
+    "what_is_implemented": [
+      "1. MemoryStorageContract — formal interface + brain_state.db schema with 6 tables",
+      "2. MemoryObjectSchema — MemoryBrainRecord, DecayState, ConsolidationLog, HealthSnapshot JSON schemas",
+      "3. MemoryClassification — extended classification: decay half-life per kind, confidence scoring, layer promotion rules",
+      "4. MemoryRetrievalInterface — rank_retrieve() with relevance+recency scoring, cross_layer_query() across all 4 layers",
+      "5. MemoryEvidenceBinding — all brain memory writes require evidence_id; provenance chain to source evidence",
+      "6. MemoryIsolationBoundary — brain_state.db separate from store.db; brain/ package with zero runtime imports"
+    ],
+    "what_is_explicitly_deferred": [
+      "Personal Knowledge Graph (BRAIN-02 — Phase 2)",
+      "Decision Memory (BRAIN-04 — Phase 2)",
+      "Experience Memory (BRAIN-05 — Phase 3)",
+      "Reasoning Kernel (BRAIN-06 — Phase 3)",
+      "Self Reflection Loop (BRAIN-07 — Phase 4)",
+      "Personal Preference Model (BRAIN-08 — Phase 4)",
+      "Mission Intelligence Layer (BRAIN-09 — Phase 4)",
+      "Evolution Mechanism (BRAIN-10 — Phase 5)",
+      "UI/dashboard for memory visualization",
+      "Memory export/import tooling",
+      "Cross-mission memory analytics"
+    ]
+  },
+
+  "existing_surface": {
+    "brain_memory_controller": {
+      "path": "src/nexara_prime/brain/memory_controller.py",
+      "current_state": "In-memory 4-layer controller with commit/recall/consolidate/summary. Evidence binding enforced for non-working layers. Consolidation: episodic→semantic on mission completion. ALL DATA IS IN-MEMORY — lost on restart.",
+      "current_methods": ["commit()", "recall()", "consolidate()", "summary()", "_classify_layer()"],
+      "current_limitations": [
+        "No persistent storage — all records lost on process restart",
+        "No retrieval ranking — recall returns raw list order",
+        "No confidence scoring or decay tracking",
+        "No cross-layer transparent query",
+        "No health metrics (coverage, freshness, consistency)",
+        "No supersession detection for outdated facts",
+        "No garbage collection for stale memories",
+        "No provenance chain tracking",
+        "No reinforcement tracking (access counts)"
+      ]
+    },
+    "brain_kernel": {
+      "path": "src/nexara_prime/brain/kernel.py",
+      "current_state": "ChiefBrainKernel binds MemoryController via bind_memory(). Calls memory.consolidate() on mission completion. BrainReceipt generated for decisions.",
+      "integration_point": "kernel.observe_result() → memory.consolidate(mission_id)"
+    },
+    "brain_protocols": {
+      "path": "src/nexara_prime/brain/__init__.py",
+      "current_state": "MemoryControllerProtocol defined with commit/recall/consolidate. BrainComponent protocol with health()."
+    }
+  },
+
+  "scope_1_memory_storage_contract": {
+    "description": "Define the persistent storage schema and formal interface for brain memory operations. Brain state is stored in .nexara/brain_state.db — completely separate from runtime .nexara/store.db.",
+    "deliverables": {
+      "brain_state_db_schema": {
+        "path": "schemas/brain_state_schema.sql",
+        "description": "SQL DDL for brain_state.db with 6 tables",
+        "tables": {
+          "brain_memories": "Persistent memory records with layer, kind, confidence, decay, evidence_id, provenance",
+          "memory_decay_state": "Per-kind half-life configuration and per-record decay tracking",
+          "memory_consolidation_log": "Audit log of consolidation operations (episodic→semantic, short_term→long_term)",
+          "memory_access_log": "Access frequency tracking for reinforcement scoring",
+          "memory_health_snapshots": "Periodic health metric snapshots (coverage, freshness, consistency)",
+          "memory_provenance_chain": "Provenance records tracing each memory back to source evidence"
+        },
+        "columns_brain_memories": [
+          "memory_id TEXT PRIMARY KEY", "mission_id TEXT NOT NULL", "key TEXT NOT NULL",
+          "content TEXT NOT NULL", "kind TEXT NOT NULL", "layer TEXT NOT NULL",
+          "confidence REAL DEFAULT 1.0", "decay_rate REAL DEFAULT 0.0",
+          "evidence_id TEXT", "provenance_chain TEXT", "access_count INTEGER DEFAULT 0",
+          "last_accessed TEXT", "consolidated_from TEXT", "superseded_by TEXT",
+          "status TEXT DEFAULT 'active'", "created_at TEXT NOT NULL", "updated_at TEXT"
+        ]
+      },
+      "memory_brain_api_interface": {
+        "path": "src/nexara_prime/brain/memory_controller.py (enhanced)",
+        "new_methods": [
+          "rank_retrieve(query, top_k, layers, min_confidence) → list[MemoryBrainRecord]",
+          "cross_layer_query(query) → dict[layer, list[MemoryBrainRecord]]",
+          "health_report() → MemoryHealthReport",
+          "decay_tick() → DecayReport",
+          "get_provenance(memory_id) → ProvenanceChain"
+        ],
+        "enhanced_methods": [
+          "commit() — now persists to brain_state.db, records provenance, initializes decay state",
+          "recall() — now returns ranked results with confidence scoring",
+          "consolidate() — now logs to consolidation_log, updates provenance",
+          "summary() — now reads from brain_state.db, includes health metrics"
+        ]
+      }
+    }
+  },
+
+  "scope_2_memory_object_schema": {
+    "description": "Define JSON schemas for all brain-specific memory objects. These extend (do not replace) existing MemoryRecord from models.py.",
+    "deliverables": {
+      "schemas_dir": "schemas/brain/",
+      "schemas": [
+        {
+          "path": "schemas/brain/memory_brain_record.schema.json",
+          "description": "Extended memory record with confidence, decay, access_count, provenance fields"
+        },
+        {
+          "path": "schemas/brain/decay_state.schema.json",
+          "description": "Per-kind decay configuration: half-life (seconds), min_confidence, decay_function"
+        },
+        {
+          "path": "schemas/brain/consolidation_log.schema.json",
+          "description": "Consolidation operation record: source memory_id, target memory_id, timestamp, trigger"
+        },
+        {
+          "path": "schemas/brain/health_snapshot.schema.json",
+          "description": "Health metrics: total_memories, active_count, stale_count, coverage_score, freshness_score, consistency_score, layer_distribution"
+        },
+        {
+          "path": "schemas/brain/provenance_chain.schema.json",
+          "description": "Provenance chain: memory_id → evidence_id → source_file → commit_sha → trace_id"
+        },
+        {
+          "path": "schemas/brain/ranked_retrieval_result.schema.json",
+          "description": "Ranked retrieval result: memory_id, relevance_score, recency_score, confidence, combined_score"
+        }
+      ]
+    }
+  },
+
+  "scope_3_memory_classification": {
+    "description": "Extend the existing 13 MemoryKind classification with brain-specific decay parameters and layer promotion rules.",
+    "deliverables": {
+      "decay_config": {
+        "path": "src/nexara_prime/brain/decay_config.py (NEW)",
+        "description": "Configuration for decay parameters per MemoryKind. Default half-life values based on memory volatility.",
+        "half_life_defaults": {
+          "short_term": "1 hour",
+          "temporary_context": "1 mission",
+          "unverified_inference": "30 minutes",
+          "fact": "90 days",
+          "user_fact": "180 days",
+          "project_fact": "365 days",
+          "preference": "90 days (re-verified on contradiction)",
+          "decision": "Never decays (superseded instead)",
+          "failure": "Never decays (superseded instead)",
+          "failure_experience": "180 days",
+          "patch": "Never decays (versioned instead)",
+          "skill_improvement": "Never decays (versioned instead)",
+          "system_rule": "Never decays (superseded instead)"
+        }
+      },
+      "layer_promotion_rules": {
+        "path": "src/nexara_prime/brain/consolidation_rules.py (NEW)",
+        "description": "Rules for promoting memories across layers: working→semantic (after access_count≥3), episodic→semantic (automatic on mission complete), semantic→procedural (after confidence≥0.9 and access_count≥10)"
+      },
+      "classification_extension": {
+        "path": "src/nexara_prime/brain/memory_controller.py (enhanced)",
+        "description": "Add classify_with_confidence(kind, content, access_count) → (layer, confidence, decay_rate) to existing _classify_layer()"
+      }
+    }
+  },
+
+  "scope_4_memory_retrieval_interface": {
+    "description": "Unified retrieval API with relevance scoring, recency bias, confidence filtering, and cross-layer transparency.",
+    "deliverables": {
+      "ranked_retrieval": {
+        "path": "src/nexara_prime/brain/memory_controller.py (enhanced)",
+        "method": "rank_retrieve(query, top_k=10, layers=None, min_confidence=0.3)",
+        "scoring": {
+          "relevance": "TF-IDF or keyword match score against content+key",
+          "recency": "Exponential decay from last_accessed timestamp",
+          "confidence": "Memory's intrinsic confidence score",
+          "combined": "relevance * 0.5 + recency * 0.25 + confidence * 0.25"
+        },
+        "output": "List of MemoryBrainRecord sorted by combined_score DESC, capped at top_k"
+      },
+      "cross_layer_query": {
+        "path": "src/nexara_prime/brain/memory_controller.py (enhanced)",
+        "method": "cross_layer_query(query, min_confidence=0.3)",
+        "description": "Transparent query across all 4 layers. Returns results grouped by layer with per-layer counts.",
+        "output": "{'working': [...], 'episodic': [...], 'semantic': [...], 'procedural': [...], 'total_count': N}"
+      },
+      "retrieval_interface_contract": {
+        "path": "src/nexara_prime/brain/__init__.py (extended)",
+        "description": "Add RetrievalInterface protocol: rank_retrieve(), cross_layer_query(), health_report()"
+      }
+    }
+  },
+
+  "scope_5_memory_evidence_binding": {
+    "description": "Enforce evidence binding for all brain memory operations. Every write must trace back to source evidence. Provenance chain tracks full lineage.",
+    "deliverables": {
+      "evidence_enforcement": {
+        "path": "src/nexara_prime/brain/memory_controller.py (enhanced)",
+        "description": "Enhanced commit() enforces evidence_id for all non-working layers. Adds provenance_chain field tracing memory_id→evidence_id→source_file→commit_sha.",
+        "evidence_required_kinds": ["decision", "failure", "failure_experience", "patch", "skill_improvement", "system_rule", "fact", "user_fact", "project_fact", "preference"],
+        "evidence_optional_kinds": ["short_term", "temporary_context", "unverified_inference"]
+      },
+      "provenance_chain": {
+        "path": "src/nexara_prime/brain/provenance.py (NEW)",
+        "description": "ProvenanceTracker class: record_provenance(memory_id, evidence_id, source, commit_sha) → provenance_id. get_chain(memory_id) → full lineage. verify_chain(memory_id) → integrity check."
+      },
+      "evidence_binding_validation": {
+        "path": "tests/brain/test_evidence_binding.py",
+        "description": "Tests: commit without evidence_id raises ValueError for required kinds; provenance chain starts at evidence; chain is traversable forward and backward"
+      }
+    }
+  },
+
+  "scope_6_memory_isolation_boundary": {
+    "description": "Enforce strict isolation: brain_state.db is separate from store.db. Brain package has zero imports from runtime package. Runtime never imports brain.",
+    "deliverables": {
+      "database_isolation": {
+        "path": "src/nexara_prime/brain/db.py (NEW)",
+        "description": "BrainDB class — manages brain_state.db connection. Separate SQLite instance, separate file path (.nexara/brain_state.db), separate connection pool. Uses same db.py patterns but different database file.",
+        "isolation_checks": [
+          "brain_state.db path != store.db path",
+          "BrainDB does not import SQLiteStore from db.py (avoids accidental store.db access)",
+          "BrainDB connection string is hardcoded to .nexara/brain_state.db"
+        ]
+      },
+      "package_isolation": {
+        "rules": [
+          "src/nexara_prime/brain/ NEVER imports from src/nexara_prime/runtime.py",
+          "src/nexara_prime/brain/ NEVER imports from src/nexara_prime/evidence.py",
+          "src/nexara_prime/brain/ NEVER imports from src/nexara_prime/evaluation.py",
+          "src/nexara_prime/brain/ MAY import from src/nexara_prime/models.py (types only)",
+          "src/nexara_prime/brain/ MAY import from src/nexara_prime/db.py (SQLiteStore pattern, not instance)",
+          "src/nexara_prime/runtime.py NEVER imports from src/nexara_prime/brain/",
+          "src/nexara_prime/evidence.py NEVER imports from src/nexara_prime/brain/"
+        ],
+        "verification": "tests/brain/test_isolation.py — grep all brain/*.py for forbidden imports, assert zero matches"
+      },
+      "memory_controller_enhancement_boundary": {
+        "description": "Enhancing MemoryController does NOT mean importing runtime. The MemoryController is brain-tier — it lives in brain/, uses BrainDB, and is called by ChiefBrainKernel (brain/kernel.py). The runtime (src/nexara_prime/runtime.py) never calls brain code directly."
+      }
+    }
+  },
+
+  "long_term_memory_implementation": {
+    "description": "New LongTermMemory class wrapping MemoryController with LTM-specific operations: consolidation with reinforcement, supersession detection, garbage collection, provenance tracking.",
+    "deliverables": {
+      "long_term_memory_module": {
+        "path": "src/nexara_prime/brain/long_term_memory.py (NEW)",
+        "class": "LongTermMemory",
+        "methods": [
+          "consolidate_to_ltm(memory_id) — promote short-term→long-term after access_count threshold",
+          "reinforce(memory_id) — increment access_count, update last_accessed, recalculate confidence",
+          "detect_supersession(key, new_content) — find conflicting memories, flag as superseded",
+          "garbage_collect(min_confidence=0.1, max_age_days=365) — archive low-confidence stale memories",
+          "get_provenance_chain(memory_id) — full lineage trace",
+          "decay_tick() — apply decay to all memories, return affected count",
+          "health_report() — LTM-specific health: consolidation_rate, supersession_rate, gc_candidates"
+        ]
+      },
+      "long_term_memory_tests": {
+        "path": "tests/brain/test_long_term_memory.py",
+        "minimum_tests": 25,
+        "required_coverage_areas": [
+          "consolidation: short_term promotes to long_term after threshold",
+          "reinforcement: access_count increments, confidence recalculates",
+          "supersession: conflicting memory flagged, old memory marked superseded_by",
+          "garbage_collection: stale memories archived, active memories preserved",
+          "decay: confidence decreases over time, reinforcment counters decay",
+          "provenance: chain traces back to original evidence",
+          "evidence_binding: commit without evidence raises error for required kinds",
+          "isolation: long_term_memory does not access runtime store.db"
+        ]
+      }
+    }
+  },
+
+  "allowed_files": {
+    "new_files": [
+      "src/nexara_prime/brain/db.py",
+      "src/nexara_prime/brain/decay_config.py",
+      "src/nexara_prime/brain/consolidation_rules.py",
+      "src/nexara_prime/brain/provenance.py",
+      "src/nexara_prime/brain/long_term_memory.py",
+      "schemas/brain_state_schema.sql",
+      "schemas/brain/memory_brain_record.schema.json",
+      "schemas/brain/decay_state.schema.json",
+      "schemas/brain/consolidation_log.schema.json",
+      "schemas/brain/health_snapshot.schema.json",
+      "schemas/brain/provenance_chain.schema.json",
+      "schemas/brain/ranked_retrieval_result.schema.json"
+    ],
+    "modified_files": [
+      "src/nexara_prime/brain/memory_controller.py (enhance with persistence, ranking, decay, health)",
+      "src/nexara_prime/brain/__init__.py (extend protocols with RetrievalInterface)"
+    ],
+    "new_test_files": [
+      "tests/brain/__init__.py",
+      "tests/brain/test_memory_brain.py",
+      "tests/brain/test_long_term_memory.py",
+      "tests/brain/test_isolation.py",
+      "tests/brain/test_evidence_binding.py"
+    ],
+    "evidence_files": [
+      "evidence/nexara/brain_architecture/phase1_implementation_evidence.json",
+      "evidence/nexara/brain_architecture/phase1_implementation_receipt.json"
+    ]
+  },
+
+  "forbidden_files": {
+    "absolute_prohibition": [
+      "src/nexara_prime/runtime.py",
+      "src/nexara_prime/evidence.py",
+      "src/nexara_prime/evaluation.py",
+      "src/nexara_prime/memory.py",
+      "src/nexara_prime/state_machine.py",
+      "src/nexara_prime/governance.py",
+      "src/nexara_prime/chief_brain_kernel.py",
+      "src/nexara_prime/api.py",
+      "src/nexara_prime/cli.py",
+      "src/nexara_prime/models.py",
+      ".nexara/evidence/",
+      "governance/",
+      "contracts/nexara/NEXARA_IDENTITY_CONTRACT_V1.json",
+      "contracts/nexara/NEXARA_PERSONAL_BRAIN_ARCHITECTURE_CONTRACT_V1.json"
+    ],
+    "read_only_reference": [
+      "src/nexara_prime/models.py (MemoryKind, MemoryRecord types only — NO modification)",
+      "src/nexara_prime/db.py (SQLiteStore pattern reference — NO modification)"
+    ],
+    "untouchable_brain_files": [
+      "src/nexara_prime/brain/kernel.py (ChiefBrainKernel — integration point, no modification)",
+      "src/nexara_prime/brain/decision_engine.py",
+      "src/nexara_prime/brain/context_engine.py",
+      "src/nexara_prime/brain/goal_manager.py",
+      "src/nexara_prime/brain/evolution_engine.py",
+      "src/nexara_prime/brain/planner.py",
+      "src/nexara_prime/brain/model_policy.py",
+      "src/nexara_prime/brain/reasoning_budget.py"
+    ]
+  },
+
+  "test_requirements": {
+    "minimum_test_count": 90,
+    "test_framework": "pytest",
+    "required_coverage_areas": [
+      {
+        "area": "Memory Persistence",
+        "min_tests": 10,
+        "checks": "commit persists to brain_state.db; recall reads from db; restart recovers from db; concurrent writes are safe"
+      },
+      {
+        "area": "Retrieval Ranking",
+        "min_tests": 12,
+        "checks": "rank_retrieve returns sorted by combined_score; relevance scoring works; recency bias works; confidence filtering works; cross_layer_query returns grouped results; empty query returns empty; all layers queried when layers=None"
+      },
+      {
+        "area": "Decay Model",
+        "min_tests": 10,
+        "checks": "decay reduces confidence over time; different half-life per kind; reinforcement counters decay; decay never goes below min_confidence; decay_tick returns affected count"
+      },
+      {
+        "area": "Evidence Binding",
+        "min_tests": 10,
+        "checks": "commit without evidence raises for required kinds; commit without evidence allowed for optional kinds; provenance chain starts at evidence; get_provenance returns full chain; verify_chain detects broken chain"
+      },
+      {
+        "area": "Long-term Memory",
+        "min_tests": 25,
+        "checks": "consolidate_to_ltm after threshold; reinforce increments access_count; supersession flags conflicts; garbage_collection archives stale; decay affects LTM slower than working; provenance traces back"
+      },
+      {
+        "area": "Isolation Boundary",
+        "min_tests": 8,
+        "checks": "brain_state.db != store.db path; brain/ has zero forbidden imports; runtime has zero brain imports; MemoryController does not import runtime modules"
+      },
+      {
+        "area": "Health Metrics",
+        "min_tests": 8,
+        "checks": "health_report returns valid structure; coverage_score calculated correctly; freshness_score reflects decay; consistency_score detects superseded; layer_distribution is accurate"
+      },
+      {
+        "area": "Consolidation",
+        "min_tests": 7,
+        "checks": "episodic→semantic automatic on consolidate(); working→semantic after access_count threshold; consolidation_log records operation; consolidated_from links preserved"
+      }
+    ]
+  },
+
+  "acceptance_criteria": [
+    "All 6 scope areas implemented and testable independently",
+    "Minimum 90 tests across 8 coverage areas, all PASS",
+    "Zero modifications to src/nexara_prime/runtime.py and other forbidden files",
+    "Existing 1151+ tests continue to PASS (no regression)",
+    "Brain state persists in .nexara/brain_state.db across process restarts",
+    "MemoryController enhanced with persistence, ranking, decay, health",
+    "LongTermMemory module operational with consolidation, reinforcement, supersession, GC",
+    "All 6 JSON schemas valid and referencable",
+    "Claude Pre-Implementation Review = PASS",
+    "All evidence files generated and valid"
+  ],
+
+  "governance_gates": {
+    "file_modification": "ALLOWED (files in scope only — see allowed_files)",
+    "commit": "AWAITING_NSEC_ARTICLE_37",
+    "push": "AWAITING_NSEC_ARTICLE_37",
+    "merge": "DENIED",
+    "deploy": "DENIED",
+    "implementation": "FROZEN — requires Claude review PASS + human approval",
+    "nsec_article_37_required": true
+  },
+
+  "next_gate": "CLAUDE_INDEPENDENT_IMPLEMENTATION_SCOPE_REVIEW_REQUIRED"
+}

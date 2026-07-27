@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_reasoning_kernel_design_v1_20260727",
+  "receipt_type": "architecture_design_receipt",
+  "mission": "NEXARA_REASONING_KERNEL_DESIGN_V1",
+  "generated_at": "2026-07-27T17:00:00Z",
+  "generated_by": "Hermes Agent (Writer)",
+  "governed_by": "NSEC V2.1 Article 44, 45, 37",
+  "frozen_artifacts": {
+    "reasoning_contract": {
+      "path": "contracts/nexara/reasoning/NEXARA_REASONING_KERNEL_DESIGN_V1.json",
+      "sha256": "5df6137f1cfd04a12dadeba58e1f68458eeaed79ea4ccb1194ade63930fdf212",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    },
+    "reasoning_report": {
+      "path": "evidence/nexara/reasoning/reasoning_kernel_design_report.json",
+      "sha256": "925b9f189441fcde5d2a364ab12aea76772a9182f299d0cb38a74317cfb34cd4",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    },
+    "reasoning_receipt": {
+      "path": "evidence/nexara/reasoning/reasoning_kernel_design_receipt.json",
+      "sha256": "PENDING_COMMIT",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    }
+  },
+  "subject_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "branch": "feat/brand-baihan",
+  "verdict": {
+    "final_result": "PASS",
+    "root_cause": "ARCHITECTURE_DESIGN_COMPLETE",
+    "summary": "Reasoning Kernel architecture designed: 7 components (Kernel Contract, Thought Process, Context Assembly, Retrieval Strategy, Decision Framework, Confidence Evaluation, Self-check). 5 principles satisfied. ZERO runtime modification. 3 P2 items. Implementation frozen.",
+    "recommended_action": "Launch Claude independent review."
+  },
+  "architecture_summary": {
+    "total_components": 7,
+    "step_types": 7,
+    "chain_structures": 3,
+    "retrieval_strategies": 5,
+    "decision_types": 4,
+    "confidence_factors": 5,
+    "self_checks": 5,
+    "new_tables": 3,
+    "new_files_planned": 6
+  },
+  "check_matrix": {
+    "ALL_7_COMPONENTS": "PASS",
+    "ZERO_RUNTIME_MOD": "PASS",
+    "CLAUDE_REVIEW": "PENDING",
+    "HUMAN_APPROVAL": "PENDING",
+    "IMPLEMENTATION": "FROZEN"
+  },
+  "next_gate": "CLAUDE_INDEPENDENT_REASONING_REVIEW_REQUIRED",
+  "evidence_chain": {
+    "predecessor": "evidence/nexara/brain_architecture/claude_implementation_review.json",
+    "this": "evidence/nexara/reasoning/reasoning_kernel_design_receipt.json",
+    "successor": "TBD (after Claude review)"
+  },
+  "integrity": {
+    "receipt_self_reference": "NONE",
+    "canonical_hash_algorithm": "hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()",
+    "source_of_truth": "Contract: 5df6137f1cfd04a12dadeba5... Report: 925b9f189441fcde5d2a364a..."
+  }
+}

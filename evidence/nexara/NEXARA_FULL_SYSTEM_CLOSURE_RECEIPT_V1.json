@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_nexara_full_system_closure_v1",
+  "receipt_type": "system_closure_receipt",
+  "mission": "NEXARA_FULL_SYSTEM_CLOSURE_VALIDATION_V1",
+  "generated_at": "2026-07-27T03:39:15.001804+00:00",
+  "generated_by": "Hermes Agent (Writer)",
+  "governed_by": "NSEC V2.1 Article 44, 45, 37",
+  "frozen_artifacts": {
+    "closure_contract": {
+      "path": "contracts/nexara/NEXARA_FULL_SYSTEM_CLOSURE_CONTRACT_V1.json",
+      "sha256": "e132f947e2925c169ef3b12a8077671021bc2a1da261c4aeb18b220971753093"
+    },
+    "closure_report": {
+      "path": "reports/nexara/NEXARA_FULL_SYSTEM_CLOSURE_REPORT_V1.md",
+      "sha256": "010b651363470db60c644c18a28f40fa698a18378d9f74eb5b2be8a1cd848f3c"
+    },
+    "closure_receipt": {
+      "path": "evidence/nexara/NEXARA_FULL_SYSTEM_CLOSURE_RECEIPT_V1.json",
+      "sha256": "PENDING_COMMIT"
+    }
+  },
+  "subject_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "branch": "feat/brand-baihan",
+  "verdict": {
+    "final_result": "PASS",
+    "root_cause": "ALL_11_PLANES_VERIFIED — Identity→Governance→Mission→Execution→Capability→Provider→Tool→Memory→Reasoning→Evidence→Regression",
+    "summary": "NEXARA Phase 1 full system closure validated. All 11 planes PASS. 1315 tests passed. 0 new failures. 0 P1 blockers. 5 active gates with Claude PASS. 17 evidence files. 5 contracts. 5 receipts."
+  },
+  "validation_results": {
+    "planes_verified": 11,
+    "planes_passed": 11,
+    "planes_failed": 0,
+    "tests_passed": 1315,
+    "tests_failed": 21,
+    "new_failures": 0,
+    "gates_active": 5,
+    "gates_all_claude_pass": true,
+    "evidence_files": 17,
+    "contract_files": 5,
+    "receipt_files": 5
+  },
+  "next_gate": "CLAUDE_INDEPENDENT_CLOSURE_REVIEW_REQUIRED",
+  "integrity": {
+    "receipt_self_reference": "NONE",
+    "canonical_hash_algorithm": "hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()",
+    "source_of_truth": "Contract SHA: e132f947e2925c169ef3b12a... Report SHA: 010b651363470db60c644c18..."
+  }
+}

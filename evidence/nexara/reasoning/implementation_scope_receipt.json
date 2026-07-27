@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_reasoning_implementation_scope_v1_20260727",
+  "receipt_type": "implementation_scope_receipt",
+  "mission": "NEXARA_REASONING_KERNEL_IMPLEMENTATION_SCOPE_V1",
+  "generated_at": "2026-07-27T18:00:00Z",
+  "generated_by": "Hermes Agent (Writer)",
+  "governed_by": "NSEC V2.1 Article 44, 45, 37",
+  "frozen_artifacts": {
+    "scope_contract": {
+      "path": "contracts/nexara/reasoning/NEXARA_REASONING_KERNEL_IMPLEMENTATION_CONTRACT_V1.json",
+      "sha256": "117a1325bb64fd1bd2e49b85430994290b11ca5f05b2cf171423a20a5c385d56",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    },
+    "scope_report": {
+      "path": "evidence/nexara/reasoning/implementation_scope_report.json",
+      "sha256": "0c714e0ae0d41dca3193c547ea9b18b69b297a2a57ec4a8e18702d63e2aa960f",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    },
+    "scope_receipt": {
+      "path": "evidence/nexara/reasoning/implementation_scope_receipt.json",
+      "sha256": "PENDING_COMMIT",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    }
+  },
+  "subject_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "branch": "feat/brand-baihan",
+  "verdict": {
+    "final_result": "PASS",
+    "root_cause": "IMPLEMENTATION_SCOPE_FROZEN",
+    "summary": "Reasoning Kernel implementation scope frozen. 7 modules. 16 files scoped. 80+ tests. 13 runtime + 11 brain files protected. Claude review + human approval required.",
+    "recommended_action": "Launch Claude scope review."
+  },
+  "scope_summary": {
+    "new_python": [
+      "brain/reasoning/__init__.py",
+      "kernel.py",
+      "context_assembler.py",
+      "decision_framework.py",
+      "confidence.py",
+      "self_check.py",
+      "models.py"
+    ],
+    "new_tests": [
+      "tests/reasoning/ (9 files)"
+    ],
+    "modules": 7,
+    "min_tests": 80,
+    "runtime_protected": 13,
+    "brain_protected": 11,
+    "new_p1": 0,
+    "new_p2": 3
+  },
+  "check_matrix": {
+    "ALL_7_MODULES": "PASS",
+    "RUNTIME_PROTECTED": "PASS",
+    "CLAUDE_REVIEW": "PENDING",
+    "HUMAN_APPROVAL": "PENDING",
+    "IMPLEMENTATION": "FROZEN"
+  },
+  "next_gate": "CLAUDE_INDEPENDENT_IMPLEMENTATION_SCOPE_REVIEW_REQUIRED",
+  "evidence_chain": {
+    "predecessor": "evidence/nexara/reasoning/reasoning_kernel_design_receipt.json",
+    "this": "evidence/nexara/reasoning/implementation_scope_receipt.json",
+    "successor": "TBD (after implementation)"
+  },
+  "integrity": {
+    "receipt_self_reference": "NONE",
+    "canonical_hash_algorithm": "hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()",
+    "source_of_truth": "Contract: 117a1325bb64fd1bd2e49b85... Report: 0c714e0ae0d41dca3193c547..."
+  }
+}

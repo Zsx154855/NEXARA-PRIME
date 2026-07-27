@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_memory_brain_implementation_scope_v1_20260727",
+  "receipt_type": "implementation_scope_receipt",
+  "mission": "NEXARA_MEMORY_BRAIN_IMPLEMENTATION_SCOPE_V1",
+  "generated_at": "2026-07-27T15:00:00Z",
+  "generated_by": "Hermes Agent (唯一 Writer)",
+  "governed_by": "NSEC V2.1 Article 44, Article 45, Article 37",
+  "frozen_artifacts": {
+    "implementation_scope_contract": {
+      "path": "contracts/nexara/NEXARA_MEMORY_BRAIN_IMPLEMENTATION_SCOPE_V1.json",
+      "sha256": "812f1ec1dc378f5017ff47e8af94159e33644d06fca193551591916d334eaf38",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    },
+    "implementation_scope_report": {
+      "path": "evidence/nexara/brain_architecture/phase1_implementation_scope_report.json",
+      "sha256": "61ff6f8e4a7d4acfa1e68281f44b70ddafb0c5cbee2b8b5c857cfc9c9ba66404",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    },
+    "implementation_scope_receipt": {
+      "path": "evidence/nexara/brain_architecture/phase1_implementation_scope_receipt.json",
+      "sha256": "PENDING_COMMIT",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    },
+    "claude_implementation_scope_review": {
+      "path": "evidence/nexara/brain_architecture/claude_implementation_scope_review.json",
+      "sha256": "e766efbd18cd10055fb44d91bcccdce7d806e4400d36df39a2386a1cb6978f1b",
+      "integrity": "IMMUTABLE_AFTER_COMMIT",
+      "description": "Claude independent scope review — PASS (23.5/25), 0 blocking, 3 advisories. ADV-03 resolved."
+    }
+  },
+  "subject_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "branch": "feat/brand-baihan",
+  "verdict": {
+    "final_result": "PASS",
+    "root_cause": "IMPLEMENTATION_SCOPE_FROZEN",
+    "summary": "Memory Brain Phase 1 implementation scope frozen. 6 scope areas defined: storage (brain_state.db with 6 tables), object schemas (6 JSON schemas), classification (decay config + consolidation rules), retrieval (ranked + cross-layer), evidence binding (10 kinds enforced + provenance tracking), isolation (separate DB + package rules). 19 files scoped: 12 new, 2 modified, 5 test. 80+ tests across 8 areas. 14 runtime files protected. 8 existing brain files untouched. Claude review + human approval required before implementation.",
+    "recommended_action": "Launch Claude independent scope review. After PASS, proceed to human approval gate. Then begin implementation."
+  },
+  "scope_summary": {
+    "new_python_files": [
+      "brain/db.py",
+      "brain/decay_config.py",
+      "brain/consolidation_rules.py",
+      "brain/provenance.py",
+      "brain/long_term_memory.py"
+    ],
+    "modified_python_files": [
+      "brain/memory_controller.py (enhanced)",
+      "brain/__init__.py (extended protocols)"
+    ],
+    "new_schema_files": [
+      "schemas/brain_state_schema.sql",
+      "schemas/brain/ (6 JSON schemas)"
+    ],
+    "new_test_files": [
+      "tests/brain/test_memory_brain.py",
+      "tests/brain/test_long_term_memory.py",
+      "tests/brain/test_isolation.py",
+      "tests/brain/test_evidence_binding.py",
+      "tests/brain/__init__.py"
+    ],
+    "runtime_files_protected": 14,
+    "brain_files_untouched": 8,
+    "minimum_tests": 80,
+    "new_p1": 1,
+    "new_p2": 2
+  },
+  "check_matrix": {
+    "CONTRACT_CREATED": true,
+    "CONTRACT_VALID_JSON": true,
+    "REPORT_CREATED": true,
+    "REPORT_VALID_JSON": true,
+    "ALL_6_SCOPES_DEFINED": "PASS",
+    "EXISTING_SURFACE_PRESERVED": "PASS",
+    "FORBIDDEN_BOUNDARY_ENFORCED": "PASS",
+    "DEFERRED_SCOPE_CLEAN": "PASS",
+    "TEST_SUITE_DESIGNED": "PASS",
+    "RUNTIME_ZERO_MODIFICATION": "PASS",
+    "CLAUDE_REVIEW": "PASS (23.5/25)",
+    "HUMAN_APPROVAL": "PENDING",
+    "IMPLEMENTATION": "FROZEN",
+    "ADV_03_RESOLVED": "PASS (LTM test count aligned to 25, total→90)"
+  },
+  "governance_gates": {
+    "FILE_MODIFICATION": "ALLOWED (scoped files only)",
+    "COMMIT": "AWAITING_NSEC_ARTICLE_37",
+    "PUSH": "AWAITING_NSEC_ARTICLE_37",
+    "MERGE": "DENIED",
+    "IMPLEMENTATION": "FROZEN",
+    "RUNTIME_MODIFICATION": "DENIED",
+    "TAG": "DENIED",
+    "RELEASE": "DENIED",
+    "DEPLOY": "DENIED"
+  },
+  "next_gate": "HUMAN_APPROVAL_GATE (NSEC Article 37)",
+  "evidence_chain": {
+    "predecessor": "evidence/nexara/brain_architecture/brain_architecture_receipt.json (Brain Architecture Design V1)",
+    "this": "evidence/nexara/brain_architecture/phase1_implementation_scope_receipt.json",
+    "successor": "evidence/nexara/brain_architecture/phase1_implementation_receipt.json (after implementation)"
+  },
+  "integrity": {
+    "receipt_self_reference": "NONE",
+    "canonical_hash_algorithm": "hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()",
+    "source_of_truth": "This receipt attests: NEXARA_MEMORY_BRAIN_IMPLEMENTATION_SCOPE_V1.json frozen with SHA256=812f1ec1dc378f5017ff47e8af94159e33644d06fca193551591916d334eaf38; phase1_implementation_scope_report.json frozen with SHA256=61ff6f8e4a7d4acfa1e68281f44b70ddafb0c5cbee2b8b5c857cfc9c9ba66404; claude_implementation_scope_review.json frozen with SHA256=e766efbd18cd10055fb44d91bcccdce7d806e4400d36df39a2386a1cb6978f1b"
+  }
+}
