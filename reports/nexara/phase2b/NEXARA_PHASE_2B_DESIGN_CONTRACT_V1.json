@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/nexara/phase2b/design_contract_v1.json",
+  "title": "NEXARA Phase 2B Design Contract — Preference Model & Experience Learning",
+  "governed_by": "NSEC V2.1",
+  "frozen_at": "2026-07-27T09:50:04.795152+00:00",
+  "baseline": "593f7070839c9a01ea98c3e4c39741cbdfa1fe16",
+  "design_principles": [
+    "BRAIN_ABOVE_RUNTIME: All learning operates at brain layer, never touches runtime",
+    "MEMORY_FOUNDATION: All models read/write through MemoryController interface",
+    "EVIDENCE_BACKED: Every preference, pattern, and lesson binds to specific evidence",
+    "PERSONAL_SOVEREIGN: Single-owner model — no federated learning, no telemetry",
+    "INCREMENTAL_ACTIVATION: Each component independently toggleable via boundary.py check()"
+  ],
+  "components": {
+    "PREF-01": {
+      "name": "PreferenceModel",
+      "file": "src/nexara_prime/brain/preference_model.py",
+      "layer": "Semantic",
+      "description": "Learns and applies user preferences from observed behavior patterns",
+      "capabilities": [
+        {
+          "name": "record_behavior",
+          "desc": "Observe a user action and derive preference signal",
+          "evidence_kind": "BEHAVIOR_OBSERVATION"
+        },
+        {
+          "name": "infer_preference",
+          "desc": "Given a decision context, return ranked preference vector",
+          "input": "DecisionContext",
+          "output": "PreferenceVector"
+        },
+        {
+          "name": "update_weights",
+          "desc": "Reinforce or decay preference weights based on outcome feedback",
+          "evidence_kind": "OUTCOME_EVIDENCE"
+        },
+        {
+          "name": "resolve_conflict",
+          "desc": "When two preferences contradict, apply decay curve to older entry and reinforce newer",
+          "strategy": "recency_weighted_decay"
+        },
+        {
+          "name": "get_profile",
+          "desc": "Return current preference model snapshot for audit",
+          "output": "PreferenceProfile"
+        },
+        {
+          "name": "summarize",
+          "desc": "Comply with MemoryControllerProtocol"
+        }
+      ],
+      "model_format": {
+        "type": "weighted_keyword_vector",
+        "max_dimensions": 200,
+        "decay_half_life_hours": 168
+      },
+      "schema": {
+        "table": "preferences",
+        "columns": [
+          "id",
+          "mission_id",
+          "key",
+          "weight",
+          "evidence_id",
+          "created_at",
+          "last_reinforced_at",
+          "access_count",
+          "status"
+        ],
+        "indices": [
+          "idx_pref_key",
+          "idx_pref_mission"
+        ]
+      }
+    },
+    "EXP-01": {
+      "name": "ExperienceLearner",
+      "file": "src/nexara_prime/brain/experience_learner.py",
+      "layer": "Episodic",
+      "description": "Records mission outcomes, extracts success/failure patterns, ranks experiences by relevance",
+      "capabilities": [
+        {
+          "name": "record_mission_outcome",
+          "desc": "Store mission result with full trace for learning",
+          "evidence_kind": "MISSION_OUTCOME"
+        },
+        {
+          "name": "extract_pattern",
+          "desc": "Given N recorded outcomes, surface common success/failure vectors",
+          "input": "[ExperienceRecord]",
+          "output": "[Pattern]"
+        },
+        {
+          "name": "rank_experiences",
+          "desc": "Rank past experiences by similarity to current mission context",
+          "input": "MissionContext + [ExperienceRecord]",
+          "output": "RankedExperiences"
+        },
+        {
+          "name": "get_lessons",
+          "desc": "Return top-N lessons for a given decision domain",
+          "output": "[Lesson]"
+        },
+        {
+          "name": "prune_irrelevant",
+          "desc": "Remove experiences below confidence threshold after decay period",
+          "threshold": 0.2
+        },
+        {
+          "name": "summarize",
+          "desc": "Comply with MemoryControllerProtocol"
+        }
+      ],
+      "pattern_types": [
+        "tool_selection_success",
+        "decision_path_outcome",
+        "timing_pattern"
+      ],
+      "schema": {
+        "table": "experiences",
+        "columns": [
+          "id",
+          "mission_id",
+          "outcome",
+          "trace_id",
+          "patterns",
+          "confidence",
+          "evidence_id",
+          "created_at",
+          "access_count",
+          "status"
+        ],
+        "indices": [
+          "idx_exp_mission",
+          "idx_exp_outcome"
+        ]
+      }
+    }
+  },
+  "dependency_graph": {
+    "PreferenceModel": {
+      "reads": [
+        "MemoryController.rank_retrieve"
+      ],
+      "writes": [
+        "MemoryController.commit(preferences)"
+      ],
+      "requires": [
+        "KnowledgeGraph (for context enrichment)"
+      ]
+    },
+    "ExperienceLearner": {
+      "reads": [
+        "MemoryController.rank_retrieve",
+        "EvidenceStore"
+      ],
+      "writes": [
+        "MemoryController.commit(experiences)"
+      ],
+      "requires": [
+        "KnowledgeGraph (for pattern extraction)"
+      ]
+    }
+  },
+  "activation_gates": {
+    "preference_model_enabled": "AutonomousBoundary.check('preference_model_activate') == ALLOWED",
+    "experience_learning_enabled": "AutonomousBoundary.check('experience_learning_activate') == ALLOWED",
+    "pattern_extraction_auto": "BLOCKED — requires EVO-07 R3 capability gate"
+  },
+  "forbidden": [
+    "preference_model auto-activates without human approval",
+    "experience patterns modify runtime dispatch logic",
+    "preference data leaves local environment",
+    "multi-user profile separation (not in scope)",
+    "model weight export to external systems"
+  ],
+  "file_manifest": {
+    "new_files": [
+      "src/nexara_prime/brain/preference_model.py",
+      "src/nexara_prime/brain/experience_learner.py"
+    ],
+    "test_files": [
+      "tests/brain/phase2b/test_preference_model.py",
+      "tests/brain/phase2b/test_experience_learner.py",
+      "tests/brain/phase2b/test_isolation.py"
+    ],
+    "protected_phase1_files": [
+      "runtime.py",
+      "models.py",
+      "memory_controller.py",
+      "reasoning/",
+      "evolution/"
+    ],
+    "test_target": "70+ (30 pref + 30 exp + 10 isolation)"
+  }
+}

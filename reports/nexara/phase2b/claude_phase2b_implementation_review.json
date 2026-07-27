@@ -1,0 +1,313 @@
+{
+  "review_metadata": {
+    "reviewer": "Claude (subagent)",
+    "phase": "2B",
+    "round": 2,
+    "timestamp": "2026-07-27T00:00:00Z",
+    "scope": "Implementation review — API alignment, test quality, runtime boundary, isolation",
+    "files_reviewed": [
+      "src/nexara_prime/brain/preference_model.py",
+      "src/nexara_prime/brain/experience_learner.py",
+      "tests/brain/phase2b/test_preference_model.py",
+      "tests/brain/phase2b/test_experience_learner.py",
+      "tests/brain/phase2b/test_isolation.py"
+    ],
+    "test_result": "28/28 PASS (0.15s)",
+    "previous_round": "Round 1 Claude review flagged MockMC API misalignment, layer mapping gaps, missing override logic"
+  },
+
+  "round1_fixes_verified": {
+    "mockmc_api_alignment": {
+      "status": "FIXED",
+      "details": "MockMC now matches real MemoryController API exactly",
+      "commit_signature": {
+        "mock": "commit(*a, **kw) — extracts mission_id, key, content, kind, evidence_id, confidence from kw args",
+        "real": "commit(mission_id, key, content, kind, evidence_id=None, confidence=1.0, ...)",
+        "call_style_in_code": "All calls use keyword args: commit(mission_id=..., key=..., content=..., kind=..., evidence_id=..., confidence=...)",
+        "verdict": "MATCH — keyword-arg calling convention fully compatible"
+      },
+      "recall_signature": {
+        "mock": "recall(mission_id, layer=None, **kw)",
+        "real": "recall(mission_id, layer=None)",
+        "call_style_in_code": "recall(mission_id, layer='semantic') — positional mission_id, keyword layer",
+        "verdict": "MATCH"
+      },
+      "rank_retrieve_signature": {
+        "mock": "rank_retrieve(query, top_k=10, layers=None, min_confidence=0.3, **kw)",
+        "real": "rank_retrieve(query, top_k=10, layers=None, min_confidence=0.3)",
+        "call_style_in_code": "rank_retrieve(query=..., top_k=..., layers=[...], min_confidence=...)",
+        "verdict": "MATCH"
+      }
+    },
+    "layer_mapping": {
+      "status": "FIXED",
+      "details": "Layer mapping correctly maps kind→layer via _LAYER_MAP in both test files",
+      "test_map": {
+        "preference": "semantic",
+        "experience": "episodic",
+        "procedural": "procedural",
+        "lesson": "procedural"
+      },
+      "real_consolidation_rules": {
+        "MemoryKind.PREFERENCE.value": "semantic",
+        "MemoryKind.DECISION.value": "episodic",
+        "MemoryKind.FAILURE.value": "episodic"
+      },
+      "note": "Test layer map is self-consistent but see CRITICAL finding below about 'experience' kind not existing in real ConsolidationRules"
+    },
+    "get_preference_returns_most_recent": {
+      "status": "FIXED",
+      "details": "Iterates all records, reassigns `found = r` on each match, last match wins. Since MockMC appends to list, last = most recent. Test test_update_overwrites confirms this behavior."
+    },
+    "evidence_backed_override": {
+      "status": "FIXED",
+      "details": "resolve_conflict sets new_score = 99.0 when evidence_id is truthy, guaranteeing override over any old_score (max theoretical ~1.0). Test test_evidence_backed_overrides confirms: weak pref (weight=0.9, conf=0.9, old_score=0.81) is overridden by strong pref with evidence_id='ev_strong'.",
+      "verdict": "CORRECT — evidence-backed entries always win"
+    }
+  },
+
+  "critical_findings": [
+    {
+      "severity": "HIGH",
+      "id": "CF-001",
+      "title": "Layer mismatch: experience_learner writes to 'semantic' but reads from 'episodic' in production",
+      "category": "layer_routing_bug",
+      "detail": "experience_learner.record_outcome() commits with kind='experience'. The real MemoryController._classify_layer() calls classify_layer('experience') which returns 'semantic' (default for unknown kinds — 'experience' is NOT in KIND_TO_LAYER). However, extract_patterns(), rank_experiences(), and prune_irrelevant() all call rank_retrieve() with layers=['episodic']. In production, experiences would be stored in the semantic layer but retrieved from the episodic layer — they would NEVER be found.",
+      "root_cause": "Test MockMC maps 'experience' → 'episodic' in its _LAYER_MAP, masking this bug. Real ConsolidationRules.KIND_TO_LAYER has no 'experience' key — classify_layer('experience') returns 'semantic' (default).",
+      "affected_methods": [
+        "extract_patterns() — reads layers=['episodic'], but records stored in 'semantic'",
+        "rank_experiences() — reads layers=['episodic'], but records stored in 'semantic'",
+        "prune_irrelevant() — reads layers=['episodic'], but records stored in 'semantic'"
+      ],
+      "fix_options": [
+        "Option A: Add 'experience' → 'episodic' to ConsolidationRules.KIND_TO_LAYER (best — semantically correct, episodic is for time-bounded events)",
+        "Option B: Change experience_learner queries to use layers=['semantic'] (wrong — semantically incorrect)",
+        "Option C: Change experience_learner to use kind='decision' or kind='failure' per outcome (requires refactor of record_outcome)"
+      ],
+      "recommended_fix": "Option A — Add 'experience': 'episodic' to KIND_TO_LAYER in consolidation_rules.py"
+    },
+    {
+      "severity": "MEDIUM",
+      "id": "CF-002",
+      "title": "Two pattern extraction tests have zero assertions (vacuously passing)",
+      "category": "test_quality_gap",
+      "detail": "test_extract_success_pattern (line 88-91) and test_extract_failure_pattern (line 93-96) call learner.extract_patterns() but have NO assert statements. They pass trivially because Python functions without assertions cannot fail. These tests provide zero coverage verification.",
+      "affected_tests": [
+        "tests/brain/phase2b/test_experience_learner.py::TestPatternExtraction::test_extract_success_pattern",
+        "tests/brain/phase2b/test_experience_learner.py::TestPatternExtraction::test_extract_failure_pattern"
+      ],
+      "recommended_fix": "Add assertions verifying extracted pattern properties: pattern_type ('tool_selection_success' for high success rate), success_rate correctness, frequency count"
+    },
+    {
+      "severity": "MEDIUM",
+      "id": "CF-003",
+      "title": "apply_decay ignores half_life_hours parameter",
+      "category": "dead_parameter",
+      "detail": "PreferenceModel.apply_decay() accepts half_life_hours: int = 168 but always applies a flat 0.99 multiplier to weight regardless of parameter value. The half-life semantics documented in the docstring ('Decay preferences older than half-life') are not implemented.",
+      "code_location": "preference_model.py:68-80",
+      "evidence": "Line 73: new_weight = p.weight * (1.0 - 0.01) — constant 0.99, half_life_hours never used",
+      "recommended_fix": "Either implement time-based decay using half_life_hours and p.created_at, or remove the parameter if flat decay is intentional"
+    },
+    {
+      "severity": "LOW",
+      "id": "CF-004",
+      "title": "Duplicate MockMC class in both test files",
+      "category": "code_duplication",
+      "detail": "test_preference_model.py (lines 9-52) and test_experience_learner.py (lines 9-52) contain identical MockMC implementations including identical _LAYER_MAP. This violates DRY and means fixes to MockMC must be applied in two places.",
+      "recommended_fix": "Extract MockMC to tests/brain/phase2b/conftest.py or tests/brain/phase2b/mock_mc.py"
+    }
+  ],
+
+  "api_alignment_audit": {
+    "preference_model_api": {
+      "methods": 6,
+      "methods_detail": {
+        "record_preference": {
+          "params": "mission_id, key, category, value, weight=1.0, confidence=0.5, evidence_id=None",
+          "calls_mc": "commit(mission_id=..., key='pref:{key}', content=serialized, kind='preference', evidence_id=..., confidence=...)",
+          "alignment": "CORRECT — uses kind='preference' which maps to semantic layer",
+          "evidence_id_handling": "evidence_id or '' — passes empty string for None, real MC would reject (see CF-005)"
+        },
+        "get_preference": {
+          "params": "mission_id, key",
+          "calls_mc": "recall(mission_id, layer='semantic')",
+          "alignment": "CORRECT — preferences stored in semantic layer",
+          "logic": "Iterates all records, last match wins. Correct for append-only storage."
+        },
+        "get_all_preferences": {
+          "params": "mission_id='global'",
+          "calls_mc": "recall(mission_id, layer='semantic')",
+          "alignment": "CORRECT",
+          "filtering": "Filters by kind='preference' AND status='active'"
+        },
+        "rank_preferences": {
+          "params": "keywords, top_k=10",
+          "calls_mc": "rank_retrieve(query=keywords, top_k=top_k*2, layers=['semantic'], min_confidence=0.1)",
+          "alignment": "CORRECT — over-fetches 2x then re-ranks by weight*confidence"
+        },
+        "apply_decay": {
+          "params": "mission_id, half_life_hours=168",
+          "calls_mc": "commit() for each preference with reduced weight",
+          "alignment": "CORRECT structurally but half_life_hours ignored (CF-003)"
+        },
+        "resolve_conflict": {
+          "params": "mission_id, key, new_value, confidence, evidence_id=None",
+          "calls_mc": "commit() or record_preference()",
+          "alignment": "CORRECT — evidence-backed override works (CF-001 Round 1 fix verified)"
+        }
+      }
+    },
+    "experience_learner_api": {
+      "methods": 6,
+      "methods_detail": {
+        "record_outcome": {
+          "params": "mission_id, outcome, action, result, success, evidence_id=None, trace_id=''",
+          "calls_mc": "commit(mission_id=..., key='exp:{mid}:{id}', content=serialized, kind='experience', evidence_id=..., confidence=0.5 if success else 0.3)",
+          "alignment": "STRUCTURALLY CORRECT but kind='experience' is not a real MemoryKind (CF-001)"
+        },
+        "record_lesson": {
+          "params": "mission_id, lesson, evidence_id=None",
+          "calls_mc": "commit(mission_id=..., key='lesson:{mid}:{id}', content=serialized, kind='procedural', evidence_id=...)",
+          "alignment": "CORRECT — 'procedural' maps to procedural layer in real consolidation rules"
+        },
+        "extract_patterns": {
+          "params": "limit=50",
+          "calls_mc": "rank_retrieve(query='outcome success failure', top_k=limit, layers=['episodic'], min_confidence=0.1)",
+          "alignment": "LAYER MISMATCH — reads episodic but writes to semantic in production (CF-001)",
+          "logic": "Groups by action, requires >=3 samples, classifies as tool_selection_success (>70%), decision_path_outcome (<30%), or timing_pattern (30-70%)"
+        },
+        "rank_experiences": {
+          "params": "keywords, top_k=10",
+          "calls_mc": "rank_retrieve(query=keywords, top_k=top_k*2, layers=['episodic'], min_confidence=0.1)",
+          "alignment": "LAYER MISMATCH (CF-001)",
+          "bonus_penalty_logic": "Success experiences get +10% confidence boost, failures get -5%. Clamped to [0.1, 1.0]."
+        },
+        "get_lessons": {
+          "params": "query='', top_k=10",
+          "calls_mc": "rank_retrieve(query=query or 'lesson', top_k=top_k, layers=['procedural'], min_confidence=0.1)",
+          "alignment": "CORRECT — 'procedural' matches record_lesson kind"
+        },
+        "prune_irrelevant": {
+          "params": "threshold=0.2",
+          "calls_mc": "rank_retrieve(query='experience', top_k=200, layers=['episodic'], min_confidence=0.0)",
+          "alignment": "LAYER MISMATCH (CF-001)",
+          "note": "Returns count only, doesn't actually prune. Method name is aspirational."
+        }
+      }
+    }
+  },
+
+  "isolation_audit": {
+    "preference_model_imports": {
+      "allowed": ["__future__", "json", "dataclasses", "typing", "TYPE_CHECKING", "..models (new_id, now_iso)"],
+      "memory_controller": "Imported under TYPE_CHECKING only — no runtime import",
+      "forbidden_found": [],
+      "brain_db_references": 0,
+      "runtime_references": 0,
+      "verdict": "PASS — fully isolated"
+    },
+    "experience_learner_imports": {
+      "allowed": ["__future__", "json", "dataclasses", "typing", "TYPE_CHECKING", "..models (new_id, now_iso)"],
+      "memory_controller": "Imported under TYPE_CHECKING only — no runtime import",
+      "forbidden_found": [],
+      "brain_db_references": 0,
+      "runtime_references": 0,
+      "verdict": "PASS — fully isolated"
+    },
+    "isolation_tests": {
+      "test_preference_model_no_runtime_imports": "PASS — checks 7 forbidden import patterns",
+      "test_experience_learner_no_runtime_imports": "PASS — checks 7 forbidden import patterns",
+      "test_both_modules_use_memory_controller_interface": "PASS — verifies MemoryController in TYPE_CHECKING",
+      "test_no_direct_db_imports": "PASS — verifies no 'from .db import' or 'brain.db' references",
+      "coverage": "4 tests, comprehensive. Checks for runtime.py, models.py (full import), evidence.py, tools.py, model_gateway.py, governance.py, cli.py, api.py."
+    }
+  },
+
+  "test_quality_assessment": {
+    "overall_score": "7.5/10 — Good structure, some assertion gaps and duplication",
+    "preference_model_tests": {
+      "count": 15,
+      "classes": 5,
+      "strengths": [
+        "CRUD coverage: create, read, read-nonexistent, read-all, update-overwrite",
+        "Conflict resolution: no-existing, confidence-wins, evidence-always-wins",
+        "Ranking: returns results, respects top_k",
+        "Decay: verifies count affected",
+        "Profile/summarize: structural verification"
+      ],
+      "gaps": [
+        "No test for record_preference with evidence_id parameter",
+        "No test for get_preference cross-mission isolation",
+        "No test for apply_decay when no preferences exist",
+        "No test for resolve_conflict when old score > new score (low-confidence challenger loses)",
+        "No test for rank_preferences empty keyword strings",
+        "No test for get_profile/summarize on empty model"
+      ]
+    },
+    "experience_learner_tests": {
+      "count": 13,
+      "classes": 7,
+      "strengths": [
+        "Record outcome: success, failure, lesson — all covered",
+        "Pattern extraction: multiple experiences, few-samples threshold honored",
+        "Ranking, lessons, pruning, summary: structural coverage"
+      ],
+      "gaps": [
+        "CRITICAL: test_extract_success_pattern (line 88-91) — ZERO assertions, vacuously passing (CF-002)",
+        "CRITICAL: test_extract_failure_pattern (line 93-96) — ZERO assertions, vacuously passing (CF-002)",
+        "No test for extract_patterns on empty store",
+        "No test for pattern classification (tool_selection_success vs decision_path_outcome vs timing_pattern)",
+        "No test for rank_experiences confidence adjustment logic (+10% success / -5% failure)",
+        "No test for rank_experiences sorting order verification (success before failure)",
+        "No test for get_lessons with empty query (tests only explicit query)"
+      ]
+    },
+    "isolation_tests": {
+      "count": 4,
+      "strengths": [
+        "Comprehensive forbidden import list (8 patterns)",
+        "Verifies both modules independently",
+        "Verifies MemoryController interface usage",
+        "Verifies no brain.db direct imports"
+      ],
+      "gaps": [
+        "Does not test for TYPE_CHECKING guard (could import real MC at runtime accidentally)",
+        "Tests use file-level string checks rather than actual import isolation (acceptable for static analysis)"
+      ]
+    },
+    "mock_fidelity": {
+      "mockmc_recall_global_behavior": "MockMC.recall() treats mission_id='global' as 'return all missions'. Real MC passes mission_id directly to DB — no global wildcard. PreferenceModel uses mission_id='global' as default in get_all_preferences/get_profile. This could produce different results in production if 'global' isn't handled by DB layer.",
+      "mockmc_evidence_enforcement": "MockMC does NOT enforce evidence binding (real MC raises ValueError for preference without evidence_id). Tests always pass non-empty evidence_ids, so this gap doesn't cause false positives, but it means the enforcement logic is untested.",
+      "mockmc_rank_retrieve_scoring": "MockMC uses simplistic keyword substring matching. Real MC uses relevance (0.5) + recency (0.25) + confidence (0.25) weighted scoring. This means test ranking order may differ from production ranking order."
+    }
+  },
+
+  "additional_code_quality_notes": {
+    "preference_model": {
+      "resolve_conflict_empty_string_edge_case": "If evidence_id='' (empty string), new_score = confidence (not 99.0). This is consistent with record_preference converting None→'' but could surprise callers.",
+      "get_preference_ordering_dependency": "Relies on iteration order matching insertion order. Real MC recall() may return DB-ordered results. If DB doesn't preserve insertion order, 'most recent' guarantee breaks.",
+      "deserialize_pref_fallback": "Correctly falls back to record-level weight/confidence/evidence_id if not found in serialized content JSON."
+    },
+    "experience_learner": {
+      "record_outcome_confidence": "Sets confidence=0.5 for success, 0.3 for failure — appropriate differentiation.",
+      "extract_patterns_min_samples": "Requires >=3 samples per action before pattern is emitted — reasonable statistical threshold.",
+      "rank_experiences_bonus_logic": "Success experiences get 1.1x confidence boost, failures get 0.95x penalty. Sort key is confidence * (1.5 if success else 0.5). Reasonable but could use configurable weights.",
+      "prune_irrelevant": "Returns count but doesn't actually delete/prune. Method name is misleading — should be renamed to count_low_confidence or similar.",
+      "summarize_limit": "Calls extract_patterns(limit=20) — lower limit than default 50, reasonable for summary use."
+    }
+  },
+
+  "verdict": {
+    "round1_fixes": "ALL FIXES CONFIRMED — MockMC API alignment, layer mapping, get_preference most-recent, evidence-backed override",
+    "new_issues": "1 HIGH (CF-001 layer mismatch), 2 MEDIUM (CF-002 no-assertion tests, CF-003 dead parameter), 1 LOW (CF-004 code duplication)",
+    "overall_assessment": "CONDITIONAL PASS — Round 1 fixes are solid and verifiable. However, CF-001 is a production bug masked by test mock: experience_learner writes to semantic layer but reads from episodic layer. Tests pass because MockMC maps 'experience' → 'episodic', but the real ConsolidationRules default unknown kinds to 'semantic'. Fix CF-001 before production deployment. CF-002 (no-assertion tests) should be fixed to ensure the pattern extraction pipeline is actually tested. CF-003 (unused half_life_hours) is a code quality issue. The module boundary (no runtime imports, no brain.db imports) is clean and well-verified by 4 isolation tests.",
+    "recommended_actions": [
+      "P0: Add 'experience': 'episodic' to KIND_TO_LAYER in consolidation_rules.py (fix CF-001)",
+      "P1: Add assertions to test_extract_success_pattern and test_extract_failure_pattern (fix CF-002)",
+      "P2: Implement or remove half_life_hours parameter in apply_decay (fix CF-003)",
+      "P3: Extract shared MockMC to conftest.py (fix CF-004)",
+      "P3: Add test for preference without evidence_id behavior (evidence enforcement verification)",
+      "P3: Add test for resolve_conflict when low-confidence challenger loses"
+    ]
+  }
+}

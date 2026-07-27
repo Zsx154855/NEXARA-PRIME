@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NEXARA Phase 2B Final Read-Only Review",
+  "reviewer": "Claude (Independent Reviewer — Final)",
+  "reviewed_at": "2026-07-27T12:00:00.000000+00:00",
+  "review_target": "Phase 2B Frozen Tree (preference_model + experience_learner)",
+  "review_type": "READ-ONLY FINAL — P0 fixes verified, no code modifications",
+
+  "overall_verdict": "CONDITIONAL_PASS",
+  "verdict_rationale": "1 P0 finding remains (contract SHA mismatch), 2 P0 fixes verified. P0-03 expected (files uncommitted, awaiting human approval). P1 issues are pre-existing and acknowledged. Recommend P0-01 fix (recalculate contract SHA) before declaring frozen.",
+
+  "p0_fix_verification": {
+    "P0-01": {
+      "title": "Contract SHA mismatch in receipt",
+      "claimed_status": "FIXED",
+      "verified_status": "NOT_FIXED",
+      "detail": "Receipt (NEXARA_PHASE_2B_IMPLEMENTATION_RECEIPT_V1.json) claims contract_sha256='274d440ba4f3e4920944c47fe4afb48d7dece80e071b94273b49b097ed3830e3'. Actual SHA-256 of NEXARA_PHASE_2B_IMPLEMENTATION_CONTRACT_V1.json on disk: 'e9a5cf7a79ca0ca131e42ed6acdb0ad19f6437fe50f3d6ee60d3220ffe467c06'. Design contract SHA: '58d9bed2f0c432397034bdccdf69194640fa7dc2d1ac030ca43e5a6f01dc4349'. Neither matches the receipt's claim.",
+      "severity": "P0",
+      "recommendation": "Recompute contract SHA-256 and update receipt's contract_sha256 field to match the file actually on disk."
+    },
+    "P0-02": {
+      "title": "MockMC routing mismatch for kind='procedural' — silent production failure",
+      "claimed_status": "FIXED",
+      "verified_status": "FIXED",
+      "detail": "consolidation_rules.py now has both 'experience':'episodic' (line 36) and 'procedural':'procedural' (line 37) in KIND_TO_LAYER. Verified via git diff showing +3 line addition. This resolves the layer routing mismatch. MockMC _LAYER_MAP in conftest.py also matches: 'experience':'episodic', 'procedural':'procedural'. The three affected methods (extract_patterns, rank_experiences, prune_irrelevant) will now correctly find experiences in the episodic layer in production.",
+      "severity": "P0",
+      "fix_evidence": "git diff shows: +'experience':'episodic', +'procedural':'procedural'"
+    },
+    "P0-03": {
+      "title": "Frozen tree is not committed — zero Phase 2B files in git",
+      "claimed_status": "EXPECTED (awaiting human approval)",
+      "verified_status": "CONFIRMED_EXPECTED",
+      "detail": "All Phase 2B files remain untracked: preference_model.py, experience_learner.py, tests/brain/phase2b/, contracts/nexara/phase2b/, evidence/nexara/phase2b/. Git HEAD is still 48f848e (Phase 2A). This is expected per task description — awaiting human approval for commit.",
+      "severity": "P0",
+      "untracked_files": [
+        "src/nexara_prime/brain/preference_model.py",
+        "src/nexara_prime/brain/experience_learner.py",
+        "tests/brain/phase2b/ (4 files)",
+        "contracts/nexara/phase2b/ (2 files)",
+        "evidence/nexara/phase2b/ (5 files)"
+      ]
+    }
+  },
+
+  "additional_fixes_verified": {
+    "CF-002_vacuous_tests": {
+      "title": "Two pattern extraction tests had zero assertions (from implementation review)",
+      "status": "FIXED",
+      "detail": "test_extract_success_pattern now has 5 assertions (pattern count, type, success_rate, frequency). test_extract_failure_pattern now has 5 assertions (pattern count, type, success_rate, frequency). Both verified in test_experience_learner.py lines 39-58."
+    },
+    "CF-003_dead_parameter": {
+      "title": "apply_decay ignored half_life_hours parameter",
+      "status": "FIXED",
+      "detail": "Line 70 now uses: decay_factor = 0.5 ** (1.0 / max(half_life_hours, 1)). Parameter is properly consumed. Note: decay is still per-call, not based on created_at timestamps (P2 note)."
+    },
+    "CF-004_mock_duplication": {
+      "title": "Duplicate MockMC class in both test files",
+      "status": "FIXED",
+      "detail": "MockMC now lives in conftest.py only. Both test_preference_model.py and test_experience_learner.py import mock_mc fixture from conftest.py."
+    }
+  },
+
+  "source_files_on_disk": {
+    "src/nexara_prime/brain/preference_model.py": {
+      "lines": 119,
+      "classes": 2,
+      "public_methods": 8,
+      "sha256": "38fe7d8304990aaa818cd2f1ea80b28faeede41b74f8e82be297c478b9765467",
+      "in_git": false,
+      "dirty": false
+    },
+    "src/nexara_prime/brain/experience_learner.py": {
+      "lines": 139,
+      "classes": 3,
+      "public_methods": 7,
+      "sha256": "866acbd847a0c0a68e7801a965519bab4c9ac4018f1631e432c4d70ba8f86ea8",
+      "in_git": false,
+      "dirty": false
+    },
+    "src/nexara_prime/brain/consolidation_rules.py": {
+      "lines": 61,
+      "sha256": "f802868145321c100383ce6e5741c1de6525ff2d0bd9e8564d26e1db03e7c900",
+      "in_git": true,
+      "in_head_commit": true,
+      "dirty": true,
+      "dirty_lines": "+3 (experience:'episodic', procedural:'procedural' entries)"
+    },
+    "tests/brain/phase2b/conftest.py": {
+      "lines": 58,
+      "sha256": "49a6929c987f2531ed8c9a722c6f1b5fdaa4b2bd09867888dedaaab2b0072e57",
+      "in_git": false
+    },
+    "tests/brain/phase2b/test_preference_model.py": {
+      "lines": 92,
+      "sha256": "b12d15e4d85e75a73c7a1a8bdcd984276b9b0a74f780879da281be6b808b7f2d",
+      "in_git": false
+    },
+    "tests/brain/phase2b/test_experience_learner.py": {
+      "lines": 98,
+      "sha256": "7564a25d232c530bf9309e22e25971a38828d91db6d7cfa6fac871ca40d326f3",
+      "in_git": false
+    },
+    "tests/brain/phase2b/test_isolation.py": {
+      "lines": 33,
+      "sha256": "1ee38ed0eda444a1d10923aae3fb2cceee5e42ace19fbad20267300b27e41f1a",
+      "in_git": false
+    },
+    "tests/brain/phase2b/__init__.py": {
+      "lines": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "in_git": false
+    }
+  },
+
+  "test_results": {
+    "phase2b_total": 28,
+    "phase2b_pass": 28,
+    "phase2b_fail": 0,
+    "phase2b_time": "0.15s",
+    "pytest_verified": true,
+    "pytest_command": "pytest tests/brain/phase2b/ -v --tb=short"
+  },
+
+  "ruff": {
+    "status": "0 errors",
+    "verified": true,
+    "command": "ruff check src/nexara_prime/brain/experience_learner.py preference_model.py consolidation_rules.py tests/brain/phase2b/"
+  },
+
+  "git_status": {
+    "HEAD": "48f848eb95e71d459629fcfd7fbceb2dd3ffb828",
+    "HEAD_message": "feat(nexara): implement phase 2a autonomy boundary and knowledge graph",
+    "phase2b_files_tracked": false,
+    "modified_tracked": [
+      "src/nexara_prime/brain/consolidation_rules.py (+3 lines)",
+      "src/nexara_prime/cli.py (pre-existing, not Phase 2B)",
+      "src/nexara_prime/model_router.py (pre-existing, not Phase 2B)",
+      "src/nexara_prime/runtime.py (pre-existing, not Phase 2B)"
+    ],
+    "untracked_phase2b": [
+      "src/nexara_prime/brain/preference_model.py",
+      "src/nexara_prime/brain/experience_learner.py",
+      "tests/brain/phase2b/",
+      "contracts/nexara/phase2b/",
+      "evidence/nexara/phase2b/"
+    ]
+  },
+
+  "review_criteria": {
+    "api_alignment": {
+      "result": "PASS",
+      "details": {
+        "preference_model_api": "8 public methods follow MemoryController interface pattern (commit/recall/rank_retrieve). No direct DB, no runtime imports.",
+        "experience_learner_api": "7 public methods follow MemoryController interface. record_outcome/record_lesson use commit(); extract_patterns/rank_experiences/get_lessons use recall/rank_retrieve.",
+        "mock_mc_fidelity": "PASS — MockMC _LAYER_MAP now matches real KIND_TO_LAYER for experience, procedural, preference. Dead 'lesson' entry in mock only (P2)."
+      }
+    },
+    "test_quality": {
+      "result": "PASS",
+      "details": {
+        "test_count": 28,
+        "coverage_areas": ["CRUD", "ranking", "decay", "conflict resolution", "profile", "pattern extraction", "lessons", "pruning", "summary", "isolation"],
+        "happy_path": true,
+        "edge_cases": true,
+        "negative_cases": true,
+        "isolation_tests": 4,
+        "vacuously_passing_tests": 0,
+        "shallow_assertions": ["test_rank_returns_sorted (only checks isinstance(list))", "test_get_lessons_returns_list (only checks isinstance(list))", "test_decay_reduces_weights (checks count >=1, not weight values)"]
+      }
+    },
+    "runtime_boundary": {
+      "result": "PASS_WITH_NOTE",
+      "details": {
+        "phase2b_modules_clean": "PASS — PreferenceModel and ExperienceLearner are new untracked files. consolidation_rules.py has +3 additive lines (P0-02 fix).",
+        "no_runtime_imports_in_phase2b_modules": "PASS — isolation tests confirm zero imports from runtime, cli, api, model_gateway, governance, evidence, tools",
+        "no_direct_db_imports": "PASS — both modules use MemoryController interface, no brain.db imports",
+        "pre_existing_dirty": "3 protected files (cli.py, model_router.py, runtime.py) have pre-existing uncommitted changes outside Phase 2B scope — acknowledged, not blocking"
+      }
+    },
+    "governance_compliance": {
+      "result": "FAIL",
+      "details": {
+        "contract_sha_integrity": "FAIL — Receipt claims contract_sha=274d440b... but actual contract SHA-256 is e9a5cf7a... (see P0-01)",
+        "frozen_tree_commit": "FAIL — no git commit exists for Phase 2B files (P0-03, expected)",
+        "evidence_artifacts_tracked": "FAIL — contracts/nexara/phase2b/ and evidence/nexara/phase2b/ are untracked (P0-03, expected)"
+      }
+    }
+  },
+
+  "findings": [
+    {
+      "id": "FINAL-P0-01",
+      "severity": "P0",
+      "category": "evidence_integrity",
+      "title": "Contract SHA mismatch in receipt — continued from prior review",
+      "detail": "Receipt claims contract_sha256='274d440ba4f3e4920944c47fe4afb48d7dece80e071b94273b49b097ed3830e3'. Actual implementation contract SHA is e9a5cf7a79ca0ca131e42ed6acdb0ad19f6437fe50f3d6ee60d3220ffe467c06. Design contract SHA is 58d9bed2f0c432397034bdccdf69194640fa7dc2d1ac030ca43e5a6f01dc4349. Neither matches.",
+      "recommendation": "Recompute contract SHA-256 and update receipt. Ensure both files are frozen simultaneously."
+    },
+    {
+      "id": "FINAL-P1-01",
+      "severity": "P1",
+      "category": "runtime_boundary",
+      "title": "Protected runtime files have pre-existing uncommitted changes",
+      "detail": "cli.py, model_router.py, runtime.py have uncommitted changes predating Phase 2B. Acknowledged as pre-existing. Not blocking but should be resolved in a separate PR before Phase 2B commit.",
+      "recommendation": "Commit or stash these changes before Phase 2B commit."
+    },
+    {
+      "id": "FINAL-P1-02",
+      "severity": "P1",
+      "category": "code_quality",
+      "title": "MemoryKind enum missing 'experience' value",
+      "detail": "ExperienceLearner uses raw string 'experience' in 4 locations (record_outcome, extract_patterns, rank_experiences, prune_irrelevant). MemoryKind enum has 13 values but no EXPERIENCE member. consolidation_rules.py now handles the raw string correctly, but the enum gap means no IDE autocomplete, no type checking, and no documentation for this kind.",
+      "recommendation": "Add MemoryKind.EXPERIENCE = 'experience' to models.py enum and reference it in experience_learner.py and consolidation_rules.py."
+    },
+    {
+      "id": "FINAL-P2-01",
+      "severity": "P2",
+      "category": "test_infrastructure",
+      "title": "MockMC _LAYER_MAP has dead 'lesson' entry",
+      "detail": "conftest.py maps 'lesson':'procedural' but no code path uses kind='lesson'. record_lesson uses kind='procedural'. Real KIND_TO_LAYER has no 'lesson' key — classify_layer('lesson') would default to 'semantic' in production.",
+      "recommendation": "Remove 'lesson' entry from MockMC _LAYER_MAP, or add 'lesson':'procedural' to real KIND_TO_LAYER if the kind is planned for future use."
+    },
+    {
+      "id": "FINAL-P2-02",
+      "severity": "P2",
+      "category": "governance",
+      "title": "Contract method counts don't match actual code",
+      "detail": "Contract claims PREF-01 has 6 methods (actual: 8 — record_preference, get_preference, get_all_preferences, rank_preferences, apply_decay, resolve_conflict, get_profile, summarize). EXP-01 claims 6 methods (actual: 7 — record_outcome, record_lesson, extract_patterns, rank_experiences, get_lessons, prune_irrelevant, summarize).",
+      "recommendation": "Update contract method counts or define counting methodology explicitly."
+    },
+    {
+      "id": "FINAL-P2-03",
+      "severity": "P2",
+      "category": "code_quality",
+      "title": "Unnecessary # noqa: F401 on used import",
+      "detail": "experience_learner.py line 5: 'import json  # noqa: F401'. json is used throughout (json.dumps on lines 65, 124; json.loads on lines 75, 110, 129). F401 would never fire.",
+      "recommendation": "Remove the '# noqa: F401' comment."
+    },
+    {
+      "id": "FINAL-P2-04",
+      "severity": "P2",
+      "category": "code_quality",
+      "title": "apply_decay is per-call, not time-based",
+      "detail": "While half_life_hours parameter is now consumed (CF-003 fix), decay is applied on each call regardless of elapsed time. No created_at timestamp comparison. Docstring says 'Decay preferences' but doesn't specify time-based behavior, so this is acceptable behavior — but the half_life_hours name implies time-awareness.",
+      "recommendation": "Rename to decay_per_call or implement time-based decay using created_at timestamps."
+    },
+    {
+      "id": "FINAL-P2-05",
+      "severity": "P2",
+      "category": "code_quality",
+      "title": "prune_irrelevant returns count but doesn't actually prune",
+      "detail": "experience_learner.py prune_irrelevant() counts low-confidence records but never deletes them. Method name is misleading.",
+      "recommendation": "Rename to count_low_confidence_experiences or implement actual pruning via MemoryController."
+    }
+  ],
+
+  "positive_observations": [
+    "All 28 Phase 2B tests pass (0.15s)",
+    "ruff check passes with 0 errors (independently verified)",
+    "P0-02 fix confirmed: consolidation_rules.py KIND_TO_LAYER now includes 'experience':'episodic' and 'procedural':'procedural'",
+    "CF-002 vacuous test fix confirmed: both pattern extraction tests now have 5 meaningful assertions each",
+    "CF-003 dead parameter fix confirmed: half_life_hours is now consumed in decay_factor calculation",
+    "CF-004 MockMC deduplication confirmed: single MockMC in conftest.py, shared via pytest fixture",
+    "Both modules correctly use MemoryController interface — no direct DB, no runtime imports",
+    "Isolation tests provide good boundary enforcement (4 tests covering 8 forbidden import patterns)",
+    "Code is well-structured: dataclass entities, serialization helpers, delegate-to-MC pattern",
+    "PreferenceModel covers CRUD, ranking, decay, conflict resolution, and profile summarization",
+    "ExperienceLearner covers recording, pattern extraction, ranking, lessons, pruning, and summarization"
+  ],
+
+  "contract_and_receipt_hashes": {
+    "algorithm": "SHA-256",
+    "implementation_contract_disk": "e9a5cf7a79ca0ca131e42ed6acdb0ad19f6437fe50f3d6ee60d3220ffe467c06",
+    "implementation_receipt_claimed": "274d440ba4f3e4920944c47fe4afb48d7dece80e071b94273b49b097ed3830e3",
+    "design_contract_disk": "58d9bed2f0c432397034bdccdf69194640fa7dc2d1ac030ca43e5a6f01dc4349",
+    "design_receipt_claimed": "b285ade211206677fdc6bd92e836f6b05f69821231ff2c9c9fad9e676b44b099",
+    "implementation_receipt_disk": "4eac95ab1bccdab33bbc4cc9148ad92ea107a18b5a24cf97301a5992c53a9455",
+    "design_receipt_disk": "74e4d1fb26ab0aa4ef78b5cb702d8642caee0b558793a4e9841ebcf68351c20e",
+    "contract_match": false
+  },
+
+  "closure_criteria": {
+    "phase2b_tests_pass": { "status": "PASS", "verified": true, "detail": "28/28 (0.15s)" },
+    "ruff_zero": { "status": "PASS", "verified": true, "detail": "All checks passed" },
+    "phase1_diff_zero": { "status": "NOT_VERIFIABLE", "detail": "Phase 2B files not committed; no diff baseline" },
+    "phase2a_diff_zero": { "status": "ACKNOWLEDGED_DIRTY", "detail": "3 protected files have pre-existing uncommitted changes" },
+    "frozen_tree": { "status": "NOT_FROZEN", "detail": "No git commit exists for Phase 2B files" },
+    "contract_sha_integrity": { "status": "FAIL", "detail": "Receipt claims different contract SHA than actual disk SHA" }
+  },
+
+  "summary": "NEXARA Phase 2B final read-only review complete. 2 of 3 P0 findings are resolved (P0-02 FIXED, P0-03 EXPECTED). P0-01 remains: contract SHA mismatch in the implementation receipt — claims 274d440b... but actual contract SHA is e9a5cf7a... Three additional fixes from prior implementation review are confirmed (CF-002 vacuous tests, CF-003 dead parameter, CF-004 MockMC deduplication). All 28 tests pass, ruff is clean. P1 issues (3 dirty runtime files) are pre-existing and acknowledged. P2 findings are minor code quality and documentation issues. OVERALL: CONDITIONAL_PASS — recommend fixing P0-01 (contract SHA) before declaring the tree frozen and committing."
+}
