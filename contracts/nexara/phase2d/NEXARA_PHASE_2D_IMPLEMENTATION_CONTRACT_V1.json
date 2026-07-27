@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NEXARA Phase 2D Evolution Engine Contract",
+  "governed_by": "NSEC V2.1",
+  "baseline": "80533de476c106231de8d9f69fe56a45d4d073d2",
+  "frozen_at": "2026-07-27T15:31:54.222550+00:00",
+  "modules": {
+    "EVO-07": "EvolutionController (collect/evaluate/approve/apply/reject/verify/archive)"
+  },
+  "test_results": {
+    "phase2d_pass": 27,
+    "full_regression_pass": 1468,
+    "pre_existing_fail": 23
+  },
+  "ruff": "0 errors",
+  "claude_review": "APPROVED",
+  "phase1_diff": 0,
+  "phase2a_diff": 0,
+  "phase2b_diff": 0,
+  "phase2c_diff": 0
+}

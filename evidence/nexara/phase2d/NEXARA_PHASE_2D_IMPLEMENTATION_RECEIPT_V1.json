@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_nexara_phase2d_v1",
+  "head": "3d43a5fa5d716c9a1a473be465177fe1cbf61646",
+  "contract_sha256": "6d38747ea8d8f3f503e89b2a8fdbe64be8a45532be8f2b6aad7818be4ee70c1b",
+  "tests": "27/27 Phase2D, 1468 total, 23 pre-existing",
+  "ruff": "0",
+  "claude": "APPROVED",
+  "phases_merged": [
+    "Phase1",
+    "Phase2A",
+    "Phase2B",
+    "Phase2C"
+  ],
+  "ci": "8/9 PASS (python baseline FAIL — pre-existing, baseline waiver active)"
+}
