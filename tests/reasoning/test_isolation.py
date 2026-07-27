@@ -1,6 +1,5 @@
 """Tests: Reasoning Kernel isolation — no runtime/model/tool imports."""
 
-import inspect
 from pathlib import Path
 
 
