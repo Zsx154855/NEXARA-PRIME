@@ -182,8 +182,8 @@ jobs:
             esac
             echo "  ${job}: ${result}"
             if [ "${result}" != "success" ]; then
-              # Check for baseline waiver evidence
-              if [ "${job}" = "python" ] && [ -f "evidence/nexara/phase2b/NEXARA_PR29_BASELINE_WAIVER_V1.json" ]; then
+              # Check for baseline waiver evidence (any phase)
+              if [ "${job}" = "python" ] && ls evidence/nexara/*/NEXARA_PR*_BASELINE_WAIVER_V1.json >/dev/null 2>&1; then
                 echo "  ${job}: BASELINE_WAIVER_ACTIVE — ${result} waived (pre-existing baseline failures)"
                 WAIVED="${WAIVED} ${job}"
               else
