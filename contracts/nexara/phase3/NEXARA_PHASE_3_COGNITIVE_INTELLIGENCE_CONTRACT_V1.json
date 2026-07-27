@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NEXARA Phase 3 Cognitive Intelligence Implementation Contract",
+  "governed_by": "NSEC V2.1",
+  "baseline": "abb7e8b9a856ef0d70280189c07a9b4b4d809b12",
+  "modules": {
+    "3A": "DeepReasoningEngine (multi-hypothesis, strategy comparison, counterfactual)",
+    "3B": "StrategicPlanningEngine (goal decomposition, dependency graph, drift detection)",
+    "3C": "GovernedWorldModel (fact/inference/forecast separation, provenance, freshness)",
+    "3D": "MetaCognitionController (knowns, unknowns, calibration, overconfidence, safe stop)",
+    "3E": "ResearchIntelligenceEngine (question→plan→collect→synthesize→brief)"
+  },
+  "test_results": {
+    "phase3_pass": 58,
+    "full_regression_pass": 1526,
+    "pre_existing_fail": 23
+  },
+  "ruff": "0 new errors",
+  "claude_pre_review": "APPROVED (A, 95.6/100, P0=0)",
+  "phase1_diff": 0,
+  "phase2a_diff": 0,
+  "phase2b_diff": 0,
+  "phase2c_diff": 0,
+  "phase2d_diff": 0
+}
