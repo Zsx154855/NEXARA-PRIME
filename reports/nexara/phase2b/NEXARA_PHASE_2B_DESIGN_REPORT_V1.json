@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "mission": "NEXARA_PHASE_2B_DESIGN_GATE_V1",
+  "phase": "DESIGN_ONLY",
+  "status": "FROZEN",
+  "head": "593f7070839c9a01ea98c3e4c39741cbdfa1fe16",
+  "contract_sha256": "b285ade211206677fdc6bd92e836f6b05f69821231ff2c9c9fad9e676b44b099",
+  "components": 2,
+  "new_files": 2,
+  "test_target": "70+",
+  "runtime_protection": "ZERO_MODIFICATION — brain layer only",
+  "principles_verified": [
+    "BRAIN_ABOVE_RUNTIME",
+    "MEMORY_FOUNDATION",
+    "EVIDENCE_BACKED",
+    "PERSONAL_SOVEREIGN",
+    "INCREMENTAL_ACTIVATION"
+  ],
+  "forbidden_enforced": 5,
+  "ready_for_claude_review": true
+}

@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NEXARA Phase 2B Read-Only Independent Review",
+  "reviewer": "Claude (Independent Reviewer)",
+  "reviewed_at": "2026-07-27T11:30:00.000000+00:00",
+  "review_target": "Phase 2B Frozen Tree (preference_model + experience_learner)",
+  "review_type": "READ-ONLY — no code modifications",
+  "head_claimed": "593f7070839c9a01ea98c3e4c39741cbdfa1fe16",
+
+  "overall_verdict": "FAIL",
+  "verdict_rationale": "3 P0 blocking findings: contract SHA mismatch, MockMC routing mismatch that would cause silent production failures, and entire tree is untracked (not committed). Cannot certify as a frozen tree.",
+
+  "source_files_reviewed": {
+    "src/nexara_prime/brain/preference_model.py": {
+      "exists_on_disk": true,
+      "in_git": false,
+      "in_head_commit": false,
+      "lines": 119,
+      "classes": 2,
+      "public_methods": 8
+    },
+    "src/nexara_prime/brain/experience_learner.py": {
+      "exists_on_disk": true,
+      "in_git": false,
+      "in_head_commit": false,
+      "lines": 139,
+      "classes": 3,
+      "public_methods": 7
+    },
+    "src/nexara_prime/brain/consolidation_rules.py": {
+      "exists_on_disk": true,
+      "in_git": true,
+      "in_head_commit": true,
+      "lines": 60,
+      "dirty": true,
+      "dirty_lines": "+2 (\"experience\": \"episodic\" entry)"
+    }
+  },
+
+  "test_results": {
+    "phase2b_total": 28,
+    "phase2b_pass": 28,
+    "phase2b_fail": 0,
+    "phase2b_skipped": 0,
+    "pytest_verified": true,
+    "pytest_command": "pytest tests/brain/phase2b/ -v --tb=short",
+    "pytest_output_abbreviated": "28 passed in 0.14s"
+  },
+
+  "ruff": {
+    "status": "0 errors (claimed)",
+    "verified": false,
+    "note": "Not independently re-run; accepting as reported"
+  },
+
+  "git_status": {
+    "HEAD": "48f848e feat(nexara): implement phase 2a autonomy boundary and knowledge graph",
+    "phase2b_files_tracked": false,
+    "untracked": [
+      "src/nexara_prime/brain/preference_model.py",
+      "src/nexara_prime/brain/experience_learner.py",
+      "tests/brain/phase2b/",
+      "contracts/nexara/phase2b/",
+      "evidence/nexara/phase2b/"
+    ],
+    "modified_tracked": [
+      "src/nexara_prime/brain/consolidation_rules.py (+2 lines)"
+    ],
+    "dirty_outside_scope": [
+      "src/nexara_prime/cli.py (+14/-?)",
+      "src/nexara_prime/model_router.py (+2/-?)",
+      "src/nexara_prime/runtime.py (+166/-?)"
+    ]
+  },
+
+  "review_criteria": {
+    "api_alignment": {
+      "result": "PASS_WITH_NOTES",
+      "details": {
+        "preference_model_api": "All 8 public methods follow MemoryController interface pattern (commit/recall/rank_retrieve). No direct DB, no runtime imports.",
+        "experience_learner_api": "All 7 public methods follow MemoryController interface. record_outcome/record_lesson use commit(); extract_patterns/rank_experiences/get_lessons use recall/rank_retrieve.",
+        "mock_mc_fidelity": "FAIL — MockMC routing for kind='procedural' diverges from real classify_layer (see FINDING-02)"
+      }
+    },
+    "test_quality": {
+      "result": "PASS_WITH_FINDINGS",
+      "details": {
+        "test_count": 28,
+        "coverage_areas": ["CRUD", "ranking", "decay", "conflict resolution", "profile", "pattern extraction", "lessons", "pruning", "summary", "isolation"],
+        "happy_path": true,
+        "edge_cases": true,
+        "negative_cases": true,
+        "isolation_tests": 4,
+        "vacuum_test_scan": "No vacuously passing tests found (all have meaningful assertions).",
+        "notes": [
+          "test_decay_reduces_weights checks count (>=1) but not actual weight/confidence values — shallow assertion",
+          "test_rank_returns_experiences checks isinstance(list) but not ranking order — weak assertion",
+          "test_get_lessons_returns_list checks isinstance(list) but not lesson content — weak assertion"
+        ]
+      }
+    },
+    "runtime_boundary": {
+      "result": "FAIL",
+      "details": {
+        "phase2b_modules_clean": "FAIL — consolidation_rules.py has uncommitted +2 line change; preference_model.py and experience_learner.py are untracked",
+        "protected_files_dirty": "FAIL — cli.py, model_router.py, runtime.py all have uncommitted changes (violates NEXARA gate rule: '3 dirty files NEVER staged')",
+        "no_runtime_imports_in_phase2b_modules": "PASS — isolation tests confirm zero imports from runtime, cli, api, model_gateway, governance, evidence, tools",
+        "no_direct_db_imports": "PASS — both modules use MemoryController interface, no brain.db imports"
+      }
+    },
+    "governance_compliance": {
+      "result": "FAIL",
+      "details": {
+        "contract_sha_integrity": "FAIL — Receipt claims contract_sha=7148ef9f72... but actual contract SHA-256 is 90ca8ee4afdd... (see FINDING-01)",
+        "receipt_self_hash": "NOT_CHECKED — receipt has no self-hash field",
+        "frozen_tree_claim": "FAIL — claimed frozen at HEAD 593f7070 but zero Phase 2B files exist in that commit (git show HEAD:<path> returns 'fatal: path exists on disk, but not in ...')",
+        "contract_head_claim": "593f7070839c9a01ea98c3e4c39741cbdfa1fe16",
+        "actual_head": "48f848e (different commit — Phase 2A, not Phase 2B)",
+        "evidence_artifacts_tracked": "FAIL — contracts/nexara/phase2b/ and evidence/nexara/phase2b/ are untracked"
+      }
+    }
+  },
+
+  "findings": [
+    {
+      "id": "FINDING-01",
+      "severity": "P0",
+      "category": "evidence_integrity",
+      "title": "Contract SHA mismatch in receipt",
+      "detail": "Receipt (NEXARA_PHASE_2B_IMPLEMENTATION_RECEIPT_V1.json) claims contract_sha='7148ef9f727d0d552fa96fc3f41ba56c44ee32ebae97abdad2e9f5835636ab76' but the actual SHA-256 of the contract file on disk is '90ca8ee4afdd352bb79f01fbf45f4f122dc315db960d31bb467e0f02f89b532b'. This breaks the evidence chain — the receipt cannot be trusted to reference the correct contract.",
+      "recommendation": "Recompute contract SHA-256 and update receipt's contract_sha field. Re-run shasum -a 256 on the contract file."
+    },
+    {
+      "id": "FINDING-02",
+      "severity": "P0",
+      "category": "test_quality",
+      "title": "MockMC routing mismatch for kind='procedural' — silent production failure",
+      "detail": "ExperienceLearner.record_lesson() commits with kind='procedural'. In MockMC (_LAYER_MAP), 'procedural' maps to layer='procedural'. In the real ConsolidationRules.KIND_TO_LAYER, there is NO 'procedural' key — classify_layer('procedural') returns default 'semantic'. get_lessons() queries layers=['procedural'], so in production it would find ZERO lessons. Tests pass because the mock routes differently than production. This is the exact pitfall warned about in the implementation-review skill: 'When MockMC replicates layer-mapping, cross-reference the mock's maps against the real production rules.'",
+      "recommendation": "Either (a) add MemoryKind.PROCEDURAL='procedural' to the enum and a 'procedural':'procedural' entry to KIND_TO_LAYER, or (b) change record_lesson to use kind='lesson' and add 'lesson':'procedural' to KIND_TO_LAYER. Then update MockMC _LAYER_MAP to match."
+    },
+    {
+      "id": "FINDING-03",
+      "severity": "P0",
+      "category": "governance",
+      "title": "Frozen tree is not committed — zero Phase 2B files in git",
+      "detail": "The contract claims the tree is frozen at HEAD 593f7070839c9a01ea98c3e4c39741cbdfa1fe16. However: (1) git show HEAD:src/nexara_prime/brain/preference_model.py fails with 'exists on disk, but not in commit'; (2) git ls-files returns empty for both source files; (3) git status shows all Phase 2B files as untracked (??). The 'frozen tree' has no version control — it exists only on the local filesystem.",
+      "recommendation": "Commit all Phase 2B files to git before claiming a frozen tree. A frozen tree must have a verifiable git commit containing all source, test, contract, and evidence artifacts."
+    },
+    {
+      "id": "FINDING-04",
+      "severity": "P1",
+      "category": "runtime_boundary",
+      "title": "Protected runtime files have uncommitted changes",
+      "detail": "NEXARA gate rules explicitly state '3 dirty files NEVER staged: cli.py, model_router.py, runtime.py'. All three have significant uncommitted changes: cli.py (+14 lines: Chief Brain integration), model_router.py (+2: mock tier change), runtime.py (+166: model pool, routing, brain gates). These changes are outside Phase 2B scope.",
+      "recommendation": "Either commit these changes in a separate PR before Phase 2B, or stash them to keep the Phase 2B review boundary clean."
+    },
+    {
+      "id": "FINDING-05",
+      "severity": "P1",
+      "category": "runtime_boundary",
+      "title": "consolidation_rules.py has uncommitted Phase 2B change",
+      "detail": "The '+2 lines' adding 'experience':'episodic' to KIND_TO_LAYER is an uncommitted modification to a tracked file. This is the only Phase 2B change touching an existing file.",
+      "recommendation": "Include consolidation_rules.py in the Phase 2B commit scope."
+    },
+    {
+      "id": "FINDING-06",
+      "severity": "P1",
+      "category": "api_alignment",
+      "title": "MemoryKind enum missing 'experience' value — raw string bypasses type safety",
+      "detail": "ExperienceLearner uses kind='experience' (raw string) in 4 places (record_outcome, extract_patterns, rank_experiences, prune_irrelevant). The MemoryKind enum has 13 values but no EXPERIENCE='experience' member. ConsolidationRules.KIND_TO_LAYER maps the raw string 'experience' to 'episodic', bypassing the enum type-safety layer that all other kinds use.",
+      "recommendation": "Add MemoryKind.EXPERIENCE = 'experience' to the enum in models.py, then reference it via MemoryKind.EXPERIENCE.value in consolidation_rules.py and MemoryKind.EXPERIENCE in experience_learner.py."
+    },
+    {
+      "id": "FINDING-07",
+      "severity": "P2",
+      "category": "governance",
+      "title": "Contract method and test counts don't match actual code",
+      "detail": "Contract claims PREF-01 has 6 methods (actual: 8 public) and 15 tests (actual: 13 in test_preference_model.py). EXP-01 claims 6 methods (actual: 7 public) and 13 tests (actual: 11 in test_experience_learner.py + 4 isolation = 15 total, but isolation tests aren't module-specific).",
+      "recommendation": "Update contract method counts to match actual code, or explain counting methodology."
+    },
+    {
+      "id": "FINDING-08",
+      "severity": "P2",
+      "category": "code_quality",
+      "title": "Unnecessary # noqa: F401 on used import",
+      "detail": "experience_learner.py line 5: 'import json  # noqa: F401'. The 'json' module IS used throughout the file (json.dumps, json.loads on lines 65, 75, 110, 124, 129), so F401 would never fire. The annotation is noise.",
+      "recommendation": "Remove the '# noqa: F401' comment."
+    },
+    {
+      "id": "FINDING-09",
+      "severity": "P2",
+      "category": "test_quality",
+      "title": "MockMC _LAYER_MAP has dead 'lesson' entry",
+      "detail": "conftest.py _LAYER_MAP includes '\"lesson\": \"procedural\"' but no code path uses kind='lesson'. record_lesson uses kind='procedural', not kind='lesson'. Dead code in test infrastructure.",
+      "recommendation": "Remove unused 'lesson' entry from MockMC _LAYER_MAP, or align it with the real rules (where classify_layer('lesson') would return 'semantic' by default)."
+    }
+  ],
+
+  "canonical_hashes": {
+    "algorithm": "SHA-256",
+    "contract_disk": "90ca8ee4afdd352bb79f01fbf45f4f122dc315db960d31bb467e0f02f89b532b",
+    "contract_receipt_claimed": "7148ef9f727d0d552fa96fc3f41ba56c44ee32ebae97abdad2e9f5835636ab76",
+    "contract_match": false,
+    "receipt_disk": "384827ee81b35ec174a044017fdac82fb7010866eb50d91c68e85e1bd10d0fa3"
+  },
+
+  "closure_criteria": {
+    "phase2b_tests_pass": { "claim": "28/28", "verified": true },
+    "full_regression_pass": { "claim": "1407/21 pre-existing", "verified": false, "note": "Not independently re-run; accepting as reported" },
+    "ruff_zero": { "claim": "0 new", "verified": false, "note": "Not independently re-run; accepting as reported" },
+    "phase1_diff_zero": { "claim": true, "verified": false, "note": "Cannot verify — Phase 2B files are not committed; no diff baseline exists" },
+    "phase2a_diff_zero": { "claim": true, "verified": false, "note": "Cannot verify — working tree has uncommitted Phase 2A-era changes in cli.py, model_router.py, runtime.py" },
+    "frozen_tree": { "claim": true, "verified": false, "note": "All Phase 2B files are untracked — no frozen commit exists" }
+  },
+
+  "observations": {
+    "positive": [
+      "All 28 Phase 2B tests pass (0.14s)",
+      "Both modules correctly use MemoryController interface — no direct DB, no runtime imports",
+      "Isolation tests provide good boundary enforcement (4 tests covering forbidden imports)",
+      "Code is well-structured: dataclass entities, serialization helpers, delegate-to-MC pattern",
+      "PreferenceModel covers CRUD, ranking, decay, conflict resolution, and profile summarization",
+      "ExperienceLearner covers recording, pattern extraction, ranking, lessons, pruning, and summarization"
+    ],
+    "concerns": [
+      "Entire Phase 2B tree is untracked — no git commit to freeze against",
+      "MockMC layer routing diverges from real ConsolidationRules in at least one critical path (kind='procedural')",
+      "Contract SHA is wrong in receipt — evidence chain is broken",
+      "Three protected NEXARA runtime files have uncommitted changes outside Phase 2B scope"
+    ]
+  }
+}

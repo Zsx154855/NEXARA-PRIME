@@ -32,6 +32,9 @@ KIND_TO_LAYER: dict[str, str] = {
     MemoryKind.PATCH.value: "procedural",
     MemoryKind.SKILL_IMPROVEMENT.value: "procedural",
     MemoryKind.SYSTEM_RULE.value: "procedural",
+    # Phase 2B experience learner uses "experience" kind for recorded outcomes
+    "experience": "episodic",
+    "procedural": "procedural",
 }
 
 

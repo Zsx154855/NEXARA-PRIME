@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_nexara_phase2b_design_v1",
+  "mission": "NEXARA_PHASE_2B_DESIGN_GATE_V1",
+  "contract_sha256": "b285ade211206677fdc6bd92e836f6b05f69821231ff2c9c9fad9e676b44b099",
+  "head": "593f7070839c9a01ea98c3e4c39741cbdfa1fe16",
+  "components": [
+    "PREF-01 PreferenceModel",
+    "EXP-01 ExperienceLearner"
+  ],
+  "artifacts": [
+    "contracts/nexara/phase2b/",
+    "reports/nexara/phase2b/",
+    "evidence/nexara/phase2b/"
+  ],
+  "governance": "NSEC V2.1",
+  "next_gate": "CLAUDE_INDEPENDENT_ARCHITECTURE_REVIEW_REQUIRED"
+}

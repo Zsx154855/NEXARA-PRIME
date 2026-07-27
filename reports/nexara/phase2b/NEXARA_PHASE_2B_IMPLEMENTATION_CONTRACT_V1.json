@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/nexara/phase2b/implementation_contract_v1.json",
+  "title": "NEXARA Phase 2B Implementation Contract",
+  "governed_by": "NSEC V2.1",
+  "baseline": "593f7070839c9a01ea98c3e4c39741cbdfa1fe16",
+  "frozen_at": "2026-07-27T10:57:52.105275+00:00",
+  "modules": {
+    "PREF-01": {
+      "file": "src/nexara_prime/brain/preference_model.py",
+      "methods": 6
+    },
+    "EXP-01": {
+      "file": "src/nexara_prime/brain/experience_learner.py",
+      "methods": 6
+    }
+  },
+  "test_results": {
+    "phase2b_pass": 28,
+    "full_regression_pass": 1407,
+    "pre_existing_fail": 21
+  },
+  "ruff": "0 errors (Phase 2B files)",
+  "phase1_diff": 0,
+  "phase2a_diff": 0,
+  "claude_readonly_review": "PENDING",
+  "p0_p1_findings": "awaiting review"
+}

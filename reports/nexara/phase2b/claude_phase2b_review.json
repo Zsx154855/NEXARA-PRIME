@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "review_id": "claude_phase2b_review_v1",
+  "mission": "NEXARA_PHASE_2B_DESIGN_GATE_V1",
+  "reviewer": "Claude (independent architecture reviewer)",
+  "reviewed_at": "2026-07-27T11:15:00+00:00",
+  "baseline": "593f7070839c9a01ea98c3e4c39741cbdfa1fe16",
+  "current_head": "48f848eb95e71d459629fcfd7fbceb2dd3ffb828",
+  "contract_sha256": "b285ade211206677fdc6bd92e836f6b05f69821231ff2c9c9fad9e676b44b099",
+  "report_sha256": "69a6ab9c3683eb6c0be41a8c225ddee09092a9e653537a57f503fd701fa6a0d5",
+  "verdict": "APPROVED_WITH_ISSUES",
+  "issues": {
+    "critical": 2,
+    "warning": 3,
+    "info": 1
+  },
+  "checks": {
+    "sha256_integrity": {
+      "status": "PASS_WITH_NOTE",
+      "details": {
+        "contract_sha256_matches_receipt": true,
+        "contract_sha256_matches_report": true,
+        "report_sha256_in_receipt": false,
+        "note": "Receipt carries contract_sha256 but NOT report_sha256. Per NEXARA governance pattern, receipts should cross-reference both frozen artifacts. Recommend adding report_sha256 field."
+      }
+    },
+    "design_completeness": {
+      "status": "PASS",
+      "details": {
+        "components_count": 2,
+        "pref01_methods": ["record_behavior", "infer_preference", "update_weights", "resolve_conflict", "get_profile", "summarize"],
+        "pref01_methods_count": 6,
+        "exp01_methods": ["record_mission_outcome", "extract_pattern", "rank_experiences", "get_lessons", "prune_irrelevant", "summarize"],
+        "exp01_methods_count": 6,
+        "schemas_defined": true,
+        "model_format_specified": true,
+        "test_target": "70+ (30 pref + 30 exp + 10 isolation)",
+        "file_manifest_complete": true,
+        "new_files": ["src/nexara_prime/brain/preference_model.py", "src/nexara_prime/brain/experience_learner.py"],
+        "test_files": ["tests/brain/phase2b/test_preference_model.py", "tests/brain/phase2b/test_experience_learner.py", "tests/brain/phase2b/test_isolation.py"]
+      }
+    },
+    "principles_enforced": {
+      "status": "PASS_WITH_ISSUES",
+      "details": {
+        "BRAIN_ABOVE_RUNTIME": {
+          "status": "PASS",
+          "evidence": "Both components in src/nexara_prime/brain/. Dependency graph restricts to MemoryController + KnowledgeGraph. No runtime imports. protected_phase1_files block runtime.py."
+        },
+        "MEMORY_FOUNDATION": {
+          "status": "PASS",
+          "evidence": "Both components read via MemoryController.rank_retrieve() (exists in brain/memory_controller.py), write via MemoryController.commit() (exists with full signature). MemoryController enforces evidence binding for non-working layers."
+        },
+        "EVIDENCE_BACKED": {
+          "status": "PASS",
+          "evidence": "All capabilities specify evidence_kind. Both schemas include evidence_id column. MemoryController.commit() rejects EVIDENCE_REQUIRED_KINDS without evidence_id."
+        },
+        "PERSONAL_SOVEREIGN": {
+          "status": "PASS",
+          "evidence": "Contract explicitly states 'single-owner model — no federated learning, no telemetry'. Forbidden action #3: 'preference data leaves local environment'. No external system dependencies in dependency graph."
+        },
+        "INCREMENTAL_ACTIVATION": {
+          "status": "FAIL",
+          "evidence": "Activation gates defined via AutonomousBoundary.check() but the action IDs ('preference_model_activate', 'experience_learning_activate') are NOT in any boundary set (ALLOWED/BLOCKED/APPROVAL_REQUIRED). They fall through to default-allowed. Furthermore, the contract uses string comparison '== ALLOWED' but check() returns a BoundaryDecision dataclass — the correct check is '.allowed == True'. See critical issues below."
+        }
+      }
+    },
+    "dependency_graph_valid": {
+      "status": "PASS",
+      "details": {
+        "PreferenceModel": {
+          "reads_memory_controller_rank_retrieve": true,
+          "reads_path": "MemoryController.rank_retrieve — EXISTS in brain/memory_controller.py:211",
+          "writes_memory_controller_commit": true,
+          "writes_path": "MemoryController.commit() — EXISTS in brain/memory_controller.py:62",
+          "requires_knowledge_graph": true,
+          "requires_path": "KnowledgeGraph — EXISTS in brain/knowledge_graph.py",
+          "note": "commit() signature is (mission_id, key, content, kind, ...) — the contract shorthand 'commit(preferences)' is semantically correct as the kind='preference' binding"
+        },
+        "ExperienceLearner": {
+          "reads_memory_controller_rank_retrieve": true,
+          "reads_evidence_store": true,
+          "reads_evidence_store_path": "EvidenceStore — EXISTS in src/nexara_prime/evidence.py:13",
+          "writes_memory_controller_commit": true,
+          "requires_knowledge_graph": true,
+          "requires_path": "KnowledgeGraph — EXISTS in brain/knowledge_graph.py"
+        }
+      }
+    },
+    "forbidden_actions_blocked": {
+      "status": "FAIL",
+      "details": {
+        "blocked_1_preference_auto_activate": {
+          "description": "preference_model auto-activates without human approval",
+          "status": "NOT_ENFORCED",
+          "finding": "The activation gate checks AutonomousBoundary.check('preference_model_activate'). This action ID is NOT in AUTONOMOUS_BLOCKED, AUTONOMOUS_ALLOWED, or APPROVAL_REQUIRED sets. boundary.py defaults unknown actions to ALLOWED (response='PROCEED'). Verified by live boundary test: check('preference_model_activate') → allowed=True, response='PROCEED'. No human approval gate exists.",
+          "recommendation": "Add 'preference_model_activate' to APPROVAL_REQUIRED set in brain/evolution/boundary.py, OR add an explicit human-approval validation path in the activation sequence."
+        },
+        "blocked_2_runtime_dispatch": {
+          "description": "experience patterns modify runtime dispatch logic",
+          "status": "PASS",
+          "finding": "Both components are brain-layer only. Dependency graph restricts reads to MemoryController + EvidenceStore + KnowledgeGraph, writes via MemoryController.commit(). No runtime dispatch hooks. Protected Phase 1 files block runtime.py modification."
+        },
+        "blocked_3_data_leaves_local": {
+          "description": "preference data leaves local environment",
+          "status": "PASS_AS_POLICY",
+          "finding": "Enforced by PERSONAL_SOVEREIGN principle and architectural isolation (brain layer, no external system imports). No explicit technical exfiltration guard — this is a policy-level constraint consistent with the design-only phase.",
+          "recommendation": "During implementation, consider adding a data-egress assertion in MemoryController that verifies commit() target locality."
+        },
+        "blocked_4_multi_user": {
+          "description": "multi-user profile separation (not in scope)",
+          "status": "PASS_ACKNOWLEDGED",
+          "finding": "Acknowledged as out-of-scope design constraint. Single-owner model consistent with PERSONAL_SOVEREIGN principle."
+        },
+        "blocked_5_weight_export": {
+          "description": "model weight export to external systems",
+          "status": "PASS_AS_POLICY",
+          "finding": "Policy-level constraint. No export API defined in design. PreferenceModel.get_profile() returns PreferenceProfile for audit, not external export.",
+          "recommendation": "During implementation, ensure get_profile() output is for local audit only and does not serialize model internals."
+        }
+      }
+    },
+    "activation_gates": {
+      "status": "FAIL",
+      "details": {
+        "preference_model_enabled": {
+          "contract_gate": "AutonomousBoundary.check('preference_model_activate') == ALLOWED",
+          "issues": [
+            "check() returns BoundaryDecision dataclass, not string. '== ALLOWED' would fail against an object. Correct: check(...).allowed == True",
+            "'preference_model_activate' not in any boundary set — defaults to allowed. No human-approval path exists despite contract claiming approval requirement."
+          ]
+        },
+        "experience_learning_enabled": {
+          "contract_gate": "AutonomousBoundary.check('experience_learning_activate') == ALLOWED",
+          "issues": [
+            "Same BoundaryDecision vs string comparison issue.",
+            "'experience_learning_activate' not in any boundary set — defaults to allowed."
+          ]
+        },
+        "pattern_extraction_auto": {
+          "contract_gate": "BLOCKED — requires EVO-07 R3 capability gate",
+          "issues": [
+            "Contract says BLOCKED but 'pattern_extraction_auto' is NOT in AUTONOMOUS_BLOCKED set. Live test: check('pattern_extraction_auto') → allowed=True. Implementation MUST add this to AUTONOMOUS_BLOCKED."
+          ]
+        }
+      }
+    },
+    "protected_files_exist": {
+      "status": "PASS",
+      "details": {
+        "runtime.py": "/Users/agentos/NEXARA-PRIME/src/nexara_prime/runtime.py",
+        "models.py": "/Users/agentos/NEXARA-PRIME/src/nexara_prime/models.py",
+        "memory_controller.py": "/Users/agentos/NEXARA-PRIME/src/nexara_prime/brain/memory_controller.py",
+        "reasoning_dir": "/Users/agentos/NEXARA-PRIME/src/nexara_prime/brain/reasoning/",
+        "evolution_dir": "/Users/agentos/NEXARA-PRIME/src/nexara_prime/brain/evolution/"
+      }
+    }
+  },
+  "critical_issues": [
+    {
+      "id": "CRIT-01",
+      "severity": "critical",
+      "area": "activation_gates",
+      "title": "Activation gate string comparison is semantically wrong",
+      "description": "Contract specifies 'AutonomousBoundary.check(...) == ALLOWED' but check() returns a BoundaryDecision dataclass, not a string. The condition would always evaluate False. Correct check: check(...).allowed == True or check(...).response == 'PROCEED'.",
+      "impact": "Implementation following the contract literally would produce non-functional activation gates.",
+      "fix": "Update contract and implementation to use check(...).allowed == True OR add __eq__ to BoundaryDecision that accepts string 'ALLOWED'/'PROCEED'."
+    },
+    {
+      "id": "CRIT-02",
+      "severity": "critical",
+      "area": "forbidden_actions + activation_gates",
+      "title": "Preference model activation lacks human approval enforcement",
+      "description": "Forbidden action #1 states 'preference_model auto-activates without human approval'. But 'preference_model_activate' is not in AUTONOMOUS_BLOCKED, AUTONOMOUS_ALLOWED, or APPROVAL_REQUIRED boundary sets. boundary.py defaults unknown actions to ALLOWED. The activation gate would pass without any human interaction.",
+      "impact": "PreferenceModel could activate autonomously, violating the design contract's primary forbidden action.",
+      "fix": "Add 'preference_model_activate' and 'experience_learning_activate' to APPROVAL_REQUIRED set in brain/evolution/boundary.py. Alternatively, add a dedicated human-approval step before the boundary check."
+    }
+  ],
+  "warnings": [
+    {
+      "id": "WARN-01",
+      "severity": "warning",
+      "area": "activation_gates",
+      "title": "pattern_extraction_auto not actually blocked in boundary",
+      "description": "Contract says 'pattern_extraction_auto: BLOCKED — requires EVO-07 R3 capability gate'. But 'pattern_extraction_auto' is NOT in AUTONOMOUS_BLOCKED. Live test shows check() returns allowed=True.",
+      "fix": "Add 'pattern_extraction_auto' to AUTONOMOUS_BLOCKED set in brain/evolution/boundary.py."
+    },
+    {
+      "id": "WARN-02",
+      "severity": "warning",
+      "area": "receipt",
+      "title": "Receipt missing report_sha256 cross-reference",
+      "description": "Receipt carries contract_sha256 but not report_sha256. Per NEXARA governance pattern, receipts should cross-reference both frozen artifacts for chain-of-custody.",
+      "fix": "Add report_sha256 field to receipt: 'report_sha256': '69a6ab9c3683eb6c0be41a8c225ddee09092a9e653537a57f503fd701fa6a0d5'."
+    },
+    {
+      "id": "WARN-03",
+      "severity": "warning",
+      "area": "design_completeness",
+      "title": "EvidenceStore dependency at non-brain import path",
+      "description": "ExperienceLearner reads from EvidenceStore which lives at src/nexara_prime/evidence.py (outside brain/). While EvidenceStore exists and is valid, importing from outside the brain layer could violate BRAIN_ABOVE_RUNTIME if evidence.py has runtime imports. Current evidence.py imports SQLiteStore, EventBus, and models — all infrastructure, not runtime. Acceptable but worth noting.",
+      "fix": "Document in implementation contract that ExperienceLearner must import EvidenceStore through a brain-layer adapter to maintain isolation."
+    }
+  ],
+  "info": [
+    {
+      "id": "INFO-01",
+      "severity": "info",
+      "area": "dependency_graph",
+      "title": "MemoryController.commit() signature not explicitly matched to contract shorthand",
+      "description": "Contract says 'MemoryController.commit(preferences)' and 'MemoryController.commit(experiences)'. Actual commit() signature is (mission_id, key, content, kind, ...). The contract uses semantic shorthand (kind='preference'/'experience'). Implementation should use kind='preference' for PREF-01 and kind='experience' for EXP-01 to align with MemoryController's evidence-binding classification. The 'preference' kind is already in EVIDENCE_REQUIRED_KINDS — ensure 'experience' is added."
+    }
+  ],
+  "verified_dependencies": {
+    "MemoryController.rank_retrieve": {"exists": true, "file": "src/nexara_prime/brain/memory_controller.py", "line": 211},
+    "MemoryController.commit": {"exists": true, "file": "src/nexara_prime/brain/memory_controller.py", "line": 62},
+    "KnowledgeGraph": {"exists": true, "file": "src/nexara_prime/brain/knowledge_graph.py", "line": 76},
+    "EvidenceStore": {"exists": true, "file": "src/nexara_prime/evidence.py", "line": 13},
+    "AutonomousBoundary.check": {"exists": true, "file": "src/nexara_prime/brain/evolution/boundary.py", "line": 101},
+    "AutonomousBoundary.is_allowed": {"exists": true, "file": "src/nexara_prime/brain/evolution/boundary.py", "line": 170}
+  },
+  "summary": "NEXARA Phase 2B Design Contract is architecturally sound and well-structured. All 5 design principles have deliberate enforcement mechanisms. The dependency graph is valid — every declared dependency exists in the codebase. Both components have complete method specifications, schemas, and test targets. However, the review identifies 2 critical issues and 3 warnings that must be addressed before implementation: (1) the activation gate string comparison '== ALLOWED' is wrong — check() returns a BoundaryDecision dataclass, not a string; (2) the primary forbidden action 'preference_model auto-activates without human approval' is not enforced — the action IDs fall through to default-allowed in the boundary; (3) 'pattern_extraction_auto' is not in AUTONOMOUS_BLOCKED despite the contract declaring it blocked; (4) the receipt is missing the report_sha256 cross-reference; (5) EvidenceStore lives outside brain/ which merits an import-path note. The design is APPROVED_WITH_ISSUES — fix the 2 critical issues before proceeding to implementation.",
+  "next_gate": "HUMAN_REVIEW_REQUIRED — address CRIT-01 and CRIT-02 before NEXARA_PHASE_2B_IMPLEMENTATION"
+}
