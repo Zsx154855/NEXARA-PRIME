@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/runtime_integration/runtime_integration_design_v1.json",
+  "title": "NEXARA Runtime Integration — Architecture Design V1",
+  "description": "Defines how the 5-plane architecture (Control, Execution, Capability, Provider, Tool) integrates with NexaraRuntime V2. Design only — no implementation.",
+  "frozen_at": "2026-07-27T06:30:00Z",
+  "governed_by": "NSEC V2.1",
+  "pr24_baseline": {
+    "kma_merged": "a0f9d16b",
+    "what_kma_added": "MemoryKernel idempotency, EvidenceStore public API, CircuitBreaker consolidation, KnowledgeService supersession, ChiefBrainKernel recall()",
+    "what_5_planes_add": "Structured agent lifecycle, capability-driven routing, provider-agnostic selection, tool sandbox, evidence chain"
+  },
+  "runtime_boundary": {
+    "layers": {
+      "contracts": {
+        "role": "Design contracts — JSON schemas, validators, type definitions",
+        "runtime_access": "read-only reference at import time"
+      },
+      "runtime": {
+        "role": "NEW additive layer — plane controllers, adapters, bridges",
+        "location": "src/nexara_prime/ — NEW files only, no existing file modification"
+      },
+      "evidence": {
+        "role": "EvidenceStore — append-only evidence persistence",
+        "existing": "src/nexara_prime/evidence.py — reused, not modified"
+      },
+      "memory": {
+        "role": "MemoryKernel — knowledge persistence with evidence binding",
+        "existing": "src/nexara_prime/memory.py — reused, not modified"
+      }
+    },
+    "new_files_allowed": [
+      "src/nexara_prime/mission_lifecycle.py — Control Plane controller",
+      "src/nexara_prime/execution_plane.py — Execution Plane controller",
+      "src/nexara_prime/capability_resolver.py — Capability → Provider resolution",
+      "src/nexara_prime/provider_adapter.py — Provider adapter registry",
+      "src/nexara_prime/tool_registry.py — Tool registry runtime",
+      "src/nexara_prime/cross_ref.py — CrossRefValidator runtime (from contracts/)"
+    ],
+    "existing_files_protected": [
+      "src/nexara_prime/runtime.py — NexaraRuntime (read only)",
+      "src/nexara_prime/evidence.py — EvidenceStore (read only)",
+      "src/nexara_prime/memory.py — MemoryKernel (read only)",
+      "src/nexara_prime/model_router.py — ModelRouter (read only)",
+      "src/nexara_prime/model_gateway.py — ModelGateway (read only)",
+      "src/nexara_prime/tools.py — ToolRuntime (read only, wrapped by adapter)",
+      "src/nexara_prime/capabilities.py — CapabilityRegistry (read only, extended by resolver)"
+    ]
+  },
+  "nexara_runtime_v2": {
+    "description": "NexaraRuntime V2 adds 6 new modules as additive platform layer above V1. Existing runtime unchanged.",
+    "modules": {
+      "mission_runtime": {
+        "file": "mission_lifecycle.py",
+        "purpose": "Control Plane controller — state transitions, lease management, heartbeat monitoring",
+        "delegates_to": "MissionStateMachine (existing)",
+        "evidence": "state_transition events → EvidenceStore"
+      },
+      "capability_resolver": {
+        "file": "capability_resolver.py",
+        "purpose": "Capability → Provider resolution pipeline (6-step)",
+        "delegates_to": "CapabilityRegistry (existing)",
+        "evidence": "resolution decisions → EvidenceStore"
+      },
+      "provider_router": {
+        "file": "provider_adapter.py",
+        "purpose": "Provider adapter registry + multi-dim scoring + selection",
+        "delegates_to": "ModelRouter + CircuitBreaker (existing)",
+        "evidence": "routing decisions → EvidenceStore"
+      },
+      "tool_adapter": {
+        "file": "tool_registry.py",
+        "purpose": "Tool registry runtime — capability-gated tool dispatch",
+        "delegates_to": "ToolRuntime (existing)",
+        "evidence": "ToolInvocation records → EvidenceStore"
+      },
+      "cross_ref_runtime": {
+        "file": "cross_ref.py",
+        "purpose": "Runtime CrossRefValidator — ported from contracts/mission_lifecycle/",
+        "delegates_to": "EvidenceStore (existing)",
+        "evidence": "validation results → EvidenceStore"
+      },
+      "execution_controller": {
+        "file": "execution_plane.py",
+        "purpose": "Execution Plane controller — agent dispatch, lease enforcement, failure recovery",
+        "delegates_to": "mission_lifecycle + tool_registry",
+        "evidence": "execution events → EvidenceStore"
+      }
+    }
+  },
+  "flows": {
+    "startup": [
+      "1. NexaraRuntime.__init__() — existing V1 init",
+      "2. Load CapabilityRegistry (existing)",
+      "3. Load ToolRegistry (NEW — wraps ToolRuntime)",
+      "4. Load ProviderAdapterRegistry (NEW — wraps ModelRouter)",
+      "5. Load MissionLifecycleController (NEW — wraps MissionStateMachine)",
+      "6. Load ExecutionController (NEW — binds all above)",
+      "7. Runtime ready. Awaiting mission."
+    ],
+    "mission_execution": [
+      "1. Mission received → MissionLifecycleController creates mission, transitions to CREATED",
+      "2. CapabilityResolver resolves mission needs → capabilities → providers",
+      "3. ExecutionController dispatches agents with leases",
+      "4. Agent invokes tools through ToolRegistry → ToolRuntime → sandbox",
+      "5. EvidenceStore records every state transition, tool invocation, and artifact",
+      "6. CrossRefValidator checks evidence chain integrity at each gate",
+      "7. WAITING_REVIEW → independent reviewer evaluates → VERIFYING → COMPLETED"
+    ],
+    "failure_recovery": [
+      "1. Agent crash detected (heartbeat gap > 120s)",
+      "2. ExecutionController saves checkpoint",
+      "3. SYSTEM transitions to BLOCKED or FAILED",
+      "4. Coordinator reassigns agent (if retries remain)",
+      "5. New agent replays from checkpoint with idempotency_key",
+      "6. Evidence chain preserved through replay"
+    ],
+    "evidence_flow": [
+      "1. State transition → Event (event_type=mission.state_changed)",
+      "2. Tool invocation → ToolInvocation record → EvidenceArtifact (kind=tool_invocation)",
+      "3. Artifact production → EvidenceArtifact (kind=evidence/receipt/review/code)",
+      "4. CrossRefValidator → cross-reference integrity check",
+      "5. Receipt → EvidenceArtifact (kind=receipt) attesting to chain",
+      "6. All evidence in EvidenceStore → append-only, SHA256-verified"
+    ]
+  },
+  "migration_strategy": {
+    "from": "PR24 KMA (a0f9d16b) — direct Runtime calls, implicit agent roles",
+    "to": "NexaraRuntime V2 — structured planes, explicit capability routing",
+    "phases": {
+      "phase_0_complete": "5-plane architecture design. All Claude-reviewed PASS.",
+      "phase_1_target": "Implement 6 new modules in src/nexara_prime/. Zero existing file modifications.",
+      "phase_2_target": "Wire Execution Plane to Tool Runtime. Migration of existing missions to structured lifecycle.",
+      "phase_3_target": "Provider adapter registry. Capability-driven provider selection replacing hardcoded model choices.",
+      "compatibility": "Existing Runtime API unchanged. All existing tests (1029+) continue to PASS. New tests added for new modules."
+    },
+    "risk_mitigation": [
+      "Each new module is independently testable (71 validator tests already pass)",
+      "Existing Runtime frozen — no regressions possible",
+      "Rollback: delete new files, revert to V1 Runtime"
+    ]
+  },
+  "five_plane_to_runtime_map": {
+    "control_plane →": "mission_lifecycle.py → MissionStateMachine (existing)",
+    "execution_plane →": "execution_plane.py + tool_registry.py → ToolRuntime (existing)",
+    "capability_plane →": "capability_resolver.py → CapabilityRegistry + ModelRouter (existing)",
+    "provider_plane →": "provider_adapter.py → ModelRouter + CircuitBreaker (existing)",
+    "tool_plane →": "tool_registry.py → ToolRuntime + SandboxBackend (existing)"
+  },
+  "non_invasive": true
+}

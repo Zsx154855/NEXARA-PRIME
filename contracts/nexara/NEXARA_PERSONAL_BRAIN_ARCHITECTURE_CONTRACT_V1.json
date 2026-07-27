@@ -1,0 +1,420 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/nexara/brain_architecture_contract_v1.json",
+  "title": "NEXARA Personal Brain Architecture Design Contract V1",
+  "description": "Architecture freeze contract for the NEXARA Personal Brain — a 10-component cognitive architecture that sits ABOVE the existing runtime as a design-only layer. This contract defines interfaces, data flows, component responsibilities, and integration boundaries. ZERO runtime modification. Implementation phase is explicitly deferred.",
+  "frozen_at": "2026-07-27T14:00:00Z",
+  "governed_by": "NSEC V2.1 Article 1 (Fixed Engineering Loop), Article 4 (Best Direction First), Article 8 (Maximum Reachable Endpoint), Article 45 (Definition of Done)",
+  "contract_type": "architecture_design",
+  "phase": "ARCHITECTURE_FREEZE",
+  "implementation_frozen": true,
+  "version": "1.0.0",
+  "canonical_id": "NEXARA_PERSONAL_BRAIN_ARCHITECTURE_V1",
+
+  "design_principles": {
+    "principle_1": "Brain ABOVE Runtime — Brain components enrich and guide runtime execution; they do NOT replace, modify, or bypass the runtime pipeline.",
+    "principle_2": "Memory is the Foundation — All brain components operate over a unified memory fabric. No component stores its own separate truth.",
+    "principle_3": "Evidence-Backed Evolution — Every brain output (decision, inference, preference, pattern) must be traceable to evidence records.",
+    "principle_4": "Personal and Sovereign — The brain models ONE person's cognition. No multi-tenant, no shared models, no external training.",
+    "principle_5": "Incremental Activation — Components are activated progressively as their memory foundation matures. No big-bang brain boot."
+  },
+
+  "architecture_overview": {
+    "description": "The NEXARA Personal Brain is a 10-component cognitive layer that sits between raw mission execution and the runtime pipeline. It adds reasoning, learning, reflection, and personalization capabilities that persist across missions.",
+    "layers": {
+      "layer_1_foundation": {
+        "name": "Memory Fabric",
+        "components": ["Memory Brain", "Personal Knowledge Graph", "Long-term Memory"],
+        "description": "The persistent substrate — all other components read from and write to this layer."
+      },
+      "layer_2_cognition": {
+        "name": "Cognitive Engine",
+        "components": ["Reasoning Kernel", "Decision Memory", "Experience Memory"],
+        "description": "Active processing — reasons over context, records decisions, learns from experience."
+      },
+      "layer_3_meta": {
+        "name": "Meta-Cognition",
+        "components": ["Self Reflection Loop", "Personal Preference Model", "Mission Intelligence Layer"],
+        "description": "Self-improvement — reflects on outcomes, models preferences, enhances mission execution."
+      },
+      "layer_4_evolution": {
+        "name": "Evolution",
+        "components": ["Evolution Mechanism"],
+        "description": "Long-term growth — pattern recognition, skill improvement, capability auto-registration."
+      }
+    }
+  },
+
+  "components": {
+    "1_memory_brain": {
+      "id": "BRAIN-01",
+      "name": "Memory Brain",
+      "description": "Unified memory fabric that consolidates all memory types (13 MemoryKind) across four layers (Working, Episodic, Semantic, Procedural). Provides the single source of truth for all brain components.",
+      "existing_foundation": "MemoryKernel (src/nexara_prime/memory.py) + MemoryLayerManager + RAGPipeline",
+      "new_capabilities": [
+        "Memory consolidation — merge related memories across layers",
+        "Memory decay — confidence-based staleness tracking",
+        "Memory retrieval ranking — relevance scoring with recency bias",
+        "Cross-layer query — transparent query across all four layers",
+        "Memory health metrics — coverage, freshness, consistency scores"
+      ],
+      "interface": {
+        "inputs": ["MemoryRecord (all 13 kinds)", "RetrievalQuery (semantic + keyword)", "ConsolidationTrigger"],
+        "outputs": ["RankedMemoryResults", "MemoryHealthReport", "ConsolidationBatch"],
+        "api": "MemoryBrainAPI: consolidate(), rank_retrieve(), health_check(), cross_layer_query()"
+      },
+      "integration": "Wraps MemoryKernel + MemoryLayerManager. Does NOT modify memory.py. Adds consolidation and ranking on top of existing write/read paths.",
+      "data_flow": "All components → MemoryBrainAPI → MemoryKernel/RAGPipeline → SQLite"
+    },
+
+    "2_personal_knowledge_graph": {
+      "id": "BRAIN-02",
+      "name": "Personal Knowledge Graph",
+      "description": "Structured knowledge representation as entities + typed relations. Built on top of the semantic memory layer. Enables graph traversal, inference, and context expansion.",
+      "existing_foundation": "KnowledgeService (src/nexara_prime/knowledge.py) + KnowledgeObject/KnowledgeRelation types",
+      "new_capabilities": [
+        "Entity extraction — parse memory content into typed entities (Person, Concept, Tool, File, Decision, Pattern)",
+        "Relation inference — deduce implicit relations between entities (11 existing relation types + 6 new: PREFERS, AVOIDS, EVOLVED_FROM, CONTRADICTS, SUPPORTS, DEPENDS_ON)",
+        "Graph traversal — BFS/DFS over entity-relation graph for context expansion",
+        "Graph visualization — export to Graphviz/JSON for human review",
+        "Knowledge confidence — Bayesian confidence scoring per entity and relation",
+        "Graph pruning — remove low-confidence or superseded entities"
+      ],
+      "interface": {
+        "inputs": ["MemoryRecord (semantic layer)", "EntityExtractionQuery", "RelationInferenceQuery"],
+        "outputs": ["KnowledgeGraph (entities + relations)", "ExpandedContext", "GraphStats"],
+        "api": "KnowledgeGraphAPI: extract_entities(), infer_relations(), traverse(), export_graph(), prune()"
+      },
+      "integration": "Reads from MemoryBrain semantic layer. Writes entity/relation metadata back to MemoryBrain as SEMANTIC/FACT memories. Does NOT duplicate memory storage.",
+      "data_flow": "Semantic memories → EntityExtractor → Entities + Relations → GraphStore (in-memory/SQLite) → TraversalEngine → ExpandedContext"
+    },
+
+    "3_long_term_memory": {
+      "id": "BRAIN-03",
+      "name": "Long-term Memory",
+      "description": "Persistent, slow-changing memory for facts, preferences, rules, and project knowledge. Implements decay, reinforcement, and garbage collection.",
+      "existing_foundation": "MemoryKernel with SEMANTIC + PROCEDURAL layers, PREFERENCE/PROJECT_FACT/USER_FACT/SYSTEM_RULE kinds",
+      "new_capabilities": [
+        "Memory decay model — exponential decay with half-life per memory kind",
+        "Reinforcement — access frequency boosts confidence, preventing decay",
+        "Long-term consolidation — promote frequently-accessed short-term memories to long-term",
+        "Supersession detection — flag outdated facts when new evidence contradicts",
+        "Garbage collection — auto-archive low-confidence, never-accessed memories",
+        "Provenance chain — track origin of every long-term memory back to evidence"
+      ],
+      "interface": {
+        "inputs": ["MemoryRecord (all kinds)", "DecayTick (periodic)", "ReinforcementSignal"],
+        "outputs": ["ConsolidatedMemory", "DecayReport", "GCBatch"],
+        "api": "LongTermMemoryAPI: consolidate(), tick_decay(), reinforce(), garbage_collect(), provenance()"
+      },
+      "integration": "Operates over MemoryBrain's semantic + procedural layers. Adds decay/reinforcement metadata to existing records. Does NOT modify MemoryKernel write paths.",
+      "data_flow": "MemoryBrain records → DecayEngine (periodic) → ReinforceEngine (access-triggered) → ConsolidationEngine → Updated LTM store"
+    },
+
+    "4_decision_memory": {
+      "id": "BRAIN-04",
+      "name": "Decision Memory",
+      "description": "Records every significant decision with its full context: alternatives considered, rationale, evidence relied upon, outcome, and post-hoc evaluation. Enables future decisions to reference past decision patterns.",
+      "existing_foundation": "MemoryKind.DECISION records, ApprovalEngine decisions, EvaluationEngine results",
+      "new_capabilities": [
+        "Decision recording — structured capture of decision context, alternatives, rationale",
+        "Outcome linking — bind decision to mission outcome (success/failure/blocked)",
+        "Decision pattern mining — identify recurring decision types and their success rates",
+        "Decision recommendation — suggest approach based on similar past decisions",
+        "Decision audit trail — full trace from decision → evidence → outcome → evaluation"
+      ],
+      "interface": {
+        "inputs": ["DecisionContext (alternatives, constraints, evidence)", "MissionOutcome", "EvaluationResult"],
+        "outputs": ["DecisionRecord", "DecisionPattern", "DecisionRecommendation"],
+        "api": "DecisionMemoryAPI: record_decision(), link_outcome(), mine_patterns(), recommend()"
+      },
+      "integration": "Hooks into runtime stage processors (verify→evidence→eval) to capture decisions automatically. Writes to MemoryBrain as DECISION kind records.",
+      "data_flow": "Runtime decision point → DecisionRecorder → DecisionRecord → MemoryBrain (DECISION) → PatternMiner → DecisionRecommendation"
+    },
+
+    "5_experience_memory": {
+      "id": "BRAIN-05",
+      "name": "Experience Memory",
+      "description": "Distills mission experiences into reusable lessons. Transforms raw failures and successes into structured experience records that inform future execution.",
+      "existing_foundation": "MemoryKind.FAILURE, FAILURE_EXPERIENCE, SKILL_IMPROVEMENT, 32 FailureCode enums",
+      "new_capabilities": [
+        "Experience extraction — parse mission failure/success into structured lesson",
+        "Failure pattern clustering — group similar failures by FailureCode",
+        "Success pattern extraction — identify what worked and why",
+        "Lesson application — suggest applicable lessons for new mission context",
+        "Experience decay — lessons that never reapply lose confidence over time",
+        "Cross-mission learning — transfer lessons from one mission type to related types"
+      ],
+      "interface": {
+        "inputs": ["MissionResult (success/failure)", "FailureCode", "RecoveryTrace"],
+        "outputs": ["ExperienceRecord", "FailureCluster", "LessonRecommendation"],
+        "api": "ExperienceMemoryAPI: extract_experience(), cluster_failures(), extract_success_pattern(), recommend_lessons()"
+      },
+      "integration": "Hooks into evaluation stage. Reads EvaluationResult + FailureCode, writes FAILURE_EXPERIENCE + SKILL_IMPROVEMENT to MemoryBrain.",
+      "data_flow": "EvaluationResult → ExperienceExtractor → ExperienceRecord → MemoryBrain (FAILURE_EXPERIENCE) → LessonRecommender → MissionIntelligence"
+    },
+
+    "6_reasoning_kernel": {
+      "id": "BRAIN-06",
+      "name": "Reasoning Kernel",
+      "description": "Active inference engine that processes mission context + personal knowledge → reasoned decisions, plans, and predictions. The cognitive core of the brain.",
+      "existing_foundation": "MissionCompiler, ContractEngine, TokenCompiler (context assembly); ModelRouter (provider selection)",
+      "new_capabilities": [
+        "Context assembly — gather relevant memories, knowledge graph nodes, past decisions, preferences",
+        "Multi-step reasoning — chain-of-thought with intermediate conclusions tracked as evidence",
+        "Uncertainty quantification — explicit confidence scores on every inference",
+        "Alternative generation — produce and rank multiple reasoning paths",
+        "Bias detection — identify when reasoning relies on low-confidence or stale memories",
+        "Reasoning trace — full audit trail of reasoning steps tied to evidence"
+      ],
+      "interface": {
+        "inputs": ["MissionContext", "AssembledKnowledge (KG + decisions + preferences)", "ReasoningQuery"],
+        "outputs": ["ReasoningResult (conclusions + confidence + trace)", "AlternativePaths (ranked)"],
+        "api": "ReasoningKernelAPI: reason(), assemble_context(), quantify_uncertainty(), generate_alternatives(), audit_trace()"
+      },
+      "integration": "Sits between context assembly (MissionCompiler) and execution (Runtime). Does NOT modify the runtime pipeline — enriches the context that feeds into it.",
+      "data_flow": "MissionContext → ContextAssembler (KG + DecisionMemory + PreferenceModel) → ReasoningEngine → ReasoningResult → Runtime (as enriched context)"
+    },
+
+    "7_self_reflection_loop": {
+      "id": "BRAIN-07",
+      "name": "Self Reflection Loop",
+      "description": "Periodic meta-cognitive cycle: evaluate recent performance → identify patterns → update memory → improve capabilities. The brain's learning mechanism.",
+      "existing_foundation": "EvaluationEngine (scores), MemoryLayerManager (writes), CapabilityRegistry (tracks)",
+      "new_capabilities": [
+        "Performance review — aggregate mission evaluations over time window",
+        "Gap identification — detect capability gaps (missing knowledge, weak patterns, frequent failures)",
+        "Improvement proposal — generate PATCH/SKILL_IMPROVEMENT memory records",
+        "Hypothesis testing — propose improvement → test on next mission → evaluate → confirm/reject",
+        "Reflection journal — structured log of all reflection cycles with before/after metrics",
+        "Adaptive frequency — reflect more often when performance degrades, less when stable"
+      ],
+      "interface": {
+        "inputs": ["EvaluationBatch (recent missions)", "CapabilityScores", "FailureClusters (from ExperienceMemory)"],
+        "outputs": ["ReflectionReport", "ImprovementProposal (MemoryRecord)", "HypothesisRecord"],
+        "api": "SelfReflectionAPI: reflect(), identify_gaps(), propose_improvement(), test_hypothesis(), journal()"
+      },
+      "integration": "Triggered after every N missions or on performance degradation. Reads from EvaluationEngine + ExperienceMemory + CapabilityRegistry. Writes to MemoryBrain + CapabilityRegistry.",
+      "data_flow": "EvaluationBatch → GapAnalyzer → ImprovementProposer → MemoryBrain (PATCH/SKILL_IMPROVEMENT) → HypothesisTracker → NextMission → Verify → Confirm/Reject"
+    },
+
+    "8_personal_preference_model": {
+      "id": "BRAIN-08",
+      "name": "Personal Preference Model",
+      "description": "Distills the owner's preferences from interaction history — explicit preferences, implicit patterns, and inferred priorities. Personalizes all brain outputs.",
+      "existing_foundation": "MemoryKind.PREFERENCE + USER_FACT records, interaction history in memory",
+      "new_capabilities": [
+        "Preference extraction — parse explicit 'I prefer X over Y' statements",
+        "Implicit preference inference — detect preferences from repeated choices/patterns",
+        "Preference weighting — confidence-weighted preference with decay for old preferences",
+        "Conflict resolution — detect contradictory preferences, flag for human clarification",
+        "Preference application — bias reasoning, ranking, and recommendations toward owner preferences",
+        "Preference evolution — track how preferences change over time"
+      ],
+      "interface": {
+        "inputs": ["InteractionHistory", "ExplicitPreferenceStatement", "ImplicitChoicePattern"],
+        "outputs": ["PreferenceModel", "PreferenceWeight (per domain)", "ConflictReport"],
+        "api": "PreferenceModelAPI: extract_preferences(), infer_implicit(), resolve_conflicts(), apply_bias(), track_evolution()"
+      },
+      "integration": "Reads from MemoryBrain PREFERENCE + USER_FACT + DECISION records. Feeds into ReasoningKernel (bias application) and MissionIntelligence (personalization).",
+      "data_flow": "MemoryBrain (PREFERENCE+USER_FACT+DECISION) → PreferenceExtractor → PreferenceModel → ReasoningKernel (bias) + MissionIntelligence (personalization)"
+    },
+
+    "9_mission_intelligence_layer": {
+      "id": "BRAIN-09",
+      "name": "Mission Intelligence Layer",
+      "description": "Mission-aware intelligence that enriches mission planning and execution with personal context: what the owner cares about, what worked before, what to avoid.",
+      "existing_foundation": "MissionCompiler, MissionTriageEngine, AdaptiveMissionProfile",
+      "new_capabilities": [
+        "Mission understanding — classify mission intent, domain, risk, complexity",
+        "Context enrichment — attach relevant knowledge graph nodes + past decisions + preferences",
+        "Strategy recommendation — suggest execution strategy based on mission similarity",
+        "Risk prediction — predict risk based on mission type + past failures + capability gaps",
+        "Resource estimation — estimate tokens, time, tools needed based on similar past missions",
+        "Post-mission analysis — compare predicted vs actual, feed back to all components"
+      ],
+      "interface": {
+        "inputs": ["MissionIntent", "MissionSpec", "EnrichedContext (from ReasoningKernel + PreferenceModel)"],
+        "outputs": ["MissionIntelligenceReport", "StrategyRecommendation", "RiskPrediction", "ResourceEstimate"],
+        "api": "MissionIntelligenceAPI: understand_mission(), enrich_context(), recommend_strategy(), predict_risk(), post_analyze()"
+      },
+      "integration": "Sits between mission triage and execution planning. Reads from ReasoningKernel + PreferenceModel + DecisionMemory + ExperienceMemory. Enriches MissionCompiler input.",
+      "data_flow": "MissionIntent → MissionIntelligence → EnrichedContext → MissionCompiler → Runtime → PostAnalysis → Feedback → All brain components"
+    },
+
+    "10_evolution_mechanism": {
+      "id": "BRAIN-10",
+      "name": "Evolution Mechanism",
+      "description": "Long-term growth engine: recognizes patterns across the entire brain, proposes new capabilities, auto-registers proven skills, and tracks the brain's maturity.",
+      "existing_foundation": "CapabilityRegistry, SKILL_IMPROVEMENT memories, AdaptiveScheduler",
+      "new_capabilities": [
+        "Pattern emergence detection — identify when enough experience exists to formalize a new skill",
+        "Capability proposal — propose new Capability entries based on proven patterns",
+        "Skill formalization — convert SKILL_IMPROVEMENT memories into registered Capabilities",
+        "Maturity tracking — brain maturity score across all 10 components",
+        "Evolution journal — structured log of all evolutionary steps with evidence",
+        "Evolution governance — human approval gate for new capability activation"
+      ],
+      "interface": {
+        "inputs": ["CapabilityScores", "SkillImprovementBatch", "PatternEmergenceSignal"],
+        "outputs": ["CapabilityProposal", "MaturityReport", "EvolutionJournalEntry"],
+        "api": "EvolutionAPI: detect_patterns(), propose_capability(), formalize_skill(), maturity_score(), approve_evolution()"
+      },
+      "integration": "Reads from all 9 other components. Writes to CapabilityRegistry (new capabilities) and MemoryBrain (EVOLUTION kind). Requires human approval per NSEC Article 37.",
+      "data_flow": "AllBrainComponents → PatternDetector → CapabilityProposer → HumanApproval → CapabilityRegistry + MemoryBrain → MaturityTracker"
+    }
+  },
+
+  "component_interaction_matrix": {
+    "description": "How each component interacts with every other component. R=Reads from, W=Writes to, B=Both.",
+    "matrix": {
+      "MemoryBrain":       {"KG": "B", "LTM": "B", "Decision": "W", "Experience": "W", "Reasoning": "R", "Reflection": "B", "Preference": "R", "MissionIntel": "R", "Evolution": "R"},
+      "KnowledgeGraph":   {"MemoryBrain": "B", "LTM": "R", "Decision": "R", "Experience": "R", "Reasoning": "R", "Reflection": "R", "Preference": "R", "MissionIntel": "R", "Evolution": "R"},
+      "LongTermMemory":   {"MemoryBrain": "B", "KG": "R", "Decision": "R", "Experience": "R", "Reasoning": "R", "Reflection": "R", "Preference": "W", "MissionIntel": "R", "Evolution": "R"},
+      "DecisionMemory":   {"MemoryBrain": "B", "KG": "R", "LTM": "R", "Experience": "R", "Reasoning": "R", "Reflection": "R", "Preference": "R", "MissionIntel": "R", "Evolution": "R"},
+      "ExperienceMemory": {"MemoryBrain": "B", "KG": "R", "LTM": "R", "Decision": "R", "Reasoning": "R", "Reflection": "R", "Preference": "R", "MissionIntel": "R", "Evolution": "R"},
+      "ReasoningKernel":  {"MemoryBrain": "R", "KG": "R", "LTM": "R", "Decision": "R", "Experience": "R", "Reflection": "R", "Preference": "R", "MissionIntel": "R", "Evolution": "R"},
+      "SelfReflection":   {"MemoryBrain": "B", "KG": "R", "LTM": "R", "Decision": "R", "Experience": "R", "Reasoning": "R", "Preference": "R", "MissionIntel": "R", "Evolution": "W"},
+      "PreferenceModel":  {"MemoryBrain": "B", "KG": "R", "LTM": "R", "Decision": "R", "Experience": "R", "Reasoning": "W", "Reflection": "R", "MissionIntel": "W", "Evolution": "R"},
+      "MissionIntel":     {"MemoryBrain": "R", "KG": "R", "LTM": "R", "Decision": "R", "Experience": "R", "Reasoning": "R", "Reflection": "R", "Preference": "R", "Evolution": "R"},
+      "Evolution":        {"MemoryBrain": "W", "KG": "W", "LTM": "W", "Decision": "R", "Experience": "R", "Reasoning": "R", "Reflection": "R", "Preference": "R", "MissionIntel": "R"}
+    }
+  },
+
+  "runtime_integration_boundary": {
+    "description": "The Brain layer integrates with the existing runtime at specific hook points. ZERO runtime code modification.",
+    "hook_points": [
+      {
+        "hook": "Mission Admission",
+        "runtime_point": "ChiefBrainKernel.submit()",
+        "brain_action": "MissionIntelligence: enrich mission context before admission",
+        "integration_type": "Pre-processing — brain enriches input, runtime executes as-is"
+      },
+      {
+        "hook": "Context Assembly",
+        "runtime_point": "MissionCompiler.compile()",
+        "brain_action": "ReasoningKernel + KnowledgeGraph: expand context with relevant knowledge",
+        "integration_type": "Enrichment — brain appends context, runtime uses enriched context"
+      },
+      {
+        "hook": "Execution Decision",
+        "runtime_point": "ModelRouter.select_provider()",
+        "brain_action": "DecisionMemory + PreferenceModel: inform provider selection with past decisions",
+        "integration_type": "Advice — brain recommends, runtime decides"
+      },
+      {
+        "hook": "Verification",
+        "runtime_point": "runtime._process_verification()",
+        "brain_action": "ExperienceMemory: compare current result against past similar results",
+        "integration_type": "Post-processing — brain reads runtime output, enriches verification"
+      },
+      {
+        "hook": "Evidence Recording",
+        "runtime_point": "EvidenceStore.record()",
+        "brain_action": "All components: write brain-specific evidence annotations",
+        "integration_type": "Parallel write — brain writes alongside runtime, no interference"
+      },
+      {
+        "hook": "Memory Patch",
+        "runtime_point": "runtime._process_memory_patch()",
+        "brain_action": "SelfReflection + Evolution: propose improvements based on mission outcome",
+        "integration_type": "Augmentation — brain proposes additional patches, runtime processes them"
+      },
+      {
+        "hook": "Evaluation",
+        "runtime_point": "EvaluationEngine.evaluate()",
+        "brain_action": "SelfReflection: trigger reflection if performance degraded; Evolution: check for emergent patterns",
+        "integration_type": "Post-processing — brain reads evaluation, triggers meta-cognition"
+      }
+    ]
+  },
+
+  "data_architecture": {
+    "brain_state_store": {
+      "description": "Brain-specific state stored alongside (not inside) existing runtime storage.",
+      "storage": "SQLite database at .nexara/brain_state.db (separate from runtime .nexara/store.db)",
+      "tables": [
+        "brain_component_status — activation state, last run, health per component",
+        "knowledge_graph_nodes — entity nodes with type, confidence, provenance",
+        "knowledge_graph_edges — typed relations between entities",
+        "decision_records — structured decisions with context, alternatives, outcome",
+        "experience_records — distilled lessons from mission outcomes",
+        "preference_weights — per-domain preference scores with confidence",
+        "reflection_journal — structured reflection cycle logs",
+        "evolution_journal — capability emergence and formalization log",
+        "reasoning_traces — audit trail of reasoning steps",
+        "mission_intelligence_cache — enriched context snapshots per mission",
+        "brain_maturity_scores — component-level and aggregate maturity metrics"
+      ]
+    },
+    "memory_integration": {
+      "description": "Brain components write enriched records through MemoryBrain → MemoryKernel. The existing memory.py is the single write path.",
+      "new_memory_kinds_proposed": [
+        "EVOLUTION — capability emergence and formalization records",
+        "REASONING_TRACE — reasoning step audit trail (supplementary, not primary)",
+        "BRAIN_HEALTH — periodic brain health snapshots"
+      ]
+    }
+  },
+
+  "activation_phases": {
+    "description": "Components are activated progressively. Each phase builds on the memory foundation of prior phases.",
+    "phase_1_foundation": {
+      "components": ["Memory Brain", "Long-term Memory"],
+      "prerequisite": "MemoryKernel + RAGPipeline operational",
+      "description": "Establish unified memory fabric with consolidation, decay, and ranking."
+    },
+    "phase_2_knowledge": {
+      "components": ["Personal Knowledge Graph", "Decision Memory"],
+      "prerequisite": "Phase 1 complete + sufficient semantic memories accumulated",
+      "description": "Build structured knowledge from memory content. Record decisions systematically."
+    },
+    "phase_3_cognition": {
+      "components": ["Reasoning Kernel", "Experience Memory"],
+      "prerequisite": "Phase 2 complete + sufficient decision records for pattern mining",
+      "description": "Enable active reasoning over knowledge. Learn from mission experiences."
+    },
+    "phase_4_meta": {
+      "components": ["Self Reflection Loop", "Personal Preference Model", "Mission Intelligence Layer"],
+      "prerequisite": "Phase 3 complete + sufficient mission history for reflection",
+      "description": "Add self-improvement, personalization, and mission-aware intelligence."
+    },
+    "phase_5_evolution": {
+      "components": ["Evolution Mechanism"],
+      "prerequisite": "Phase 4 complete + proven patterns emerging across components",
+      "description": "Enable long-term autonomous growth with human governance approval."
+    }
+  },
+
+  "forbidden_actions": {
+    "absolute_prohibition": [
+      "Modify any file under src/nexara_prime/",
+      "Modify the runtime pipeline (execute→verify→evidence→memory→eval)",
+      "Bypass MemoryKernel for direct SQLite writes",
+      "Replace or duplicate EvidenceStore",
+      "Modify MissionStateMachine transitions",
+      "Implement any brain component before architecture review approval",
+      "Register new Capabilities without human approval (NSEC Article 37)",
+      "Auto-evolve capabilities without governance gate"
+    ],
+    "allowed_actions": [
+      "Create new files under src/nexara_prime/brain/ (new package, additive only)",
+      "Create new test files under tests/brain/",
+      "Create contracts under contracts/nexara/",
+      "Create evidence under evidence/nexara/brain_architecture/",
+      "Write brain state to .nexara/brain_state.db (separate database)",
+      "Read from existing runtime components (read-only integration)"
+    ]
+  },
+
+  "next_gate": "NEXARA_PERSONAL_BRAIN_ARCHITECTURE_REVIEW (Claude Independent Review)",
+
+  "governance_gates": {
+    "architecture_freeze": "IN_EFFECT — no implementation until review passes",
+    "commit": "AWAITING_NSEC_ARTICLE_37",
+    "push": "AWAITING_NSEC_ARTICLE_37",
+    "merge": "DENIED",
+    "deploy": "DENIED",
+    "implementation": "FROZEN"
+  }
+}

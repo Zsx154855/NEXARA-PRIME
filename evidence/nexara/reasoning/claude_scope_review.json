@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "review_id": "claude_scope_review_v1_20260727",
+  "reviewer": "Claude (Independent Reviewer)",
+  "mission": "NEXARA_REASONING_KERNEL_IMPLEMENTATION_SCOPE_V1",
+  "reviewed_at": "2026-07-27T19:30:00Z",
+  "subject_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "branch": "feat/brand-baihan",
+  "governed_by": "NSEC V2.1 Article 1, 8, 37, 45",
+  "role": "Independent scope reviewer — verify contract integrity before implementation unfreeze",
+
+  "verdict": "PASS_WITH_OBSERVATIONS",
+  "can_proceed": true,
+  "summary": "Implementation scope is well-structured, internally consistent, and ready to proceed. Two P2 observations identified: (1) file organization divergence from parent design contract (thought_process.py merged into kernel.py), (2) confidence factor naming/weighting divergence from parent design. Neither is blocking — they represent implementation-level refinements of the architecture, but should be acknowledged and optionally reconciled with the design contract before implementation begins. All critical guards are in place: 24 files protected with zero overlap, import isolation rules cover the top-risk paths, memory adapter properly interfaces through rank_retrieve(), test coverage distributes correctly across module complexity.",
+
+  "review_criteria": {
+    "1_scope_completeness": {
+      "verdict": "PASS_WITH_OBSERVATIONS",
+      "all_7_modules_complete": true,
+      "modules": {
+        "REASON-01_kernel": {
+          "file": "brain/reasoning/kernel.py",
+          "class": "ReasoningKernel",
+          "methods": ["reason", "audit", "quantify_uncertainty"],
+          "io_spec_complete": true,
+          "verdict": "PASS"
+        },
+        "REASON-02_thought_process": {
+          "file": "brain/reasoning/kernel.py (ThoughtProcessEngine inner class)",
+          "class": "ThoughtProcessEngine",
+          "methods": ["execute_chain"],
+          "step_output_spec_complete": true,
+          "chain_types": ["linear", "branched", "iterative"],
+          "verdict": "PASS"
+        },
+        "REASON-03_context_assembly": {
+          "file": "brain/reasoning/context_assembler.py",
+          "class": "ContextAssembler",
+          "methods": ["assemble"],
+          "hard_limits_defined": {"max_items": 50, "max_tokens": 5000},
+          "verdict": "PASS"
+        },
+        "REASON-04_memory_adapter": {
+          "file": "brain/reasoning/context_assembler.py (MemoryRetrievalAdapter inner class)",
+          "class": "MemoryRetrievalAdapter",
+          "methods": ["retrieve"],
+          "strategies": 5,
+          "isolation_rule_explicit": true,
+          "verdict": "PASS"
+        },
+        "REASON-05_decision_framework": {
+          "file": "brain/reasoning/decision_framework.py",
+          "class": "DecisionFramework",
+          "methods": ["decide"],
+          "output_spec_complete": true,
+          "verdict": "PASS"
+        },
+        "REASON-06_confidence": {
+          "file": "brain/reasoning/confidence.py",
+          "class": "ConfidenceEngine",
+          "methods": ["evaluate"],
+          "weights_sum_to_1": true,
+          "verdict": "PASS"
+        },
+        "REASON-07_self_check": {
+          "file": "brain/reasoning/self_check.py",
+          "class": "SelfCheckValidator",
+          "methods": ["validate"],
+          "checks_defined": 5,
+          "verdict": "PASS"
+        }
+      },
+      "observations": [
+        {
+          "id": "OBS-SCOPE-01",
+          "severity": "P2",
+          "title": "File organization divergence from parent design contract",
+          "detail": "Parent DESIGN_V1.json (line 271) lists thought_process.py as a separate file: 'brain/reasoning/kernel.py, context_assembler.py, thought_process.py, confidence.py, self_check.py, decision_framework.py'. IMPLEMENTATION_CONTRACT_V1.json merges ThoughtProcessEngine as an inner class inside kernel.py. The implementation contract's approach is valid (inner class reduces file count and coupling concerns) but introduces a structural divergence from the architecture design.",
+          "recommendation": "Either update DESIGN_V1 to reflect the merged structure, or document this as an intentional implementation refinement in the contract diff."
+        },
+        {
+          "id": "OBS-SCOPE-02",
+          "severity": "P2",
+          "title": "Confidence factor names and weights diverged from parent design",
+          "detail": "DESIGN_V1.json factors: evidence_strength(0.35), memory_quality(0.25), past_success_rate(0.20), reasoning_completeness(0.15), self_consistency(0.05). IMPLEMENTATION_CONTRACT_V1.json factors: evidence_strength(0.35), consistency(0.20), completeness(0.20), source_reliability(0.15), historical_accuracy(0.10). Both sum to 1.0, but factor names and weights differ. The implementation contract's factors may be more testable (simpler factor names, no dependency on memory quality metrics which don't exist yet) but this is a significant semantic change.",
+          "recommendation": "Reconcile with design contract. If the implementation contract's factor set is intentional (better testability, avoids Phase 2 dependencies), explicitly document the rationale and update DESIGN_V1 accordingly."
+        }
+      ]
+    },
+
+    "2_existing_surface_preservation": {
+      "verdict": "PASS",
+      "runtime_files_protected": {
+        "claimed": 13,
+        "confirmed_on_disk": 13,
+        "files": [
+          {"path": "src/nexara_prime/runtime.py", "exists": true},
+          {"path": "src/nexara_prime/evidence.py", "exists": true},
+          {"path": "src/nexara_prime/evaluation.py", "exists": true},
+          {"path": "src/nexara_prime/memory.py", "exists": true},
+          {"path": "src/nexara_prime/tools.py", "exists": true},
+          {"path": "src/nexara_prime/model_gateway.py", "exists": true},
+          {"path": "src/nexara_prime/state_machine.py", "exists": true},
+          {"path": "src/nexara_prime/governance.py", "exists": true},
+          {"path": "src/nexara_prime/chief_brain_kernel.py", "exists": true},
+          {"path": "src/nexara_prime/api.py", "exists": true},
+          {"path": "src/nexara_prime/cli.py", "exists": true},
+          {"path": "contracts/nexara/NEXARA_IDENTITY_CONTRACT_V1.json", "exists": true},
+          {"path": "contracts/nexara/NEXARA_PERSONAL_BRAIN_ARCHITECTURE_CONTRACT_V1.json", "exists": true}
+        ]
+      },
+      "brain_files_protected": {
+        "claimed": 11,
+        "confirmed_on_disk": 11,
+        "total_brain_files_on_disk": 16,
+        "files": [
+          {"path": "src/nexara_prime/brain/kernel.py", "exists": true},
+          {"path": "src/nexara_prime/brain/decision_engine.py", "exists": true},
+          {"path": "src/nexara_prime/brain/context_engine.py", "exists": true},
+          {"path": "src/nexara_prime/brain/memory_controller.py", "exists": true},
+          {"path": "src/nexara_prime/brain/long_term_memory.py", "exists": true},
+          {"path": "src/nexara_prime/brain/db.py", "exists": true},
+          {"path": "src/nexara_prime/brain/goal_manager.py", "exists": true},
+          {"path": "src/nexara_prime/brain/evolution_engine.py", "exists": true},
+          {"path": "src/nexara_prime/brain/planner.py", "exists": true},
+          {"path": "src/nexara_prime/brain/model_policy.py", "exists": true},
+          {"path": "src/nexara_prime/brain/reasoning_budget.py", "exists": true}
+        ],
+        "note": "16 brain .py files exist on disk. 11 are explicitly protected. 5 auxiliary files (provenance.py, consolidation_rules.py, decay_config.py, brain_receipt.py, __init__.py) are not in the untouchable list but are not at risk — all new files go under the non-existent brain/reasoning/ subdirectory."
+      },
+      "overlap_check": {
+        "verdict": "PASS",
+        "zero_overlap": true,
+        "evidence": "All 7 new Python files live under brain/reasoning/ (new subdirectory, confirmed absent on disk). All 13 runtime files live under src/nexara_prime/ (not brain/reasoning/). All 11 brain files live under brain/ (not brain/reasoning/). Zero namespace collision."
+      },
+      "reasoning_dir_exists": false,
+      "tests_reasoning_dir_exists": false
+    },
+
+    "3_boundary_integrity": {
+      "verdict": "PASS_WITH_OBSERVATIONS",
+      "import_prohibition_rules": {
+        "count": 4,
+        "coverage": [
+          {"rule": "No brain.db imports", "risk_level": "critical", "verdict": "COVERED"},
+          {"rule": "No direct memory_controller imports", "risk_level": "critical", "verdict": "COVERED"},
+          {"rule": "No runtime/evidence/evaluation imports", "risk_level": "critical", "verdict": "COVERED"},
+          {"rule": "No tools/model_gateway imports", "risk_level": "critical", "verdict": "COVERED"}
+        ],
+        "gaps": [
+          {
+            "id": "OBS-BOUNDARY-01",
+            "severity": "P3",
+            "title": "5 absolute_prohibition files not explicitly covered by import prohibition rules",
+            "detail": "The import_prohibition list (4 rules) covers runtime.py, evidence.py, evaluation.py, tools.py, model_gateway.py. The absolute_prohibition list also protects state_machine.py, governance.py, chief_brain_kernel.py, api.py, cli.py — but these are not explicitly in the import prohibition rules. While the absolute_prohibition says they cannot be modified (which is stronger than import prohibition), a reasoning developer could still import from them unintentionally. The contract should explicitly forbid importing from ALL 13 absolute_prohibition files.",
+            "recommendation": "Add import prohibition rules for the remaining 5 runtime files, or add a blanket rule: 'brain/reasoning/ NEVER imports any module in the absolute_prohibition list.'"
+          }
+        ]
+      },
+      "memory_adapter_isolation": {
+        "verdict": "PASS",
+        "interface_used": "MemoryController.rank_retrieve()",
+        "rank_retrieve_exists": {"file": "src/nexara_prime/brain/memory_controller.py", "line": 211, "confirmed": true},
+        "no_direct_db_import": "explicitly forbidden in contract",
+        "isolation_rule_in_contract": true
+      },
+      "read_only_references": {
+        "memory_controller_decide": {"file": "src/nexara_prime/brain/kernel.py", "line": 105, "method": "decide", "confirmed": true},
+        "models_enums": {"file": "src/nexara_prime/models.py", "MemoryKind": "line 75", "RiskLevel": "line 19", "confirmed": true}
+      }
+    },
+
+    "4_test_coverage": {
+      "verdict": "PASS",
+      "total_areas": 8,
+      "claimed_minimum": 80,
+      "area_sum": 90,
+      "test_framework": "pytest",
+      "areas": [
+        {"area": "Kernel Contract", "min": 10, "file": "test_kernel.py", "module_complexity": "medium", "verdict": "ADEQUATE"},
+        {"area": "Thought Process", "min": 15, "file": "test_thought_process.py", "module_complexity": "high", "verdict": "ADEQUATE"},
+        {"area": "Context Assembly", "min": 15, "file": "test_context_assembler.py", "module_complexity": "high", "verdict": "ADEQUATE"},
+        {"area": "Memory Adapter", "min": 10, "file": "test_memory_adapter.py", "module_complexity": "medium", "verdict": "ADEQUATE"},
+        {"area": "Decision Framework", "min": 10, "file": "test_decision_framework.py", "module_complexity": "medium", "verdict": "ADEQUATE"},
+        {"area": "Confidence", "min": 10, "file": "test_confidence.py", "module_complexity": "low", "verdict": "ADEQUATE"},
+        {"area": "Self Check", "min": 10, "file": "test_self_check.py", "module_complexity": "medium", "verdict": "ADEQUATE"},
+        {"area": "Isolation", "min": 10, "file": "test_isolation.py", "module_complexity": "cross-cutting", "verdict": "ADEQUATE"}
+      ],
+      "distribution_analysis": "Thought Process (15) and Context Assembly (15) are the most complex modules (7-step chain, 6-step pipeline with 5 retrieval strategies respectively) — they receive the highest test allocation. Remaining modules receive 10 tests each, appropriate for single-method interfaces. Isolation tests (10) cover cross-cutting import boundary enforcement. Distribution is well-calibrated.",
+      "specific_test_requirements": [
+        {"id": "confidence_sum_test", "requirement": "Confidence weights MUST sum to 1.0 — verified by test", "coverage_area": "Confidence"},
+        {"id": "isolation_db_test", "requirement": "Memory adapter NEVER imports brain.db — verified by isolation test", "coverage_area": "Isolation"},
+        {"id": "determinism_test", "requirement": "Reasoning is deterministic: same inputs → same outputs", "coverage_area": "Kernel Contract"},
+        {"id": "context_bound_test", "requirement": "Context bounded to 50 items / 5000 tokens max", "coverage_area": "Context Assembly"},
+        {"id": "self_check_all_5_test", "requirement": "Self-check: all 5 checks operational", "coverage_area": "Self Check"}
+      ]
+    },
+
+    "5_governance": {
+      "verdict": "PASS",
+      "nsec_article_37_required": true,
+      "nsec_article_37_status": "AWAITING — review must PASS before NSEC 37 can be invoked",
+      "implementation_status": "FROZEN — confirmed: brain/reasoning/ directory does not exist on disk",
+      "tests_reasoning_dir_status": "FROZEN — confirmed: tests/reasoning/ directory does not exist on disk",
+      "human_approval_required": true,
+      "human_approval_status": "PENDING",
+      "governance_gates": {
+        "architecture_freeze": "IN_EFFECT",
+        "file_modification": "ALLOWED (scoped files only)",
+        "commit": "AWAITING_NSEC_ARTICLE_37",
+        "push": "AWAITING_NSEC_ARTICLE_37",
+        "merge": "DENIED",
+        "deploy": "DENIED",
+        "implementation": "FROZEN — requires Claude scope review PASS + human approval"
+      },
+      "freeze_integrity": {
+        "contract_sha256": "117a1325bb64fd1bd2e49b85430994290b11ca5f05b2cf171423a20a5c385d56",
+        "report_sha256": "0c714e0ae0d41dca3193c547ea9b18b69b297a2a57ec4a8e18702d63e2aa960f",
+        "receipt_sha256": "PENDING_COMMIT",
+        "head": "e38aae49dc545162e3cc652e554ea26c0b8278e5"
+      }
+    }
+  },
+
+  "acceptance_criteria_audit": [
+    {"criterion": "All 7 modules implemented and testable independently", "pre_implementation": "SPEC_COMPLETE", "post_implementation": "PENDING"},
+    {"criterion": "Minimum 80 tests across 8 coverage areas, all PASS", "pre_implementation": "SPEC_COMPLETE (90 specified)", "post_implementation": "PENDING"},
+    {"criterion": "ZERO modifications to forbidden files", "pre_implementation": "GUARDS_IN_PLACE", "post_implementation": "PENDING"},
+    {"criterion": "Existing 1224+ tests continue to PASS", "pre_implementation": "REGRESSION_SUITE_EXISTS", "post_implementation": "PENDING"},
+    {"criterion": "Confidence weights sum to 1.0 (verified by test)", "pre_implementation": "SPEC_COMPLETE (test_area=Confidence)", "post_implementation": "PENDING"},
+    {"criterion": "Self-check: all 5 checks operational", "pre_implementation": "SPEC_COMPLETE (test_area=Self Check)", "post_implementation": "PENDING"},
+    {"criterion": "Memory adapter: NEVER imports brain.db (verified by isolation test)", "pre_implementation": "SPEC_COMPLETE (test_area=Isolation)", "post_implementation": "PENDING"},
+    {"criterion": "Reasoning is deterministic: same inputs → same outputs", "pre_implementation": "SPEC_COMPLETE (no model calls)", "post_implementation": "PENDING"},
+    {"criterion": "Context bounded to 50 items / 5000 tokens max", "pre_implementation": "SPEC_COMPLETE (hard limits in contract)", "post_implementation": "PENDING"},
+    {"criterion": "Claude Pre-Implementation Review = PASS", "result": "PASS_WITH_OBSERVATIONS"},
+    {"criterion": "Claude Post-Implementation Review = PASS", "result": "PENDING"},
+    {"criterion": "All evidence files generated and valid", "result": "PENDING"}
+  ],
+
+  "observations_summary": [
+    {
+      "id": "OBS-SCOPE-01",
+      "severity": "P2",
+      "title": "thought_process.py merged into kernel.py as inner class",
+      "blocking": false,
+      "action": "Reconcile with DESIGN_V1 or document as intentional refinement"
+    },
+    {
+      "id": "OBS-SCOPE-02",
+      "severity": "P2",
+      "title": "Confidence factor names and weights diverged from DESIGN_V1",
+      "blocking": false,
+      "action": "Reconcile factor set with design contract or document rationale"
+    },
+    {
+      "id": "OBS-BOUNDARY-01",
+      "severity": "P3",
+      "title": "5 absolute_prohibition files have no explicit import prohibition rule",
+      "blocking": false,
+      "action": "Add explicit import prohibition for state_machine, governance, chief_brain_kernel, api, cli, or add blanket rule"
+    }
+  ],
+
+  "blocking_issues": [],
+  "p_items": {
+    "p0": [],
+    "p1": [],
+    "p2": [
+      "OBS-SCOPE-01: File organization divergence from DESIGN_V1 (thought_process inner class in kernel.py)",
+      "OBS-SCOPE-02: Confidence factor naming/weighting divergence from DESIGN_V1"
+    ],
+    "p3": [
+      "OBS-BOUNDARY-01: 5 absolute_prohibition files lack explicit import prohibition"
+    ]
+  },
+
+  "next_gate": "NSEC_ARTICLE_37_INVOCATION — after human acknowledges P2 observations and approves unfreeze",
+  "evidence_chain": {
+    "predecessor_design_review": "evidence/nexara/reasoning/claude_reasoning_review.json",
+    "implementation_scope_contract": "contracts/nexara/reasoning/NEXARA_REASONING_KERNEL_IMPLEMENTATION_CONTRACT_V1.json",
+    "scope_report": "evidence/nexara/reasoning/implementation_scope_report.json",
+    "scope_receipt": "evidence/nexara/reasoning/implementation_scope_receipt.json",
+    "this_review": "evidence/nexara/reasoning/claude_scope_review.json",
+    "successor": "TBD (post-implementation review)"
+  }
+}

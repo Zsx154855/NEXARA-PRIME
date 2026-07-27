@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/nexara/reasoning/reasoning_kernel_design_v1.json",
+  "title": "NEXARA Reasoning Kernel Architecture Design Contract V1",
+  "description": "Architecture freeze for the Reasoning Kernel — cognitive inference layer. ZERO runtime modification.",
+  "frozen_at": "2026-07-27T17:00:00Z",
+  "governed_by": "NSEC V2.1 Article 1, 4, 8, 37, 45",
+  "contract_type": "architecture_design",
+  "phase": "ARCHITECTURE_FREEZE",
+  "implementation_frozen": true,
+  "version": "1.0.0",
+  "parent_component": "BRAIN-06: Reasoning Kernel",
+  "design_principles": {
+    "p1": "Reasoning ABOVE Runtime — enriches context, advises decisions, NEVER executes tools",
+    "p2": "Every Step Has Evidence — every reasoning step traceable to source evidence",
+    "p3": "Uncertainty Is Quantified — every conclusion carries explicit confidence score",
+    "p4": "Self-Check Is Mandatory — every chain verified before presentation",
+    "p5": "Memory Is the Fuel — reasoning draws exclusively from Memory Brain"
+  },
+  "existing_foundation": {
+    "chief_brain_kernel": "brain/kernel.py — orchestrates intent analysis, decision gates",
+    "decision_engine": "brain/decision_engine.py — basic risk-based classification (122 lines)",
+    "context_engine": "brain/context_engine.py — simple context compilation (39 lines)",
+    "memory_brain": "brain/memory_controller.py — ranked retrieval available via rank_retrieve()",
+    "mission_compiler": "mission_compiler.py — objective→MissionSpec (47 lines, read-only)"
+  },
+  "components": {
+    "1_reasoning_kernel_contract": {
+      "id": "REASON-01",
+      "name": "Reasoning Kernel Contract",
+      "description": "Formal interface: inputs = MissionContext + AssembledKnowledge + ReasoningQuery. outputs = ReasoningResult + ReasoningTrace.",
+      "api": {
+        "reason": "reason(mission_context, assembled_knowledge, reasoning_query) -> ReasoningResult",
+        "audit": "audit_trace(reasoning_id) -> ReasoningTrace",
+        "confidence": "quantify_uncertainty(conclusion, evidence_weight) -> ConfidenceScore"
+      },
+      "guarantees": [
+        "Every output has explicit confidence score 0.0-1.0",
+        "Every step cites source evidence or memory record",
+        "Alternative paths generated when confidence < 0.8",
+        "Self-check runs before returning final result",
+        "Deterministic given same inputs (no model calls)"
+      ]
+    },
+    "2_thought_process_model": {
+      "id": "REASON-02",
+      "name": "Thought Process Model",
+      "description": "Structured multi-step reasoning chain: OBSERVE→CLASSIFY→DECOMPOSE→INFER→VALIDATE→SYNTHESIZE→REFLECT.",
+      "step_types": [
+        "OBSERVE",
+        "CLASSIFY",
+        "DECOMPOSE",
+        "INFER",
+        "VALIDATE",
+        "SYNTHESIZE",
+        "REFLECT"
+      ],
+      "step_structure": {
+        "step_id": "Unique step identifier",
+        "step_type": "One of the 7 step types",
+        "input_facts": "Facts consumed (memory references)",
+        "reasoning": "Textual explanation of logic",
+        "conclusion": "Intermediate or final conclusion",
+        "confidence": "Confidence score 0.0-1.0",
+        "evidence_refs": "Evidence or memory IDs",
+        "alternatives": "Alternative conclusions considered",
+        "depends_on": "Previous step IDs"
+      },
+      "chain_structures": {
+        "linear": "OBSERVE→CLASSIFY→INFER→VALIDATE→SYNTHESIZE→REFLECT (simple decisions)",
+        "branched": "OBSERVE→(INFER_A, INFER_B)→SYNTHESIZE→REFLECT (multi-factor)",
+        "iterative": "OBSERVE→INFER→VALIDATE→(low_conf?OBSERVE(more))→SYNTHESIZE→REFLECT"
+      }
+    },
+    "3_context_assembly": {
+      "id": "REASON-03",
+      "name": "Context Assembly",
+      "description": "Gathers relevant knowledge from Memory Brain for reasoning. 6-step pipeline.",
+      "pipeline": [
+        "1. Mission Context Extraction — from MissionCompiler",
+        "2. Memory Retrieval — rank_retrieve() across 4 layers, min_confidence=0.3",
+        "3. Past Decision Retrieval — DECISION kind memories for similar missions",
+        "4. Preference Application — PREFERENCE + USER_FACT memories",
+        "5. Context Deduplication — remove redundant, keep highest-confidence",
+        "6. Context Bounding — trim to 50 items / 5000 tokens max"
+      ],
+      "output_struct": {
+        "mission_summary": "Concise objective + constraints",
+        "relevant_memories": "Top-K ranked across layers",
+        "past_decisions": "Similar past decisions with outcomes",
+        "preferences": "Owner preferences relevant to context",
+        "context_size": "Token count",
+        "assembled_at": "Timestamp"
+      }
+    },
+    "4_memory_retrieval_strategy": {
+      "id": "REASON-04",
+      "name": "Memory Retrieval Strategy",
+      "description": "5 strategies for layered retrieval with progressive specificity.",
+      "strategies": [
+        {
+          "name": "Broad Semantic",
+          "layers": [
+            "semantic",
+            "procedural"
+          ],
+          "top_k": 20,
+          "min_conf": 0.3
+        },
+        {
+          "name": "Episodic Match",
+          "layers": [
+            "episodic"
+          ],
+          "top_k": 10,
+          "min_conf": 0.5
+        },
+        {
+          "name": "Working Context",
+          "layers": [
+            "working"
+          ],
+          "top_k": 5,
+          "min_conf": 0.0
+        },
+        {
+          "name": "Preference Bias",
+          "layers": [
+            "semantic"
+          ],
+          "kinds": [
+            "preference",
+            "user_fact"
+          ],
+          "top_k": 5,
+          "min_conf": 0.5
+        },
+        {
+          "name": "Procedural Rules",
+          "layers": [
+            "procedural"
+          ],
+          "top_k": 10,
+          "min_conf": 0.7
+        }
+      ],
+      "progressive_retrieval": "If confidence < 0.7, re-query with +50% top_k, min_conf -0.1"
+    },
+    "5_decision_framework": {
+      "id": "REASON-05",
+      "name": "Decision Framework",
+      "description": "6-step structured decision process with alternatives, evidence weighting, and outcome prediction.",
+      "steps": [
+        "1. Problem Framing — define decision boundary",
+        "2. Alternative Generation — ≥2 alternatives with evidence",
+        "3. Evidence Weighting — score by evidence_strength, past_similarity, preference_alignment, risk_tolerance",
+        "4. Recommendation — top-ranked alternative with rationale",
+        "5. Outcome Prediction — expected result with similar_case_references",
+        "6. Decision Recording — write to DecisionMemory via MemoryBrain"
+      ],
+      "decision_types": [
+        "binary",
+        "selection",
+        "classification",
+        "prediction"
+      ]
+    },
+    "6_confidence_evaluation": {
+      "id": "REASON-06",
+      "name": "Confidence Evaluation",
+      "description": "5-factor weighted confidence scoring per reasoning step.",
+      "factors": {
+        "evidence_strength": {
+          "weight": 0.35,
+          "formula": "min(1.0, evidence_count/5.0) * recency_factor"
+        },
+        "memory_quality": {
+          "weight": 0.25,
+          "formula": "avg_memory_confidence * min(1.0, memory_count/10.0)"
+        },
+        "past_success_rate": {
+          "weight": 0.2,
+          "formula": "past_successes/past_total if past_total>0 else 0.5"
+        },
+        "reasoning_completeness": {
+          "weight": 0.15,
+          "formula": "steps_completed/max(steps_expected,1)"
+        },
+        "self_consistency": {
+          "weight": 0.05,
+          "formula": "consistency_score from self_check"
+        }
+      },
+      "levels": {
+        "HIGH": "[0.8, 1.0] — proceed, auto-approve R0-R1",
+        "MEDIUM": "[0.5, 0.8) — proceed with caution, generate alternatives",
+        "LOW": "[0.3, 0.5) — trigger additional retrieval, re-reason",
+        "INSUFFICIENT": "[0.0, 0.3) — escalate to human"
+      }
+    },
+    "7_self_check_mechanism": {
+      "id": "REASON-07",
+      "name": "Self-check Mechanism",
+      "description": "5 automated verification checks on reasoning chain before presentation.",
+      "checks": [
+        {
+          "name": "Logical Consistency",
+          "method": "Compare conclusion pairs for contradiction",
+          "pass": "Zero contradictions"
+        },
+        {
+          "name": "Chain Completeness",
+          "method": "Check dependency graph for orphans",
+          "pass": "All dependencies satisfied"
+        },
+        {
+          "name": "Evidence Coverage",
+          "method": "Count evidence_refs per conclusion step",
+          "pass": "All INFER/SYNTHESIZE have >=1 ref"
+        },
+        {
+          "name": "Confidence Calibration",
+          "method": "Flag if confidence > evidence_strength + 0.3",
+          "pass": "No overconfident steps"
+        },
+        {
+          "name": "Circularity Detection",
+          "method": "Check dependency graph for cycles",
+          "pass": "No cycles"
+        }
+      ],
+      "result": {
+        "overall_pass": "TRUE only if ALL checks pass",
+        "failures": "List of failed checks with specific step references",
+        "remediation": "Suggested action per failure"
+      }
+    }
+  },
+  "integration_architecture": {
+    "description": "Integrates at ChiefBrainKernel.decide() — pre-processing enrichment. ZERO runtime modification.",
+    "flow": [
+      "ChiefBrainKernel.decide() → ReasoningKernel.reason()",
+      "ContextAssembler gathers from MemoryBrain (5 strategies)",
+      "ThoughtProcessModel executes reasoning chain",
+      "ConfidenceEvaluator scores each step",
+      "SelfCheckMechanism verifies consistency",
+      "Confidence < 0.7 triggers progressive retrieval + re-reason",
+      "DecisionFramework selects recommendation with alternatives",
+      "ReasoningResult returned to ChiefBrainKernel for policy + budget checks"
+    ]
+  },
+  "data_architecture": {
+    "new_tables_in_brain_state_db": [
+      "reasoning_sessions (reasoning_id, mission_id, final_confidence, self_check_passed)",
+      "reasoning_traces (trace_id, reasoning_id, step_id, step_type, conclusion, confidence, evidence_refs)",
+      "confidence_history (history_id, reasoning_id, predicted_confidence, actual_outcome, calibration_error)"
+    ]
+  },
+  "forbidden_actions": {
+    "absolute_prohibition": [
+      "Modify src/nexara_prime/runtime.py",
+      "Modify src/nexara_prime/brain/kernel.py",
+      "Modify src/nexara_prime/brain/memory_controller.py",
+      "Modify identity or architecture contracts",
+      "Call external models for reasoning (reasoning is deterministic inference)",
+      "Execute tools from within reasoning",
+      "Access runtime store.db"
+    ],
+    "allowed_actions": [
+      "Create src/nexara_prime/brain/reasoning/ package",
+      "Create brain/reasoning/kernel.py, context_assembler.py, thought_process.py, confidence.py, self_check.py, decision_framework.py",
+      "Create tests/brain/reasoning/",
+      "Add tables to brain_state.db (additive migration)",
+      "Read from MemoryController.rank_retrieve()"
+    ]
+  },
+  "next_gate": "CLAUDE_INDEPENDENT_REASONING_REVIEW_REQUIRED",
+  "implementation": "FROZEN",
+  "governance_gates": {
+    "architecture_freeze": "IN_EFFECT",
+    "commit": "AWAITING_NSEC_ARTICLE_37",
+    "push": "AWAITING_NSEC_ARTICLE_37",
+    "merge": "DENIED",
+    "deploy": "DENIED"
+  }
+}

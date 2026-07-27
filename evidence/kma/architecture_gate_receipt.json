@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_kma_architecture_gate_v1_20260726",
+  "receipt_type": "architecture_gate_receipt",
+  "mission": "NEXARA_POST_PR24_ARCHITECTURE_GATE_V1",
+  "generated_at": "2026-07-26T18:30:00Z",
+  "generated_by": "Hermes Agent (Writer)",
+  "governed_by": "NSEC V2.1 Article 45 (Definition of Done), Article 37 (High-Impact Approval)",
+
+  "frozen_artifacts": {
+    "architecture_gate_report": {
+      "path": "evidence/kma/architecture_gate_report.json",
+      "sha256": "580df051b82baf62b43ef51662164bb0a8f06284c1c02657b7f9900c26babca4",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    },
+    "architecture_gate_receipt": {
+      "path": "evidence/kma/architecture_gate_receipt.json",
+      "sha256": "4b1835cd307f1b026152970e61a0f133b4d5bccc7f35b7c55e38fd398cd7d0be",
+      "integrity": "IMMUTABLE_AFTER_COMMIT"
+    }
+  },
+
+  "subject_head": "b42ac6b007e662c7fab0ced04d3718521e69181e",
+  "base_head": "5266a6f85939823fa52e2f506cf403800db4bb84",
+  "pr_number": 24,
+  "pr_state": "OPEN_DRAFT",
+
+  "verdict": {
+    "final_result": "BLOCKED",
+    "root_cause": "CLAUDE_REVIEW_MISSING",
+    "file_scope": "evidence/kma/architecture_gate_report.json",
+    "recommended_action": "Request Claude independent architecture review on PR #24. All 5 architecture dimensions PASS — only missing Claude sign-off."
+  },
+
+  "architecture_check_summary": {
+    "memory_authority": {
+      "verdict": "PASS",
+      "evidence": "KnowledgeService wraps MemoryKernel; idempotency_key on write/propose/patch; receipt_id added to MemoryRecord; supersession detection implemented; bypass paths eliminated"
+    },
+    "evidence_runtime": {
+      "verdict": "PASS",
+      "evidence": "5 new public API methods added to EvidenceStore; receipt_status() single judgment authority; runtime self-judgment removed; append-only preserved; KMA_INVARIANT_09+10 satisfied"
+    },
+    "model_router": {
+      "verdict": "PASS",
+      "evidence": "CircuitBreaker consolidated to single shared instance; model_gateway duplicate removed; ModelProvider Protocol for adapters; provider-agnostic routing; KMA_INVARIANT_13 satisfied"
+    },
+    "governance": {
+      "verdict": "PASS",
+      "evidence": "PolicyEngine/ApprovalEngine/MissionStateMachine unchanged; receipt_status fail-closed; CapabilityRegistry single instance; cli.py reads PROGRAM_STATE; no governance bypasses created"
+    },
+    "context_engineering": {
+      "verdict": "PASS",
+      "evidence": "KnowledgeRecall structured input; KnowledgeObject/KnowledgeRelation graph types; 11 relation types; layer-aware recall; confidence/metadata support; future compiler-compatible"
+    }
+  },
+
+  "check_matrix": {
+    "HEAD_FROZEN": true,
+    "WORKTREE_CLEAN": true,
+    "PR_STATE_VALID": true,
+    "CI_PASS": true,
+    "THREADS": "0_claimed",
+    "CLAUDE_REVIEW": "MISSING",
+    "MEMORY_BOUNDARY": "PASS",
+    "EVIDENCE_BOUNDARY": "PASS",
+    "ROUTER_BOUNDARY": "PASS",
+    "GOVERNANCE_BOUNDARY": "PASS",
+    "CONTEXT_COMPATIBILITY": "PASS"
+  },
+
+  "governance_gates": {
+    "FILE_MODIFICATION": "NOT_APPLICABLE (read-only gate)",
+    "COMMIT": "DENIED",
+    "PUSH": "DENIED",
+    "FORCE_PUSH": "DENIED",
+    "REBASE": "DENIED",
+    "MERGE": "DENIED",
+    "PR_BODY_EDIT": "DENIED",
+    "PR_READY": "DENIED",
+    "PR_CLOSE": "DENIED",
+    "PR_CREATE": "DENIED",
+    "TAG": "DENIED",
+    "RELEASE": "DENIED",
+    "DEPLOY": "DENIED",
+    "GITHUB_READ": "ALLOWED",
+    "EVIDENCE_WRITE": "GRANTED (evidence/kma/ files only)"
+  },
+
+  "kma_contract_compliance": {
+    "contract_v1_0": "contracts/kma/KNOWLEDGE_MEMORY_AUTHORITY_CONTRACT_V1.md",
+    "amendment_v1_1": "contracts/kma/KNOWLEDGE_MEMORY_AUTHORITY_CONTRACT_V1_1_AMENDMENT.md",
+    "implementation_scope": "contracts/kma/KMA_PHASE2_IMPLEMENTATION_SCOPE_V1.json",
+    "total_kma_invariants": 13,
+    "verified_invariants": 13,
+    "violated_invariants": 0,
+    "scope_compliant": true,
+    "no_denylist_violation": true
+  },
+
+  "ci_verification": {
+    "all_pass": true,
+    "job_count": 9,
+    "run_count": 2,
+    "kma_tests": {
+      "total": 147,
+      "passed": 147,
+      "failed": 0,
+      "duration_seconds": 0.71
+    }
+  },
+
+  "next_gate": "CLAUDE_INDEPENDENT_REVIEW_REQUIRED",
+
+  "evidence_chain": {
+    "predecessor_receipt": "evidence/kma/kma_phase2_completion_receipt.json",
+    "this_receipt": "evidence/kma/architecture_gate_receipt.json",
+    "successor_receipt": "TBD (after Claude review + merge approval)"
+  },
+
+  "integrity": {
+    "receipt_self_reference": "NONE (receipt does not reference its own future commit SHA)",
+    "source_of_truth": "This receipt attests: architecture_gate_report.json frozen at subject_head b42ac6b",
+    "verification_instruction": "Verify architecture_gate_report.json SHA256 against commit evidence after git-commit"
+  }
+}

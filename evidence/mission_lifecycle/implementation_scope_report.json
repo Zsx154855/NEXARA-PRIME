@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "mission": "NEXARA_AGENT_MISSION_LIFECYCLE_IMPLEMENTATION_SCOPE_FREEZE_V1",
+  "phase": "Phase 1 — Implementation Scope Freeze",
+  "design_baseline": "Phase 0 Design Review V2 = PASS (Claude deleg_d12be103)",
+  "generated_at": "2026-07-27T02:35:00Z",
+  "governed_by": "NSEC V2.1",
+
+  "scope_freeze": {
+    "phase_1_boundary": "4 validators only — no runtime, no scheduler, no heartbeat runtime",
+    "additive_only": true,
+    "existing_runtime_frozen": true,
+    "files_to_create": 7,
+    "files_to_modify": 0,
+    "minimum_tests": 30
+  },
+
+  "deliverables": [
+    {
+      "id": "IMPL-01",
+      "file": "contracts/mission_lifecycle/agent_role_validator.py",
+      "purpose": "Validate agent role constraints (writer_reviewer_separation, coordinator_writer_isolation)",
+      "interface": "validate_agent_roles(agents, risk_level, sep_flag, iso_flag) -> ValidationResult",
+      "tests": "tests/test_agent_role_validator.py (≥8 tests)"
+    },
+    {
+      "id": "IMPL-02",
+      "file": "contracts/mission_lifecycle/state_transition_validator.py",
+      "purpose": "Validate state transitions against 10-state FSM with actor/evidence checks",
+      "interface": "validate_transition(current, target, actor, evidence_ids) -> ValidationResult",
+      "tests": "tests/test_state_transition_validator.py (≥10 tests)"
+    },
+    {
+      "id": "IMPL-03",
+      "file": "contracts/mission_lifecycle/evidence_artifact_validator.py",
+      "purpose": "Validate evidence artifacts per Artifact→Validator→Evidence→Gate pipeline",
+      "interface": "validate_artifact(artifact_type, artifact_data) -> ValidationResult",
+      "tests": "tests/test_evidence_artifact_validator.py (≥8 tests)"
+    },
+    {
+      "id": "IMPL-04",
+      "file": "contracts/mission_lifecycle/__init__.py",
+      "purpose": "Package init, re-export all validators"
+    }
+  ],
+
+  "existing_assets": {
+    "schema": "contracts/mission/mission_contract.schema.json (V1.1)",
+    "validator": "contracts/mission/mission_contract_validator.py (already implemented, 15 tests PASS)",
+    "design_doc": "docs/runtime/mission_lifecycle_manager_design.md"
+  },
+
+  "test_matrix": {
+    "total_minimum": 30,
+    "coverage_areas": {
+      "agent_role_constraints": 8,
+      "state_transitions": 10,
+      "evidence_artifact_validation": 8,
+      "integration_smoke": 4
+    },
+    "must_fail_cases": [
+      "writer == reviewer with separation=true",
+      "coordinator == writer on R2+ with isolation=true",
+      "CREATED → RUNNING (skip ASSIGNED, PLANNING)",
+      "COMPLETED → RUNNING (terminal)",
+      "evidence artifact with no SHA256",
+      "receipt with broken cross-refs"
+    ],
+    "must_pass_cases": [
+      "hermes=WRITER, claude=REVIEWER, agentos=COORDINATOR",
+      "writer == reviewer with separation=false, risk=R0",
+      "CREATED → ASSIGNED → PLANNING → RUNNING (happy path)",
+      "BLOCKED → ASSIGNED (recovery)",
+      "WAITING_REVIEW → VERIFYING (review done)",
+      "valid CODE artifact with SHA256"
+    ]
+  },
+
+  "rollback": {
+    "strategy": "Delete all NEW files under contracts/mission_lifecycle/ and new test files",
+    "reversion": "contracts/mission/mission_contract_validator.py unchanged",
+    "runtime_impact": "ZERO — no src/nexara_prime/ files touched",
+    "verification": "Existing test suite unchanged (≥1029 PASS)"
+  },
+
+  "forbidden": {
+    "modify_existing_runtime": true,
+    "modify_memory_authority": true,
+    "modify_evidence_runtime": true,
+    "chief_brain_reconstruction": true,
+    "merge": true,
+    "deploy": true
+  },
+
+  "claude_review_required": true,
+  "ready_for_review": true
+}

@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/provider_runtime/provider_runtime_design_v1.json",
+  "title": "NEXARA Provider Runtime — Architecture Design Contract V1",
+  "frozen_at": "2026-07-27T05:00:00Z",
+  "governed_by": "NSEC V2.1",
+  "principle": "The system knows capabilities, not providers. Provider selection is capability-driven, scored, and fallback-safe.",
+  "problem_statements": {
+    "p1": {
+      "title": "System cannot know Claude/GPT/DeepSeek",
+      "wrong": "if model == 'claude': call_claude()",
+      "correct": "cap.reasoning.high → resolve_provider() → adapter.complete()",
+      "principle": "Capability declares need. Provider Runtime satisfies it without system awareness of provider identity."
+    },
+    "p2": {
+      "title": "How are providers scored?",
+      "dimensions": [
+        "capability_match",
+        "latency_ms",
+        "cost_per_1k_tokens",
+        "reliability_score",
+        "context_window",
+        "historical_success_rate"
+      ],
+      "principle": "Multi-dimensional scoring. No single dimension dominates. Weights configurable per capability."
+    },
+    "p3": {
+      "title": "How does failure switch providers?",
+      "chain": "Primary fails → circuit breaker opens → selector picks next scored → fallback exhausted → escalate to Coordinator",
+      "principle": "Transparent fallback. System unaware of switch. Evidence records which provider served."
+    }
+  },
+  "provider_contract": {
+    "description": "A Provider is a capability-fulfilling model endpoint. Defined abstractly — no hardcoded provider names.",
+    "schema": {
+      "provider_id": "prov.{name}  e.g. prov.deepseek, prov.openai, prov.anthropic",
+      "display_name": "Human-readable label (for logs/evidence only)",
+      "capabilities": [
+        "cap.reasoning.high",
+        "cap.code.write"
+      ],
+      "models": [
+        {
+          "model_id": "deepseek-v4-pro",
+          "tier": "pro",
+          "context_window": 128000,
+          "latency_ms": 2000,
+          "cost_input_1k": 0.002,
+          "cost_output_1k": 0.008
+        }
+      ],
+      "adapter": "ModelProvider Protocol implementation",
+      "health_check_endpoint": "optional ping URL",
+      "rate_limit": {
+        "requests_per_minute": 60,
+        "tokens_per_minute": 100000
+      }
+    }
+  },
+  "provider_registry": {
+    "description": "Registry of all available providers. Capability Runtime queries by capability_id, not provider name.",
+    "interface": {
+      "register": "registry.register(provider) → prov_id",
+      "find_by_capability": "registry.find_by_capability(capability_id) → list[Provider]",
+      "find_by_tier": "registry.find_by_tier(tier) → list[Provider]",
+      "get_adapter": "registry.get_adapter(provider_id, model_id) → ModelProvider"
+    },
+    "existing": "ModelRouter._PROVIDERS dict (ProviderInfo) — to be wrapped, not replaced"
+  },
+  "provider_router": {
+    "description": "Routes capability requests to scored providers. Wraps existing ModelRouter.",
+    "existing": "ModelRouter.route() already does tier selection + circuit breaker + cost estimate. Provider Runtime adds capability mapping + multi-dim scoring.",
+    "routing_pipeline": [
+      {
+        "step": 1,
+        "name": "Capability Resolution",
+        "action": "CapabilityResolver → capability_id + required attributes (context_window, latency_max, cost_budget)"
+      },
+      {
+        "step": 2,
+        "name": "Provider Discovery",
+        "action": "ProviderRegistry.find_by_capability(capability_id) → candidate providers"
+      },
+      {
+        "step": 3,
+        "name": "Multi-Dim Scoring",
+        "action": "Score each candidate on 6 dimensions. Filter out those below minimum threshold."
+      },
+      {
+        "step": 4,
+        "name": "Health Gate",
+        "action": "Remove providers with open circuit breaker OR failed health check"
+      },
+      {
+        "step": 5,
+        "name": "Selection",
+        "action": "Pick highest-scored provider. Record as primary. Next as fallback."
+      },
+      {
+        "step": 6,
+        "name": "Adapter Bind",
+        "action": "registry.get_adapter(provider, model) → ModelProvider Protocol"
+      },
+      {
+        "step": 7,
+        "name": "Evidence Record",
+        "action": "Record routing decision as EvidenceArtifact (kind=provider_routing)"
+      }
+    ]
+  },
+  "provider_selector": {
+    "scoring_dimensions": {
+      "capability_match": {
+        "weight": 0.3,
+        "description": "How well does this provider's model match the capability requirements?",
+        "formula": "exact_model_preference ? 1.0 : tier_match * 0.7"
+      },
+      "latency": {
+        "weight": 0.15,
+        "description": "Typical latency vs mission latency_target_ms",
+        "formula": "min(1.0, latency_target / actual_latency)"
+      },
+      "cost": {
+        "weight": 0.2,
+        "description": "Estimated cost vs mission token_budget",
+        "formula": "min(1.0, budget / estimated_cost)"
+      },
+      "reliability": {
+        "weight": 0.15,
+        "description": "Uptime + circuit breaker history",
+        "formula": "1.0 - (failure_count / (success_count + failure_count + 1))"
+      },
+      "context_window": {
+        "weight": 0.1,
+        "description": "Context window size vs mission requirement",
+        "formula": "min(1.0, context_window / required_context)"
+      },
+      "historical_success": {
+        "weight": 0.1,
+        "description": "Historical success rate for this capability",
+        "formula": "successful_invocations / total_invocations for this capability_id"
+      }
+    },
+    "minimum_threshold": 0.3,
+    "weights_configurable": true
+  },
+  "provider_adapter": {
+    "description": "Uniform interface for all providers. Implements ModelProvider Protocol from model_gateway.py.",
+    "interface": {
+      "complete": "(system: str, task: str, context: dict, *, trace_id: str, timeout_s: float) → ModelResponse",
+      "name": "provider name (string)",
+      "model": "model identifier (string)"
+    },
+    "implementations": "One adapter per (provider, model) pair. All adapters conform to ModelProvider Protocol."
+  },
+  "provider_policy_engine": {
+    "rules": [
+      {
+        "rule": "risk_ceiling",
+        "description": "R3+ missions require pro-tier providers only",
+        "enforcement": "filter out flash-tier providers for R3+"
+      },
+      {
+        "rule": "cost_cap",
+        "description": "Never exceed mission token_budget",
+        "enforcement": "estimated_cost > budget → skip provider"
+      },
+      {
+        "rule": "latency_bound",
+        "description": "Never exceed mission latency_target_ms",
+        "enforcement": "typical_latency > target → skip provider"
+      },
+      {
+        "rule": "context_minimum",
+        "description": "Provider context window must fit mission requirements",
+        "enforcement": "context_window < required → skip provider"
+      }
+    ]
+  },
+  "cost_control": {
+    "budget_enforcement": "Per-mission token budget from mission contract retry_policy. Enforced at routing time.",
+    "cost_tracking": "Every ModelResponse includes cost_usd. Summed per mission. Alert Coordinator at 80/90/100% budget.",
+    "circuit_breaker": "Existing CircuitBreaker from model_router.py. Per-provider failure counting. Opens at threshold=3, cooldown=60s."
+  },
+  "fallback_strategy": {
+    "primary_fails": "Circuit breaker opens → selector picks next scored provider",
+    "all_high_tier_exhausted": "Fall back to standard tier if mission risk allows (R0-R2 only)",
+    "all_providers_exhausted": "CapabilityResolver walks fallback_chain to lower-tier capability",
+    "complete_exhaustion": "Transition mission to BLOCKED. Notify Coordinator with PROVIDER_EXHAUSTED code.",
+    "evidence": "Every fallback step recorded. Final routing decision includes full fallback chain trace."
+  },
+  "health_check": {
+    "liveness": "Optional ping before selection. provider_health dict from ModelRouter.route()",
+    "circuit_breaker": "Primary health gate. Open breaker = provider unavailable.",
+    "historical": "Reliability score from ProviderSelector scoring. Degrades with failures, recovers with successes."
+  },
+  "pr24_capability_mapping": {
+    "hermes_writer": "cap.code.write → prov.deepseek (deepseek-v4-pro). cap.evidence.generate → no model needed.",
+    "claude_reviewer": "cap.review.architecture → prov.deepseek (deepseek-v4-pro).",
+    "agentos_coordinator": "cap.orchestrate → no model needed. cap.gate.evaluate → no model needed.",
+    "note": "In PR24, Claude was the REVIEWER agent name — not the provider. Provider was deepseek-v4-pro for all model calls."
+  },
+  "integration": {
+    "above": "Capability Runtime — declares capability_id, required attributes",
+    "below": "ModelProvider adapters — uniform complete() interface",
+    "existing": "ModelRouter, CircuitBreaker, ProviderInfo, ModelProvider Protocol — all reused",
+    "non_invasive": true
+  }
+}

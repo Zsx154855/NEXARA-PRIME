@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/mission/mission_contract_v1_1.json",
+  "title": "NEXARA Agent Mission Contract Schema V1.1",
+  "description": "Canonical schema for NEXARA Agent Mission Lifecycle Manager mission contracts. V1.1 amends V1.0: adds writer_reviewer_separation, coordinator_writer_isolation, assigned phase timeout, produced_by enum, cross-entry validation rules. Derived from PR24 Architecture Gate workflow (a0f9d16b).",
+  "type": "object",
+  "required": [
+    "mission_id",
+    "objective",
+    "scope",
+    "agents",
+    "permissions",
+    "risk_level",
+    "success_criteria",
+    "required_evidence",
+    "approval_gate",
+    "timeout",
+    "retry_policy"
+  ],
+  "properties": {
+    "mission_id": {
+      "type": "string",
+      "pattern": "^mission_[a-f0-9]{12}$",
+      "description": "Unique mission identifier"
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "Natural language mission objective"
+    },
+    "scope": {
+      "type": "object",
+      "required": ["allowlist", "denylist", "mutations", "artifacts", "gates"],
+      "properties": {
+        "allowlist": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1,
+          "description": "File patterns allowed to modify"
+        },
+        "denylist": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "File patterns prohibited from modification"
+        },
+        "mutations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["READ", "WRITE", "EXECUTE_TEST", "GENERATE_EVIDENCE", "COMMIT", "PUSH", "MERGE", "DEPLOY", "REVIEW", "BLOCK", "APPROVE"]
+          },
+          "minItems": 1,
+          "description": "Allowed mutation types"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["CODE", "TEST_RESULT", "EVIDENCE", "RECEIPT", "REVIEW", "LOGS", "PLAN", "REPORT"]
+          },
+          "description": "Expected output artifact types"
+        },
+        "gates": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Required gate IDs to pass before COMPLETED"
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "$comment": "CROSS-ENTRY VALIDATION (enforced by MissionContractValidator): (1) No agent may hold both WRITER and REVIEWER when writer_reviewer_separation=true. (2) No agent may hold both COORDINATOR and WRITER for R2+ missions when coordinator_writer_isolation=true. (3) Each agent_id must be unique across entries.",
+      "items": {
+        "type": "object",
+        "required": ["agent_id", "role", "capabilities", "lease", "permissions"],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique agent identifier"
+          },
+          "agent_type": {
+            "type": "string",
+            "enum": ["HUMAN", "AI_MODEL", "SYSTEM"],
+            "default": "AI_MODEL"
+          },
+          "provider": {
+            "type": "string",
+            "description": "LLM provider for AI_MODEL agents"
+          },
+          "model": {
+            "type": "string",
+            "description": "Model name"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["WRITER", "REVIEWER", "COORDINATOR", "APPROVER", "SYSTEM"],
+            "description": "Agent role in this mission"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "description": "Capabilities leased to this agent"
+          },
+          "lease": {
+            "type": "object",
+            "required": ["duration_seconds", "renewable"],
+            "properties": {
+              "duration_seconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 86400
+              },
+              "renewable": {
+                "type": "boolean"
+              },
+              "exclusivity": {
+                "type": "string",
+                "enum": ["SHARED", "EXCLUSIVE"],
+                "default": "SHARED"
+              }
+            }
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["READ", "WRITE", "EXECUTE_TEST", "GENERATE_EVIDENCE", "COMMIT", "PUSH", "MERGE", "DEPLOY", "REVIEW", "BLOCK", "APPROVE"]
+            },
+            "minItems": 1
+          },
+          "context": {
+            "type": "object",
+            "description": "Initial context for this agent"
+          }
+        }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["action", "granted_to", "scope"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["READ", "WRITE", "EXECUTE_TEST", "GENERATE_EVIDENCE", "COMMIT", "PUSH", "MERGE", "DEPLOY", "REVIEW", "BLOCK", "APPROVE"]
+          },
+          "granted_to": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Agent IDs granted this permission"
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["MISSION", "FILE", "GATE", "GLOBAL"],
+            "description": "Permission scope boundary"
+          },
+          "condition": {
+            "type": "string",
+            "description": "Additional condition for permission grant"
+          }
+        }
+      },
+      "$comment": "DUAL PERMISSION RESOLUTION: Agent-level permissions take precedence over mission-level permissions (more specific wins). When conflict exists, the most restrictive permission applies (deny-by-default)."
+    },
+    "writer_reviewer_separation": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enforce that no single agent holds both WRITER and REVIEWER roles. Required for audit integrity. Set to false only for R0 self-review missions."
+    },
+    "coordinator_writer_isolation": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enforce that Coordinator and Writer are separate agents for R2+ missions. Prevents orchestrator self-approval."
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["R0", "R1", "R2", "R3", "R4"],
+      "description": "Mission risk classification per NSEC"
+    },
+    "success_criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["criterion_id", "description", "measurable", "verification"],
+        "properties": {
+          "criterion_id": {"type": "string"},
+          "description": {"type": "string"},
+          "measurable": {"type": "boolean"},
+          "verification": {
+            "type": "string",
+            "enum": ["TEST_PASS", "EVIDENCE_PRESENT", "REVIEW_PASS", "GATE_PASS", "HUMAN_APPROVAL", "CI_PASS", "ARTIFACT_SHA256"]
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "required_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["evidence_kind", "produced_by", "verification_method"],
+        "properties": {
+          "evidence_kind": {"type": "string"},
+          "produced_by": {
+            "type": "string",
+            "enum": ["WRITER", "REVIEWER", "COORDINATOR", "APPROVER", "SYSTEM"],
+            "description": "Agent role that produces this evidence"
+          },
+          "verification_method": {
+            "type": "string",
+            "enum": ["SHA256", "SCHEMA_VALIDATION", "CROSS_REF", "SIGNATURE", "REVIEW"]
+          },
+          "idempotency_key": {"type": "string"}
+        }
+      },
+      "minItems": 1
+    },
+    "approval_gate": {
+      "type": "object",
+      "required": ["required_approvals", "approvers", "auto_approve_conditions"],
+      "properties": {
+        "required_approvals": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "approvers": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1
+        },
+        "auto_approve_conditions": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "escalation_timeout_seconds": {
+          "type": "integer",
+          "minimum": 60
+        }
+      }
+    },
+    "timeout": {
+      "type": "object",
+      "required": ["mission_timeout_seconds"],
+      "properties": {
+        "mission_timeout_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 604800
+        },
+        "phase_timeouts": {
+          "type": "object",
+          "properties": {
+            "assigned_seconds": {"type": "integer", "minimum": 60},
+            "planning_seconds": {"type": "integer", "minimum": 60},
+            "running_seconds": {"type": "integer", "minimum": 60},
+            "waiting_review_seconds": {"type": "integer", "minimum": 60},
+            "verifying_seconds": {"type": "integer", "minimum": 30}
+          }
+        },
+        "heartbeat_interval_seconds": {
+          "type": "integer",
+          "default": 30
+        },
+        "heartbeat_timeout_seconds": {
+          "type": "integer",
+          "default": 120
+        }
+      }
+    },
+    "retry_policy": {
+      "type": "object",
+      "required": ["max_retries"],
+      "properties": {
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "backoff": {
+          "type": "string",
+          "enum": ["linear", "exponential", "fixed"],
+          "default": "exponential"
+        },
+        "base_delay_seconds": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 1
+        },
+        "max_delay_seconds": {
+          "type": "integer",
+          "default": 600,
+          "minimum": 1
+        },
+        "retryable_failures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "PROVIDER_UNAVAILABLE", "PROVIDER_TIMEOUT", "PROVIDER_QUOTA_EXCEEDED",
+              "TOOL_UNKNOWN", "TOOL_TIMEOUT", "TOOL_SANDBOX_UNAVAILABLE",
+              "RUNTIME_INTERNAL"
+            ]
+          }
+        },
+        "non_retryable_failures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "APPROVAL_MISSING", "APPROVAL_INVALID", "APPROVAL_EXPIRED",
+              "INTEGRITY_ENVELOPE_INVALID", "INTEGRITY_IDEMPOTENCY_CONFLICT",
+              "INTEGRITY_RECEIPT_CHAIN_BROKEN", "INTEGRITY_HASH_MISMATCH",
+              "EVIDENCE_MISSING", "EVIDENCE_UNVERIFIABLE",
+              "RECEIPT_MISSING", "RECEIPT_UNVERIFIABLE",
+              "MEMORY_EVIDENCE_UNBOUND", "MEMORY_CONFLICT_UNRESOLVED"
+            ]
+          }
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "description": "Initial context payload shared across all agents"
+    }
+  }
+}

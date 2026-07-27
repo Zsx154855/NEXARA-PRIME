@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/capability/capability_extension_v1.json",
+  "title": "NEXARA Capability Runtime — Extension V1 (Tool Runtime alignment)",
+  "description": "Adds 3 capabilities missing from V1: cap.code.read, cap.browser.control, cap.api.invoke. Remediation for P1 cross-contract gap.",
+  "remediates": "Claude review deleg_c7583290 — cross_contract_capability_gap",
+  "new_capabilities": {
+    "cap.code.read": {
+      "name": "Code Reading",
+      "description": "Read source code files within mission scope",
+      "risk_ceiling": "R0",
+      "required_permissions": [
+        "READ"
+      ],
+      "provider_preferences": [],
+      "fallback_chain": [],
+      "evidence_required": false,
+      "idempotent": true,
+      "timeout_s": 30,
+      "grants_tools": [
+        "tool.file.read",
+        "tool.file.list",
+        "tool.file.stat"
+      ]
+    },
+    "cap.browser.control": {
+      "name": "Browser Control",
+      "description": "Navigate, screenshot, and extract content from web pages",
+      "risk_ceiling": "R2",
+      "required_permissions": [
+        "READ"
+      ],
+      "provider_preferences": [],
+      "fallback_chain": [],
+      "evidence_required": true,
+      "idempotent": false,
+      "timeout_s": 120,
+      "grants_tools": [
+        "tool.browser.navigate",
+        "tool.browser.screenshot",
+        "tool.browser.extract"
+      ]
+    },
+    "cap.code.execute": {
+      "name": "Code Execution",
+      "description": "Execute code in sandboxed environment (shell, test runner)",
+      "risk_ceiling": "R2",
+      "required_permissions": ["READ", "EXECUTE_TEST"],
+      "provider_preferences": [],
+      "fallback_chain": [],
+      "evidence_required": true,
+      "idempotent": false,
+      "timeout_s": 300,
+      "grants_tools": ["tool.shell.exec"]
+    },
+    "cap.api.invoke": {
+      "name": "API Invocation",
+      "description": "Call external APIs within mission scope and rate limits",
+      "risk_ceiling": "R2",
+      "required_permissions": [
+        "READ"
+      ],
+      "provider_preferences": [],
+      "fallback_chain": [],
+      "evidence_required": true,
+      "idempotent": false,
+      "timeout_s": 60,
+      "grants_tools": [
+        "tool.api.call",
+        "tool.api.poll"
+      ]
+    }
+  },
+  "permission_matrix_update": {
+    "WRITER": [
+      "+cap.code.read",
+      "+cap.api.invoke"
+    ],
+    "REVIEWER": [
+      "+cap.code.read",
+      "+cap.browser.control"
+    ],
+    "COORDINATOR": [
+      "+cap.code.read",
+      "+cap.api.invoke"
+    ]
+  },
+  "capability_runtime_remains_single_source": true
+}

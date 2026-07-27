@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/nexara/full_system_closure_contract_v1.json",
+  "title": "NEXARA Full System Closure Contract V1",
+  "description": "Defines completion criteria for NEXARA Phase 1 system closure. All 11 planes must PASS. Zero P1 blockers. Independent Claude review required.",
+  "frozen_at": "2026-07-27T03:39:15.001804+00:00",
+  "governed_by": "NSEC V2.1",
+  "contract_type": "system_closure",
+  "phase": "PHASE_1_CLOSURE",
+  "version": "1.0.0",
+  "closure_criteria": {
+    "all_11_planes_pass": true,
+    "zero_p1_blockers": true,
+    "zero_new_test_failures": true,
+    "claude_review_pass": false,
+    "human_approval": false
+  },
+  "planes": {
+    "identity": {
+      "status": "PASS",
+      "evidence": "NEXARA=Personal Sovereign AI Agent, single_owner, owner_only, AgentOS=external"
+    },
+    "governance": {
+      "status": "PASS",
+      "evidence": "NSEC V2.1 active, 19 chapters, 55 articles, 546 lines"
+    },
+    "mission_lifecycle": {
+      "status": "PASS",
+      "evidence": "StateMachine + Recovery + Evidence binding operational"
+    },
+    "execution": {
+      "status": "PASS",
+      "evidence": "NexaraRuntime: 5 stage processors, 62KB, 1196 lines"
+    },
+    "capability": {
+      "status": "PASS",
+      "evidence": "CapabilityRegistry V1+V2 converged"
+    },
+    "provider": {
+      "status": "PASS",
+      "evidence": "ModelRouter + ModelGateway + CircuitBreaker"
+    },
+    "tool": {
+      "status": "PASS",
+      "evidence": "ToolRuntime + GovernedAdapters + Sandbox"
+    },
+    "memory_brain": {
+      "status": "PASS",
+      "evidence": "MemoryController + LongTermMemory + BrainDB, 73/73 tests PASS"
+    },
+    "reasoning": {
+      "status": "PASS",
+      "evidence": "ReasoningKernel: 7 modules, 7-step chain, 91/91 tests PASS"
+    },
+    "evidence": {
+      "status": "PASS",
+      "evidence": "17 evidence files, 5 contracts, 5 receipts, all SHA-256 verifiable"
+    },
+    "regression": {
+      "status": "PASS",
+      "evidence": "1315 passed, 21 pre-existing (wire_truth_enums), 0 new failures"
+    }
+  },
+  "test_baseline": {
+    "total_passed": 1315,
+    "total_failed": 21,
+    "pre_existing_failures": 21,
+    "new_failures": 0,
+    "brain_tests": 73,
+    "reasoning_tests": 91,
+    "runtime_tests": 1151
+  },
+  "active_gates": [
+    {
+      "gate": "NEXARA_PROJECT_IDENTITY_FREEZE_V1",
+      "result": "PASS_WITH_RECOMMENDATIONS",
+      "claude": "PASS"
+    },
+    {
+      "gate": "NEXARA_PERSONAL_BRAIN_ARCHITECTURE_DESIGN_V1",
+      "result": "PASS_WITH_RECOMMENDATIONS",
+      "claude": "PASS"
+    },
+    {
+      "gate": "NEXARA_MEMORY_BRAIN_IMPLEMENTATION_V1",
+      "result": "PASS",
+      "claude": "PASS"
+    },
+    {
+      "gate": "NEXARA_REASONING_KERNEL_DESIGN_V1",
+      "result": "PASS",
+      "claude": "PASS"
+    },
+    {
+      "gate": "NEXARA_REASONING_KERNEL_IMPLEMENTATION_V1",
+      "result": "PASS",
+      "claude": "PASS"
+    }
+  ],
+  "p_items": {
+    "p0": 0,
+    "p1": 0,
+    "p2": 14
+  },
+  "next_phase": "NEXARA_PHASE_2 — after human approval"
+}
