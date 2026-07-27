@@ -2,7 +2,7 @@
 
 import pytest
 from src.nexara_prime.brain.evolution.boundary import (
-    AutonomousBoundary, VetoRecord, ActionContext,
+    AutonomousBoundary, BoundaryDecision, VetoRecord, ActionContext,
     AUTONOMOUS_ALLOWED, AUTONOMOUS_BLOCKED, APPROVAL_REQUIRED,
 )
 
