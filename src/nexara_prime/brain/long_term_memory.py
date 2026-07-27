@@ -12,11 +12,10 @@ from ..models import new_id, now_iso
 
 from .db import BrainDB
 from .memory_controller import MemoryController
-from .decay_config import compute_decayed_confidence, get_half_life, get_min_confidence
+from .decay_config import get_half_life
 from .consolidation_rules import (
     should_promote_working_to_semantic,
     should_promote_semantic_to_procedural,
-    classify_layer,
 )
 
 

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from ...models import new_id, now_iso
+from ...models import new_id
 from .models import Decision, DecisionOption, ConfidenceScore
 
 

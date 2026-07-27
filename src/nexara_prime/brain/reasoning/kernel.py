@@ -11,7 +11,7 @@ from typing import Any, TYPE_CHECKING
 from ...models import new_id, now_iso
 from .models import (
     ReasoningStep, ReasoningTrace, ReasoningResult,
-    AssembledContext, MissionContext, DecisionOption,
+    AssembledContext, MissionContext,
 )
 from .context_assembler import ContextAssembler, MemoryRetrievalAdapter
 from .decision_framework import DecisionFramework
