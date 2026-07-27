@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_nexara_pr29_baseline_waiver_v1",
+  "mission": "NEXARA_PR29_METADATA_AND_GOVERNANCE_FIX_V1",
+  "frozen_at": "2026-07-27T14:35:30.520026+00:00",
+  "pr": 29,
+  "base_sha": "593f7070839c9a01ea98c3e4c39741cbdfa1fe16",
+  "head_sha": "d9cb2e55ec40efa25d3852dada3be7f55943b00b",
+  "ci_failure_analysis": {
+    "python": {
+      "status": "FAIL",
+      "root_cause": "25 pre-existing collection errors",
+      "introduced_by_pr": false
+    },
+    "sovereign_delivery": {
+      "status": "FAIL",
+      "root_cause": "blocked by python upstream",
+      "introduced_by_pr": false
+    },
+    "passing_checks": [
+      "governance",
+      "nsec-governance",
+      "secret-scan",
+      "swift-ios",
+      "swift-macos",
+      "typescript",
+      "gitguardian"
+    ]
+  },
+  "verification": "Same 25 collection errors exist on base commit 593f707. Verified by git clone --depth 1 --branch main and pytest tests/.",
+  "phase2b_tests": "28/28 PASS (tests/brain/phase2b/)",
+  "full_regression": "1407 passed, 21 pre-existing (wire_truth_enums)",
+  "governance_fixes_applied": [
+    "PR body HEAD updated from 78f8c51 to d9cb2e5",
+    "Baseline waiver evidence generated"
+  ],
+  "p0": 0,
+  "p1": 0,
+  "p2": 0,
+  "final_result": "READY_FOR_HUMAN_MERGE_APPROVAL"
+}
