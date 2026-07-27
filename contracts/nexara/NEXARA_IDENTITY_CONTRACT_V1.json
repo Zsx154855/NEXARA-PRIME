@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/nexara/identity_contract_v1.json",
+  "title": "NEXARA Project Identity Freeze Contract V1",
+  "description": "Establishes the formal, immutable project identity boundary for NEXARA as an independent Personal Sovereign AI Agent. This contract freezes the foundational identity facts and declares explicit prohibition boundaries. Governed by NSEC V2.1.",
+  "frozen_at": "2026-07-27T12:00:00Z",
+  "governed_by": "NSEC V2.1 — Preamble §签署主体, Article 51-55 (Complete Delivery Responsibility), Chapter 19 (NEXARA-PRIME Binding Constraints)",
+  "contract_type": "identity_freeze",
+  "version": "1.0.0",
+  "canonical_id": "NEXARA_IDENTITY_CONTRACT_V1",
+  "immutable": true,
+  "supersedes": null,
+
+  "project_identity": {
+    "project_name": "NEXARA",
+    "project_name_zh": "柏韩",
+    "project_type": "Personal Sovereign AI Agent",
+    "project_type_detail": "A first-party, single-owner sovereign AI runtime with full governance, evidence, memory, and execution capabilities. Not a SaaS, not a platform, not a multi-tenant service.",
+    "canonical_repo": "NEXARA-PRIME",
+    "canonical_namespace": "nexara_prime",
+    "canonical_workspace": "/Users/agentos/NEXARA-PRIME",
+    "governance_constitution": "NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1 (NSEC V2.1)",
+    "governance_level": "SUPREME"
+  },
+
+  "ownership_model": {
+    "owner_type": "single_owner",
+    "owner_identity": "顺新 (SHUNXIN ZHANG)",
+    "owner_email": "taimilivilla@gmail.com",
+    "owner_role": "甲方 — Project Owner, Final Decision Maker, Ultimate Goal Definer",
+    "authority_model": "owner_only",
+    "authority_model_detail": "All final authority resides with the single human owner. No shared governance, no community voting, no multi-stakeholder model. The owner holds final control over: goals, approval, pause, takeover, revocation, rollback, and irreversible external actions.",
+    "governed_by_nsec_article": "NSEC V2.1 §第一部分·签署主体, Article 37 (High-Impact Approval), Article 46 (Highest Interpretation Order: 甲方最终控制权)"
+  },
+
+  "relationship_with_agentos": {
+    "status": "independent",
+    "detail": "NEXARA is an independent project with its own governance (NSEC V2.1), codebase (nexara_prime), repo (NEXARA-PRIME), and runtime. AgentOS is an external execution coordination tool used by NEXARA; AgentOS is NOT a parent, NOT a super-project, NOT a governance authority over NEXARA, and NOT part of the NEXARA identity scope.",
+    "agentos_role": "External execution coordination tool only — used by NEXARA for browser QA, desktop automation, and multi-agent orchestration. AgentOS does not participate in NEXARA governance, does not own NEXARA decisions, and is not a NEXARA entity.",
+    "nsec_binding": "NSEC V2.1 Chapter 19: Hermes runtime dependency = 0. Hermes/Codex/Claude are development executors only.",
+    "boundary_clause": "No AgentOS decision, contract, governance document, or runtime artifact shall override, amend, or circumvent NSEC V2.1 or any NEXARA identity contract."
+  },
+
+  "prohibitions": {
+    "description": "These prohibitions are ABSOLUTE and IMMUTABLE within the scope of this contract. Any violation constitutes a breach of NSEC V2.1 Article 47.",
+    "items": [
+      {
+        "id": "PROHIBIT-01",
+        "category": "identity_misattribution",
+        "severity": "BLOCKING",
+        "rule": "AgentOS name shall NEVER be used as the NEXARA project body name or canonical identity.",
+        "detail": "NEXARA is not 'AgentOS NEXARA', not 'AgentOS-PRIME', not a subproject of AgentOS. The project name is 'NEXARA' — standalone, unqualified. The repo is 'NEXARA-PRIME'.",
+        "nsrc_article": "Chapter 19 §总则: 产品包为 nexara_prime"
+      },
+      {
+        "id": "PROHIBIT-02",
+        "category": "platform_positioning",
+        "severity": "BLOCKING",
+        "rule": "NEXARA shall NEVER be positioned as a public platform, multi-tenant service, SaaS, or community project.",
+        "detail": "NEXARA is a Personal Sovereign AI Agent — single-owner, first-party. No tenant system, no registration, no public API, no marketplace, no community governance. The project serves exactly one owner.",
+        "nsrc_article": "Preamble: NEXARA 是一个需要长期运行、持续演进、可验证、可治理、可恢复并由人类保持最终控制权的第一方主权智能体系统"
+      },
+      {
+        "id": "PROHIBIT-03",
+        "category": "multi_user_model",
+        "severity": "BLOCKING",
+        "rule": "NEXARA shall NEVER adopt a multi-user model, role-based access control for external users, or shared ownership structure.",
+        "detail": "No user management, no RBAC for external parties, no OAuth integration for third-party access, no team/organization model, no collaborator roles. The only recognized 'user' is the single owner (甲方).",
+        "nsrc_article": "§第一部分·签署主体: NEXARA 项目负责人、项目所有者、最终目标定义者及最高决策者"
+      }
+    ]
+  },
+
+  "positive_identity_statements": {
+    "description": "Affirmative declarations that define what NEXARA IS, complementing the prohibitions.",
+    "items": [
+      {
+        "id": "AFFIRM-01",
+        "statement": "NEXARA is a first-party sovereign AI agent runtime operating under the sole authority of its human owner."
+      },
+      {
+        "id": "AFFIRM-02",
+        "statement": "NEXARA owns its own governance (NSEC V2.1), runtime (nexara_prime), evidence system, memory system, and decision-making pipeline."
+      },
+      {
+        "id": "AFFIRM-03",
+        "statement": "NEXARA may USE external tools (AgentOS, Hermes, Claude, Codex) but these are executors, NOT governors."
+      },
+      {
+        "id": "AFFIRM-04",
+        "statement": "NEXARA's scope extends to all current and future derivatives: NEXARA Runtime, NEXARA Multi-Agent System, NEXARA CI Authority, NEXARA Knowledge Base, NEXARA Memory Graph, NEXARA Governance, NEXARA Desktop, NEXARA Web, NEXARA iOS, NEXARA macOS."
+      }
+    ]
+  },
+
+  "architecture_boundary": {
+    "description": "The hard boundary between NEXARA identity and external tooling/coordination layers.",
+    "inside_nexara_identity": [
+      "NEXARA-PRIME repository",
+      "nexara_prime Python package",
+      "NSEC V2.1 governance constitution",
+      "NEXARA runtime (src/nexara_prime/)",
+      "NEXARA evidence system (.nexara/evidence/)",
+      "NEXARA memory system (memory.py, knowledge.py)",
+      "NEXARA contracts (contracts/)",
+      "NEXARA CI authority (.github/workflows/)",
+      "NEXARA test suite (tests/)",
+      "NEXARA CLI (src/nexara_prime/cli.py)",
+      "NEXARA REST API (src/nexara_prime/api.py)",
+      "All NEXARA-branded derivatives (Desktop, Web, iOS, macOS)"
+    ],
+    "outside_nexara_identity": [
+      "AgentOS (external coordination tool)",
+      "Hermes Agent (development executor)",
+      "Claude/Codex (external AI assistants)",
+      "Model Providers (DeepSeek, OpenAI, etc.)",
+      "GitHub (hosting platform, not governance)",
+      "macOS (host operating system)"
+    ],
+    "boundary_rule": "Anything inside the NEXARA identity boundary is governed by NSEC V2.1. Anything outside is a tool — NEXARA may use it but is not defined by it."
+  },
+
+  "role_declaration": {
+    "cto": "NEXARA Architecture Authority — defines and freezes project identity boundaries",
+    "hermes": "唯一 Writer — sole agent authorized to create/modify NEXARA artifacts in this gate",
+    "claude": "Independent Reviewer — external, impartial review of all identity artifacts",
+    "agentos": "仅作为外部执行协调工具，不属于 NEXARA — AgentOS is explicitly excluded from NEXARA identity and governance"
+  },
+
+  "validation_requirements": {
+    "json_schema": "All identity artifacts must validate against JSON Schema draft 2020-12",
+    "cross_reference": "Contract → Report → Receipt must form a consistent, hash-linked chain",
+    "evidence_integrity": "SHA-256 hashes of all frozen artifacts must be recorded and verifiable",
+    "claude_review": "Claude independent review must verify: (a) contract correctness, (b) prohibition completeness, (c) boundary clarity, (d) no AgentOS identity contamination"
+  },
+
+  "next_gate": "NEXARA_BRAND_IDENTITY_V1 (after identity freeze is confirmed by Claude review + human approval)",
+
+  "governance_gates": {
+    "file_modification": "ALLOWED (contracts/nexara/ + evidence/nexara/ files)",
+    "commit": "AWAITING_NSEC_ARTICLE_37",
+    "push": "AWAITING_NSEC_ARTICLE_37",
+    "merge": "DENIED (feature branch; merge after human approval)",
+    "deploy": "DENIED",
+    "nsec_article_37_required": true
+  }
+}

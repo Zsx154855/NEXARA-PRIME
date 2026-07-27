@@ -1,0 +1,318 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/nexara/reasoning/implementation_contract_v1.json",
+  "title": "NEXARA Reasoning Kernel Implementation Scope Contract V1",
+  "description": "Frozen implementation scope for Reasoning Kernel Phase 1. Defines exact files, interfaces, test requirements, and forbidden boundaries. ZERO runtime modification. Implementation starts only after Claude review PASS + human approval.",
+  "frozen_at": "2026-07-27T18:00:00Z",
+  "governed_by": "NSEC V2.1 Article 1, 8, 37, 45",
+  "contract_type": "implementation_scope",
+  "phase": "PHASE_REASONING_KERNEL_IMPLEMENTATION",
+  "parent_design": "contracts/nexara/reasoning/NEXARA_REASONING_KERNEL_DESIGN_V1.json",
+  "parent_component": "BRAIN-06: Reasoning Kernel",
+  "version": "1.0.0",
+  "mission_scope": {
+    "objective": "Implement Reasoning Kernel — cognitive inference layer. 7 modules. ZERO runtime modification. Deterministic inference only (no model calls).",
+    "what_is_implemented": [
+      "REASON-01: Kernel API — reason(), audit(), quantify_uncertainty()",
+      "REASON-02: Thought Process Engine — 7 step types (OBSERVE→CLASSIFY→DECOMPOSE→INFER→VALIDATE→SYNTHESIZE→REFLECT)",
+      "REASON-03: Context Assembly — 6-step pipeline, bounded to 50 items / 5000 tokens",
+      "REASON-04: Memory Retrieval Adapter — wraps MemoryController.rank_retrieve(), never imports brain.db",
+      "REASON-05: Decision Framework — Problem→Options→Evidence→Risk→Selection→Review",
+      "REASON-06: Confidence Engine — 5 factors (evidence_strength, consistency, completeness, source_reliability, historical_accuracy), weights sum 1.0",
+      "REASON-07: Self Check Validator — 5 checks (consistency, completeness, evidence, calibration, circularity)"
+    ],
+    "what_is_explicitly_deferred": [
+      "Model-call-based reasoning (Phase 3 — after confidence calibration data exists)",
+      "DecisionMemory writes (depends on DecisionMemory implementation — Phase 2)",
+      "Knowledge Graph integration (depends on KnowledgeGraph — Phase 2)",
+      "Preference Model integration (depends on PreferenceModel — Phase 4)",
+      "Evolution-driven reasoning improvement (Phase 5)",
+      "UI for reasoning visualization"
+    ]
+  },
+  "allowed_files": {
+    "new_python_files": [
+      "src/nexara_prime/brain/reasoning/__init__.py",
+      "src/nexara_prime/brain/reasoning/kernel.py",
+      "src/nexara_prime/brain/reasoning/context_assembler.py",
+      "src/nexara_prime/brain/reasoning/decision_framework.py",
+      "src/nexara_prime/brain/reasoning/confidence.py",
+      "src/nexara_prime/brain/reasoning/self_check.py",
+      "src/nexara_prime/brain/reasoning/models.py"
+    ],
+    "new_test_files": [
+      "tests/reasoning/__init__.py",
+      "tests/reasoning/test_kernel.py",
+      "tests/reasoning/test_thought_process.py",
+      "tests/reasoning/test_context_assembler.py",
+      "tests/reasoning/test_memory_adapter.py",
+      "tests/reasoning/test_decision_framework.py",
+      "tests/reasoning/test_confidence.py",
+      "tests/reasoning/test_self_check.py",
+      "tests/reasoning/test_isolation.py"
+    ],
+    "new_contract_files": [
+      "contracts/nexara/reasoning/NEXARA_REASONING_KERNEL_IMPLEMENTATION_CONTRACT_V1.json"
+    ],
+    "new_evidence_files": [
+      "evidence/nexara/reasoning/implementation_scope_report.json",
+      "evidence/nexara/reasoning/implementation_scope_receipt.json"
+    ],
+    "brain_state_db_additions": [
+      "reasoning_sessions table",
+      "reasoning_traces table",
+      "confidence_history table"
+    ]
+  },
+  "forbidden_files": {
+    "absolute_prohibition": [
+      "src/nexara_prime/runtime.py",
+      "src/nexara_prime/evidence.py",
+      "src/nexara_prime/evaluation.py",
+      "src/nexara_prime/memory.py",
+      "src/nexara_prime/tools.py",
+      "src/nexara_prime/model_gateway.py",
+      "src/nexara_prime/state_machine.py",
+      "src/nexara_prime/governance.py",
+      "src/nexara_prime/chief_brain_kernel.py",
+      "src/nexara_prime/api.py",
+      "src/nexara_prime/cli.py",
+      "contracts/nexara/NEXARA_IDENTITY_CONTRACT_V1.json",
+      "contracts/nexara/NEXARA_PERSONAL_BRAIN_ARCHITECTURE_CONTRACT_V1.json"
+    ],
+    "read_only_reference": [
+      "src/nexara_prime/brain/memory_controller.py (rank_retrieve() only)",
+      "src/nexara_prime/brain/kernel.py (decide() integration point)",
+      "src/nexara_prime/models.py (MemoryKind, RiskLevel types)"
+    ],
+    "untouchable_brain_files": [
+      "src/nexara_prime/brain/kernel.py",
+      "src/nexara_prime/brain/decision_engine.py",
+      "src/nexara_prime/brain/context_engine.py",
+      "src/nexara_prime/brain/memory_controller.py",
+      "src/nexara_prime/brain/long_term_memory.py",
+      "src/nexara_prime/brain/db.py",
+      "src/nexara_prime/brain/goal_manager.py",
+      "src/nexara_prime/brain/evolution_engine.py",
+      "src/nexara_prime/brain/planner.py",
+      "src/nexara_prime/brain/model_policy.py",
+      "src/nexara_prime/brain/reasoning_budget.py"
+    ],
+    "import_prohibition": [
+      "brain/reasoning/ NEVER imports brain.db",
+      "brain/reasoning/ NEVER imports brain/memory_controller.py directly (use interface)",
+      "brain/reasoning/ NEVER imports runtime.py, evidence.py, evaluation.py",
+      "brain/reasoning/ NEVER imports tools.py, model_gateway.py"
+    ]
+  },
+  "module_specifications": {
+    "REASON-01_kernel": {
+      "file": "brain/reasoning/kernel.py",
+      "class": "ReasoningKernel",
+      "methods": {
+        "reason": {
+          "signature": "reason(mission: MissionContext, context: AssembledContext, constraints: list[str]) -> ReasoningResult",
+          "description": "Execute full reasoning chain: assemble→think→decide→check. Returns result with trace."
+        },
+        "audit": {
+          "signature": "audit(reasoning_id: str) -> ReasoningTrace",
+          "description": "Return full step-by-step reasoning trace with evidence references."
+        },
+        "quantify_uncertainty": {
+          "signature": "quantify_uncertainty(conclusion: str, evidence_weight: float) -> ConfidenceScore",
+          "description": "Quantify uncertainty of a conclusion given evidence strength."
+        }
+      },
+      "output": {
+        "reasoning_id": "str",
+        "reasoning_trace": "list[ReasoningStep]",
+        "conclusion": "str",
+        "confidence": "float (0.0-1.0)",
+        "evidence_refs": "list[str]",
+        "uncertainty": "UncertaintyReport",
+        "self_check_passed": "bool",
+        "alternatives": "list[AlternativeDecision]"
+      }
+    },
+    "REASON-02_thought_process": {
+      "file": "brain/reasoning/kernel.py (ThoughtProcessEngine inner class)",
+      "class": "ThoughtProcessEngine",
+      "methods": {
+        "execute_chain": {
+          "signature": "execute_chain(query: str, context: AssembledContext, chain_type: str = 'linear') -> list[ReasoningStep]",
+          "description": "Execute reasoning chain: OBSERVE→CLASSIFY→DECOMPOSE→INFER→VALIDATE→SYNTHESIZE→REFLECT"
+        }
+      },
+      "step_output": {
+        "step_id": "str",
+        "step_type": "str (OBSERVE/CLASSIFY/DECOMPOSE/INFER/VALIDATE/SYNTHESIZE/REFLECT)",
+        "input_facts": "list[str]",
+        "operation": "str (description of what this step does)",
+        "output": "str (conclusion or intermediate result)",
+        "confidence": "float",
+        "evidence_refs": "list[str]"
+      }
+    },
+    "REASON-03_context_assembly": {
+      "file": "brain/reasoning/context_assembler.py",
+      "class": "ContextAssembler",
+      "methods": {
+        "assemble": {
+          "signature": "assemble(mission: MissionContext, memory: MemoryRetrievalAdapter) -> AssembledContext",
+          "description": "6-step pipeline: extract→retrieve→past_decisions→preferences→dedup→bound"
+        }
+      },
+      "hard_limits": {
+        "max_items": 50,
+        "max_tokens": 5000
+      }
+    },
+    "REASON-04_memory_adapter": {
+      "file": "brain/reasoning/context_assembler.py (MemoryRetrievalAdapter inner class)",
+      "class": "MemoryRetrievalAdapter",
+      "methods": {
+        "retrieve": {
+          "signature": "retrieve(query: str, strategy: str, top_k: int, min_confidence: float) -> list[MemoryItem]",
+          "description": "Wraps MemoryController.rank_retrieve(). 5 strategies: broad_semantic, episodic_match, working_context, preference_bias, procedural_rules."
+        }
+      },
+      "isolation_rule": "NEVER imports brain.db or any runtime module. Only calls MemoryController.rank_retrieve() through interface."
+    },
+    "REASON-05_decision_framework": {
+      "file": "brain/reasoning/decision_framework.py",
+      "class": "DecisionFramework",
+      "methods": {
+        "decide": {
+          "signature": "decide(problem: ProblemFrame, options: list[DecisionOption], evidence: list[EvidenceItem], risk: RiskAssessment) -> Decision",
+          "description": "6-step: Problem→Options→Evidence→Risk→Selection→Review"
+        }
+      },
+      "output": {
+        "decision": "str (selected option)",
+        "reason": "str (rationale)",
+        "evidence": "list[str] (evidence references)",
+        "risk": "str (risk assessment)",
+        "confidence": "float"
+      }
+    },
+    "REASON-06_confidence": {
+      "file": "brain/reasoning/confidence.py",
+      "class": "ConfidenceEngine",
+      "methods": {
+        "evaluate": {
+          "signature": "evaluate(evidence_strength: float, consistency: float, completeness: float, source_reliability: float, historical_accuracy: float) -> ConfidenceScore",
+          "description": "5-factor weighted scoring. Weights MUST sum to 1.0."
+        }
+      },
+      "weights": {
+        "evidence_strength": 0.35,
+        "consistency": 0.2,
+        "completeness": 0.2,
+        "source_reliability": 0.15,
+        "historical_accuracy": 0.1
+      }
+    },
+    "REASON-07_self_check": {
+      "file": "brain/reasoning/self_check.py",
+      "class": "SelfCheckValidator",
+      "methods": {
+        "validate": {
+          "signature": "validate(trace: list[ReasoningStep]) -> SelfCheckResult",
+          "description": "5 checks: consistency, completeness, evidence_coverage, calibration, circularity."
+        }
+      },
+      "checks": [
+        {
+          "name": "consistency",
+          "method": "Compare conclusion pairs for contradiction"
+        },
+        {
+          "name": "completeness",
+          "method": "Verify all step dependencies satisfied"
+        },
+        {
+          "name": "evidence_coverage",
+          "method": "All INFER/SYNTHESIZE steps have >=1 evidence_ref"
+        },
+        {
+          "name": "calibration",
+          "method": "No step confidence > evidence_strength + 0.3"
+        },
+        {
+          "name": "circularity",
+          "method": "No cycles in step dependency graph"
+        }
+      ]
+    }
+  },
+  "test_requirements": {
+    "minimum_test_count": 80,
+    "test_framework": "pytest",
+    "coverage_areas": [
+      {
+        "area": "Kernel Contract",
+        "min_tests": 10,
+        "file": "test_kernel.py"
+      },
+      {
+        "area": "Thought Process",
+        "min_tests": 15,
+        "file": "test_thought_process.py"
+      },
+      {
+        "area": "Context Assembly",
+        "min_tests": 15,
+        "file": "test_context_assembler.py"
+      },
+      {
+        "area": "Memory Adapter",
+        "min_tests": 10,
+        "file": "test_memory_adapter.py"
+      },
+      {
+        "area": "Decision Framework",
+        "min_tests": 10,
+        "file": "test_decision_framework.py"
+      },
+      {
+        "area": "Confidence",
+        "min_tests": 10,
+        "file": "test_confidence.py"
+      },
+      {
+        "area": "Self Check",
+        "min_tests": 10,
+        "file": "test_self_check.py"
+      },
+      {
+        "area": "Isolation",
+        "min_tests": 10,
+        "file": "test_isolation.py"
+      }
+    ]
+  },
+  "acceptance_criteria": [
+    "All 7 modules implemented and testable independently",
+    "Minimum 80 tests across 8 coverage areas, all PASS",
+    "ZERO modifications to forbidden files",
+    "Existing 1224+ tests continue to PASS",
+    "Confidence weights sum to 1.0 (verified by test)",
+    "Self-check: all 5 checks operational",
+    "Memory adapter: NEVER imports brain.db (verified by isolation test)",
+    "Reasoning is deterministic: same inputs → same outputs",
+    "Context bounded to 50 items / 5000 tokens max",
+    "Claude Pre-Implementation Review = PASS",
+    "Claude Post-Implementation Review = PASS",
+    "All evidence files generated and valid"
+  ],
+  "governance_gates": {
+    "file_modification": "ALLOWED (scoped files only)",
+    "commit": "AWAITING_NSEC_ARTICLE_37",
+    "push": "AWAITING_NSEC_ARTICLE_37",
+    "merge": "DENIED",
+    "deploy": "DENIED",
+    "implementation": "FROZEN — requires Claude scope review PASS + human approval",
+    "nsec_article_37_required": true
+  },
+  "next_gate": "CLAUDE_INDEPENDENT_IMPLEMENTATION_SCOPE_REVIEW_REQUIRED"
+}

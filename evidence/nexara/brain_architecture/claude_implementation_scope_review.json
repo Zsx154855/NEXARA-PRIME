@@ -1,0 +1,352 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "review_id": "claude_implementation_scope_review_v1_20260727",
+  "review_type": "independent_implementation_scope_review",
+  "mission": "NEXARA_MEMORY_BRAIN_IMPLEMENTATION_SCOPE_V1",
+  "reviewer_role": "Claude — Independent Reviewer",
+  "reviewed_at": "2026-07-27T16:30:00Z",
+  "governed_by": "NSEC V2.1 Article 40 (职责分离), Article 37 (高影响审批), Article 45 (完成定义)",
+  "subject_head": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "branch": "feat/brand-baihan",
+
+  "artifacts_reviewed": [
+    {
+      "path": "contracts/nexara/NEXARA_MEMORY_BRAIN_IMPLEMENTATION_SCOPE_V1.json",
+      "sha256": "9b4a20d0041b715f7e9828ec2c00bb2aae1e76c167aeee0cdff1275117b8f531",
+      "role": "primary_scope_contract"
+    },
+    {
+      "path": "evidence/nexara/brain_architecture/phase1_implementation_scope_report.json",
+      "sha256": "167f754b556c64f5b430a8af343216c76371e7f77010370185a3b0d6cb6707e3",
+      "role": "scope_report"
+    },
+    {
+      "path": "evidence/nexara/brain_architecture/phase1_implementation_scope_receipt.json",
+      "sha256": "PENDING_COMMIT",
+      "role": "scope_receipt"
+    },
+    {
+      "path": "contracts/nexara/NEXARA_PERSONAL_BRAIN_ARCHITECTURE_CONTRACT_V1.json",
+      "role": "parent_architecture_contract"
+    },
+    {
+      "path": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md",
+      "role": "governance_reference"
+    }
+  ],
+
+  "codebase_verification": {
+    "brain_memory_controller": {
+      "path": "src/nexara_prime/brain/memory_controller.py",
+      "actual_lines": 101,
+      "actual_methods": ["commit", "recall", "consolidate", "summary", "_classify_layer"],
+      "current_evidence_required_kinds": ["decision", "failure", "failure_experience", "patch", "skill_improvement", "system_rule"],
+      "storage": "in-memory Python lists (4 layer lists)",
+      "verdict": "MATCHES_SCOPE_CLAIMS"
+    },
+    "brain_kernel": {
+      "path": "src/nexara_prime/brain/kernel.py",
+      "actual_lines": 166,
+      "class": "ChiefBrainKernel",
+      "integration_point": "observe_result() → memory.consolidate(mission_id) at line 151",
+      "bind_method": "bind_memory(controller) at line 155",
+      "verdict": "CORRECTLY_MARKED_UNTOUCHABLE"
+    },
+    "brain_protocols": {
+      "path": "src/nexara_prime/brain/__init__.py",
+      "actual_lines": 103,
+      "defined_protocols": ["BrainComponent", "DecisionInput", "DecisionOutput", "ModelPolicy", "MemoryControllerProtocol", "Goal"],
+      "protocol_missing": "MemoryControllerProtocol defines commit/recall/consolidate BUT NOT summary() — actual class has it",
+      "verdict": "MATCHES_WITH_MINOR_GAP"
+    },
+    "existing_brain_files": {
+      "total_python_files": 11,
+      "untouchable_claimed": 8,
+      "untouchable_actual": ["kernel.py", "decision_engine.py", "context_engine.py", "goal_manager.py", "evolution_engine.py", "planner.py", "model_policy.py", "reasoning_budget.py"],
+      "verdict": "ALL_8_EXIST_ON_DISK"
+    },
+    "current_isolation_status": {
+      "brain_imports_runtime": false,
+      "runtime_imports_brain": false,
+      "verdict": "ISOLATION_INTACT_TODAY"
+    },
+    "state_machine_py_exists": false,
+    "state_machine_note": "Listed in absolute_prohibition but file does not exist on disk — conservative/defensive entry, no impact"
+  },
+
+  "review_criteria": {
+    "1_scope_completeness": {
+      "verdict": "PASS",
+      "score": "5/5",
+      "details": {
+        "scope_1_storage_contract": {
+          "status": "DEFINED",
+          "evidence": "brain_state.db schema with 6 tables (brain_memories, memory_decay_state, memory_consolidation_log, memory_access_log, memory_health_snapshots, memory_provenance_chain). All columns specified for brain_memories table (16 columns). BrainDB class at brain/db.py manages separate SQLite connection at .nexara/brain_state.db."
+        },
+        "scope_2_object_schema": {
+          "status": "DEFINED",
+          "evidence": "6 JSON schemas enumerated: memory_brain_record, decay_state, consolidation_log, health_snapshot, provenance_chain, ranked_retrieval_result. All reside under schemas/brain/. Extend (not replace) existing MemoryRecord from models.py."
+        },
+        "scope_3_classification": {
+          "status": "DEFINED",
+          "evidence": "decay_config.py with per-kind half-life for all 13 MemoryKind (1h short_term to Never for system_rule). consolidation_rules.py with layer promotion thresholds (access_count≥3, confidence≥0.9). Enhanced _classify_layer() adds confidence + decay_rate output.",
+          "note": "Half-life values are reasonable: short-term 1h, facts 90-365 days, decisions/patches never decay (superseded/versioned instead). Classification is principled."
+        },
+        "scope_4_retrieval": {
+          "status": "DEFINED",
+          "evidence": "rank_retrieve() with 3-factor weighted scoring: relevance(0.5) + recency(0.25) + confidence(0.25). cross_layer_query() returns grouped-by-layer dict with total_count. RetrievalInterface protocol added to brain/__init__.py."
+        },
+        "scope_5_evidence_binding": {
+          "status": "DEFINED",
+          "evidence": "10 of 13 MemoryKind require evidence_id (expanded from current 6). ProvenanceTracker class with record_provenance(), get_chain(), verify_chain(). Test file tests/brain/test_evidence_binding.py specified.",
+          "expansion": "Currently 6 kinds require evidence (decision, failure, failure_experience, patch, skill_improvement, system_rule). Scope adds: fact, user_fact, project_fact, preference — expanding to 10 required kinds."
+        },
+        "scope_6_isolation": {
+          "status": "DEFINED",
+          "evidence": "BrainDB uses separate .nexara/brain_state.db (not .nexara/store.db). 7 explicit package import rules. Verification via test_isolation.py with grep-based import checking. brain/ NEVER imports runtime/evidence/evaluation. runtime/ NEVER imports brain/."
+        }
+      }
+    },
+
+    "2_existing_surface_preservation": {
+      "verdict": "PASS",
+      "score": "4.5/5",
+      "details": {
+        "memory_controller_methods_preserved": {
+          "status": "PASS",
+          "methods": ["commit()", "recall()", "consolidate()", "summary()"],
+          "evidence": "All 4 existing methods preserved with enhanced implementations. New keyword arguments added with defaults for backward compatibility. New methods (rank_retrieve, cross_layer_query, health_report, decay_tick, get_provenance) are additive only."
+        },
+        "brain_kernel_unchanged": {
+          "status": "PASS",
+          "evidence": "brain/kernel.py is in forbidden_files.untouchable_brain_files. ChiefBrainKernel.bind_memory() and observe_result() → memory.consolidate() continue to work with enhanced MemoryController (same interface, enhanced internals)."
+        },
+        "protocols_extended_not_broken": {
+          "status": "PASS",
+          "evidence": "brain/__init__.py modified only to add RetrievalInterface protocol. Existing BrainComponent, DecisionInput/Output, ModelPolicy, MemoryControllerProtocol, Goal preserved unchanged."
+        },
+        "no_other_brain_files_modified": {
+          "status": "PASS",
+          "evidence": "Only memory_controller.py and __init__.py modified. All 8 untouchable files exist on disk and are explicitly protected."
+        },
+        "advisory_1_protocol_gap": {
+          "severity": "LOW",
+          "finding": "MemoryControllerProtocol in brain/__init__.py (lines 68-89) defines commit(), recall(), consolidate() BUT NOT summary(). The actual MemoryController class at memory_controller.py has a summary() method (line 84). The scope should add summary() to the protocol when extending __init__.py. This does not block implementation but is a hygiene gap.",
+          "recommendation": "Add summary() → dict[str, Any] to MemoryControllerProtocol during __init__.py extension."
+        },
+        "advisory_2_duplicate_kernel_files": {
+          "severity": "INFO",
+          "finding": "Two kernel files exist: brain/kernel.py (ChiefBrainKernel, 166 lines) AND chief_brain_kernel.py (separate file). The scope correctly protects chief_brain_kernel.py in absolute_prohibition and treats brain/kernel.py as the canonical ChiefBrainKernel location. No current issue, but worth noting for future clean-up."
+        }
+      }
+    },
+
+    "3_runtime_boundary_integrity": {
+      "verdict": "PASS",
+      "score": "5/5",
+      "details": {
+        "zero_runtime_modification": {
+          "status": "PASS",
+          "evidence": "14 runtime files in absolute_prohibition list. ZERO runtime files in allowed_files or modified_files. The scope explicitly states: enhancing MemoryController does NOT mean importing runtime. MemoryController is brain-tier.",
+          "protected_files": [
+            "src/nexara_prime/runtime.py",
+            "src/nexara_prime/evidence.py",
+            "src/nexara_prime/evaluation.py",
+            "src/nexara_prime/memory.py",
+            "src/nexara_prime/state_machine.py (defensive — file does not actually exist)",
+            "src/nexara_prime/governance.py",
+            "src/nexara_prime/chief_brain_kernel.py",
+            "src/nexara_prime/api.py",
+            "src/nexara_prime/cli.py",
+            "src/nexara_prime/models.py (read-only reference only)",
+            ".nexara/evidence/",
+            "governance/",
+            "contracts/nexara/NEXARA_IDENTITY_CONTRACT_V1.json",
+            "contracts/nexara/NEXARA_PERSONAL_BRAIN_ARCHITECTURE_CONTRACT_V1.json"
+          ]
+        },
+        "brain_never_imports_runtime": {
+          "status": "PASS",
+          "evidence": "7 explicit import prohibition rules in scope_6 package_isolation. Brain MAY import models.py (types) and db.py (pattern). Brain NEVER imports runtime.py, evidence.py, evaluation.py.",
+          "current_state_verified": "Grep confirms zero 'from.*runtime' or 'import.*runtime' in brain/ package today (only runtime_checkable from typing, which is unrelated)."
+        },
+        "runtime_never_imports_brain": {
+          "status": "PASS",
+          "evidence": "Explicit rule: runtime.py NEVER imports from src/nexara_prime/brain/. Current state verified: zero imports from brain in runtime.py."
+        },
+        "database_separation": {
+          "status": "PASS",
+          "evidence": "brain_state.db at .nexara/brain_state.db — completely separate path from .nexara/store.db. BrainDB uses separate SQLite instance, separate connection pool. Hardcoded connection string to brain_state.db path."
+        }
+      }
+    },
+
+    "4_test_coverage_design": {
+      "verdict": "PASS",
+      "score": "4/5",
+      "details": {
+        "all_8_areas_defined": {
+          "status": "PASS",
+          "areas": [
+            {"area": "Memory Persistence", "min_tests": 10, "checks_specified": true},
+            {"area": "Retrieval Ranking", "min_tests": 12, "checks_specified": true},
+            {"area": "Decay Model", "min_tests": 10, "checks_specified": true},
+            {"area": "Evidence Binding", "min_tests": 10, "checks_specified": true},
+            {"area": "Long-term Memory", "min_tests": 15, "checks_specified": true},
+            {"area": "Isolation Boundary", "min_tests": 8, "checks_specified": true},
+            {"area": "Health Metrics", "min_tests": 8, "checks_specified": true},
+            {"area": "Consolidation", "min_tests": 7, "checks_specified": true}
+          ],
+          "total_minimum": 80
+        },
+        "minimum_80_realistic": {
+          "status": "PASS",
+          "analysis": "80 tests across 8 areas with specific checks per area is realistic for the scope of 12 new files + 2 enhanced files. Average 10 tests per area with strong variation (7-15) matches complexity distribution. The 80 minimum is conservative — actual implementation would likely exceed this."
+        },
+        "isolation_boundary_tests_exist": {
+          "status": "PASS",
+          "evidence": "tests/brain/test_isolation.py specified with 8 minimum tests covering: brain_state.db != store.db path, zero forbidden imports in brain/, zero brain imports in runtime, MemoryController does not import runtime modules."
+        },
+        "evidence_binding_coverage": {
+          "status": "PASS",
+          "evidence": "10 minimum tests covering both required kinds (10 of 13 MemoryKind must have evidence_id) and optional kinds (3 kinds: short_term, temporary_context, unverified_inference). Provenance chain tests: starts at evidence, get_provenance returns full chain, verify_chain detects broken chain."
+        },
+        "advisory_3_ltm_test_count_inconsistency": {
+          "severity": "MEDIUM",
+          "finding": "The scope contract declares two different minimum test counts for Long-term Memory tests. long_term_memory_implementation section (line 272) says 'minimum_tests: 25' for test_long_term_memory.py. test_requirements section (line 378) says 'min_tests: 15' for the Long-term Memory area. If 25 is authoritative, total minimum would be 90, not 80. If 15 is authoritative, the LTM section should be corrected.",
+          "recommendation": "Align the two declarations. Recommendation: use 25 as the authoritative minimum for test_long_term_memory.py (the scope is substantial — 7 methods + evidence binding + isolation) and update test_requirements total to 90. Alternatively, establish that the 25 includes overlap with evidence/isolation tests in the same file, and 15 is the LTM-specific count."
+        }
+      }
+    },
+
+    "5_governance_compliance": {
+      "verdict": "PASS",
+      "score": "5/5",
+      "details": {
+        "nsec_article_37_respected": {
+          "status": "PASS",
+          "evidence": "Scope explicitly states: 'implementation: FROZEN — requires Claude review PASS + human approval'. nsec_article_37_required: true. commit: AWAITING_NSEC_ARTICLE_37. push: AWAITING_NSEC_ARTICLE_37. merge: DENIED. deploy: DENIED. The scope freezes implementation at the review gate — no code changes until human approval. This fully respects NSEC Article 37."
+        },
+        "forbidden_actions_aligned": {
+          "status": "PASS",
+          "evidence": [
+            "Scope does NOT modify runtime pipeline (execute→verify→evidence→memory→eval)",
+            "Scope does NOT bypass MemoryKernel — enhances brain-tier MemoryController",
+            "Scope does NOT replace or duplicate EvidenceStore",
+            "Scope does NOT implement components outside Phase 1 scope",
+            "Scope does NOT register new Capabilities without approval",
+            "Scope does NOT enable auto-evolution"
+          ]
+        },
+        "implementation_freeze_explicit": {
+          "status": "PASS",
+          "count": 8,
+          "locations": [
+            "contract line 7: 'implementation_frozen': true",
+            "contract line 418: implementation: 'FROZEN — requires Claude review PASS + human approval'",
+            "contract line 422: next_gate: 'CLAUDE_INDEPENDENT_IMPLEMENTATION_SCOPE_REVIEW_REQUIRED'",
+            "report line 7: 'implementation_frozen': true",
+            "report line 157: 'IMPLEMENTATION': 'FROZEN'",
+            "receipt line 71: 'IMPLEMENTATION': 'FROZEN'",
+            "receipt line 66: 'RUNTIME_MODIFICATION': 'DENIED'",
+            "receipt line 78: 'next_gate': 'CLAUDE_INDEPENDENT_IMPLEMENTATION_SCOPE_REVIEW_REQUIRED'"
+          ]
+        },
+        "nsec_article_40_respected": {
+          "status": "PASS",
+          "evidence": "This review is performed by Claude as Independent Reviewer, separate from Hermes (Writer). Verifies actual files on disk, not just contract claims. Verifies contract consistency across all three artifacts. This satisfies Article 40: Writer ≠ Verifier."
+        },
+        "nsec_article_45_respected": {
+          "status": "PASS",
+          "evidence": "Acceptance criteria defined (10 items). Test requirements specified. Evidence requirements specified. Implementation is frozen — 'code written' is not considered 'task complete'."
+        },
+        "nsec_appendix_b_alignment": {
+          "status": "PASS",
+          "evidence": "Scope does not create second truth source (brain_state.db is additive, not duplicative). Does not weaken tests. Does not claim mock as live. Does not hardcode secrets. Does not split completable work."
+        }
+      }
+    }
+  },
+
+  "advisory_summary": [
+    {
+      "id": "ADV-01",
+      "severity": "LOW",
+      "criterion": "Existing Surface Preservation",
+      "finding": "MemoryControllerProtocol in brain/__init__.py defines commit/recall/consolidate but NOT summary(). The actual MemoryController class has summary(). Add summary() → dict[str, Any] to the protocol during extension.",
+      "blocks_implementation": false,
+      "recommended_fix": "Add summary() signature to MemoryControllerProtocol when extending __init__.py"
+    },
+    {
+      "id": "ADV-02",
+      "severity": "INFO",
+      "criterion": "Existing Surface Preservation",
+      "finding": "Two kernel files exist: brain/kernel.py (ChiefBrainKernel, 166 lines) and chief_brain_kernel.py. The scope correctly treats brain/kernel.py as canonical and protects chief_brain_kernel.py in absolute_prohibition. Future clean-up candidate.",
+      "blocks_implementation": false,
+      "recommended_fix": "None required for Phase 1. Consider consolidating in Phase 4."
+    },
+    {
+      "id": "ADV-03",
+      "severity": "MEDIUM",
+      "criterion": "Test Coverage Design",
+      "finding": "Inconsistent minimum test counts for Long-term Memory: long_term_memory_implementation section says 25 minimum, test_requirements section says 15 minimum. Total minimum would be 90 (not 80) if 25 is authoritative.",
+      "blocks_implementation": false,
+      "recommended_fix": "Align declarations. Recommend: use 25 minimum for test_long_term_memory.py, update total to 90, and update test_requirements LTM area to 15+ to reflect the 7-method scope."
+    }
+  ],
+
+  "overall_verdict": {
+    "result": "PASS",
+    "score": "23.5/25",
+    "summary": "The NEXARA Memory Brain Implementation Scope V1 is well-defined, comprehensive, and governance-compliant. All 6 scope areas are specified with concrete deliverables, file paths, and interface contracts. Existing surface is preserved — only memory_controller.py and __init__.py are modified, with all 8 untouchable brain files protected. Runtime boundary integrity is strong — 14 files in absolute prohibition, explicit import rules, separate brain_state.db. Test coverage covers all 8 areas with 80+ tests minimum. NSEC Article 37 is fully respected with explicit implementation freeze and human approval gate. Three advisories identified: one LOW (missing summary() in protocol), one INFO (duplicate kernel files), one MEDIUM (inconsistent LTM test count). None block implementation.",
+    "implementation_can_proceed": true,
+    "conditions_for_proceeding": [
+      "Human approval per NSEC Article 37",
+      "ADV-03 (LTM test count) resolved — align to 25 → update total to 90",
+      "ADV-01 (protocol gap) addressed during __init__.py extension"
+    ],
+    "next_gate": "HUMAN_APPROVAL_GATE"
+  },
+
+  "check_matrix": {
+    "SCOPE_1_STORAGE_CONTRACT_DEFINED": "PASS",
+    "SCOPE_2_OBJECT_SCHEMA_DEFINED": "PASS",
+    "SCOPE_3_CLASSIFICATION_DEFINED": "PASS",
+    "SCOPE_4_RETRIEVAL_DEFINED": "PASS",
+    "SCOPE_5_EVIDENCE_BINDING_DEFINED": "PASS",
+    "SCOPE_6_ISOLATION_DEFINED": "PASS",
+    "EXISTING_SURFACE_PRESERVED": "PASS (with ADV-01)",
+    "BRAIN_KERNEL_UNCHANGED": "PASS",
+    "PROTOCOLS_EXTENDED_NOT_BROKEN": "PASS (with ADV-01)",
+    "ZERO_RUNTIME_MODIFICATION": "PASS",
+    "BRAIN_NEVER_IMPORTS_RUNTIME": "PASS",
+    "RUNTIME_NEVER_IMPORTS_BRAIN": "PASS",
+    "BRAIN_STATE_DB_SEPARATE": "PASS",
+    "ALL_8_TEST_AREAS_DEFINED": "PASS",
+    "MINIMUM_80_TESTS_REALISTIC": "PASS (with ADV-03)",
+    "ISOLATION_TESTS_EXIST": "PASS",
+    "EVIDENCE_BINDING_TESTS_COMPLETE": "PASS",
+    "NSEC_ARTICLE_37_RESPECTED": "PASS",
+    "FORBIDDEN_ACTIONS_ALIGNED": "PASS",
+    "IMPLEMENTATION_FREEZE_EXPLICIT": "PASS",
+    "INDEPENDENT_REVIEW_COMPLETE": "PASS"
+  },
+
+  "integrity": {
+    "review_self_reference": "NONE",
+    "canonical_hash_algorithm": "hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()",
+    "artifacts_verified_on_disk": [
+      "src/nexara_prime/brain/memory_controller.py (101 lines, verified)",
+      "src/nexara_prime/brain/kernel.py (166 lines, verified)",
+      "src/nexara_prime/brain/__init__.py (103 lines, verified)",
+      "src/nexara_prime/brain/ (11 .py files, 8 untouchable verified)",
+      "src/nexara_prime/runtime.py (imports verified — no brain imports)",
+      "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md (verified)"
+    ],
+    "evidence_chain": {
+      "predecessor": "evidence/nexara/brain_architecture/phase1_implementation_scope_receipt.json",
+      "this": "evidence/nexara/brain_architecture/claude_implementation_scope_review.json",
+      "successor": "evidence/nexara/brain_architecture/phase1_implementation_evidence.json (after implementation)"
+    }
+  }
+}
