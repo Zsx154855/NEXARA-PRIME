@@ -1,0 +1,121 @@
+{
+  "forensic_id": "NEXARA_HERMES_EFFECTIVE_CONFIG_FORENSICS_V1",
+  "forensic_type": "CONFIG_RESOLUTION_TRACE",
+  "governed_by": "NSEC V2.1 Article 28 — Reality First",
+  "timestamp": "2026-08-05T00:00:00Z",
+  "investigator": "H-CHAIRMAN (Hermes Agent)",
+
+  "question": "Where does the '*' deny pattern enter the effective Hermes config?",
+
+  "evidence_sources": [
+    {
+      "source": "Active default profile config",
+      "path": "/Users/agentos/.hermes/config.yaml",
+      "approvals_section": {
+        "mode": "manual",
+        "timeout": 60,
+        "cron_mode": "deny",
+        "mcp_reload_confirm": true,
+        "destructive_slash_confirm": true
+      },
+      "has_deny_field": false,
+      "contains_exact_star": false
+    },
+    {
+      "source": "nexara-unattended profile config",
+      "path": "/Users/agentos/.hermes/profiles/nexara-unattended/config.yaml",
+      "approvals_section": {
+        "mode": "off",
+        "timeout": 1,
+        "cron_mode": "deny",
+        "has_deny_field": true,
+        "deny_count": 25,
+        "deny_patterns": [
+          "*sudo*", "*pkill*", "*killall*", "*kill -9*", "*kill -KILL*",
+          "*git add*", "*git commit*", "*git push*", "*git merge*", "*git rebase*",
+          "*git cherry-pick*", "*git tag*", "*git reset*", "*git clean*",
+          "*git checkout*", "*git switch*", "*gh pr create*", "*gh pr merge*",
+          "*gh release*", "*pip install*", "*python -m pip*", "*uv sync*",
+          "*hermes update*", "*hermes skills*", "*security add-*", "*security delete-*",
+          "*rm -rf /Users/agentos/NEXARA-PRIME*",
+          "*rm -rf /Users/agentos/Documents/Codex*",
+          "*rm -rf /private/tmp/NEXARA-8871-HISTORICAL-PRELOAD-SNAPSHOT-*"
+        ]
+      },
+      "contains_exact_literal_star": false,
+      "note": "All patterns are scoped globs (e.g., *sudo*). No bare '*' entry exists."
+    },
+    {
+      "source": "D1 worktree — PRIMARY CANDIDATE per diagnostic",
+      "path": "/Users/agentos/.hermes/worktrees/d1/config.yaml",
+      "file_type": "AgentsOS project config (NOT Hermes config)",
+      "has_approvals_section": false,
+      "contains_deny": false,
+      "verdict": "FALSE LEAD — not a Hermes config file"
+    },
+    {
+      "source": "D1 worktree dev — PRIMARY CANDIDATE per diagnostic",
+      "path": "/Users/agentos/.hermes/worktrees/d1/config.dev.yaml",
+      "file_type": "AgentsOS project config (NOT Hermes config)",
+      "has_approvals_section": false,
+      "contains_deny": false,
+      "verdict": "FALSE LEAD — not a Hermes config file"
+    },
+    {
+      "source": "Effective config (Python load_config)",
+      "method": "hermes_cli.config.load_config()",
+      "approvals.deny": [],
+      "approvals.mode": "manual",
+      "denial_breaker_threshold": 3,
+      "smart_policy": "",
+      "contains_exact_star": false
+    },
+    {
+      "source": "Effective config (CLI hermes config get approvals)",
+      "command": "hermes config get approvals",
+      "deny": [],
+      "mode": "manual",
+      "contains_exact_star": false
+    }
+  ],
+
+  "code_analysis": {
+    "deny_match_function": "tools/approval.py:_match_user_deny_rule() line 525",
+    "mechanism": "fnmatch.fnmatchcase(candidate, pattern.lower())",
+    "config_source": "hermes_cli.config.load_config() → config.get('approvals', {})",
+    "note": "If deny=[] (empty), function returns None immediately at line 543-544 — no matching occurs"
+  },
+
+  "diagnostic_claim_analysis": {
+    "claim": "TERMINAL_TOOL_DENY=CONTAINS_EXACT_STAR, MATCH_RESULT=user-defined deny rule '*'",
+    "diagnostic_own_confidence": "LOW_TO_MEDIUM",
+    "diagnostic_own_status": "PROVISIONAL_NOT_PROVEN",
+    "diagnostic_own_admission": "FIRST_STAGE_WHERE_STAR_APPEARS=UNVERIFIED",
+    "diagnostic_own_boundary": "KNOWN_BOUNDARY=RAW_DEFAULT_AND_RAW_PROFILE_DO_NOT_CONTAIN_EXACT_STAR",
+    "diagnostic_own_inference": "星号进入点位于后续 managed/worktree/session/config-merge/tool-normalization 阶段之一"
+  },
+
+  "findings": {
+    "active_profile": "default",
+    "effective_deny_list": [],
+    "any_source_contains_exact_star": false,
+    "diagnostic_primary_candidates_validated": false,
+    "diagnostic_primary_candidates_are_not_hermes_configs": true,
+    "nexara_unattended_has_deny_rules": true,
+    "nexara_unattended_has_literal_star": false
+  },
+
+  "root_cause": {
+    "classification": "DIAGNOSTIC_CLAIM_UNSUBSTANTIATED",
+    "confidence": "HIGH",
+    "reason": "All inspectable config sources (active default, nexara-unattended profile, d1 worktree, Python load_config, CLI config get) show NO literal '*' deny pattern. The effective deny list for the active session is empty ([]). The diagnostic's own metadata acknowledges the claim is PROVISIONAL_NOT_PROVEN with LOW_TO_MEDIUM confidence."
+  },
+
+  "hypothesis": "The diagnostic may have been generated from a DIFFERENT session/profile context where a '*' deny rule was active (e.g., nexara-unattended profile with approvals.mode='off' and its deny list). The diagnostic's reference to 'd1 worktree' suggests cross-session/config contamination — the d1 worktree is an AgentsOS project, not a Hermes config source. The effective '*' may have been an artifact of a managed-scope config merge in a different Hermes invocation, not the current default-profile session.",
+
+  "safe_fix_authorized": false,
+  "reason_no_fix": "No broken config to fix. The effective config has deny=[] — no '*' pattern blocks any command. Modifying any file would be changing a non-broken state based on an unsubstantiated diagnostic.",
+
+  "final_verdict": "NO_ACTION_REQUIRED — effective config is clean (deny: []). Diagnostic claim unsubstantiated by file system evidence.",
+  "nsec_article_28": "Reality first: facts contradict the diagnostic claim. The effective config deny list is empty."
+}

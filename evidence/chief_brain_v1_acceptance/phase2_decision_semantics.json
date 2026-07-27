@@ -1,0 +1,35 @@
+[
+  {
+    "test": "A_stable",
+    "d1_model": "deepseek-v4-flash",
+    "d2_model": "deepseek-v4-flash",
+    "stable": true
+  },
+  {
+    "test": "B_risk_impact",
+    "R1_action": "execute",
+    "R3_action": "escalate",
+    "risk_changes_action": true
+  },
+  {
+    "test": "C_complexity_tier",
+    "model": "deepseek-v4-flash"
+  },
+  {
+    "test": "D_budget",
+    "action": "escalate"
+  },
+  {
+    "test": "E_unavailable_reject",
+    "gpt5_R4": false
+  },
+  {
+    "test": "F_reason_policy",
+    "has_reason": true,
+    "has_policy": true
+  },
+  {
+    "test": "G_fail_closed_policy",
+    "empty_model_R4": false
+  }
+]

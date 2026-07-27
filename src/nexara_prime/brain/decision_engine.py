@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..models import new_id, now_iso
+from ..models import FailureCode, new_id, now_iso
 
 
 class DecisionEngine:

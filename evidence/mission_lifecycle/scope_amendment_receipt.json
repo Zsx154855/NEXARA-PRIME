@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_mission_lifecycle_scope_amendment_v1_1_20260727",
+  "receipt_type": "scope_amendment_receipt",
+  "mission": "NEXARA_AGENT_MISSION_LIFECYCLE_SCOPE_AMENDMENT_AND_REVIEW_V1",
+  "generated_at": "2026-07-27T02:05:00Z",
+  "governed_by": "NSEC V2.1 Article 45",
+
+  "amendment_summary": {
+    "previous_review": "Claude Design Review (deleg_abf7e423) — BLOCKED",
+    "p1_blocking": "AGENT_MODEL_MISSING_WRITER_REVIEWER_SEPARATION_CONSTRAINT",
+    "p2_count": 15,
+    "resolution": "Schema V1.1 + MissionContractValidator + 15 tests",
+    "all_p1_resolved": true,
+    "all_p2_addressed": true
+  },
+
+  "deliverables": [
+    "contracts/mission/mission_contract.schema.json (V1.0 → V1.1)",
+    "contracts/mission/mission_contract_validator.py (NEW)",
+    "tests/test_mission_contract.py (NEW, 15 tests)",
+    "evidence/mission_lifecycle/scope_amendment_report.json (NEW)",
+    "evidence/mission_lifecycle/scope_amendment_receipt.json (NEW)"
+  ],
+
+  "verification": {
+    "validator_manual": "PASS — all 4 scenarios tested",
+    "pytest": "15/15 PASS",
+    "schema_valid_json": true
+  },
+
+  "next_gate": "CLAUDE_DESIGN_REVIEW_V2",
+
+  "governance": {
+    "merge": "DENIED",
+    "push": "DENIED",
+    "deploy": "DENIED"
+  }
+}

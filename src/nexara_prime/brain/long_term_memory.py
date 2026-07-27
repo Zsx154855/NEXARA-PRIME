@@ -12,10 +12,11 @@ from ..models import new_id, now_iso
 
 from .db import BrainDB
 from .memory_controller import MemoryController
-from .decay_config import get_half_life
+from .decay_config import compute_decayed_confidence, get_half_life, get_min_confidence
 from .consolidation_rules import (
     should_promote_working_to_semantic,
     should_promote_semantic_to_procedural,
+    classify_layer,
 )
 
 
@@ -41,6 +42,8 @@ class LongTermMemory:
         layer = record.get("layer", "")
         access_count = int(record.get("access_count", 0))
         confidence = float(record.get("confidence", 1.0))
+        kind = record.get("kind", "")
+
         promoted = False
         new_layer = layer
 

@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/mission_lifecycle/control_plane_design_v1.json",
+  "title": "NEXARA Agent Mission Lifecycle Control Plane — Design V1",
+  "description": "Control plane architecture for the NEXARA Agent Mission Lifecycle Manager. Defines state machine, lease model, heartbeat, recovery, evidence integration, and governance boundaries. Design only — no runtime implementation.",
+  "frozen_at": "2026-07-27T03:30:00Z",
+  "governed_by": "NSEC V2.1",
+  "phase": "Design Only — Phase 0 Control Plane",
+
+  "state_machine": {
+    "states": {
+      "CREATED": {"description": "Mission registered, no agents assigned", "terminal": false},
+      "ASSIGNED": {"description": "Agents assigned, capabilities leased", "terminal": false},
+      "PLANNING": {"description": "Mission plan being formulated", "terminal": false},
+      "RUNNING": {"description": "Active execution — agents performing work", "terminal": false},
+      "WAITING_REVIEW": {"description": "Execution paused — awaiting independent review", "terminal": false},
+      "VERIFYING": {"description": "Evidence being verified, gates checked", "terminal": false},
+      "COMPLETED": {"description": "All gates passed, mission closed", "terminal": true},
+      "FAILED": {"description": "Terminal failure — unrecoverable", "terminal": true},
+      "BLOCKED": {"description": "Non-terminal block — awaiting external input", "terminal": false},
+      "CANCELLED": {"description": "Mission cancelled by authority", "terminal": true}
+    },
+    "transitions": [
+      {"from": "CREATED", "to": "ASSIGNED", "actor": "COORDINATOR", "condition": "agents assigned + capabilities verified"},
+      {"from": "CREATED", "to": "FAILED", "actor": "COORDINATOR", "condition": "assignment impossible"},
+      {"from": "CREATED", "to": "CANCELLED", "actor": "CTO", "condition": "authority cancels"},
+      {"from": "ASSIGNED", "to": "PLANNING", "actor": "WRITER", "condition": "plan formulated + scope frozen"},
+      {"from": "ASSIGNED", "to": "BLOCKED", "actor": "COORDINATOR", "condition": "missing capability or permission"},
+      {"from": "ASSIGNED", "to": "CANCELLED", "actor": "CTO", "condition": "authority cancels"},
+      {"from": "PLANNING", "to": "RUNNING", "actor": "COORDINATOR", "condition": "plan approved + gates set"},
+      {"from": "PLANNING", "to": "BLOCKED", "actor": "REVIEWER", "condition": "plan rejected or blocked"},
+      {"from": "PLANNING", "to": "CANCELLED", "actor": "CTO", "condition": "authority cancels"},
+      {"from": "RUNNING", "to": "WAITING_REVIEW", "actor": "COORDINATOR", "condition": "all agents done, review needed"},
+      {"from": "RUNNING", "to": "VERIFYING", "actor": "COORDINATOR", "condition": "self-verifiable, no review needed"},
+      {"from": "RUNNING", "to": "FAILED", "actor": "SYSTEM", "condition": "agent crash or timeout"},
+      {"from": "RUNNING", "to": "BLOCKED", "actor": "WRITER", "condition": "external dependency blocked"},
+      {"from": "WAITING_REVIEW", "to": "VERIFYING", "actor": "REVIEWER", "condition": "review received"},
+      {"from": "WAITING_REVIEW", "to": "RUNNING", "actor": "REVIEWER", "condition": "review requests changes"},
+      {"from": "WAITING_REVIEW", "to": "BLOCKED", "actor": "COORDINATOR", "condition": "reviewer unavailable"},
+      {"from": "WAITING_REVIEW", "to": "FAILED", "actor": "SYSTEM", "condition": "review timeout exceeded"},
+      {"from": "WAITING_REVIEW", "to": "CANCELLED", "actor": "CTO", "condition": "CTO override"},
+      {"from": "VERIFYING", "to": "COMPLETED", "actor": "COORDINATOR", "condition": "all gates PASS"},
+      {"from": "VERIFYING", "to": "RUNNING", "actor": "COORDINATOR", "condition": "gate failure → remediate"},
+      {"from": "VERIFYING", "to": "FAILED", "actor": "COORDINATOR", "condition": "unrecoverable gate failure"},
+      {"from": "VERIFYING", "to": "BLOCKED", "actor": "REVIEWER", "condition": "gate blocked by missing input"},
+      {"from": "VERIFYING", "to": "CANCELLED", "actor": "CTO", "condition": "CTO override"},
+      {"from": "BLOCKED", "to": "ASSIGNED", "actor": "COORDINATOR", "condition": "block resolved at assignment level"},
+      {"from": "BLOCKED", "to": "PLANNING", "actor": "COORDINATOR", "condition": "block resolved at planning level"},
+      {"from": "BLOCKED", "to": "RUNNING", "actor": "COORDINATOR", "condition": "block resolved at execution level"},
+      {"from": "BLOCKED", "to": "CANCELLED", "actor": "CTO", "condition": "authority cancels"},
+      {"from": "BLOCKED", "to": "FAILED", "actor": "SYSTEM", "condition": "block timeout / escalation"}
+    ]
+  },
+
+  "lease_model": {
+    "writer_lease": {
+      "purpose": "Exclusive write access to mission scope files",
+      "ownership": "Single Writer agent — EXCLUSIVE",
+      "expiry_seconds": 3600,
+      "renewable": true,
+      "renewal_window_seconds": 300,
+      "files_locked": ["mission scope allowlist"],
+      "commit_freeze": "Enforced during REVIEW and VERIFYING states",
+      "conflict_handling": "New Writer request blocks until lease expires or is released",
+      "release_on": ["COMPLETED", "FAILED", "CANCELLED", "BLOCKED"],
+      "violation_code": "LEASE_VIOLATION_WRITER_EXCLUSIVITY"
+    },
+    "reviewer_lease": {
+      "purpose": "Read-only review access to mission artifacts",
+      "ownership": "Single Reviewer agent — EXCLUSIVE",
+      "expiry_seconds": 1800,
+      "renewable": false,
+      "permissions": ["READ", "REVIEW", "BLOCK"],
+      "prohibited": ["WRITE", "COMMIT", "PUSH", "MERGE", "DEPLOY"],
+      "conflict_handling": "Only one active review at a time per mission",
+      "release_on": ["VERIFYING", "RUNNING", "FAILED", "CANCELLED"],
+      "violation_code": "LEASE_VIOLATION_REVIEWER_ISOLATION"
+    },
+    "coordinator_lease": {
+      "purpose": "Orchestration authority — state transitions, agent dispatch",
+      "ownership": "Single Coordinator agent — EXCLUSIVE",
+      "expiry_seconds": 7200,
+      "renewable": true,
+      "renewal_window_seconds": 600,
+      "permissions": ["state transitions", "agent dispatch", "gate evaluation"],
+      "prohibited": ["WRITE (artifact content)", "REVIEW (independent judgment)"],
+      "isolation_rule_r2_plus": "Coordinator MUST NOT also hold Writer lease (R2+ missions)",
+      "violation_code": "LEASE_VIOLATION_COORDINATOR_ISOLATION"
+    }
+  },
+
+  "heartbeat_model": {
+    "signal_schema": {
+      "agent_id": "string (required)",
+      "mission_id": "string (required)",
+      "timestamp": "ISO8601 (required)",
+      "agent_alive": "boolean (required)",
+      "progress": {
+        "current_state": "MissionState enum",
+        "percent_complete": "float 0.0-1.0",
+        "current_task": "string"
+      },
+      "last_action": {
+        "action_type": "read|write|review|test|delegate",
+        "action_target": "string",
+        "action_timestamp": "ISO8601"
+      },
+      "failure_signal": {
+        "has_failure": "boolean",
+        "failure_code": "FailureCode enum",
+        "failure_detail": "string"
+      },
+      "lease_status": {
+        "lease_active": "boolean",
+        "lease_expires_at": "ISO8601"
+      }
+    },
+    "interval_seconds": 30,
+    "timeout_seconds": 120,
+    "failure_detection": {
+      "on_timeout": "agent considered DEAD after 120s without heartbeat",
+      "on_lease_expiry": "lease released, agent capability revoked",
+      "escalation": "SYSTEM actor may transition RUNNING → FAILED if all agents dead"
+    }
+  },
+
+  "recovery_design": {
+    "scenarios": [
+      {
+        "scenario": "agent_crash",
+        "detection": "Heartbeat gap > 120s OR process exit detected",
+        "action": "Reassign agent or escalate. Resume from last checkpoint.",
+        "target_state": "RUNNING (resume) or BLOCKED (escalate)",
+        "idempotency": "replay_from_checkpoint"
+      },
+      {
+        "scenario": "lease_expiration",
+        "detection": "lease.expires_at < now AND no renewal received",
+        "action": "Release lease, revoke agent capabilities, notify Coordinator",
+        "target_state": "BLOCKED (awaiting new agent assignment)",
+        "idempotency": "release_lease + capability_revoke"
+      },
+      {
+        "scenario": "duplicate_execution",
+        "detection": "Same idempotency_key with different result in evidence chain",
+        "action": "Reject duplicate, replay from canonical idempotency record",
+        "target_state": "RUNNING (replay) or BLOCKED (conflict)",
+        "idempotency": "idempotency_key_gate"
+      },
+      {
+        "scenario": "state_conflict",
+        "detection": "Two actors attempt incompatible transitions simultaneously",
+        "action": "First-writer-wins. Second actor receives CONCURRENT_TRANSITION_CONFLICT error.",
+        "target_state": "State determined by first completed transition",
+        "idempotency": "atomic_compare_and_swap"
+      },
+      {
+        "scenario": "storage_failure",
+        "detection": "EvidenceStore write returns error (disk full, DB corruption)",
+        "action": "Degrade to in-memory buffer, retry with backoff, alert Coordinator",
+        "target_state": "RUNNING (with degraded evidence) or BLOCKED (if retries exhausted)",
+        "idempotency": "buffer_and_retry"
+      }
+    ],
+    "checkpoint_strategy": "on_every_state_transition — stores (mission_state, agents, artifacts, evidence_chain, timestamp)"
+  },
+
+  "evidence_integration": {
+    "per_transition_requirements": [
+      {"transition": "CREATED → ASSIGNED", "evidence_kind": "assignment_event", "required": true},
+      {"transition": "ASSIGNED → PLANNING", "evidence_kind": "plan_artifact", "required": true},
+      {"transition": "PLANNING → RUNNING", "evidence_kind": "plan_approval", "required": true},
+      {"transition": "RUNNING → WAITING_REVIEW", "evidence_kind": "execution_evidence", "required": true},
+      {"transition": "RUNNING → VERIFYING", "evidence_kind": "execution_evidence", "required": true},
+      {"transition": "WAITING_REVIEW → VERIFYING", "evidence_kind": "review_artifact", "required": true},
+      {"transition": "VERIFYING → COMPLETED", "evidence_kind": "gate_evidence", "required": true},
+      {"transition": "* → FAILED", "evidence_kind": "failure_event", "required": true},
+      {"transition": "* → CANCELLED", "evidence_kind": "cancellation_event", "required": true},
+      {"transition": "* → BLOCKED", "evidence_kind": "block_event", "required": false}
+    ],
+    "event_schema": {
+      "event_id": "evt_{sha256(idempotency_key)[:12]}",
+      "event_type": "mission.state_changed",
+      "timestamp": "ISO8601",
+      "actor": "AgentRole enum",
+      "payload": {
+        "from": "MissionState",
+        "to": "MissionState",
+        "evidence_id": "evidence_{sha256[:12]}",
+        "idempotency_key": "string",
+        "lease_snapshot": "active leases at transition time"
+      }
+    }
+  },
+
+  "governance_boundary": {
+    "actors": [
+      {
+        "role": "APPROVER",
+        "aliases": ["HUMAN_CTO"],
+        "permissions": ["CANCEL (any non-terminal state)", "APPROVE (NSEC Article 37)", "OVERRIDE_BLOCK"],
+        "prohibited": ["WRITE code", "EXECUTE tests", "MODIFY state directly"],
+        "isolation": "External to automation loop. Only CTO can merge/deploy."
+      },
+      {
+        "role": "COORDINATOR",
+        "permissions": ["state transitions (orchestration)", "agent dispatch", "gate evaluation", "lease management"],
+        "prohibited": ["WRITE artifact content", "REVIEW (independent judgment)", "CANCEL mission"],
+        "isolation": "Must not hold Writer lease on R2+ missions"
+      },
+      {
+        "role": "WRITER",
+        "permissions": ["WRITE code", "EXECUTE tests", "GENERATE evidence", "COMMIT (scope only)"],
+        "prohibited": ["REVIEW own work", "MERGE", "DEPLOY", "APPROVE"],
+        "isolation": "Must not hold Reviewer lease. Exclusive file lock during lease."
+      },
+      {
+        "role": "REVIEWER",
+        "permissions": ["READ all artifacts", "REVIEW code/architecture", "BLOCK transitions"],
+        "prohibited": ["WRITE code", "COMMIT", "PUSH", "MERGE", "DEPLOY"],
+        "isolation": "Must be different agent from Writer. Read-only contract enforced by lease."
+      },
+      {
+        "role": "VERIFIER",
+        "permissions": ["VALIDATE evidence", "CHECK cross-references", "EVALUATE gates"],
+        "prohibited": ["MODIFY evidence", "OVERRIDE gate results"],
+        "isolation": "Evidence validation is deterministic and auditable. No subjective judgment."
+      },
+      {
+        "role": "SYSTEM",
+        "permissions": ["DETECT timeouts", "TRIGGER recovery", "ENFORCE lease expiry"],
+        "prohibited": ["MODIFY mission objective", "OVERRIDE human approval"],
+        "isolation": "Purely reactive. No proactive mission changes."
+      }
+    ],
+    "permission_isolation_rules": [
+      "Writer ≠ Reviewer (always)",
+      "Coordinator ≠ Writer (R2+)",
+      "Coordinator ≠ Reviewer (always — different judgment domains)",
+      "CTO ≠ Writer/Reviewer/Coordinator (external authority)",
+      "System ≠ any human role (automated only)"
+    ]
+  },
+
+  "design_validators": {
+    "already_implemented": [
+      "contracts/mission_lifecycle/state_transition_validator.py (21 tests)",
+      "contracts/mission_lifecycle/agent_role_validator.py (15 tests)",
+      "contracts/mission_lifecycle/evidence_artifact_validator.py (13 tests)",
+      "contracts/mission_lifecycle/cross_ref_validator.py (7 tests)",
+      "contracts/mission/mission_contract_validator.py (15 tests)"
+    ],
+    "total_tests": 71,
+    "all_pass": true
+  }
+}

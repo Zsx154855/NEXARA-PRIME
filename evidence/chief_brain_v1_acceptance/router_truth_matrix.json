@@ -1,0 +1,94 @@
+[
+  {
+    "task": "S0_simple",
+    "complexity": 0.1,
+    "risk": 0.1,
+    "context_size": 2000,
+    "selected_provider": "mock",
+    "selected_model": "mock",
+    "reason": "Tier=flash, complexity=0.10, risk=0.10, context=2000, latency_target=5000ms → selected mock",
+    "fallback": "deepseek-v4-flash",
+    "estimated_cost": 0.0,
+    "alternatives": [
+      {
+        "provider": "deepseek-v4-flash",
+        "model": "deepseek-v4-flash",
+        "tier": "flash"
+      },
+      {
+        "provider": "deepseek-v4-pro",
+        "model": "deepseek-v4-pro",
+        "tier": "pro"
+      }
+    ]
+  },
+  {
+    "task": "S1_normal",
+    "complexity": 0.3,
+    "risk": 0.3,
+    "context_size": 8000,
+    "selected_provider": "mock",
+    "selected_model": "mock",
+    "reason": "Tier=flash, complexity=0.30, risk=0.30, context=8000, latency_target=5000ms → selected mock",
+    "fallback": "deepseek-v4-flash",
+    "estimated_cost": 0.0,
+    "alternatives": [
+      {
+        "provider": "deepseek-v4-flash",
+        "model": "deepseek-v4-flash",
+        "tier": "flash"
+      },
+      {
+        "provider": "deepseek-v4-pro",
+        "model": "deepseek-v4-pro",
+        "tier": "pro"
+      }
+    ]
+  },
+  {
+    "task": "S2_complex",
+    "complexity": 0.5,
+    "risk": 0.5,
+    "context_size": 30000,
+    "selected_provider": "deepseek-v4-pro",
+    "selected_model": "deepseek-v4-pro",
+    "reason": "Tier=pro, complexity=0.50, risk=0.50, context=30000, latency_target=5000ms → selected deepseek-v4-pro",
+    "fallback": "mock",
+    "estimated_cost": 0.136,
+    "alternatives": [
+      {
+        "provider": "mock",
+        "model": "mock",
+        "tier": "flash"
+      },
+      {
+        "provider": "deepseek-v4-flash",
+        "model": "deepseek-v4-flash",
+        "tier": "flash"
+      }
+    ]
+  },
+  {
+    "task": "S3_high",
+    "complexity": 0.8,
+    "risk": 0.8,
+    "context_size": 80000,
+    "selected_provider": "deepseek-v4-pro",
+    "selected_model": "deepseek-v4-pro",
+    "reason": "Tier=pro, complexity=0.80, risk=0.80, context=80000, latency_target=5000ms → selected deepseek-v4-pro",
+    "fallback": "mock",
+    "estimated_cost": 0.32,
+    "alternatives": [
+      {
+        "provider": "mock",
+        "model": "mock",
+        "tier": "flash"
+      },
+      {
+        "provider": "deepseek-v4-flash",
+        "model": "deepseek-v4-flash",
+        "tier": "flash"
+      }
+    ]
+  }
+]

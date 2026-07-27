@@ -1,0 +1,84 @@
+{
+  "report": "ORCA_NEXARA_STRICT_UI_ABSENCE_AND_REGRESSION_DELTA_FINAL_CLOSURE_V1",
+  "timestamp": "2026-08-03T04:20:00Z",
+  "status": "NOT_VERIFIED",
+  "candidate_identity_conflict": {
+    "spec_candidate_sha": "44c7067345f1a7dcca04e325d74e1f48a7c32a44",
+    "current_head_sha": "da794cf3e5b41295b9537d81712415252bb64413",
+    "conflict": "44c7067 is specified as the candidate in the task brief. However, the Canary app was built from 44c7067 per its Info.plist (NEXARACommitSHA). The regression comparison labeled 44c7067 as 'baseline' and da794cf3 as 'candidate', inverting the specified candidate identity.",
+    "resolution": "Gate B remains NOT_VERIFIED. Both runs are marked EXPLORATORY_ONLY. The identity conflict must be resolved before a valid regression delta can be produced."
+  },
+  "exploratory_runs": [
+    {
+      "label": "run_44c7067",
+      "sha": "44c7067345f1a7dcca04e325d74e1f48a7c32a44",
+      "message": "fix: keep canary window lifecycle in app delegate",
+      "passed": 1606,
+      "failed": 15,
+      "errors": 6,
+      "subtests": 3,
+      "total_collected": 1627,
+      "exit_code": 1,
+      "log": "/tmp/nexara_pytest_baseline_full.log"
+    },
+    {
+      "label": "run_da794cf3",
+      "sha": "da794cf3e5b41295b9537d81712415252bb64413",
+      "message": "fix(integration): complete LivingInterface final-gate absorption",
+      "passed": 1333,
+      "failed": 9,
+      "errors": 6,
+      "subtests": 3,
+      "total_collected": 1348,
+      "exit_code": 1,
+      "log": "/tmp/nexara_pytest_candidate_full.log"
+    }
+  ],
+  "collection_delta": {
+    "run_44c7067_total": 1627,
+    "run_da794cf3_total": 1348,
+    "delta": -279,
+    "direction": "44c7067 collected 279 MORE tests than da794cf3",
+    "unresolved": "Test collection difference not analyzed. Without identifying which tests were present in one run but absent in the other, NEW_REGRESSIONS cannot be declared as 0.",
+    "possible_causes": [
+      "Different test file sets between the two commits",
+      "uv sync + pip install modified the venv between runs (environment not identical)",
+      "Some test modules imported differently across commits"
+    ]
+  },
+  "environment_inconsistency": {
+    "between_run_actions": [
+      "uv sync",
+      "pip install pytest httpx",
+      "pip install -e ./platform/sdk/python/"
+    ],
+    "impact": "Environment was not frozen between runs. Strict same-environment comparison not satisfied."
+  },
+  "failure_classification": {
+    "note": "SHARED_FAILURE does NOT equal ENVIRONMENT_ONLY_FAILURE. Classification below is OBSERVATIONAL only, not confirmed environmental attribution.",
+    "run_44c7067_failures": [
+      "test_auto_mission_runtime.py (1)",
+      "test_ci_contract.py (1)",
+      "test_pr18_review_closure.py (1)",
+      "test_python_ci_contract.py (2)",
+      "test_receipt_self_reference.py (5)",
+      "test_runtime_v2_stage_recovery.py (4)"
+    ],
+    "run_da794cf3_failures": [
+      "test_ci_contract.py (1)",
+      "test_python_ci_contract.py (2)",
+      "test_receipt_self_reference.py (5)"
+    ],
+    "run_da794cf3_errors": [
+      "test_python_ci_contract.py (6: PyYAML NoneType)"
+    ],
+    "observational_only": "These are observed failure lists. Root cause classification (environment vs regression vs shared) has NOT been completed."
+  },
+  "conclusion": "NOT_VERIFIED",
+  "cannot_assert": [
+    "NEW_REGRESSIONS=0 (candidate identity inverted, collection delta unresolved, environment not frozen)",
+    "ENVIRONMENT_ONLY for any specific failure (attribution not performed)",
+    "SHARED_FAILURE root cause (not analyzed)",
+    "Gate B PASS (explicitly retracted — was incorrectly asserted)"
+  ]
+}

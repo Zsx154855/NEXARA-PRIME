@@ -1,0 +1,29 @@
+{
+  "$receipt_id": "receipt_mission_lifecycle_implementation_scope_v1_20260727",
+  "mission": "NEXARA_AGENT_MISSION_LIFECYCLE_IMPLEMENTATION_SCOPE_FREEZE_V1",
+  "phase": "Phase 1 — Implementation Scope Freeze",
+  "frozen_at": "2026-07-27T02:40:00Z",
+  "governed_by": "NSEC V2.1",
+
+  "contract": "contracts/mission_lifecycle/MISSION_LIFECYCLE_IMPLEMENTATION_CONTRACT_V1.json",
+  "design_baseline": "Phase 0 Design Review V2 = PASS",
+
+  "scope": {
+    "implement": ["4 validators (agent_role, state_transition, evidence_artifact, package init)"],
+    "defer": ["auto_scheduler", "auto_recovery", "multi_agent_runtime", "provider_routing", "heartbeat_runtime", "cli", "api", "ui"],
+    "forbidden": ["src/nexara_prime/*", "memory_authority", "evidence_runtime", "chief_brain"]
+  },
+
+  "files": {
+    "new": 7,
+    "modified": 0,
+    "minimum_tests": 30
+  },
+
+  "gates": {
+    "claude_review": "AWAITING",
+    "nsrc_article_37": "REQUIRED",
+    "merge": "DENIED",
+    "deploy": "DENIED"
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "receipt_type": "BUILD_RECEIPT",
+  "receipt_version": "2.0.0",
+  "mission_id": "mis-04e88c0c4992",
+  "pipeline_id": "pip-de9ff384",
+  "generated_at": 1785935164.41193,
+  "governed_by": "NSEC V2.1 + council_rules.yaml V2.0.0",
+  "created_files": [
+    "REQUIREMENT_INPUT:COMPLETED:0_errors",
+    "DNA_GENERATION:COMPLETED:0_errors",
+    "COUNCIL_DELIBERATION:COMPLETED:0_errors",
+    "RED_TEAM_ATTACK:COMPLETED:0_errors",
+    "JUDGE_ADJUDICATION:COMPLETED:0_errors",
+    "EXECUTION_PLAN:COMPLETED:0_errors",
+    "HERMES_RUNNER:COMPLETED:0_errors"
+  ],
+  "agent_status": {
+    "REQUIREMENT_INPUT": "COMPLETED",
+    "DNA_GENERATION": "COMPLETED",
+    "COUNCIL_DELIBERATION": "COMPLETED",
+    "RED_TEAM_ATTACK": "COMPLETED",
+    "JUDGE_ADJUDICATION": "COMPLETED",
+    "EXECUTION_PLAN": "COMPLETED",
+    "HERMES_RUNNER": "COMPLETED",
+    "EVIDENCE_COLLECTION": "COMPLETED",
+    "VERIFICATION": "COMPLETED",
+    "MEMORY_COMMIT": "IN_PROGRESS"
+  },
+  "skill_status": {
+    "council_deliberation": "ACTIVE",
+    "multi_agent_orchestration": "ACTIVE",
+    "memory_management": "ACTIVE",
+    "evidence_generation": "ACTIVE",
+    "token_optimization": "AGGRESSIVE",
+    "risk_assessment": "ACTIVE",
+    "mission_routing": "ACTIVE"
+  },
+  "token_strategy": {
+    "mode": "AGGRESSIVE",
+    "rules": [
+      "\u7981\u6b62\u91cd\u590d\u89e3\u91ca",
+      "\u7981\u6b62\u91cd\u590d\u8bfb\u53d6\u65e0\u5173\u6587\u4ef6",
+      "\u4f18\u5148\u6458\u8981\u4e0a\u4e0b\u6587",
+      "\u4f18\u5148\u589e\u91cf\u5206\u6790",
+      "\u5927\u4efb\u52a1\u62c6 Evidence Chunk",
+      "\u6bcf\u9636\u6bb5\u751f\u6210\u72b6\u6001\u5feb\u7167"
+    ]
+  },
+  "test_results": {
+    "total_stages": 10,
+    "completed": 9,
+    "failed": 0,
+    "blocked": 0
+  },
+  "risk_list": [],
+  "next_phase": "INCOMPLETE \u2014 Current stage: MEMORY_COMMIT. Progress: 90.0%",
+  "dna_hash": "d732f4570a756f8ebb877bc2649c0a9a4f9cab34b33713982684dc73136804c6",
+  "pipeline_duration_seconds": 0,
+  "prohibitions_checked": [
+    "\u672a\u6388\u6743\u4fee\u6539\u751f\u4ea7\u6570\u636e\u5e93: COMPLIANT",
+    "\u672a\u9a8c\u8bc1\u76f4\u63a5merge: COMPLIANT",
+    "\u65e0Evidence\u5ba3\u5e03\u5b8c\u6210: COMPLIANT",
+    "\u5220\u9664\u5386\u53f2\u8bb0\u5f55: COMPLIANT",
+    "\u8986\u76d6\u65e7\u9879\u76ee\u72b6\u6001: COMPLIANT"
+  ]
+}

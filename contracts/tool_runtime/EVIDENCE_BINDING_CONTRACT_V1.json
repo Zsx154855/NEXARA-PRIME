@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/tool_runtime/evidence_binding_contract_v1.json",
+  "title": "NEXARA Tool Evidence Binding — Design Contract V1",
+  "description": "Closes the evidence binding chain: ToolInvocation → ExecutionContext → EvidenceArtifact → EvidenceStore → CrossRefValidator → Receipt. Remediation for P1 evidence_runtime_chain_open.",
+  "remediates": "Claude review deleg_c7583290 — EVIDENCE_BINDING=BLOCKED",
+  "chain": {
+    "step_1": {
+      "name": "ToolInvocation",
+      "produces": "ToolInvocation record (stored in SQLiteStore, record_type=tool_invocation)",
+      "fields": [
+        "invocation_id",
+        "tool_id",
+        "agent_id",
+        "mission_id",
+        "parameters",
+        "timestamp",
+        "idempotency_key"
+      ]
+    },
+    "step_2": {
+      "name": "ExecutionContext",
+      "produces": "Immutable context snapshot at invocation time",
+      "fields": [
+        "workspace_root",
+        "sandbox_level",
+        "lease_status",
+        "capability_id"
+      ]
+    },
+    "step_3": {
+      "name": "EvidenceArtifact",
+      "produces": "EvidenceArtifact with kind=tool_invocation, sha256=hash(output)",
+      "stored_in": "EvidenceStore via EvidenceStore.add()",
+      "alignment": "Existing tools.py uses kind=execution_receipt. Phase 2 adds kind=tool_invocation to EvidenceArtifact.kind enum."
+    },
+    "step_4": {
+      "name": "EvidenceStore",
+      "produces": "Append-only evidence record with integrity envelope",
+      "api": "EvidenceStore.add(mission_id, kind, title, content, trace_id, ...) → evidence_id"
+    },
+    "step_5": {
+      "name": "CrossRefValidator",
+      "produces": "Cross-reference integrity check",
+      "runtime_plan": "CrossRefValidator is currently design-time in contracts/mission_lifecycle/. Phase 2 implementation moves core validation logic to src/nexara_prime/cross_ref.py as runtime component. Design-time tests remain for contract verification."
+    },
+    "step_6": {
+      "name": "Receipt",
+      "produces": "Receipt attesting to evidence chain integrity",
+      "stored_in": "EvidenceStore (receipt IS an EvidenceArtifact with kind=receipt)"
+    }
+  },
+  "runtime_migration_plan": {
+    "current": "tools.py emits evidence with kind=execution_receipt",
+    "phase_2_target": "tools.py emits evidence with kind=tool_invocation + evidence_chain array linking all 6 steps",
+    "cross_ref_runtime": "Core validation logic from contracts/mission_lifecycle/cross_ref_validator.py moves to src/nexara_prime/cross_ref.py",
+    "compatibility": "Existing kind=execution_receipt evidence preserved. New kind=tool_invocation added without breaking existing."
+  },
+  "non_invasive": true
+}

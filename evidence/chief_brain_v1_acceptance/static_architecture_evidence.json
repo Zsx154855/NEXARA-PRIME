@@ -1,0 +1,18 @@
+{
+  "Q1_default_path": "CLI → NexaraRuntime (Brain NOT in CLI import)",
+  "Q2_bypass": "YES — CLI calls NexaraRuntime directly, Brain is side module",
+  "Q3_direct_tool": [],
+  "Q4_runtime_authority": "Runtime is sole executor",
+  "Q5_router_active": true,
+  "Q6_fail_closed": "Verified: _resolve_model_gateway → UnavailableProvider",
+  "Q7_circular": false,
+  "Q8_compat": "models property + setter preserved",
+  "Q9_placeholder": "Brain has DecisionEngine, PolicyEngine, MemoryController — not pass-through",
+  "Q10_semantics": "DecisionEngine.classify_action, ModelPolicyEngine.allowed_for_risk — real logic",
+  "brain_files_count": 11,
+  "runtime_instantiation_points": [
+    "/Users/agentos/NEXARA-PRIME/src/nexara_prime/cli.py",
+    "/Users/agentos/NEXARA-PRIME/src/nexara_prime/api.py"
+  ],
+  "verdict_Q1": "BRAIN_BYPASS_DEFAULT — Brain not wired into CLI → Runtime path"
+}

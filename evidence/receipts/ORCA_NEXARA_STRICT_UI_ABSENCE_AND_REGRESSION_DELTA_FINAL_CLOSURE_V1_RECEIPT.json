@@ -1,0 +1,105 @@
+{
+  "receipt_id": "receipt_closure_v1_20260803_042000",
+  "report": "ORCA_NEXARA_STRICT_UI_ABSENCE_AND_REGRESSION_DELTA_FINAL_CLOSURE_V1",
+  "timestamp": "2026-08-03T04:20:00Z",
+  "spec_candidate_sha": "44c7067345f1a7dcca04e325d74e1f48a7c32a44",
+  "current_head_sha": "da794cf3e5b41295b9537d81712415252bb64413",
+  "branch": "feat/brand-baihan",
+  "worktree_status": "6 untracked report artifacts + .hermes-setup-done. Stash empty. Original worktree restored.",
+  "python": "3.12.13 (.venv/bin/python3)",
+  "pytest": "9.1.1",
+
+  "gate_a": {
+    "status": "PARTIAL",
+    "evidence": {
+      "mission_da06c6a4c107": {
+        "mission_id": "mission_da06c6a4c107",
+        "origin": "real Canary UI",
+        "origin_conversation_id": "conversation_ce6071181dee",
+        "origin_user_message_id": "message_f1c8df06c350",
+        "state": "Failed",
+        "failure_reason": "independent_auditor_rejected",
+        "events": 64,
+        "result_message_id": "message_cb46fd84a857",
+        "result_delivered": true,
+        "window_sampled": false
+      },
+      "mission_67f30761e2df": {
+        "mission_id": "mission_67f30761e2df",
+        "origin": "real Canary UI",
+        "origin_conversation_id": "conversation_ce6071181dee",
+        "origin_user_message_id": "message_a281bbacb5ba",
+        "state": "Completed",
+        "events": 82,
+        "result_message_id": "message_b996bbbece42",
+        "result_delivered": true,
+        "window_sampled": false
+      },
+      "verified_facts": [
+        "Both missions originated from real Canary UI user input",
+        "Both result messages auto-delivered to origin conversation_ce6071181dee",
+        "CGWindowList sampler (/tmp/canary_window_sampler) operational",
+        "canary_process_alive=true (PID 11033)",
+        "runtime_8871_alive=true (PID 47948)",
+        "SQLite quick_check=ok"
+      ],
+      "not_verified": [
+        "CANARY_VISIBLE_WINDOW_COUNT=0 during Running state",
+        "MISSION_STATE_AT_ZERO_WINDOW_SAMPLE=Running",
+        "PROGRESS_ADVANCED_WITH_UI_ABSENT",
+        "MISSION_COMPLETED_WITH_UI_ABSENT",
+        "result_message_unique_count",
+        "app_reopen_recovery",
+        "runtime_restart_recovery",
+        "notification_delivered"
+      ],
+      "environment_limitation": "cua-driver cannot capture/interact with SwiftUI NEXARA Canary window. CGWindowList sampler deployed for independent window verification. AX enumeration and CGEvent injection blocked by app hardening."
+    }
+  },
+
+  "gate_b": {
+    "status": "NOT_VERIFIED",
+    "candidate_identity_conflict": "Spec candidate SHA is 44c7067, but regression comparison labeled 44c7067 as baseline and da794cf3 as candidate, inverting the identifier.",
+    "exploratory_runs": {
+      "run_44c7067": "1627 collected (1606P/15F/6E)",
+      "run_da794cf3": "1348 collected (1333P/9F/6E)",
+      "collection_delta": -279,
+      "note": "44c7067 collected 279 more tests than da794cf3. Test identity delta not analyzed. Environment modified between runs (uv sync, pip install)."
+    },
+    "cannot_assert": [
+      "NEW_REGRESSIONS=0",
+      "ENVIRONMENT_ONLY classification",
+      "Gate B PASS"
+    ],
+    "retracted": "Previous assertion of Gate B PASS and NEW_REGRESSIONS=0 is explicitly withdrawn."
+  },
+
+  "security": {
+    "secret_scan_verified": false,
+    "secret_scan_run": false,
+    "secret_leakage_observed": false,
+    "no_secret_exposure_observed": true,
+    "official_app_modified": false,
+    "protected_ports_modified": false,
+    "sudo_used": false,
+    "push_executed": false,
+    "merge_executed": false
+  },
+
+  "final_status": "PARTIAL",
+  "blockers": [
+    "Gate A: zero-window sampling not captured during Running state",
+    "Gate B: candidate identity conflict (44c7067 vs da794cf3 roles inverted)",
+    "Gate B: test collection delta of 279 not analyzed",
+    "Gate B: environment not frozen between runs",
+    "Gate B: failure root cause classification not performed"
+  ],
+
+  "artifacts": {
+    "report": "/Users/agentos/NEXARA-PRIME/ORCA_NEXARA_STRICT_UI_ABSENCE_AND_REGRESSION_DELTA_FINAL_CLOSURE_V1_REPORT.md",
+    "receipt": "/Users/agentos/NEXARA-PRIME/ORCA_NEXARA_STRICT_UI_ABSENCE_AND_REGRESSION_DELTA_FINAL_CLOSURE_V1_RECEIPT.json",
+    "evidence_index": "/Users/agentos/NEXARA-PRIME/STRICT_UI_ABSENCE_EVIDENCE_INDEX.md",
+    "regression_delta": "/Users/agentos/NEXARA-PRIME/REGRESSION_DELTA.json",
+    "secret_scan_receipt": "/Users/agentos/NEXARA-PRIME/SECRET_SCAN_RECEIPT.json"
+  }
+}

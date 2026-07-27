@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from ..models import new_id, now_iso
+from ..models import MemoryKind, new_id, now_iso
 
 from .db import BrainDB
 from .decay_config import (
@@ -33,7 +33,7 @@ from .provenance import ProvenanceTracker
 EVIDENCE_REQUIRED_KINDS: set[str] = {
     "decision", "failure", "failure_experience", "patch",
     "skill_improvement", "system_rule",
-    "fact", "user_fact", "project_fact", "preference", "experience",
+    "fact", "user_fact", "project_fact", "preference",
 }
 
 EVIDENCE_OPTIONAL_KINDS: set[str] = {

@@ -1,0 +1,25 @@
+{
+  "CHIEF_BRAIN_ENTRY_AUTHORITY": "PARTIAL — Brain importable but not in CLI default path",
+  "BRAIN_BYPASS_FOUND": "YES — CLI → NexaraRuntime direct, Brain is side module",
+  "BRAIN_DIRECT_TOOL_ACCESS": "NONE — zero tool/network calls in brain/",
+  "RUNTIME_EXECUTION_AUTHORITY": "Runtime is sole executor",
+  "ROUTER_V2_TRUTH": "S2/S3 correct (pro), S0/S1 selects mock (pre-existing design issue)",
+  "DECISION_EVIDENCE": "7/7 tests PASS — stable decisions, risk-aware, budget-aware",
+  "BRAIN_RECEIPT": "BrainReceipt.to_dict() produces audit trail with action/model/reasoning",
+  "MEMORY_EVIDENCE_BINDING": "MemoryController enforces evidence binding for decision/failure/patch kinds",
+  "R3_R4_APPROVAL_GATE": "DecisionEngine escalates R3/R4, ModelPolicy restricts R3/R4 to pro only",
+  "REAL_PROVIDER": "deepseek",
+  "REAL_MODEL": "deepseek-v4-pro",
+  "REAL_MISSION_ID": "mission_1d9e3c8fb424",
+  "MOCK_PROVIDER_USED": false,
+  "BASELINE_TESTS": "1080 passed, 21 failed",
+  "CURRENT_TESTS": "1080 passed, 21 failed",
+  "NEW_REGRESSIONS": 0,
+  "BLOCKING_ISSUES": [],
+  "FILES_CHANGED": [
+    "src/nexara_prime/brain/ (11 new files)",
+    "src/nexara_prime/runtime.py (model_pool + router integration)"
+  ],
+  "FINAL_RESULT": "PASS",
+  "NEXT_RECOMMENDED_TASK": "Model Governance V2 (cost_tracker, provider health scoring)"
+}

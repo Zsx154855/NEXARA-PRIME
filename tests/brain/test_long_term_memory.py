@@ -1,5 +1,6 @@
 """Tests: Long-term Memory operations."""
 
+import time
 import pytest
 
 from src.nexara_prime.brain.db import BrainDB

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "mission": "NEXARA_AGENT_MISSION_LIFECYCLE_SCOPE_AMENDMENT_AND_REVIEW_V1",
+  "phase": "Phase 0 — Scope Amendment V1.1",
+  "amend_id": "AML-V1.1-20260727",
+  "amend_reason": "Claude Design Review (deleg_abf7e423) BLOCKED: P1 AGENT_MODEL_MISSING_WRITER_REVIEWER_SEPARATION_CONSTRAINT + 15 P2 findings",
+  "generated_at": "2026-07-27T02:00:00Z",
+  "governed_by": "NSEC V2.1",
+
+  "p1_resolution": {
+    "issue": "AGENT_MODEL_MISSING_WRITER_REVIEWER_SEPARATION_CONSTRAINT",
+    "root_cause": "JSON Schema V1.0 allowed same agent_id as both WRITER and REVIEWER. No cross-entry validation existed.",
+    "resolution": [
+      "Added writer_reviewer_separation: boolean (default: true) to mission contract schema V1.1",
+      "Added coordinator_writer_isolation: boolean (default: true) for R2+ missions",
+      "Created MissionContractValidator with cross-entry semantic validation",
+      "Rule 1: Unique (agent_id, role) pairs enforced",
+      "Rule 2: Writer-Reviewer separation enforced when writer_reviewer_separation=true",
+      "Rule 3: Coordinator-Writer isolation enforced for R2+ when coordinator_writer_isolation=true",
+      "Rule 4: Dual-permission conflict resolution (agent-level > mission-level, deny-by-default)",
+      "CONTRACT_VALID tests: 15/15 PASS"
+    ]
+  },
+
+  "p2_resolutions": {
+    "state_machine": [
+      "ASSIGNED→PLANNING condition clarified: plan is FORMED during PLANNING, FROZEN at exit",
+      "RUNNING→BLOCKED actor unified to 'Writer' in both transition matrix and permission matrix",
+      "BLOCKED state now allows recovery to ASSIGNED, PLANNING, or RUNNING (not just RUNNING)",
+      "CTO cancellation extended to WAITING_REVIEW and VERIFYING states (direct cancel, no detour)",
+      "Lifecycle FSM terminal enforcement: added guard preventing MissionStateMachine ROLLED_BACK from reversing terminal lifecycle states"
+    ],
+    "contract": [
+      "Dual-permission conflict resolution: agent-level permissions take precedence; deny-by-default",
+      "Added assigned_seconds to phase_timeouts",
+      "required_evidence.produced_by now has enum constraint: [WRITER, REVIEWER, COORDINATOR, APPROVER, SYSTEM]"
+    ],
+    "agent_model": [
+      "Coordinator+Writer co-location prohibited for R2+ missions (coordinator_writer_isolation)",
+      "APPROVER role clarified: distinct from CTO; CTO always required for NSEC Article 37"
+    ],
+    "recovery": [
+      "Added lease expiration scenario: lease TTL < heartbeat interval detection",
+      "Added storage/disk-full failure: EvidenceStore write failure → degrade → retry",
+      "Added concurrent transition conflict: first-writer-wins with conflict detection"
+    ],
+    "integration": [
+      "Phase 1 target files clarified: NEW files in src/nexara_prime/ are IMPLEMENTATION, not modification of existing Runtime"
+    ]
+  },
+
+  "changed_files": [
+    {
+      "path": "contracts/mission/mission_contract.schema.json",
+      "change": "V1.0 → V1.1: +writer_reviewer_separation, +coordinator_writer_isolation, +assigned_seconds, +produced_by enum, +dual-permission resolution $comment, +cross-entry validation $comment"
+    },
+    {
+      "path": "contracts/mission/mission_contract_validator.py",
+      "change": "NEW: 5 validation rules with test fixtures"
+    },
+    {
+      "path": "tests/test_mission_contract.py",
+      "change": "NEW: 15 tests covering P1+P2+Schema+StateMachine"
+    }
+  ],
+
+  "test_results": {
+    "validator_tests": "15/15 PASS",
+    "schema_valid_json": true,
+    "schema_v1_1_fields": true
+  },
+
+  "ready_for_claude_re_review": true
+}

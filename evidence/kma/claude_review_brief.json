@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "mission": "NEXARA_POST_PR24_CLAUDE_ARCHITECTURE_REVIEW_V1",
+  "gate_authority": "CTO Gate",
+  "reviewer": "Claude (Independent)",
+  "writer": "NONE (read-only review)",
+  "coordinator": "AgentOS",
+  "generated_at": "2026-07-26T18:45:00Z",
+  "status": "AWAITING_CLAUDE_REVIEW",
+
+  "review_subject": {
+    "pr_number": 24,
+    "pr_title": "feat(kma): converge knowledge and memory authority runtime",
+    "pr_url": "https://github.com/Zsx154855/NEXARA-PRIME/pull/24",
+    "pr_state": "OPEN_DRAFT",
+    "head_sha": "b42ac6b007e662c7fab0ced04d3718521e69181e",
+    "base_sha": "5266a6f85939823fa52e2f506cf403800db4bb84",
+    "worktree_path": "/Users/agentos/Worktrees/NEXARA-PRIME-kma-v1",
+    "scope": "KMA Phase 2 — Knowledge Memory Authority convergence",
+    "changed_files": 53,
+    "additions": 6444,
+    "deletions": 193,
+    "commits": 11
+  },
+
+  "preceding_gate_result": {
+    "gate": "NEXARA_POST_PR24_ARCHITECTURE_GATE_V1",
+    "result": "BLOCKED",
+    "block_reason": "CLAUDE_REVIEW_MISSING",
+    "hermes_findings": "ALL 5 DIMENSIONS PASS"
+  },
+
+  "review_rules": {
+    "mutation": "DISABLED",
+    "commit": "DISABLED",
+    "push": "DISABLED",
+    "merge": "DISABLED",
+    "deploy": "DISABLED",
+    "allowed": ["READ_CODE", "READ_EVIDENCE", "READ_CONTRACTS", "GENERATE_REVIEW_OUTPUT"]
+  },
+
+  "artifacts": {
+    "architecture_gate_report": {
+      "path": "evidence/kma/architecture_gate_report.json",
+      "sha256": "580df051b82baf62b43ef51662164bb0a8f06284c1c02657b7f9900c26babca4",
+      "description": "Hermes architecture gate findings — all 5 dimensions PASS (self-reported)"
+    },
+    "architecture_gate_receipt": {
+      "path": "evidence/kma/architecture_gate_receipt.json",
+      "sha256": "9f254128e9bbece121b78e769b882c2d4dc05fa296d8abb34ea908d73d804007",
+      "description": "Receipt attesting to gate evidence integrity"
+    },
+    "kma_contract_v1_0": {
+      "path": "contracts/kma/KNOWLEDGE_MEMORY_AUTHORITY_CONTRACT_V1.md",
+      "description": "Frozen KMA domain boundary contract — defines what exists and what Phase 2 may change"
+    },
+    "kma_contract_v1_1": {
+      "path": "contracts/kma/KNOWLEDGE_MEMORY_AUTHORITY_CONTRACT_V1_1_AMENDMENT.md",
+      "description": "Phase 1.5 amendment — 8 amendments extending V1.0; 5 new invariants (KMA_09 through KMA_13)"
+    },
+    "kma_implementation_scope": {
+      "path": "contracts/kma/KMA_PHASE2_IMPLEMENTATION_SCOPE_V1.json",
+      "description": "Precise file-level allowlist/denylist for Phase 2 implementation"
+    }
+  },
+
+  "review_dimensions": [
+    {
+      "id": "MEMORY_AUTHORITY",
+      "question": "Does KMA become the single canonical Memory Authority, or are there parallel truth sources?",
+      "sub_checks": [
+        "Is MemoryKernel the sole write path for committed memory?",
+        "Does KnowledgeService wrap MemoryKernel without introducing a parallel store?",
+        "Are bypass paths to SQLiteStore eliminated?",
+        "Is supersession detection correct (superseded_by preserves history, query excludes superseded)?",
+        "Are mission_scope, confidence, and relevance properly separated?",
+        "Is the idempotency_key pattern sound (same-key-same-content returns original, different-content raises conflict)?",
+        "Does receipt_id enforcement via EvidenceStore.get_envelope() close the receipt loop?"
+      ],
+      "key_files": [
+        "src/nexara_prime/memory.py (write/propose/patch — idempotency + receipt_id)",
+        "src/nexara_prime/knowledge.py (KnowledgeService — supersession + conflict)",
+        "src/nexara_prime/chief_brain_kernel.py (recall() — delegate to MemoryLayerManager)"
+      ]
+    },
+    {
+      "id": "EVIDENCE_RUNTIME",
+      "question": "Does Evidence remain the Execution Fact Layer (not Business Logic Storage)? Is the Evidence→Receipt→Verification chain intact?",
+      "sub_checks": [
+        "Are the 5 new EvidenceStore API methods (get_by_id, get_by_idempotency_key, get_envelope, receipt_status, find_by_idempotency) architecturally sound?",
+        "Is receipt_status() the SINGLE authority for receipt judgment (no runtime self-judgment)?",
+        "Is the fail-closed pattern correct (corrupt → invalid, not missing)?",
+        "Does KMA_INVARIANT_09 (No Raw Store Access) hold across all changed files?",
+        "Is evidence append-only preserved (no update/delete API introduced)?",
+        "Is the idempotent evidence_id derivation (SHA256 of 'evidence:{key}') deterministic and safe?"
+      ],
+      "key_files": [
+        "src/nexara_prime/evidence.py (lines 656-840 — new public API)",
+        "src/nexara_prime/runtime.py (_get_evidence_by_idempotency replacement, _verify_completion delegation)"
+      ]
+    },
+    {
+      "id": "MODEL_ROUTER",
+      "question": "Does the consolidated CircuitBreaker enable future Capability→Provider→Adapter routing, or does it lock in current providers?",
+      "sub_checks": [
+        "Is the CircuitBreaker consolidation correct (model_gateway.py duplicate removed, single shared instance)?",
+        "Does the shared _shared_breaker injection pattern prevent race conditions?",
+        "Is the ModelProvider Protocol sufficient for future provider adapters?",
+        "Is routing capability-based (tier/context) rather than hardcoded to specific providers?",
+        "Does the ProviderInfo dataclass support extension for new providers?"
+      ],
+      "key_files": [
+        "src/nexara_prime/model_router.py (CircuitBreaker, ModelRouter._select_provider)",
+        "src/nexara_prime/model_gateway.py (ModelGateway — removed local CB, accepts injected breaker)",
+        "src/nexara_prime/runtime.py (lines 175-206 — _shared_breaker initialization)"
+      ]
+    },
+    {
+      "id": "GOVERNANCE",
+      "question": "Does governance (Policy, Approval, Evidence, State) remain isolated from business logic?",
+      "sub_checks": [
+        "Are PolicyEngine, ApprovalEngine, MissionStateMachine untouched by KMA changes?",
+        "Is CapabilityRegistry consolidation to single instance architecturally sound (not a runtime risk)?",
+        "Is cli.py PROGRAM_STATE migration correct (no stale PROJECT_STATE references)?",
+        "Are all fail-closed patterns preserved (memory evidence-binding, receipt status, idempotency conflict)?",
+        "Does KMA_INVARIANT_04 hold (recall is read-only — no write side effects)?",
+        "Is the change controlled by implementation scope allowlist/denylist?"
+      ],
+      "key_files": [
+        "src/nexara_prime/runtime.py (CBK wiring, instance consolidation)",
+        "src/nexara_prime/capabilities.py (SQLiteStore dependency, persistence)",
+        "src/nexara_prime/cli.py (PROGRAM_STATE migration)",
+        "contracts/kma/KMA_PHASE2_IMPLEMENTATION_SCOPE_V1.json (scope contract)"
+      ]
+    },
+    {
+      "id": "CONTEXT_ENGINEERING",
+      "question": "Can KMA support a future Context Compiler (Memory Retrieval → Relevant Context → Mission Execution)?",
+      "sub_checks": [
+        "Are KnowledgeObject, KnowledgeRelation, KnowledgeRecall, KnowledgeCommit models sufficient for a future graph-based context compiler?",
+        "Does ChiefBrainKernel.recall() provide a clean entry point for context retrieval?",
+        "Are metadata fields (confidence, provenance, mission_id, trace_id, source_evidence_id) sufficient for relevance ranking?",
+        "Is the 11-relation KnowledgeRelation type set complete for future graph traversal?",
+        "Does layer-aware recall (working/episodic/semantic/procedural) map cleanly to context compilation tiers?",
+        "Are superseded records properly excluded from default recall (canonical-only by default)?"
+      ],
+      "key_files": [
+        "src/nexara_prime/models.py (lines 416-501 — 4 KMA Pydantic types)",
+        "src/nexara_prime/chief_brain_kernel.py (lines 208-276 — recall method)",
+        "contracts/kma/KNOWLEDGE_RECALL_SCHEMA_V1.json",
+        "contracts/kma/KNOWLEDGE_COMMIT_SCHEMA_V1.json"
+      ]
+    }
+  ],
+
+  "kma_invariants_for_review": [
+    {"id": "KMA_INVARIANT_01", "text": "Single Canonical Authority — each domain object has exactly one canonical source of truth"},
+    {"id": "KMA_INVARIANT_02", "text": "Evidence is Append-Only — no modify/delete API"},
+    {"id": "KMA_INVARIANT_03", "text": "Memory Requires Evidence — committed records must have valid source_evidence_id"},
+    {"id": "KMA_INVARIANT_04", "text": "Recall is Read-Only — queries must not modify memory or evidence"},
+    {"id": "KMA_INVARIANT_05", "text": "Human Approval for Conflicts — propose()→approve→commit_candidate() flow"},
+    {"id": "KMA_INVARIANT_06", "text": "Idempotent Writes — same logical operation repeated returns same result"},
+    {"id": "KMA_INVARIANT_07", "text": "Machine Index is Derived — search index from canonical source, not parallel truth"},
+    {"id": "KMA_INVARIANT_08", "text": "Obsidian is Human Surface — docs/ cannot change runtime state"},
+    {"id": "KMA_INVARIANT_09", "text": "No Raw Store Access — evidence-type records must go through EvidenceStore public API"},
+    {"id": "KMA_INVARIANT_10", "text": "Single Receipt Judgment — only EvidenceStore.receipt_status() may determine receipt presence"},
+    {"id": "KMA_INVARIANT_11", "text": "Capability History Persistence — invocation outcomes persisted to SQLiteStore"},
+    {"id": "KMA_INVARIANT_12", "text": "KMA Runtime Types must implement JSON schemas exactly"},
+    {"id": "KMA_INVARIANT_13", "text": "Single CircuitBreaker for model providers"}
+  ],
+
+  "required_output_format": {
+    "fields": [
+      "REVIEWED_HEAD",
+      "MEMORY_AUTHORITY",
+      "EVIDENCE_RUNTIME",
+      "MODEL_ROUTER",
+      "GOVERNANCE",
+      "CONTEXT_ENGINEERING",
+      "NEW_P1",
+      "NEW_P2",
+      "ARCHITECTURE_RISK",
+      "FINAL_RESULT"
+    ],
+    "format": "structured text block with NEXARA_PR24_CLAUDE_ARCHITECTURE_REVIEW_RESULT header",
+    "verdict_values": ["PASS", "BLOCKED"],
+    "p1_p2_format": "Comma-separated issue IDs, or 'NONE'",
+    "architecture_risk": "LOW / MEDIUM / HIGH / CRITICAL"
+  },
+
+  "next_gate_on_pass": "NSEC_ARTICLE_37_MERGE_APPROVAL",
+  "next_gate_on_block": "ROOT_CAUSE_REMEDIATION",
+
+  "ci_backing": {
+    "all_checks_pass": true,
+    "job_count": 9,
+    "kma_tests": "147 passed / 0 failed / 0.71s",
+    "core_tests": "1029 passed (pre-existing failures isolated)"
+  },
+
+  "instructions": "Read the architecture_gate_report.json for Hermes' self-reported findings. Independently verify each dimension against the actual source code in the KMA worktree. Do NOT trust Hermes' findings — verify from code. Output BLOCKED if any dimension fails independent verification."
+}

@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/capability/capability_runtime_design_v1.json",
+  "title": "NEXARA Capability Runtime — Architecture Design Contract V1",
+  "frozen_at": "2026-07-27T04:30:00Z",
+  "governed_by": "NSEC V2.1",
+  "layer_position": "Between Mission Lifecycle (what) and Execution Plane (how)",
+  "problem_statements": {
+    "p1": {
+      "title": "Mission如何表达需求？",
+      "wrong": "call Claude with prompt X",
+      "correct": "need HIGH_REASONING capability for architecture review",
+      "principle": "Missions declare capability needs, not provider names."
+    },
+    "p2": {
+      "title": "Capability如何选择Provider？",
+      "chain": "Capability → CapabilityResolver → ProviderRouter → ProviderAdapter",
+      "principle": "Resolution is capability-driven, provider-agnostic."
+    },
+    "p3": {
+      "title": "Capability如何进入Execution Plane？",
+      "chain": "Mission → Capability → Worker → Tool",
+      "principle": "Capability is leased to agent, agent invokes tools within capability boundary."
+    }
+  },
+  "capability_contract": {
+    "description": "A Capability is a named, versioned, permissioned unit of agent work.",
+    "schema": {
+      "capability_id": "cap.{domain}.{name}  e.g. cap.code.write, cap.review.architecture",
+      "name": "Human-readable name",
+      "version": "semver string",
+      "description": "What this capability provides",
+      "risk_ceiling": "R0-R4 — maximum risk level this capability can execute at",
+      "required_permissions": [
+        "tool permissions needed to execute"
+      ],
+      "provider_preferences": [
+        {
+          "provider": "deepseek",
+          "model": "v4-pro",
+          "priority": 1
+        }
+      ],
+      "fallback_chain": [
+        "cap.reasoning.high → cap.reasoning.standard → cap.reasoning.basic"
+      ],
+      "evidence_required": true,
+      "idempotent": true,
+      "timeout_s": 300,
+      "depends_on": [
+        "cap.prerequisite (optional)"
+      ]
+    },
+    "examples": {
+      "cap.reasoning.high": {
+        "name": "High Reasoning",
+        "description": "Complex architecture analysis requiring deep context understanding",
+        "risk_ceiling": "R3",
+        "required_permissions": [
+          "READ"
+        ],
+        "provider_preferences": [
+          {
+            "provider": "deepseek",
+            "model": "v4-pro",
+            "priority": 1
+          }
+        ],
+        "fallback_chain": [
+          "cap.reasoning.standard"
+        ],
+        "evidence_required": true
+      },
+      "cap.code.write": {
+        "name": "Code Writing",
+        "description": "Write or modify source code files",
+        "risk_ceiling": "R2",
+        "required_permissions": [
+          "READ",
+          "WRITE",
+          "EXECUTE_TEST"
+        ],
+        "provider_preferences": [
+          {
+            "provider": "deepseek",
+            "model": "v4-pro",
+            "priority": 1
+          }
+        ],
+        "fallback_chain": [
+          "cap.code.write_basic"
+        ],
+        "evidence_required": true
+      },
+      "cap.review.architecture": {
+        "name": "Architecture Review",
+        "description": "Independent architecture analysis and gate evaluation",
+        "risk_ceiling": "R3",
+        "required_permissions": [
+          "READ",
+          "REVIEW",
+          "BLOCK"
+        ],
+        "provider_preferences": [
+          {
+            "provider": "deepseek",
+            "model": "v4-pro",
+            "priority": 1
+          }
+        ],
+        "fallback_chain": [],
+        "evidence_required": true
+      },
+      "cap.evidence.generate": {
+        "name": "Evidence Generation",
+        "description": "Generate verifiable evidence artifacts",
+        "risk_ceiling": "R1",
+        "required_permissions": [
+          "READ",
+          "GENERATE_EVIDENCE"
+        ],
+        "provider_preferences": [],
+        "fallback_chain": [],
+        "evidence_required": false
+      }
+    }
+  },
+  "capability_registry": {
+    "description": "Single source of truth for all registered capabilities.",
+    "existing": "CapabilityRegistry in src/nexara_prime/capabilities.py (V2.1, converged)",
+    "extension_points": [
+      "Dynamic capability registration (Phase 2)",
+      "Capability scoring from execution history",
+      "Capability decay and confidence gating"
+    ],
+    "query_interface": {
+      "by_id": "registry.get(capability_id) → Capability",
+      "by_task_type": "registry.find_by_task(task_type) → list[Capability]",
+      "by_risk_ceiling": "registry.available_at_risk(risk_level) → list[Capability]",
+      "by_agent_role": "registry.grantable_to(role) → list[Capability]"
+    }
+  },
+  "capability_resolver": {
+    "description": "Resolves a capability request to a concrete provider+model+adapter.",
+    "resolution_pipeline": [
+      {
+        "step": 1,
+        "name": "Capability Lookup",
+        "action": "Resolve capability_id → Capability contract"
+      },
+      {
+        "step": 2,
+        "name": "Permission Check",
+        "action": "Agent role + mission risk_level ≤ capability.risk_ceiling?"
+      },
+      {
+        "step": 3,
+        "name": "Provider Selection",
+        "action": "Iterate provider_preferences; skip open circuit breakers"
+      },
+      {
+        "step": 4,
+        "name": "Fallback",
+        "action": "If no provider available, walk fallback_chain"
+      },
+      {
+        "step": 5,
+        "name": "Adapter Binding",
+        "action": "Bind selected provider to ModelProvider adapter"
+      },
+      {
+        "step": 6,
+        "name": "Lease Grant",
+        "action": "Grant CapabilityLease with expiry"
+      }
+    ],
+    "failure_modes": {
+      "CAPABILITY_NOT_FOUND": "capability_id not in registry",
+      "RISK_CEILING_EXCEEDED": "mission risk > capability.risk_ceiling",
+      "NO_PROVIDER_AVAILABLE": "all providers open circuit or unavailable",
+      "FALLBACK_EXHAUSTED": "entire fallback chain failed",
+      "LEASE_DENIED": "agent already holds conflicting lease"
+    }
+  },
+  "capability_permission": {
+    "matrix": {
+      "WRITER": [
+        "cap.code.write",
+        "cap.code.test",
+        "cap.evidence.generate",
+        "cap.reasoning.standard"
+      ],
+      "REVIEWER": [
+        "cap.review.architecture",
+        "cap.review.code",
+        "cap.reasoning.high"
+      ],
+      "COORDINATOR": [
+        "cap.orchestrate",
+        "cap.gate.evaluate",
+        "cap.state.manage"
+      ],
+      "VERIFIER": [
+        "cap.evidence.validate",
+        "cap.cross_ref.check"
+      ],
+      "APPROVER": [
+        "cap.approve.merge",
+        "cap.approve.deploy"
+      ]
+    },
+    "isolation_rules": [
+      "Writer cannot hold cap.review.*",
+      "Reviewer cannot hold cap.code.write",
+      "R2+: Coordinator cannot hold cap.code.write"
+    ]
+  },
+  "capability_lease": {
+    "description": "Time-bound grant of a capability to an agent.",
+    "schema": {
+      "lease_id": "caplease_{uuid4().hex[:12]}",
+      "capability_id": "string",
+      "agent_id": "string",
+      "mission_id": "string",
+      "granted_at": "ISO8601",
+      "expires_at": "ISO8601",
+      "provider_bound": {
+        "provider": "string",
+        "model": "string"
+      },
+      "status": "ACTIVE | EXPIRED | REVOKED"
+    },
+    "enforcement": "Agent must present valid lease before every tool invocation. Execution Plane checks lease ACTIVE status."
+  },
+  "capability_versioning": {
+    "strategy": "Semantic versioning (MAJOR.MINOR.PATCH)",
+    "compatibility": {
+      "MAJOR": "Breaking change — requires mission contract update",
+      "MINOR": "Backward-compatible addition — auto-upgrade",
+      "PATCH": "Bug fix — transparent"
+    },
+    "deprecation": "Old capability remains registered for 2 MAJOR versions with deprecated=true flag."
+  },
+  "capability_failure_handling": {
+    "scenarios": [
+      {
+        "failure": "Provider unavailable",
+        "action": "Walk provider_preferences, skip open breakers, try next"
+      },
+      {
+        "failure": "All providers exhausted",
+        "action": "Walk fallback_chain to lower-tier capability"
+      },
+      {
+        "failure": "Fallback chain exhausted",
+        "action": "Transition mission to BLOCKED. Notify Coordinator."
+      },
+      {
+        "failure": "Capability not found",
+        "action": "Reject mission at planning phase. CAPABILITY_NOT_FOUND → BLOCKED."
+      },
+      {
+        "failure": "Risk ceiling exceeded",
+        "action": "Reject capability assignment. RISK_CEILING_EXCEEDED → BLOCKED."
+      }
+    ],
+    "circuit_breaker": "Shared CircuitBreaker from model_router.py — per-provider failure counting."
+  },
+  "pr24_capability_mapping": {
+    "hermes_writer_capabilities": [
+      "cap.code.write",
+      "cap.code.test",
+      "cap.evidence.generate",
+      "cap.reasoning.standard",
+      "cap.reasoning.high"
+    ],
+    "claude_reviewer_capabilities": [
+      "cap.review.architecture",
+      "cap.reasoning.high"
+    ],
+    "agentos_coordinator_capabilities": [
+      "cap.orchestrate",
+      "cap.gate.evaluate",
+      "cap.state.manage"
+    ],
+    "all_routed_through": "CapabilityResolver → ModelRouter → ModelProvider adapter"
+  },
+  "integration": {
+    "control_plane": "Mission contract declares capability needs via required_evidence + scope",
+    "execution_plane": "Agent acquires capability lease → invokes tools within capability boundary",
+    "existing_runtime": "CapabilityRegistry (V2.1), ModelRouter, CircuitBreaker — reused, not modified",
+    "non_invasive": true
+  }
+}

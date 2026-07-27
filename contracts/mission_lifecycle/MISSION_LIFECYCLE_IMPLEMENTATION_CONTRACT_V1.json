@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/mission_lifecycle/implementation_contract_v1.json",
+  "title": "NEXARA Agent Mission Lifecycle Manager — Phase 1 Implementation Contract V1",
+  "description": "Frozen implementation contract for Phase 1 of the NEXARA Agent Mission Lifecycle Manager. Defines exact scope, allowed files, forbidden files, API interfaces, test requirements, evidence requirements, and rollback strategy. Governed by NSEC V2.1.",
+  "frozen_at": "2026-07-27T02:30:00Z",
+  "governed_by": "NSEC V2.1 Article 37, Article 45",
+  "design_baseline": {
+    "design_document": "docs/runtime/mission_lifecycle_manager_design.md",
+    "contract_schema": "contracts/mission/mission_contract.schema.json (V1.1)",
+    "design_review_v2": "PASS (Claude deleg_d12be103, 2026-07-27)",
+    "architecture_risk": "LOW",
+    "p1_open": 0,
+    "p2_open": 0
+  },
+
+  "mission_scope": {
+    "objective": "Implement Phase 1 validators for the Agent Mission Lifecycle Manager",
+    "phase": "Phase 1 — Minimum Viable Implementation",
+    "implementation_strategy": "Additive only — new files, no modification of existing Runtime",
+    "what_is_implemented": [
+      "A. MissionContractValidator — validates mission contracts against V1.1 schema + cross-entry rules",
+      "B. AgentRoleConstraintValidator — enforces writer_reviewer_separation + coordinator_writer_isolation",
+      "C. StateTransitionValidator — validates state transitions against the 10-state FSM",
+      "D. EvidenceArtifactValidator — validates evidence artifacts against the verification pipeline"
+    ],
+    "what_is_explicitly_deferred": [
+      "Automatic mission scheduling / orchestration",
+      "Automatic recovery execution (manual recovery only in Phase 1)",
+      "Multi-agent Runtime replacement",
+      "Provider routing integration",
+      "Heartbeat runtime (schema only in Phase 1)",
+      "CLI commands for mission lifecycle",
+      "API endpoints for mission lifecycle",
+      "UI screens for mission lifecycle"
+    ]
+  },
+
+  "state_machine_reference": {
+    "states": [
+      "CREATED", "ASSIGNED", "PLANNING", "RUNNING",
+      "WAITING_REVIEW", "VERIFYING", "COMPLETED",
+      "FAILED", "BLOCKED", "CANCELLED"
+    ],
+    "terminal_states": ["COMPLETED", "FAILED", "CANCELLED"],
+    "transitions_defined_in": "docs/runtime/mission_lifecycle_manager_design.md §2.2",
+    "implementation_note": "StateTransitionValidator enforces transition legality. Actual state transitions delegated to existing MissionStateMachine."
+  },
+
+  "agent_constraints": {
+    "writer_reviewer_separation": {
+      "default": true,
+      "enforced_by": "AgentRoleConstraintValidator (Rule 2)",
+      "violation_code": "P1_POLICY_VIOLATION_WRITER_REVIEWER_SEPARATION"
+    },
+    "coordinator_writer_isolation": {
+      "default": true,
+      "risk_threshold": "R2",
+      "enforced_by": "AgentRoleConstraintValidator (Rule 3)",
+      "violation_code": "P1_POLICY_VIOLATION_COORDINATOR_WRITER_ISOLATION"
+    },
+    "unique_agent_role_pairs": {
+      "enforced_by": "AgentRoleConstraintValidator (Rule 1)",
+      "violation_code": "DUPLICATE_AGENT_ID"
+    }
+  },
+
+  "api_interfaces": {
+    "mission_contract_validator": {
+      "function": "validate_mission_contract(contract: dict) -> ValidationResult",
+      "module": "contracts/mission/mission_contract_validator.py",
+      "status": "ALREADY_IMPLEMENTED (Phase 0)",
+      "tests": "tests/test_mission_contract.py (15 tests, all PASS)"
+    },
+    "agent_role_constraint_validator": {
+      "function": "validate_agent_roles(agents: list, risk_level: str, writer_reviewer_sep: bool, coordinator_writer_iso: bool) -> ValidationResult",
+      "module": "contracts/mission_lifecycle/agent_role_validator.py (NEW)",
+      "status": "TO_IMPLEMENT"
+    },
+    "state_transition_validator": {
+      "function": "validate_transition(current: str, target: str, actor: str, evidence_ids: list) -> ValidationResult",
+      "module": "contracts/mission_lifecycle/state_transition_validator.py (NEW)",
+      "status": "TO_IMPLEMENT"
+    },
+    "evidence_artifact_validator": {
+      "function": "validate_artifact(artifact_type: str, artifact_data: dict) -> ValidationResult",
+      "module": "contracts/mission_lifecycle/evidence_artifact_validator.py (NEW)",
+      "status": "TO_IMPLEMENT"
+    }
+  },
+
+  "allowed_files": {
+    "new_files": [
+      "contracts/mission_lifecycle/agent_role_validator.py",
+      "contracts/mission_lifecycle/state_transition_validator.py",
+      "contracts/mission_lifecycle/evidence_artifact_validator.py",
+      "contracts/mission_lifecycle/__init__.py"
+    ],
+    "new_test_files": [
+      "tests/test_agent_role_validator.py",
+      "tests/test_state_transition_validator.py",
+      "tests/test_evidence_artifact_validator.py"
+    ],
+    "existing_files_allowed_to_extend": [
+      "contracts/mission/mission_contract_validator.py (extend if needed, do not break existing 15 tests)"
+    ],
+    "evidence_files": [
+      "evidence/mission_lifecycle/*.json"
+    ]
+  },
+
+  "forbidden_files": {
+    "absolute_prohibition": [
+      "src/nexara_prime/*.py",
+      "src/nexara_prime/**/*.py",
+      ".nexara/**/*",
+      "governance/**/*",
+      "docs/ (except evidence references)"
+    ],
+    "read_only_reference": [
+      "src/nexara_prime/state_machine.py",
+      "src/nexara_prime/models.py",
+      "src/nexara_prime/evidence.py",
+      "src/nexara_prime/runtime.py"
+    ]
+  },
+
+  "test_requirements": {
+    "minimum_test_count": 30,
+    "required_coverage_areas": [
+      {
+        "area": "Writer-Reviewer separation",
+        "tests": [
+          "test_writer_reviewer_same_agent_fails",
+          "test_writer_reviewer_disabled_allows_same_agent",
+          "test_writer_reviewer_default_true"
+        ]
+      },
+      {
+        "area": "Coordinator-Writer isolation",
+        "tests": [
+          "test_coordinator_writer_same_agent_r3_fails",
+          "test_coordinator_writer_same_agent_r2_fails",
+          "test_coordinator_writer_same_agent_r1_allowed",
+          "test_coordinator_writer_same_agent_r0_allowed"
+        ]
+      },
+      {
+        "area": "State transitions",
+        "tests": [
+          "test_happy_path_creates_to_completed",
+          "test_blocked_recovery_to_assigned",
+          "test_blocked_recovery_to_planning",
+          "test_blocked_recovery_to_running",
+          "test_cto_cancel_from_waiting_review",
+          "test_cto_cancel_from_verifying",
+          "test_terminal_state_no_forward_transition",
+          "test_invalid_transition_rejected"
+        ]
+      },
+      {
+        "area": "Evidence validation",
+        "tests": [
+          "test_evidence_artifact_valid_json_passes",
+          "test_evidence_artifact_missing_sha256_fails",
+          "test_evidence_artifact_invalid_schema_fails",
+          "test_receipt_cross_refs_consistent_passes",
+          "test_receipt_cross_refs_mismatch_fails",
+          "test_code_artifact_ruff_check_required"
+        ]
+      },
+      {
+        "area": "Unique agent_id",
+        "tests": [
+          "test_duplicate_agent_id_same_role_fails",
+          "test_unique_agent_ids_different_roles_passes"
+        ]
+      }
+    ],
+    "test_framework": "pytest",
+    "expected_command": "python3 -m pytest tests/test_agent_role_validator.py tests/test_state_transition_validator.py tests/test_evidence_artifact_validator.py -v",
+    "expected_result": "ALL PASS, 0 FAIL, 0 SKIP"
+  },
+
+  "evidence_requirements": {
+    "per_artifact": {
+      "validator_source": "SHA256 of .py file content",
+      "test_results": "Pytest JSON report with pass/fail counts",
+      "evidence_id": "evidence_{sha256(source)[:12]}"
+    },
+    "gate_evidence": [
+      "evidence/mission_lifecycle/implementation_scope_report.json (this contract verification)",
+      "evidence/mission_lifecycle/implementation_scope_receipt.json (receipt attesting to this contract)",
+      "evidence/mission_lifecycle/phase1_implementation_evidence.json (post-implementation)",
+      "evidence/mission_lifecycle/phase1_implementation_receipt.json (post-implementation receipt)"
+    ]
+  },
+
+  "rollback_strategy": {
+    "removal": "Delete all NEW files under contracts/mission_lifecycle/ and tests/test_*_validator.py",
+    "reversion": "Revert any extensions to contracts/mission/mission_contract_validator.py",
+    "impact": "Zero impact on existing Runtime. No src/nexara_prime/ files touched.",
+    "verification": "Run existing test suite (1029+ tests) to confirm no regression"
+  },
+
+  "acceptance_criteria": [
+    "All 4 validators implemented and testable independently",
+    "Minimum 30 tests across 5 coverage areas, all PASS",
+    "Zero modifications to src/nexara_prime/",
+    "Existing 1029+ tests continue to PASS",
+    "Claude Pre-Implementation Review = PASS",
+    "All evidence files generated and valid"
+  ],
+
+  "governance": {
+    "nsrc_article_37_required": true,
+    "merge": "AWAITING_NSEC_ARTICLE_37",
+    "push": "AWAITING_NSEC_ARTICLE_37",
+    "deploy": "DENIED"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_kma_architecture_gate_final_20260726",
+  "receipt_type": "architecture_gate_final_receipt",
+  "mission": "NEXARA_POST_PR24_ARCHITECTURE_GATE_V1",
+  "generated_at": "2026-07-26T23:40:00Z",
+  "governed_by": "NSEC V2.1 Article 45",
+
+  "gate_transition": {
+    "previous_result": "BLOCKED",
+    "block_reason": "CLAUDE_REVIEW_MISSING",
+    "current_result": "PASS",
+    "transition_trigger": "Claude independent architecture review completed — all 5 dimensions PASS"
+  },
+
+  "subject_head": "b42ac6b007e662c7fab0ced04d3718521e69181e",
+
+  "review_matrix": {
+    "hermes_writer_review": {
+      "memory_authority": "PASS",
+      "evidence_runtime": "PASS",
+      "model_router": "PASS",
+      "governance": "PASS",
+      "context_engineering": "PASS"
+    },
+    "claude_independent_review": {
+      "memory_authority": "PASS",
+      "evidence_runtime": "PASS",
+      "model_router": "PASS",
+      "governance": "PASS",
+      "context_engineering": "PASS",
+      "concurrence": "CONCUR — independently verified all 5 dimensions"
+    }
+  },
+
+  "check_matrix_final": {
+    "HEAD_FROZEN": true,
+    "WORKTREE_CLEAN": true,
+    "PR_STATE_VALID": true,
+    "CI_PASS": true,
+    "THREADS": "0 (claimed)",
+    "CLAUDE_REVIEW": "PASS",
+    "MEMORY_BOUNDARY": "PASS",
+    "EVIDENCE_BOUNDARY": "PASS",
+    "ROUTER_BOUNDARY": "PASS",
+    "GOVERNANCE_BOUNDARY": "PASS",
+    "CONTEXT_COMPATIBILITY": "PASS"
+  },
+
+  "all_gate_conditions_met": true,
+
+  "final_result": "PASS",
+
+  "new_findings": {
+    "p1_blocking": "NONE",
+    "p2_non_blocking": ["P2-CB-THREAD-SAFETY"]
+  },
+
+  "architecture_risk": "LOW",
+
+  "next_gate": "NSEC_ARTICLE_37_MERGE_APPROVAL",
+
+  "evidence_chain": {
+    "artifacts": [
+      {
+        "path": "evidence/kma/architecture_gate_report.json",
+        "role": "Hermes Writer findings",
+        "sha256": "580df051b82baf62b43ef51662164bb0a8f06284c1c02657b7f9900c26babca4"
+      },
+      {
+        "path": "evidence/kma/architecture_gate_receipt.json",
+        "role": "Gate attestation (pre-Claude)",
+        "sha256": "9f254128e9bbece121b78e769b882c2d4dc05fa296d8abb34ea908d73d804007"
+      },
+      {
+        "path": "evidence/kma/claude_review_brief.json",
+        "role": "Review specification",
+        "sha256": "3c768aefb89e51646e2a2fa845982817d02eb191b24a781728760a0bbd448046"
+      },
+      {
+        "path": "evidence/kma/claude_architecture_review_result.json",
+        "role": "Claude independent review result",
+        "sha256": "d7a9dc1eaa3fe4d34dfe40b20489b73eb7a9d7ff0263c36fbdc5c4c86a4b820f"
+      },
+      {
+        "path": "evidence/kma/architecture_gate_final_receipt.json",
+        "role": "Final consolidated gate receipt",
+        "sha256": "SELF_REFERENCE_NONE"
+      }
+    ]
+  },
+
+  "governance": {
+    "merge": "AWAITING_NSEC_ARTICLE_37_HUMAN_APPROVAL",
+    "push": "AWAITING_NSEC_ARTICLE_37_HUMAN_APPROVAL",
+    "deploy": "DENIED"
+  }
+}

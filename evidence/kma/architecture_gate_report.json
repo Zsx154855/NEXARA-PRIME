@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "mission": "NEXARA_POST_PR24_ARCHITECTURE_GATE_V1",
+  "role": "Hermes=Writer, AgentOS=Coordinator, Claude=IndependentReviewer",
+  "mode": "PRE_MERGE_ARCHITECTURE_FREEZE",
+  "mutation_enabled": false,
+  "merge_enabled": false,
+  "deploy_enabled": false,
+  "generated_at": "2026-07-26T18:30:00Z",
+  "evidence_head": "b42ac6b007e662c7fab0ced04d3718521e69181e",
+  "base_head": "5266a6f85939823fa52e2f506cf403800db4bb84",
+  "merge_base": "5266a6f85939823fa52e2f506cf403800db4bb84",
+
+  "pr_state": {
+    "number": 24,
+    "state": "OPEN",
+    "draft": true,
+    "title": "feat(kma): converge knowledge and memory authority runtime",
+    "base": "main",
+    "head_branch": "work/nexara-knowledge-memory-authority-convergence-v1",
+    "head_sha": "b42ac6b007e662c7fab0ced04d3718521e69181e",
+    "url": "https://github.com/Zsx154855/NEXARA-PRIME/pull/24",
+    "created_at": "2026-07-26T05:10:29Z",
+    "updated_at": "2026-07-26T12:40:10Z",
+    "additions": 6444,
+    "deletions": 193,
+    "changed_files": 53,
+    "commits": 11,
+    "reviews_total": 55,
+    "labels": []
+  },
+
+  "worktree_state": {
+    "path": "/Users/agentos/Worktrees/NEXARA-PRIME-kma-v1",
+    "branch": "work/nexara-knowledge-memory-authority-convergence-v1",
+    "head": "b42ac6b007e662c7fab0ced04d3718521e69181e",
+    "clean": true,
+    "untracked": [".hermes-setup-done"],
+    "modified": 0,
+    "staged": 0
+  },
+
+  "ci_state": {
+    "all_pass": true,
+    "checks": [
+      {"job": "GitGuardian Security Checks", "conclusion": "pass"},
+      {"job": "governance", "conclusion": "pass"},
+      {"job": "nsec-governance", "conclusion": "pass"},
+      {"job": "python", "conclusion": "pass"},
+      {"job": "secret-scan", "conclusion": "pass"},
+      {"job": "sovereign-delivery", "conclusion": "pass"},
+      {"job": "swift-ios", "conclusion": "pass"},
+      {"job": "swift-macos", "conclusion": "pass"},
+      {"job": "typescript", "conclusion": "pass"}
+    ],
+    "runs": [
+      {"run_id": "30201807692", "status": "all_pass"},
+      {"run_id": "30201809498", "status": "all_pass"}
+    ]
+  },
+
+  "review_state": {
+    "total": 55,
+    "codex_reviews": 3,
+    "human_reviews": 52,
+    "approved": 0,
+    "changes_requested": 0,
+    "commented": 55,
+    "last_human_review": {
+      "id": 53,
+      "author": "Zsx154855",
+      "body_summary": "@codex review — all 5 findings resolved. HEAD=b42ac6b. Push#252+PR#253 pending.",
+      "threads_resolved": "all"
+    },
+    "claude_review": "MISSING",
+    "review_threads_graphql": "NOT_AVAILABLE (GraphQL endpoint blocked)",
+    "review_threads_estimated": "0 unresolved (per last human review)"
+  },
+
+  "kma_test_suite": {
+    "total": 147,
+    "passed": 147,
+    "failed": 0,
+    "duration_seconds": 0.71,
+    "files_tested": [
+      "test_kma_knowledge.py",
+      "test_kma_capability_persistence.py",
+      "test_kma_cbk_recall.py",
+      "test_kma_circuitbreaker.py",
+      "test_kma_evidence_api.py",
+      "test_kma_memory_idempotency.py",
+      "test_kma_runtime_integration.py",
+      "test_kma_types.py",
+      "test_p2_codex_regression.py",
+      "test_g3a_capability_registry.py"
+    ]
+  },
+
+  "architecture_checks": {
+    "memory_authority": {
+      "verdict": "PASS",
+      "single_source": true,
+      "bypass_path": false,
+      "future_graph_compatible": true,
+      "details": {
+        "canonical_class": "MemoryKernel (src/nexara_prime/memory.py)",
+        "knowledge_wrapper": "KnowledgeService (src/nexara_prime/knowledge.py)",
+        "recall_delegate": "ChiefBrainKernel.recall() → MemoryLayerManager.search()",
+        "idempotency": "Added to write(), propose(), patch() via idempotency_key",
+        "receipt_link": "receipt_id field added to MemoryRecord",
+        "evidence_binding": "Enforced for DECISION/FAILURE/FAILURE_EXPERIENCE/PATCH when mission-scoped",
+        "bypass_elimination": [
+          "memory.py raw store access → EvidenceStore.get_envelope()",
+          "runtime.py _get_evidence_by_idempotency() → EvidenceStore.find_by_idempotency()"
+        ],
+        "supersession": "Implemented — superseded_by field preserves history",
+        "kma_invariants_satisfied": [
+          "KMA_INVARIANT_01: Single Canonical Authority",
+          "KMA_INVARIANT_03: Memory Requires Evidence",
+          "KMA_INVARIANT_05: Human Approval for Conflicts",
+          "KMA_INVARIANT_06: Idempotent Writes"
+        ]
+      }
+    },
+
+    "evidence_runtime": {
+      "verdict": "PASS",
+      "immutable": true,
+      "replayable": true,
+      "auditable": true,
+      "details": {
+        "canonical_class": "EvidenceStore (src/nexara_prime/evidence.py)",
+        "new_api_methods": [
+          "get_by_id(evidence_id) → EvidenceArtifact",
+          "get_by_idempotency_key(key) → EvidenceArtifact | None",
+          "get_envelope(evidence_id) → dict | None",
+          "receipt_status(mission_id) → dict (SINGLE authority)",
+          "find_by_idempotency(key) → dict | None",
+          "verify_artifact(evidence_id) → EvidenceArtifact (unified entry)"
+        ],
+        "receipt_judgment": "EvidenceStore.receipt_status() — SINGLE authority; runtime self-judgment removed",
+        "fail_closed": "corrupt > 0 OR violations > 0 → invalid; missing when no receipt",
+        "append_only": true,
+        "no_update_delete_api": true,
+        "kma_invariants_satisfied": [
+          "KMA_INVARIANT_02: Evidence is Append-Only",
+          "KMA_INVARIANT_09: No Raw Store Access",
+          "KMA_INVARIANT_10: Single Receipt Judgment"
+        ]
+      }
+    },
+
+    "model_router": {
+      "verdict": "PASS",
+      "capability_based": true,
+      "provider_agnostic": true,
+      "adapter_ready": true,
+      "details": {
+        "canonical_circuit_breaker": "model_router.py::CircuitBreaker (single shared instance)",
+        "removed_duplicate": "model_gateway.py::CircuitBreaker (lines 63-91 removed)",
+        "shared_instance": "_shared_breaker in runtime.py, injected into both ModelRouter and ModelGateway",
+        "routing_strategy": "Capability-based via ModelRoutingDecision (tier/context/capability)",
+        "provider_info": "ProviderInfo dataclass with metadata (tier, context_size, latency, cost)",
+        "protocol": "ModelProvider Protocol for custom provider adapters",
+        "kma_invariants_satisfied": [
+          "KMA_INVARIANT_13: Single CircuitBreaker for model providers"
+        ]
+      }
+    },
+
+    "governance": {
+      "verdict": "PASS",
+      "isolated": true,
+      "fail_closed": true,
+      "auditable": true,
+      "details": {
+        "policy_isolation": "PolicyEngine, ApprovalEngine unchanged — no KMA changes",
+        "evidence_isolation": "EvidenceStore sole authority for evidence+receipt operations",
+        "receipt_isolation": "receipt_status() single judgment point; runtime self-judgment removed",
+        "state_isolation": "MissionStateMachine unchanged; no governance bypasses",
+        "instance_consolidation": "CapabilityRegistry single instance (was duplicated)",
+        "config_fix": "cli.py reads PROGRAM_STATE.json (was deprecated PROJECT_STATE)",
+        "fail_closed_pattern": [
+          "receipt_status: corrupt → invalid (not missing)",
+          "memory evidence-binding: evidence_required → ValueError (not silent skip)",
+          "idempotency: field mismatch → ValueError (not silent overwrite)"
+        ],
+        "kma_invariants_satisfied": [
+          "KMA_INVARIANT_04: Recall is Read-Only",
+          "KMA_INVARIANT_07: Machine Index is Derived",
+          "KMA_INVARIANT_08: Obsidian is Human Surface"
+        ]
+      }
+    },
+
+    "context_engineering": {
+      "verdict": "PASS",
+      "retrieval_ready": true,
+      "metadata_ready": true,
+      "compiler_compatible": true,
+      "details": {
+        "recall_entry": "ChiefBrainKernel.recall() → KnowledgeRecall structured output",
+        "recall_input_model": "KnowledgeRecall (query, layers, top_k, min_confidence, filters)",
+        "write_input_model": "KnowledgeCommit (kind, key, content, idempotency_key, receipt_id)",
+        "entity_model": "KnowledgeObject (object_type, sha256, confidence, status, superseded_by)",
+        "relation_model": "KnowledgeRelation (11 relation types, evidence_id, bidirectional)",
+        "layer_aware": true,
+        "metadata_support": [
+          "confidence (0.0-1.0)",
+          "mission_id",
+          "trace_id",
+          "provenance",
+          "source_evidence_id",
+          "superseded_by"
+        ],
+        "future_compiler_path": "KnowledgeObject → KnowledgeRelation graph → RAGPipeline retrieval → Context Compiler (TBD)",
+        "kma_invariants_satisfied": [
+          "KMA_INVARIANT_12: KMA Runtime Types implement JSON schemas"
+        ]
+      }
+    }
+  },
+
+  "blocking_issues": [
+    {
+      "id": "BLOCK-01",
+      "category": "REVIEW_GATE",
+      "severity": "BLOCKING",
+      "title": "Claude Independent Review Not Yet Performed",
+      "description": "Gate requires CLAUDE_REVIEW=PASS. No Claude-originated review found on PR #24. 55 total reviews: 3 Codex (chatgpt-codex-connector), 52 human (Zsx154855).",
+      "recommended_action": "Request Claude independent review of architecture changes before merge.",
+      "remediation": "Claude should review the 5 architecture dimensions and confirm PASS. Once confirmed, re-run this gate."
+    },
+    {
+      "id": "BLOCK-02",
+      "category": "REVIEW_THREADS",
+      "severity": "WARNING",
+      "title": "Review Thread Resolution Not GraphQL-Verified",
+      "description": "GraphQL endpoint for review thread verification was blocked. Last human review (53) claims all threads resolved. Cannot independently verify via REST API (unreliable per PR governance patterns).",
+      "recommended_action": "Verify review thread resolution via GitHub GraphQL API or UI before merge.",
+      "remediation": "Manually confirm all review threads on PR #24 are resolved in GitHub UI."
+    }
+  ],
+
+  "final_result": "BLOCKED",
+  "root_cause": "CLAUDE_REVIEW_MISSING",
+  "next_gate": "CLAUDE_INDEPENDENT_REVIEW_REQUIRED",
+
+  "check_matrix": {
+    "HEAD_FROZEN": true,
+    "WORKTREE_CLEAN": true,
+    "PR_STATE_VALID": true,
+    "CI_PASS": true,
+    "THREADS": "0 (claimed, not GraphQL-verified)",
+    "CLAUDE_REVIEW": "MISSING",
+    "MEMORY_BOUNDARY": "PASS",
+    "EVIDENCE_BOUNDARY": "PASS",
+    "ROUTER_BOUNDARY": "PASS",
+    "GOVERNANCE_BOUNDARY": "PASS",
+    "CONTEXT_COMPATIBILITY": "PASS"
+  },
+
+  "scope_scope": {
+    "allowed_files_contract": "contracts/kma/KMA_PHASE2_IMPLEMENTATION_SCOPE_V1.json",
+    "total_allowed_files": 22,
+    "amended_total_files": 24,
+    "new_files": 13,
+    "modified_existing_files": 7,
+    "amendment_files": 2,
+    "contract_compliant": true,
+    "no_scope_drift": true,
+    "allowlist_files": [
+      "src/nexara_prime/chief_brain_kernel.py",
+      "src/nexara_prime/runtime.py",
+      "src/nexara_prime/evidence.py",
+      "src/nexara_prime/memory.py",
+      "src/nexara_prime/models.py",
+      "src/nexara_prime/capabilities.py",
+      "src/nexara_prime/knowledge.py",
+      "src/nexara_prime/model_gateway.py",
+      "src/nexara_prime/model_router.py",
+      "src/nexara_prime/cli.py",
+      "schemas/evidence_artifact.json",
+      "tests/test_kma_*.py (8 files)",
+      "contracts/kma/ (6 files)",
+      "reports/kma/ (2 files)",
+      "evidence/kma/ (13 files)"
+    ],
+    "denylist_intact": true
+  },
+
+  "kma_contract_reference": {
+    "v1_0": "contracts/kma/KNOWLEDGE_MEMORY_AUTHORITY_CONTRACT_V1.md",
+    "v1_1_amendment": "contracts/kma/KNOWLEDGE_MEMORY_AUTHORITY_CONTRACT_V1_1_AMENDMENT.md",
+    "implementation_scope": "contracts/kma/KMA_PHASE2_IMPLEMENTATION_SCOPE_V1.json",
+    "kma_invariants_total": 13,
+    "kma_invariants_verified": 13,
+    "kma_invariants_violated": 0
+  }
+}
