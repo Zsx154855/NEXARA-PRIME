@@ -41,7 +41,6 @@ class LongTermMemory:
         layer = record.get("layer", "")
         access_count = int(record.get("access_count", 0))
         confidence = float(record.get("confidence", 1.0))
-        kind = record.get("kind", "")
 
         promoted = False
         new_layer = layer
