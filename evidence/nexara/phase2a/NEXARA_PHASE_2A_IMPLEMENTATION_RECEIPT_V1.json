@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "receipt_id": "receipt_nexara_phase2a_implementation_v1",
+  "receipt_type": "implementation_receipt",
+  "mission": "NEXARA_PHASE_2A_IMPLEMENTATION_V1",
+  "head": "df5927d67534869ca72b34857efa360b80853ea6",
+  "frozen_artifacts": {
+    "boundary": "src/nexara_prime/brain/evolution/boundary.py",
+    "knowledge_graph": "src/nexara_prime/brain/knowledge_graph.py",
+    "claude_review": {
+      "path": "evidence/nexara/phase2a/claude_phase2a_implementation_review.json",
+      "sha256": "89f892ae57c601907238ed14eb7324c75933543aa02c7b2bea6a2b4f28e93391"
+    }
+  },
+  "verdict": {
+    "final_result": "PASS",
+    "claude": "PASS (0 blocking)",
+    "tests": "64/64 Phase2a, 1379 total"
+  },
+  "governance": {
+    "commit": "DENIED",
+    "push": "DENIED",
+    "merge": "DENIED",
+    "deploy": "DENIED"
+  },
+  "next_gate": "WAITING_NSEC_ARTICLE_37_HUMAN_APPROVAL"
+}
