@@ -146,7 +146,7 @@ class SandboxEscapeTests(unittest.TestCase):
     def test_subprocess_escape_rejected(self):
         from nexara_prime.sandbox_v2 import _sanitize_argv
         # Shell injection via subprocess argument should be caught
-        args, err = _sanitize_argv(["python3", "-c", "print(1); rm -rf /"])
+        _args, err = _sanitize_argv(["python3", "-c", "print(1); rm -rf /"])
         self.assertNotEqual(err, "", "Shell metacharacters should be blocked")
 
     def test_symlink_escape_detected(self):
@@ -161,12 +161,12 @@ class SandboxEscapeTests(unittest.TestCase):
 
     def test_shell_metacharacter_blocked(self):
         from nexara_prime.sandbox_v2 import _sanitize_argv
-        args, err = _sanitize_argv(["echo", "hello; rm -rf /"])
+        _args, err = _sanitize_argv(["echo", "hello; rm -rf /"])
         self.assertNotEqual(err, "")
 
     def test_forbidden_command_blocked(self):
         from nexara_prime.sandbox_v2 import _validate_command
-        ok, reason = _validate_command("", ["sudo", "ls"])
+        ok, _reason = _validate_command("", ["sudo", "ls"])
         self.assertFalse(ok)
 
     def test_macos_sandbox_probe(self):

@@ -318,12 +318,19 @@ class SoulKernel:
     def verify_integrity(self) -> bool:
         return self.identity_fingerprint == _canonical_hash(self._immutable_payload())
 
-    def _require_evidence(self, evidence_refs: Sequence[str]) -> tuple[str, ...]:
+    def _require_evidence(
+        self,
+        evidence_refs: Sequence[str],
+        *,
+        mission_id: str = "",
+        actor: str = "",
+        action_scope: str = "",
+    ) -> tuple[str, ...]:
+        """Verify all evidence refs via EvidenceStore. Fail-closed on any issue."""
         refs = tuple(ref.strip() for ref in evidence_refs if ref and ref.strip())
         if not refs:
             raise ValueError("soul_evidence_required")
-        # P1: Verify evidence integrity via EvidenceStore before accepting
-        # Graceful: if store unavailable, accept but log (defense in depth)
+        # P1: Fail-closed — all paths must reject on any verification issue
         try:
             import os
             from pathlib import Path
@@ -339,13 +346,33 @@ class SoulKernel:
                     if not evidence_store.verify(ref):
                         raise ValueError(f"soul_evidence_invalid: {ref}")
                 except KeyError:
-                    # Evidence not yet in store — not a verification failure
-                    pass
-                except ValueError:
-                    raise
-        except (ImportError, FileNotFoundError, OSError):
-            # Store not available — defense in depth: accept with caution
-            pass
+                    # Evidence not found → fail closed
+                    raise ValueError(f"soul_evidence_not_found: {ref}")
+            # Verify mission/actor/scope bindings if specified
+            if mission_id or actor or action_scope:
+                for ref in refs:
+                    artifact = evidence_store.get_by_id(ref).model_dump()
+                    if mission_id and artifact.get("mission_id") != mission_id:
+                        raise ValueError(
+                            f"soul_evidence_mission_mismatch: {ref} "
+                            f"expected={mission_id} got={artifact.get('mission_id')}"
+                        )
+                    if actor and artifact.get("actor") != actor:
+                        raise ValueError(
+                            f"soul_evidence_actor_mismatch: {ref} "
+                            f"expected={actor} got={artifact.get('actor')}"
+                        )
+                    if action_scope and artifact.get("action_scope") != action_scope:
+                        raise ValueError(
+                            f"soul_evidence_scope_mismatch: {ref} "
+                            f"expected={action_scope} got={artifact.get('action_scope')}"
+                        )
+        except (ImportError, FileNotFoundError, OSError) as e:
+            # Store unavailable → fail closed
+            raise RuntimeError(
+                f"soul_evidence_store_unavailable: cannot verify evidence without "
+                f"EvidenceStore — fail closed. ({e})"
+            )
         return refs
 
     def _append_audit(
@@ -370,6 +397,58 @@ class SoulKernel:
         self._audit.append(event)
         return event
 
+    def _verify_owner_approval(
+        self,
+        owner_approval_id: str,
+        proposal: str,
+        actor: str,
+    ) -> None:
+        """Verify owner approval through store. Fail-closed on any issue."""
+        import os
+        from pathlib import Path
+
+        from .db import SQLiteStore
+        db_path = os.environ.get("NEXARA_DB_PATH", "nexara.db")
+        store = SQLiteStore(path=Path(db_path))
+        envelope = store.get_record_envelope(owner_approval_id)
+        if not envelope or envelope.get("record_type") != "approval":
+            raise PermissionError(f"owner_approval_not_found: {owner_approval_id}")
+        payload = envelope.get("payload", {})
+        if payload.get("status") != "approved":
+            raise PermissionError(
+                f"owner_approval_not_approved: {owner_approval_id} "
+                f"status={payload.get('status')}"
+            )
+        owner = payload.get("owner_id", "")
+        if owner and hasattr(self, "_owner_id") and getattr(self, "_owner_id", "") and owner != self._owner_id:
+            raise PermissionError(
+                f"owner_approval_wrong_owner: expected={self._owner_id} got={owner}"
+            )
+        if payload.get("action_scope", "") != "learned_character":
+            raise PermissionError(
+                f"owner_approval_wrong_scope: {owner_approval_id} "
+                f"scope={payload.get('action_scope')}"
+            )
+        if payload.get("consumed", False):
+            raise PermissionError(
+                f"owner_approval_already_consumed: {owner_approval_id}"
+            )
+        # Mark consumed (idempotent via store)
+        store.repair_record_event(
+            owner_approval_id,
+            record_type="approval",
+            expected_integrity_sha256=envelope.get("integrity_sha256", ""),
+            new_payload={**payload, "consumed": True},
+            event={
+                "event_id": f"evt_soul_approval_{owner_approval_id}",
+                "event_type": "soul_approval_consumed",
+                "aggregate_id": owner_approval_id,
+                "aggregate_type": "approval",
+                "actor": actor,
+                "payload": {"proposal": proposal},
+            },
+        )
+
     def record_experience(
         self,
         summary: str,
@@ -387,13 +466,14 @@ class SoulKernel:
         """
         if not summary.strip() or not lesson.strip() or not changed_behavior.strip():
             raise ValueError("experience_summary_lesson_behavior_required")
-        refs = self._require_evidence(evidence_refs)
-        # P1: Gate behind owner approval (after evidence check for testability)
+        refs = self._require_evidence(evidence_refs, actor=actor)
+        # P1: Real owner approval verification via store
         if not owner_approval_id:
             raise PermissionError(
                 "owner_approval_required: record_experience requires a scoped "
                 "owner approval ID for soul mutation"
             )
+        self._verify_owner_approval(owner_approval_id, changed_behavior, actor)
         experience = SoulExperience(
             experience_id=new_id("soul_exp"),
             summary=summary.strip(),
