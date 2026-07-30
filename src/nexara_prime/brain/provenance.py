@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 from typing import Any, TYPE_CHECKING
 
-from ..models import now_iso, new_id
 
 if TYPE_CHECKING:
     from .db import BrainDB

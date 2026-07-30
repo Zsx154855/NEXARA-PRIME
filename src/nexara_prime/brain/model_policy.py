@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..models import ApprovalStatus, FailureCode, new_id, now_iso
+from ..models import new_id, now_iso
 
 
 # ── Policy Rules ──────────────────────────────────────────────────────────

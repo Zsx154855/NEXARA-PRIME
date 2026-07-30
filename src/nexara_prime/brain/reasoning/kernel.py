@@ -11,7 +11,7 @@ from typing import Any, TYPE_CHECKING
 from ...models import new_id, now_iso
 from .models import (
     ReasoningStep, ReasoningTrace, ReasoningResult,
-    AssembledContext, MissionContext, DecisionOption,
+    AssembledContext, MissionContext,
 )
 from .context_assembler import ContextAssembler, MemoryRetrievalAdapter
 from .decision_framework import DecisionFramework
@@ -35,7 +35,8 @@ class ThoughtProcessEngine:
     ) -> list[ReasoningStep]:
         """Execute reasoning chain. Returns ordered list of reasoning steps."""
         steps: list[ReasoningStep] = []
-        sid = lambda n: f"step_{len(steps) + 1:02d}"
+        def sid(_name: str) -> str:
+            return f"step_{len(steps) + 1:02d}"
 
         # OBSERVE — gather facts from context
         observe = ReasoningStep(
