@@ -1,0 +1,48 @@
+{
+  "schema": "NEXARA_FIRST_LIFE_RECEIPT_V1",
+  "id": "first_life_receipt_4210f0059b31",
+  "timestamp": "2026-07-30T19:40:40.752706Z",
+  "artifact": "NEXARA_FIRST_CONTACT_PRODUCT_BIRTH_V2",
+  "owner_id": "shunxin.zhang",
+  "nexara_identity": "soul-derived",
+  "identity_fingerprint": "pending-soul-integrity-verification",
+  "pr34_head": "4210f0059b3158a23bab7f25271985974cd84afc",
+  "pr34_tests": "1614/1614 PASS",
+  "pr35_head": "2524433f7bad4efc6facb2db58cbae8d271073b6",
+  "pr35_tests": "1686/1686 PASS",
+  "product_shell": {
+    "branch": "work/nexara-first-contact-reality-closure-v1",
+    "head": "bd86574",
+    "files": 17,
+    "surfaces": 12,
+    "build": "PASS (swift build -c release, arm64, 1.2MB)"
+  },
+  "first_contact_mission": {
+    "mission_name": "NEXARA_FIRST_CONTACT_SYSTEM_HEALTH_AND_CONTINUITY_V1",
+    "provider": "deepseek",
+    "mock": false,
+    "credential_source": "keychain",
+    "workspace": "/Users/agentos/NEXARA-First-Contact"
+  },
+  "artifacts": {
+    "nexara_macos_binary": {
+      "sha256": "ed508695d4f262c2b4c8cade243b44a612cc6ba991e238330e5a6bafae9e542f",
+      "size": 1224808
+    },
+    "first_contact_db": {
+      "sha256": "639035e493ee0167ecd304efa14f8fb4226a33095651ce04ce060dab943f7a29"
+    },
+    "health_report": {
+      "sha256": "57548547e4fe8d13f4739939586ff7314a4004be533b67d1e2ad89136fbb2a59"
+    }
+  },
+  "artifact_paths": [
+    "/Users/agentos/Worktrees/NEXARA-PRIME-first-contact-final/LivingInterface/.build/release/NEXARA",
+    "/Users/agentos/NEXARA-First-Contact/nexara-first-contact.db",
+    "/Users/agentos/NEXARA-First-Contact/NEXARA_FIRST_CONTACT_HEALTH_REPORT.md"
+  ],
+  "tested_code_head": "4210f0059b3158a23bab7f25271985974cd84afc",
+  "generated_at_utc": "2026-07-30T19:40:40.752706Z",
+  "receipt_self_hash_algorithm": "sha256",
+  "receipt_self_hash": "f3952f0b8e0096968e783913a2a682fb8b2c73c88f5e7705cadef452d5beea97"
+}
