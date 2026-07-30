@@ -72,7 +72,7 @@ class ApprovalBindingTests(unittest.TestCase):
 
     def test_agent_identity_first_party_defaults(self):
         """G1: AgentIdentity must carry first-party defaults — not model-dependent."""
-        from nexara_prime.identity import AgentIdentity, AGENT_DEFAULT_PERMISSIONS
+        from nexara_prime.identity import AGENT_DEFAULT_PERMISSIONS, AgentIdentity
         aid = AgentIdentity()
         self.assertEqual(aid.agent_id, "nexara_prime.agent")
         self.assertEqual(aid.display_name, "NEXARA")
@@ -146,7 +146,7 @@ class SandboxEscapeTests(unittest.TestCase):
     def test_subprocess_escape_rejected(self):
         from nexara_prime.sandbox_v2 import _sanitize_argv
         # Shell injection via subprocess argument should be caught
-        args, err = _sanitize_argv(["python3", "-c", "print(1); rm -rf /"])
+        _args, err = _sanitize_argv(["python3", "-c", "print(1); rm -rf /"])
         self.assertNotEqual(err, "", "Shell metacharacters should be blocked")
 
     def test_symlink_escape_detected(self):
@@ -161,17 +161,18 @@ class SandboxEscapeTests(unittest.TestCase):
 
     def test_shell_metacharacter_blocked(self):
         from nexara_prime.sandbox_v2 import _sanitize_argv
-        args, err = _sanitize_argv(["echo", "hello; rm -rf /"])
+        _args, err = _sanitize_argv(["echo", "hello; rm -rf /"])
         self.assertNotEqual(err, "")
 
     def test_forbidden_command_blocked(self):
         from nexara_prime.sandbox_v2 import _validate_command
-        ok, reason = _validate_command("", ["sudo", "ls"])
+        ok, _reason = _validate_command("", ["sudo", "ls"])
         self.assertFalse(ok)
 
     def test_macos_sandbox_probe(self):
-        from nexara_prime.sandbox_v2 import MacOSSandboxBackend, OS_SANDBOX_CAPABLE
         import platform
+
+        from nexara_prime.sandbox_v2 import OS_SANDBOX_CAPABLE, MacOSSandboxBackend
         sb = MacOSSandboxBackend(self.tmpdir)
         cap = sb.probe_capability()
         if platform.system() == "Darwin":
@@ -186,9 +187,10 @@ class SandboxEscapeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             runtime = NexaraRuntime(Settings(root / "runtime.db", root / "workspace", root / "reports", "mock", True, "127.0.0.1", 8765))
-            result = runtime.tools._code_exec({"code": "__import__('pathlib').Path('/private/tmp/nexara-tool-runtime-test-escape').write_text('escape')"}, 5)
-            self.assertFalse(marker.exists(), result)
-            self.assertNotEqual(result["returncode"], 0)
+            # P1: code policy now raises PermissionError for forbidden tokens
+            with self.assertRaises(PermissionError, msg="forbidden token must be rejected"):
+                runtime.tools._code_exec({"code": "__import__('pathlib').Path('/private/tmp/nexara-tool-runtime-test-escape').write_text('escape')"}, 5)
+            self.assertFalse(marker.exists())
             runtime.store.close()
         marker.unlink(missing_ok=True)
 

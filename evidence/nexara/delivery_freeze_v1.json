@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "artifact": "NEXARA_SOVEREIGN_DELIVERY_TRANSITION_V1_DELIVERY_FREEZE",
+  "mode": "ONEPASS_FULL_CLOSURE",
+  "remote_main_sha": "52de47c14a7e08f290f47ba2e997aba982431b60",
+  "current_head_before_rebuild": "1e0f631c9809a08bb1b69f650e1c114f50e93eca",
+  "current_branch_before_rebuild": "integration/nexara-soul-constitution-v1-clean-v4",
+  "current_tree_before_rebuild": "54a822e343e0667501fab1668412c5d2091fa5ca",
+  "current_status_hash_before_rebuild": "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df",
+  "current_tracked_diff": [],
+  "current_untracked_count": 0,
+  "original_checkout": {
+    "path": "/Users/agentos/NEXARA-PRIME",
+    "head": "48f848eb95e71d459629fcfd7fbceb2dd3ffb828",
+    "branch": "feat/brand-baihan",
+    "frozen_status_hash": "56c2ce34999c1324d223c4f0c3ed0ce82ab38eeb1ba9975d2582f787db672577",
+    "write_policy": "MUST_NOT_MODIFY"
+  },
+  "pr32": {
+    "state": "OPEN",
+    "base_sha": "52de47c14a7e08f290f47ba2e997aba982431b60",
+    "head_sha": "86d512eb07bb8e532ed894a6595b4d355562c212",
+    "changed_files": 130,
+    "mergeable": false
+  },
+  "pr33": {
+    "state": "OPEN",
+    "base_sha": "52de47c14a7e08f290f47ba2e997aba982431b60",
+    "head_sha": "f200082f18fcc37e1e16453f01889d1ef2fd4d73",
+    "mergeable": true,
+    "required_ci": "sovereign-delivery",
+    "required_ci_state": "QUEUED"
+  },
+  "delivery_base_sha": "52de47c14a7e08f290f47ba2e997aba982431b60",
+  "frozen_at_utc": "2026-07-30T11:07:57Z"
+}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .db import SQLiteStore
 from .events import EventBus
@@ -65,7 +65,7 @@ class PatchReview:
 
 
 
-def _safe_memory_kind(kind_str: str, default: "MemoryKind" = None) -> "MemoryKind":
+def _safe_memory_kind(kind_str: str, default: MemoryKind = None) -> MemoryKind:
     '''Parse MemoryKind safely, falling back to default on bad input.'''
     from .models import MemoryKind
     try:
@@ -74,7 +74,7 @@ def _safe_memory_kind(kind_str: str, default: "MemoryKind" = None) -> "MemoryKin
         return default or MemoryKind.FACT
 
 class MemoryKernel:
-    def __init__(self, store: SQLiteStore, events: EventBus, evidence: "EvidenceStore | None" = None):
+    def __init__(self, store: SQLiteStore, events: EventBus, evidence: EvidenceStore | None = None):
         self.store = store
         self.events = events
         self.evidence = evidence
@@ -274,6 +274,8 @@ class MemoryKernel:
         Unverified inferences remain candidates and are never written to canonical memory.
         Safe patches may use the explicit auto policy when backed by evidence.
         """
+        # Normalize kind to MemoryKind enum (accepts strings for backward compat)
+        kind = _safe_memory_kind(kind, MemoryKind.FACT) if isinstance(kind, str) else kind
         # Idempotency check: if this key was already proposed, compare all fields.
         if idempotency_key:
             existing = self.store.find_record_envelope("memory_idempotency", "idempotency_key", idempotency_key)
@@ -364,7 +366,7 @@ class MemoryLayerManager:
     def __init__(
         self,
         kernel: MemoryKernel,
-        rag: "RAGPipeline | None" = None,
+        rag: RAGPipeline | None = None,
         *,
         enable_patch_review: bool = True,
         auto_clear_working: bool = True,
@@ -479,7 +481,9 @@ class MemoryLayerManager:
         top_k: int = 10,
         mission_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Semantic search across memory layers using RAG pipeline."""
+        """Semantic search across memory layers using RAG pipeline.
+        top_k clamped to 1..100."""
+        top_k = max(1, min(100, top_k))
         if not self.rag:
             # Fallback: keyword search in SQLite
             return self._keyword_search(query, layers, top_k, mission_id=mission_id)
