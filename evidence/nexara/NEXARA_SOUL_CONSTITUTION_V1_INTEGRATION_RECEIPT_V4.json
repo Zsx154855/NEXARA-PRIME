@@ -3,102 +3,102 @@
   "artifact": "NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_RECEIPT_V4",
   "final_result": "PASS",
   "base_sha": "f200082f18fcc37e1e16453f01889d1ef2fd4d73",
-  "evidence_subject_head": "b5a271774bf87065f2193aa79778e00728979717",
-  "acceptance_head": "b5a271774bf87065f2193aa79778e00728979717",
-  "tested_head": "b5a271774bf87065f2193aa79778e00728979717",
-  "artifact_head": "b5a271774bf87065f2193aa79778e00728979717",
-  "tree_sha": "daa6558c0e4b6d866eb7e65390f81d97585c0529",
-  "allowlist_sha256": "dd702a8d0ca9debce72a68e1f6695e0e4f2e6a7faa1f241069a05ca6213c743d",
+  "evidence_subject_head": "af2f4e3e52e3b9851ab60d3735c9fceda7006bbe",
+  "acceptance_head": "af2f4e3e52e3b9851ab60d3735c9fceda7006bbe",
+  "tested_head": "af2f4e3e52e3b9851ab60d3735c9fceda7006bbe",
+  "artifact_head": "af2f4e3e52e3b9851ab60d3735c9fceda7006bbe",
+  "tree_sha": "00a29c820d8c2264006ac236b9b078211e309350",
+  "allowlist_sha256": "b5f4c26196bd071301f965446746a9f97452ef2210da6ef4bc93b064f2ddb99e",
   "new_regressions": 0,
   "evidence_path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_EVIDENCE_V4.json",
-  "evidence_sha256": "bfff6622e9a5bf57e32eb1d448fbd055fb9a1cf16e82ddd50b5440f23a9634d6",
+  "evidence_sha256": "0edcbec3dc9391498bfa7185026de6855c675eea889b05782760b9fbe95f21c7",
   "report_path": "reports/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_REPORT.md",
-  "report_sha256": "3151f0ca551bdc0a87f941ff0319ebf5519158971ce630e493633fe2184e9510",
+  "report_sha256": "5dab4cd2bf16af6a2b4a3551808f08baf9a2bdc5e88bbae4f2c1f033f80f89f7",
   "supersession_manifest_path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_SUPERSESSION_MANIFEST.json",
-  "supersession_manifest_sha256": "a6bc975593b70d52ab1fcc362f34baa05b9dd07afa7d2c018985f0ee86872247",
+  "supersession_manifest_sha256": "1e63af9b0bacc18cd7f63beba3f0a5a4dce1ae616c5509701bbfaf7941f57422",
   "test_runs": [
     {
       "name": "soul_tests",
       "command": "env -u PYTHONPATH PYTHONPATH=src:platform/sdk/python .venv/bin/python -m pytest tests/test_soul_kernel.py -q",
       "exit_code": 0,
       "actual": "8 passed",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     },
     {
       "name": "full_suite",
       "command": "env -u PYTHONPATH PYTHONPATH=src:platform/sdk/python .venv/bin/python -m pytest -q",
       "exit_code": 0,
       "actual": "1614 passed, 3 subtests passed",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     },
     {
       "name": "sdk_wire_truth_g4_security",
       "command": "... pytest tests/test_sdk_contract.py tests/test_wire_truth_enums.py tests/test_g4_tool_runtime.py tests/test_security_hardening.py -q",
       "exit_code": 0,
       "actual": "143 passed",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     },
     {
       "name": "canonical_ruff",
       "command": "ruff check src tests platform/sdk/python",
       "exit_code": 0,
       "actual": "PASS",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     },
     {
       "name": "json_schema_shape",
       "command": "json.tool over contracts schemas platform/sdk/**/*.json",
       "exit_code": 0,
       "actual": "PASS",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     },
     {
       "name": "contract_runtime_alignment",
       "command": "SoulKernel constitution vs NEXARA_SOUL_CONSTITUTION_V1.json",
       "exit_code": 0,
       "actual": "PASS",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     },
     {
       "name": "nsec_validate",
       "command": "python scripts/governance/validate_nsec.py",
       "exit_code": 0,
       "actual": "PASS",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     },
     {
       "name": "nsec_drift",
       "command": "python scripts/governance/detect_nsec_drift.py",
       "exit_code": 0,
       "actual": "PASS",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     },
     {
       "name": "secret_scan",
       "command": "python scripts/security/scan_hardcoded_secrets.py",
       "exit_code": 0,
       "actual": "CLEAN",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     },
     {
       "name": "install_import_compile",
       "command": "compileall plus direct repository imports",
       "exit_code": 0,
       "actual": "IMPORT_PASS; compileall PASS",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     },
     {
       "name": "changed_file_allowlist",
       "command": "git diff --check f200082f18fcc37e1e16453f01889d1ef2fd4d73...HEAD and allowlist audit",
       "exit_code": 0,
-      "actual": "9 files, all scoped",
-      "observed_at_utc": "2026-07-30T09:58:15Z"
+      "actual": "13 files, all scoped",
+      "observed_at_utc": "2026-07-30T10:03:27Z"
     }
   ],
   "worktree_clean_before_artifacts": true,
   "push_performed": false,
   "replacement_pr_created": false,
   "pr32_closed": false,
-  "receipt_self_hash": "3af36da2f8ba37860a134025683bef9c68606ad18a26f0fba058270c77aceb6e",
-  "generated_at_utc": "2026-07-30T09:58:15Z"
+  "receipt_self_hash": "a00d697013ec5a0fb99de9dc7864594608fc3fdc5de8d0fbf0de5ed9f8dd765f",
+  "generated_at_utc": "2026-07-30T10:03:27Z"
 }

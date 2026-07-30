@@ -1,13 +1,13 @@
 # NEXARA Soul Constitution V1 Clean Integration V4
 
 - BASE_SHA: `f200082f18fcc37e1e16453f01889d1ef2fd4d73`
-- ACCEPTANCE_HEAD: `b5a271774bf87065f2193aa79778e00728979717`
-- TESTED_HEAD: `b5a271774bf87065f2193aa79778e00728979717`
-- ARTIFACT_HEAD: `b5a271774bf87065f2193aa79778e00728979717`
-- TREE_SHA: `daa6558c0e4b6d866eb7e65390f81d97585c0529`
-- ALLOWLIST_SHA256: `dd702a8d0ca9debce72a68e1f6695e0e4f2e6a7faa1f241069a05ca6213c743d`
+- ACCEPTANCE_HEAD: `af2f4e3e52e3b9851ab60d3735c9fceda7006bbe`
+- TESTED_HEAD: `af2f4e3e52e3b9851ab60d3735c9fceda7006bbe`
+- ARTIFACT_HEAD: `af2f4e3e52e3b9851ab60d3735c9fceda7006bbe`
+- TREE_SHA: `00a29c820d8c2264006ac236b9b078211e309350`
+- ALLOWLIST_SHA256: `b5f4c26196bd071301f965446746a9f97452ef2210da6ef4bc93b064f2ddb99e`
 - NEW_REGRESSIONS: `0`
-- Observed UTC: `2026-07-30T09:58:15Z`
+- Observed UTC: `2026-07-30T10:03:27Z`
 
 V4 is rebuilt from the independently repaired main baseline. Soul functionality is limited to the ordered source commits and the necessary conflict-resolution/lint hardening required to keep the canonical gate green. The frozen V3 BLOCKED artifacts remain unchanged and are superseded by this V4 manifest.
 
@@ -17,6 +17,10 @@ Local acceptance is green: Soul tests `8 passed`; full suite `1614 passed, 3 sub
 
 - `constitution/NEXARA_SOUL_CONSTITUTION_V1.md`
 - `contracts/nexara/NEXARA_SOUL_CONSTITUTION_V1.json`
+- `evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_EVIDENCE_V4.json`
+- `evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_RECEIPT_V4.json`
+- `evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_SUPERSESSION_MANIFEST.json`
+- `reports/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_REPORT.md`
 - `src/nexara_prime/__init__.py`
 - `src/nexara_prime/brain/kernel.py`
 - `src/nexara_prime/brain/long_term_memory.py`

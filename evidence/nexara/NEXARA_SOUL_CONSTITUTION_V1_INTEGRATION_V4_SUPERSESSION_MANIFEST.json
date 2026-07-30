@@ -17,11 +17,11 @@
     "report": "reports/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_REPORT.md"
   },
   "base_sha": "f200082f18fcc37e1e16453f01889d1ef2fd4d73",
-  "acceptance_head": "b5a271774bf87065f2193aa79778e00728979717",
-  "tested_head": "b5a271774bf87065f2193aa79778e00728979717",
-  "artifact_head": "b5a271774bf87065f2193aa79778e00728979717",
-  "tree_sha": "daa6558c0e4b6d866eb7e65390f81d97585c0529",
-  "allowlist_sha256": "dd702a8d0ca9debce72a68e1f6695e0e4f2e6a7faa1f241069a05ca6213c743d",
+  "acceptance_head": "af2f4e3e52e3b9851ab60d3735c9fceda7006bbe",
+  "tested_head": "af2f4e3e52e3b9851ab60d3735c9fceda7006bbe",
+  "artifact_head": "af2f4e3e52e3b9851ab60d3735c9fceda7006bbe",
+  "tree_sha": "00a29c820d8c2264006ac236b9b078211e309350",
+  "allowlist_sha256": "b5f4c26196bd071301f965446746a9f97452ef2210da6ef4bc93b064f2ddb99e",
   "new_regressions": 0,
-  "generated_at_utc": "2026-07-30T09:58:15Z"
+  "generated_at_utc": "2026-07-30T10:03:27Z"
 }
