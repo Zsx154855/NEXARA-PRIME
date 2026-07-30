@@ -251,7 +251,6 @@ class MacOSSandboxBackend(SandboxBackend):
                         stdout=stdout, stderr=stderr, duration_ms=elapsed,
                         sandbox_mechanism="macos_sandbox",
                         sandbox_profile_hash=_hash_str(profile),
-                        sandbox_mechanism="macos_sandbox",
                     )
                 except subprocess.TimeoutExpired:
                     try:
