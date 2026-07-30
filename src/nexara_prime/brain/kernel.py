@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..models import FailureCode, Mission, MissionState, ReasonCode, RiskLevel, new_id, now_iso
+from ..soul import SoulKernel
 
 from .decision_engine import DecisionEngine
 from .goal_manager import GoalManager
@@ -49,6 +50,7 @@ class ChiefBrainKernel:
         model_policy: ModelPolicyEngine | None = None,
         budget: ReasoningBudgetManager | None = None,
         memory: MemoryController | None = None,
+        soul: SoulKernel | None = None,
     ) -> None:
         self.decisions = DecisionEngine()
         self.goals = GoalManager()
@@ -56,6 +58,7 @@ class ChiefBrainKernel:
         self.model_policy = model_policy or ModelPolicyEngine()
         self.budget = budget or ReasoningBudgetManager()
         self.memory = memory  # Set via .bind_memory()
+        self.soul = soul or SoulKernel()
         self._receipts: list[BrainReceipt] = []
         self._missions_observed: set[str] = set()
 
@@ -67,6 +70,7 @@ class ChiefBrainKernel:
             "budget_remaining": self.budget.remaining,
             "model_policy": self.model_policy.health(),
             "memory_bound": self.memory is not None,
+            "soul": self.soul.health(),
         }
 
     # ── Pre-Mission: Intent Analysis ───────────────────────────────────────
