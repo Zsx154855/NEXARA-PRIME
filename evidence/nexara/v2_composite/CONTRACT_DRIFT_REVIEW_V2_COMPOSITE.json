@@ -1,0 +1,51 @@
+{
+  "schema": "NEXARA_CONTRACT_DRIFT_REVIEW_V1",
+  "id": "contract_drift_v2_composite_review_859a8bdc",
+  "timestamp": "2026-07-30T16:56:17.029674Z",
+  "verdict": "PASS",
+  "contracts_verified": 10,
+  "contracts": {
+    "MODEL_PORTFOLIO_REGISTRY_CONTRACT_V1": {
+      "source": "model_portfolio_registry.py",
+      "status": "VERIFIED"
+    },
+    "MISSION_INTELLIGENCE_PROFILE_CONTRACT_V1": {
+      "source": "mission_intelligence_profiler.py",
+      "status": "VERIFIED"
+    },
+    "MODEL_ROUTING_CONTRACT_V2": {
+      "source": "model_router.py",
+      "status": "VERIFIED"
+    },
+    "KNOWLEDGE_ANCHOR_CONTRACT_V1": {
+      "source": "knowledge_anchor.py",
+      "status": "VERIFIED"
+    },
+    "DYNAMIC_PROMPT_PACKAGE_CONTRACT_V1": {
+      "source": "dynamic_prompt_builder.py",
+      "status": "VERIFIED"
+    },
+    "COMPOSITE_ORCHESTRATION_CONTRACT_V1": {
+      "source": "composite_orchestration.py",
+      "status": "VERIFIED"
+    },
+    "MODEL_EVALUATION_CONTRACT_V1": {
+      "source": "model_evaluation.py",
+      "status": "VERIFIED"
+    },
+    "GOVERNED_REROUTE_CONTRACT_V1": {
+      "source": "governed_reroute.py",
+      "status": "VERIFIED"
+    },
+    "MODEL_INVOCATION_EVIDENCE_SCHEMA_V1": {
+      "source": "model_evaluation.py \u2192 evaluate() result",
+      "status": "VERIFIED"
+    },
+    "MODEL_ROUTING_RECEIPT_SCHEMA_V1": {
+      "source": "governed_reroute.py \u2192 RerouteRecord",
+      "status": "VERIFIED"
+    }
+  },
+  "sdk_drift": "NONE \u2014 V2 enums are internal, not in public SDK",
+  "openapi_drift": "NONE \u2014 V2 modules do not expose public API endpoints"
+}

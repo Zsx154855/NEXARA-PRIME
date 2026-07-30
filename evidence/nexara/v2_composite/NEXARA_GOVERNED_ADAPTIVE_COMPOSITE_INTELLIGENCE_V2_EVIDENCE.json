@@ -1,0 +1,56 @@
+{
+  "schema": "NEXARA_GOVERNED_ADAPTIVE_COMPOSITE_INTELLIGENCE_V2_EVIDENCE_V1",
+  "id": "v2_composite_closure_859a8bdc",
+  "timestamp": "2026-07-30T16:55:24.133780Z",
+  "binding": {
+    "source_candidate": "e5ff0e8",
+    "base_head": "aea49f4ab812eb54936dea459c0bffc607f96b69",
+    "tested_head": "859a8bdc24811c7bbea401bb23a99433bddfecbd",
+    "tree_sha": "d7f8450b4d1065131aada8999b43ed5bebf000be",
+    "branch": "work/nexara-governed-adaptive-composite-intelligence-v2",
+    "allowlist_hash": "b5a48b68f95cf0f51b02570951e196fa1712b80c5fb25a4a83a1d766138a5329",
+    "dependency_hashes": {
+      "src/nexara_prime/model_portfolio_registry.py": "459f32f374c33491d8e0bb736e5e39d98326472ddcb946ea1b79a6c87ae2bdd3",
+      "src/nexara_prime/mission_intelligence_profiler.py": "463d0e73c3cf486d7b2d3bddcb99960f9a8e63d2efdb26bbeb6155e84f9582a2",
+      "src/nexara_prime/knowledge_anchor.py": "783389d2e9e9b60f314cde4524597197432ae6fdef81fdc671ad82f7eb285e85",
+      "src/nexara_prime/dynamic_prompt_builder.py": "66eaa2939a4242b9c3738ee29bf601240dbd97292aa8a53b9ac8c2aa65d7e40b",
+      "src/nexara_prime/composite_orchestration.py": "c6254381897bf7e48259e74fe279c39603a62052d90770f30bc588a0bf323172",
+      "src/nexara_prime/model_evaluation.py": "94af37193710fe25c7980f3728f3a0d74b3199b5b5f1eb48bef115de3d38032b",
+      "src/nexara_prime/governed_reroute.py": "dc415f911eab94f0d8c8f8e9627b0de596922b4d5d6f786342e50fd107f1ed2f",
+      "src/nexara_prime/model_router.py": "6f5a44101ba1db69fdcb45cc9cf3d267ea2a0b4bd65075b445abf25ef3d14d0e",
+      "tests/test_composite_intelligence_v2.py": "7cfe6f097e7c5d463c2528b463994cad943268419d276d9fabba6647dee323f3"
+    }
+  },
+  "test_results": {
+    "baseline_collected": 1614,
+    "baseline_passed": 1614,
+    "baseline_exit_code": 0,
+    "candidate_collected": 1644,
+    "candidate_passed": 1644,
+    "candidate_exit_code": 0,
+    "new_regressions": 0,
+    "new_tests": 30,
+    "test_commands": [
+      "python3 -m pytest -q --tb=line (full suite, 1644 tests)"
+    ]
+  },
+  "system_tests": {
+    "soul": "8/8 PASS",
+    "tool_runtime": "10/10 PASS",
+    "memory_kma": "118/118 PASS",
+    "evidence": "14/14 PASS",
+    "composite_v2": "30/30 PASS",
+    "runtime_lifecycle": "65/65 PASS",
+    "g2_g3": "57/57 PASS",
+    "total_system": "302/302 PASS"
+  },
+  "quality": {
+    "ruff": "CLEAN (0 errors on V2 files)",
+    "nsec": "PASS",
+    "secret_scan": "CLEAN",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0
+  },
+  "verdict": "PASS"
+}

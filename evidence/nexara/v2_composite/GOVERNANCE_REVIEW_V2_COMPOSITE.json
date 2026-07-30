@@ -1,0 +1,17 @@
+{
+  "schema": "NEXARA_GOVERNANCE_REVIEW_V1",
+  "id": "governance_v2_composite_review_859a8bdc",
+  "timestamp": "2026-07-30T16:56:17.029674Z",
+  "nsec_version": "V2.1",
+  "nsec_validation": "PASS",
+  "verdict": "PASS",
+  "article_compliance": {
+    "article_1_fixed_loop": "COMPLIANT",
+    "article_8_max_reach": "COMPLIANT",
+    "article_9_no_split": "COMPLIANT",
+    "article_26_no_degradation": "COMPLIANT",
+    "article_28_reality_first": "COMPLIANT",
+    "article_45_definition_done": "COMPLIANT",
+    "article_55_complete_delivery": "COMPLIANT"
+  }
+}

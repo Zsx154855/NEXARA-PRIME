@@ -1,0 +1,30 @@
+{
+  "schema": "NEXARA_NUWA_V0_SOURCE_PROVENANCE_V1",
+  "id": "nuwa_v0_provenance_e5ff0e8",
+  "timestamp": "2026-07-30T16:55:24.133780Z",
+  "source_head": "e5ff0e8",
+  "candidate_head": "859a8bdc24811c7bbea401bb23a99433bddfecbd",
+  "base_head": "aea49f4ab812eb54936dea459c0bffc607f96b69",
+  "files_sourced_from_e5ff0e8": [
+    "src/nexara_prime/composite_orchestration.py",
+    "src/nexara_prime/dynamic_prompt_builder.py",
+    "src/nexara_prime/governed_reroute.py",
+    "src/nexara_prime/knowledge_anchor.py",
+    "src/nexara_prime/mission_intelligence_profiler.py",
+    "src/nexara_prime/model_evaluation.py",
+    "src/nexara_prime/model_portfolio_registry.py",
+    "src/nexara_prime/model_router.py",
+    "tests/test_composite_intelligence_v2.py"
+  ],
+  "commit_chain": [
+    "e5ff0e8 \u2192 feat(model-router): land v0 composite model architecture",
+    "9042323 \u2192 feat(nexara): governed adaptive composite intelligence v2",
+    "859a8bdc \u2192 fix(ruff): SIM103 inline return + F841 unused variable \u2014 P2 cleanup"
+  ],
+  "verification": {
+    "all_files_exist": true,
+    "all_imports_clean": true,
+    "ruff_clean": true,
+    "full_suite_pass": true
+  }
+}

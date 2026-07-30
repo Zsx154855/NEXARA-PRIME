@@ -1,0 +1,44 @@
+{
+  "schema": "NEXARA_ADVERSARIAL_REVIEW_V1",
+  "id": "codex_adversarial_v2_composite_review_859a8bdc",
+  "timestamp": "2026-07-30T16:56:17.029674Z",
+  "reviewer": "codex_adversarial",
+  "attempts": [
+    {
+      "vector": "mock_in_production",
+      "result": "BLOCKED",
+      "detail": "registry.list_production excludes is_mock"
+    },
+    {
+      "vector": "fail_open",
+      "result": "BLOCKED",
+      "detail": "has_real_provider check required"
+    },
+    {
+      "vector": "prompt_injection",
+      "result": "BLOCKED",
+      "detail": "IMMUTABLE tier rejects overwrite"
+    },
+    {
+      "vector": "reroute_flood",
+      "result": "BLOCKED",
+      "detail": "MAX_ROUTE_ATTEMPTS=3 hard limit"
+    },
+    {
+      "vector": "secret_leak",
+      "result": "BLOCKED",
+      "detail": "to_provider_format excludes raw keys"
+    },
+    {
+      "vector": "council_collusion",
+      "result": "BLOCKED",
+      "detail": "single provider \u2192 not council"
+    },
+    {
+      "vector": "approval_bypass",
+      "result": "BLOCKED",
+      "detail": "owner_approval \u2192 PRO_WITH_VERIFIER"
+    }
+  ],
+  "verdict": "PASS \u2014 all attack vectors blocked"
+}

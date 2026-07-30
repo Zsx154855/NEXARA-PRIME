@@ -1,0 +1,135 @@
+{
+  "schema": "NEXARA_GOVERNED_ADAPTIVE_COMPOSITE_INTELLIGENCE_V2_TEST_MATRIX_V1",
+  "id": "v2_composite_test_matrix_859a8bdc",
+  "timestamp": "2026-07-30T16:55:24.133780Z",
+  "head": "859a8bdc24811c7bbea401bb23a99433bddfecbd",
+  "base": "aea49f4ab812eb54936dea459c0bffc607f96b69",
+  "categories": {
+    "mock_production_leak": {
+      "test": "test_01_no_mock_in_production",
+      "result": "PASS"
+    },
+    "fail_closed": {
+      "test": "test_02_fail_closed_no_real_provider",
+      "result": "PASS"
+    },
+    "health_tracking": {
+      "test": "test_03_health_tracking",
+      "result": "PASS"
+    },
+    "flash_routing": {
+      "test": "test_04_flash_routing_low_risk",
+      "result": "PASS"
+    },
+    "pro_routing": {
+      "test": "test_05_pro_routing_high_complexity",
+      "result": "PASS"
+    },
+    "high_risk_approval": {
+      "test": "test_06_high_risk_requires_approval",
+      "result": "PASS"
+    },
+    "context_overflow": {
+      "test": "test_07_context_overflow_pro",
+      "result": "PASS"
+    },
+    "immutable_anchor": {
+      "test": "test_08_immutable_cannot_be_overwritten",
+      "result": "PASS"
+    },
+    "deleted_memory": {
+      "test": "test_09_deleted_memory_not_recalled",
+      "result": "PASS"
+    },
+    "memory_provenance": {
+      "test": "test_10_memory_provenance_preserved",
+      "result": "PASS"
+    },
+    "prompt_injection": {
+      "test": "test_11_prompt_injection_no_anchor_mutation",
+      "result": "PASS"
+    },
+    "budget_priority": {
+      "test": "test_12_budget_priority_immutable_first",
+      "result": "PASS"
+    },
+    "prompt_hash": {
+      "test": "test_13_prompt_hash_reproducible",
+      "result": "PASS"
+    },
+    "retry_nonce": {
+      "test": "test_14_different_retry_number_different_hash",
+      "result": "PASS"
+    },
+    "secret_redaction": {
+      "test": "test_15_no_secret_leak_in_provider_format",
+      "result": "PASS"
+    },
+    "single_provider_council": {
+      "test": "test_16_single_provider_not_council",
+      "result": "PASS"
+    },
+    "council_independence": {
+      "test": "test_17_council_members_independent",
+      "result": "PASS"
+    },
+    "failover_chain": {
+      "test": "test_18_provider_failover_chain",
+      "result": "PASS"
+    },
+    "owner_approval_verifier": {
+      "test": "test_19_owner_approval_triggers_verifier",
+      "result": "PASS"
+    },
+    "schema_failure": {
+      "test": "test_20_schema_failure_detected",
+      "result": "PASS"
+    },
+    "contract_violation": {
+      "test": "test_21_contract_violation_detected",
+      "result": "PASS"
+    },
+    "reroute_limit": {
+      "test": "test_22_reroute_attempt_limit",
+      "result": "PASS"
+    },
+    "reroute_history": {
+      "test": "test_23_reroute_history_recorded",
+      "result": "PASS"
+    },
+    "v1_compat": {
+      "test": "test_24_v1_unchanged",
+      "result": "PASS"
+    },
+    "v2_opt_in": {
+      "test": "test_25_v2_disabled_by_default",
+      "result": "PASS"
+    },
+    "v2_enable": {
+      "test": "test_26_v2_enabled_when_requested",
+      "result": "PASS"
+    },
+    "deterministic": {
+      "test": "test_27_deterministic_routing",
+      "result": "PASS"
+    },
+    "concurrent_isolation": {
+      "test": "test_28_concurrent_missions_isolated",
+      "result": "PASS"
+    },
+    "tool_policy": {
+      "test": "test_29_tool_policy_preserved",
+      "result": "PASS"
+    },
+    "budget_exhaustion": {
+      "test": "test_30_budget_exhaustion_does_not_select_mock",
+      "result": "PASS"
+    }
+  },
+  "summary": {
+    "total": 30,
+    "passed": 30,
+    "failed": 0,
+    "errors": 0
+  }
+}
