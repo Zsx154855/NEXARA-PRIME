@@ -1,0 +1,145 @@
+{
+  "schema_version": "3.0",
+  "artifact": "NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_EVIDENCE_V3",
+  "final_result": "PASS",
+  "parent_head": "52de47c14a7e08f290f47ba2e997aba982431b60",
+  "base_sha": "52de47c14a7e08f290f47ba2e997aba982431b60",
+  "acceptance_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
+  "tested_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
+  "artifact_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
+  "tree_hash": "eb1f5779cbdbe2fe1c1ead085dee64d0290669de",
+  "allowlist": [
+    "constitution/NEXARA_SOUL_CONSTITUTION_V1.md",
+    "contracts/nexara/NEXARA_SOUL_CONSTITUTION_V1.json",
+    "evidence/nexara/NEXARA_MAIN_BASELINE_REPAIR_EVIDENCE_V1.json",
+    "evidence/nexara/NEXARA_MAIN_BASELINE_REPAIR_RECEIPT_V1.json",
+    "evidence/nexara/commit_chain_proof.json",
+    "evidence/nexara/delivery_freeze_v1.json",
+    "platform/sdk/python/nexara_sdk/models.py",
+    "reports/nexara/NEXARA_MAIN_BASELINE_REPAIR_V1_REPORT.md",
+    "src/nexara_prime/__init__.py",
+    "src/nexara_prime/brain/kernel.py",
+    "src/nexara_prime/brain/long_term_memory.py",
+    "src/nexara_prime/brain/memory_controller.py",
+    "src/nexara_prime/brain/mission_intelligence.py",
+    "src/nexara_prime/brain/reasoning/kernel.py",
+    "src/nexara_prime/brain/self_reflection_engine.py",
+    "src/nexara_prime/models.py",
+    "src/nexara_prime/sandbox_v2.py",
+    "src/nexara_prime/soul.py",
+    "src/nexara_prime/tools.py",
+    "tests/brain/phase2a/test_knowledge_graph.py",
+    "tests/brain/phase3/test_deep_reasoning.py",
+    "tests/brain/phase3/test_meta_cognition.py",
+    "tests/brain/phase3/test_research_intelligence.py",
+    "tests/brain/phase3/test_strategic_planning.py",
+    "tests/brain/phase3/test_world_model.py",
+    "tests/test_soul_kernel.py"
+  ],
+  "allowlist_hash": "e986adca97269945d507cab4cc080cf49610b746c1c735a8df939fe4f053512d",
+  "artifact_hashes": [
+    {
+      "path": "reports/nexara/NEXARA_SOVEREIGN_DELIVERY_V1_REPORT.md",
+      "sha256": "c5957955dbbf550004df2ebd5900c64d6285daaa3c590714515e7c9d5296a702",
+      "size": 2814
+    }
+  ],
+  "artifact_sizes": [
+    2814
+  ],
+  "timestamp_order_valid": true,
+  "new_regressions": 0,
+  "source_commits": [
+    "4e42d7e3a414964856fe1086cd19f59dd5d4900e",
+    "9c60a6b8f2cc631735fcb26f170ebd20b6623798",
+    "86d512eb07bb8e532ed894a6595b4d355562c212",
+    "1e0f631c9809a08bb1b69f650e1c114f50e93eca"
+  ],
+  "validation_authority": "NEXARA_LOCAL",
+  "test_runs": [
+    {
+      "name": "soul_tests",
+      "command": "... pytest tests/test_soul_kernel.py -q",
+      "exit_code": 0,
+      "actual": "8 passed",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "full_suite",
+      "command": "... pytest -q",
+      "exit_code": 0,
+      "actual": "1614 passed, 3 subtests passed",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "sdk_wire_truth_g4_security",
+      "command": "... pytest tests/test_sdk_contract.py tests/test_wire_truth_enums.py tests/test_g4_tool_runtime.py tests/test_security_hardening.py -q",
+      "exit_code": 0,
+      "actual": "143 passed",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "canonical_ruff",
+      "command": "ruff check src tests platform/sdk/python",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "json_schema",
+      "command": "json.tool over contracts schemas platform/sdk/**/*.json",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "contract_runtime_alignment",
+      "command": "SoulKernel constitution vs contract JSON",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "nsec_validate",
+      "command": "python scripts/governance/validate_nsec.py",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "nsec_drift",
+      "command": "python scripts/governance/detect_nsec_drift.py",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "secret_scan",
+      "command": "python scripts/security/scan_hardcoded_secrets.py",
+      "exit_code": 0,
+      "actual": "CLEAN",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "install_import_compile",
+      "command": "compileall plus direct repository imports",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "changed_file_allowlist",
+      "command": "git diff --check 52de47c14a7e08f290f47ba2e997aba982431b60...HEAD and scoped allowlist audit",
+      "exit_code": 0,
+      "actual": "26 files, all scoped",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    }
+  ],
+  "cross_reference": {
+    "receipt_path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_RECEIPT_V3.json",
+    "proof_path": "evidence/nexara/NEXARA_SOVEREIGN_DELIVERY_PROOF_V1.json",
+    "report_path": "reports/nexara/NEXARA_SOVEREIGN_DELIVERY_V1_REPORT.md",
+    "baseline_repair_receipt_path": "evidence/nexara/NEXARA_MAIN_BASELINE_REPAIR_RECEIPT_V1.json"
+  },
+  "generated_at_utc": "2026-07-30T11:11:23Z"
+}

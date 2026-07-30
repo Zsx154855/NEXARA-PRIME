@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "artifact": "NEXARA_SOVEREIGN_DELIVERY_PROOF_V1",
+  "final_result": "PASS",
+  "nexara_validation_authority": true,
+  "local_gate_complete": true,
+  "external_platform_is_only_transport": true,
+  "parent_head": "52de47c14a7e08f290f47ba2e997aba982431b60",
+  "acceptance_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
+  "tested_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
+  "artifact_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
+  "tree_hash": "eb1f5779cbdbe2fe1c1ead085dee64d0290669de",
+  "allowlist_hash": "e986adca97269945d507cab4cc080cf49610b746c1c735a8df939fe4f053512d",
+  "new_regressions": 0,
+  "evidence_sha256": "71a9c037001d0d27c59fb65a0b9df1f97c2267cf9ceef6b2931442381aaaf971",
+  "receipt_sha256": "9d1091acbdc82a1c133444658f511bec25784b1bef3fa55cced6f18291b703c1",
+  "receipt_self_hash": "8b736a1259a6435effcbc888c17d83d52af3018163530afb86f0eee901a25f00",
+  "artifact_hashes": [
+    {
+      "path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_EVIDENCE_V3.json",
+      "sha256": "71a9c037001d0d27c59fb65a0b9df1f97c2267cf9ceef6b2931442381aaaf971",
+      "size": 5298
+    },
+    {
+      "path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_RECEIPT_V3.json",
+      "sha256": "9d1091acbdc82a1c133444658f511bec25784b1bef3fa55cced6f18291b703c1",
+      "size": 3607
+    },
+    {
+      "path": "reports/nexara/NEXARA_SOVEREIGN_DELIVERY_V1_REPORT.md",
+      "sha256": "c5957955dbbf550004df2ebd5900c64d6285daaa3c590714515e7c9d5296a702",
+      "size": 2814
+    }
+  ],
+  "timestamp_order_valid": true,
+  "generated_at_utc": "2026-07-30T11:11:23Z"
+}

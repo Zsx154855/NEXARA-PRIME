@@ -1,0 +1,99 @@
+{
+  "schema_version": "3.0",
+  "artifact": "NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_RECEIPT_V3",
+  "final_result": "PASS",
+  "parent_head": "52de47c14a7e08f290f47ba2e997aba982431b60",
+  "base_sha": "52de47c14a7e08f290f47ba2e997aba982431b60",
+  "evidence_subject_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
+  "acceptance_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
+  "tested_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
+  "artifact_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
+  "tree_hash": "eb1f5779cbdbe2fe1c1ead085dee64d0290669de",
+  "allowlist_hash": "e986adca97269945d507cab4cc080cf49610b746c1c735a8df939fe4f053512d",
+  "new_regressions": 0,
+  "evidence_path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_EVIDENCE_V3.json",
+  "evidence_sha256": "71a9c037001d0d27c59fb65a0b9df1f97c2267cf9ceef6b2931442381aaaf971",
+  "report_path": "reports/nexara/NEXARA_SOVEREIGN_DELIVERY_V1_REPORT.md",
+  "report_sha256": "c5957955dbbf550004df2ebd5900c64d6285daaa3c590714515e7c9d5296a702",
+  "test_runs": [
+    {
+      "name": "soul_tests",
+      "command": "... pytest tests/test_soul_kernel.py -q",
+      "exit_code": 0,
+      "actual": "8 passed",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "full_suite",
+      "command": "... pytest -q",
+      "exit_code": 0,
+      "actual": "1614 passed, 3 subtests passed",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "sdk_wire_truth_g4_security",
+      "command": "... pytest tests/test_sdk_contract.py tests/test_wire_truth_enums.py tests/test_g4_tool_runtime.py tests/test_security_hardening.py -q",
+      "exit_code": 0,
+      "actual": "143 passed",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "canonical_ruff",
+      "command": "ruff check src tests platform/sdk/python",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "json_schema",
+      "command": "json.tool over contracts schemas platform/sdk/**/*.json",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "contract_runtime_alignment",
+      "command": "SoulKernel constitution vs contract JSON",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "nsec_validate",
+      "command": "python scripts/governance/validate_nsec.py",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "nsec_drift",
+      "command": "python scripts/governance/detect_nsec_drift.py",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "secret_scan",
+      "command": "python scripts/security/scan_hardcoded_secrets.py",
+      "exit_code": 0,
+      "actual": "CLEAN",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "install_import_compile",
+      "command": "compileall plus direct repository imports",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    },
+    {
+      "name": "changed_file_allowlist",
+      "command": "git diff --check 52de47c14a7e08f290f47ba2e997aba982431b60...HEAD and scoped allowlist audit",
+      "exit_code": 0,
+      "actual": "26 files, all scoped",
+      "observed_at_utc": "2026-07-30T11:08:00Z"
+    }
+  ],
+  "receipt_self_hash": "8b736a1259a6435effcbc888c17d83d52af3018163530afb86f0eee901a25f00",
+  "generated_at_utc": "2026-07-30T11:11:23Z"
+}
