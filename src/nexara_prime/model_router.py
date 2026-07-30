@@ -232,7 +232,6 @@ class ModelRouter:
             self._sync_breaker_to_portfolio()
             # P1-01: HUMAN_ESCALATION must NOT become Mock RoutingDecision
             if result.mode.value == "HUMAN_ESCALATION":
-                from .models import ModelRoutingDecision
                 return ModelRoutingDecision(
                     mission_id=mission_id,
                     selected_provider="",
