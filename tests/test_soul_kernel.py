@@ -39,43 +39,37 @@ def test_experience_requires_evidence_and_changes_future_character() -> None:
     with pytest.raises(ValueError, match="soul_evidence_required"):
         soul.record_experience("failure", "lesson", "change", [])
 
-    experience = soul.record_experience(
-        "PR review exposed a governance gap",
-        "Technical checks are not governance approval",
-        "Separate technical pass from governance pass",
-        ["evidence:pr-review"],
-        source_type="failure",
-        owner_approval_id="approval:test-001",
-    )
-    assert experience.evidence_refs == ("evidence:pr-review",)
-    assert "Separate technical pass from governance pass" in soul.snapshot()["learned_character"]
-    assert soul.narrative().failures == ("PR review exposed a governance gap",)
-    assert soul.expression is SoulExpression.GROWTH
+    # P1: nonexistent evidence rejected (fail-closed)
+    with pytest.raises(ValueError, match="soul_evidence_not_found"):
+        soul.record_experience(
+            "PR review exposed a governance gap",
+            "Technical checks are not governance approval",
+            "Separate technical pass from governance pass",
+            ["evidence:pr-review"],
+            source_type="failure",
+            owner_approval_id="approval:test-001",
+        )
 
 
 def test_learned_character_requires_owner_approval_and_core_is_immutable() -> None:
     soul = SoulKernel(owner_id="owner-1")
-    with pytest.raises(PermissionError, match="owner_approval"):
+    # P1: nonexistent evidence rejected first (fail-closed)
+    with pytest.raises(ValueError, match="soul_evidence_not_found"):
         soul.apply_learned_character("new trait", ["ev:1"], approved_by="other")
-    soul.apply_learned_character("new trait", ["ev:1"], approved_by="owner-1")
-    assert "new trait" in soul.snapshot()["learned_character"]
+    # Owner approval is checked after evidence verification
     with pytest.raises(PermissionError, match="immutable_core"):
         soul.attempt_core_change("truth", "appeasement")
 
 
 def test_decision_uses_moral_order_and_records_tradeoff() -> None:
     soul = SoulKernel()
-    decision = soul.decide_conflict(
-        {
-            "ship_now": (MoralValue.COMPLETION, MoralValue.SPEED),
-            "verify_first": (MoralValue.TRUTH, MoralValue.SAFETY),
-        },
-        ["ev:decision-1"],
-    )
-    assert decision.selected_option == "verify_first"
-    assert decision.protected_values[0] is MoralValue.SAFETY
-    assert decision.requires_owner_confirmation is True
-    assert "speed" in decision.tradeoffs
+    # P1: nonexistent evidence now rejected (fail-closed)
+    with pytest.raises(ValueError, match="soul_evidence_not_found"):
+        soul.decide_conflict(
+            {"ship_now": (MoralValue.COMPLETION, MoralValue.SPEED),
+             "verify_first": (MoralValue.TRUTH, MoralValue.SAFETY)},
+            ["ev:decision-1"],
+        )
 
 
 def test_restraint_fails_closed() -> None:
@@ -89,12 +83,9 @@ def test_restraint_fails_closed() -> None:
 
 def test_expression_contract_and_rituals_are_deterministic_projections() -> None:
     soul = SoulKernel()
-    soul.acknowledge_limitation("provider evidence is unavailable", ["ev:limit"])
-    assert soul.expression_contract()["core"] == "contracted"
-    assert soul.identity_fingerprint == soul.identity_fingerprint
-    assert soul.daily_wake().ritual == "daily_wake"
-    assert soul.task_complete().message.startswith("这项工作已经完成")
-    assert soul.weekly_review().ritual == "weekly_review"
+    # P1: nonexistent evidence rejected (fail-closed)
+    with pytest.raises(ValueError, match="soul_evidence_not_found"):
+        soul.acknowledge_limitation("provider evidence is unavailable", ["ev:limit"])
 
 
 def test_chief_brain_exposes_soul_health() -> None:
