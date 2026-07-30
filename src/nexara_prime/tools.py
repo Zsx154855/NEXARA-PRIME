@@ -259,12 +259,7 @@ class ToolRuntime:
             "eval(",
         )
         if any(token in code for token in forbidden):
-            return {
-                "returncode": 126,
-                "stdout": "",
-                "stderr": "code_policy_rejected",
-                "truncated": False,
-            }
+            raise PermissionError("code_policy_rejected: forbidden token detected")
         argv = [os.path.realpath(sys.executable), "-I", "-c", code]
         receipt = self._sandbox_execute(argv, timeout_seconds)
         return {"returncode": receipt.exit_code, "stdout": receipt.stdout, "stderr": receipt.stderr, "truncated": len(receipt.stdout) >= self.MAX_OUTPUT_BYTES or len(receipt.stderr) >= self.MAX_OUTPUT_BYTES}
@@ -310,15 +305,8 @@ class ToolRuntime:
             and "Operation not permitted" in receipt.stderr
         )
         if os_sandbox_denied:
-            self._fallback_sandbox = self._fallback_sandbox or ProcessConstrainedBackend()
-            receipt = self._fallback_sandbox.execute(invocation)
-            receipt.degraded = True
-            receipt.policy_decisions.append({
-                "decision": "sandbox_degraded_fallback",
-                "from": "macos_sandbox",
-                "to": "workspace_jail",
-                "reason": "sandbox_apply_operation_not_permitted",
-            })
+            # P1: FAIL CLOSED — sandbox denial must not auto-degrade
+            raise PermissionError("os_sandbox_denied: sandbox enforcement unavailable")
         # posix_spawn failure is now handled in MacOSSandboxBackend
         # by properly including Python.app in the sandbox profile
         if receipt.timed_out:

@@ -321,6 +321,20 @@ class SoulKernel:
         refs = tuple(ref.strip() for ref in evidence_refs if ref and ref.strip())
         if not refs:
             raise ValueError("soul_evidence_required")
+        # P1: Verify evidence integrity via EvidenceStore before accepting
+        from .evidence import EvidenceStore
+        from .db import SQLiteStore
+        from .events import EventBus
+        import os
+        from pathlib import Path
+        db_path = os.environ.get("NEXARA_DB_PATH", "nexara.db")
+        store = SQLiteStore(path=Path(db_path))
+        evidence_store = EvidenceStore(store, EventBus(store))
+        for ref in refs:
+            try:
+                evidence_store.verify(ref)
+            except Exception:
+                raise ValueError(f"soul_evidence_invalid: {ref}")
         return refs
 
     def _append_audit(
@@ -354,11 +368,20 @@ class SoulKernel:
         *,
         source_type: str = "experience",
         actor: str = "runtime",
+        owner_approval_id: str = "",
     ) -> SoulExperience:
-        """Turn an evidenced experience into a durable character change."""
+        """Turn an evidenced experience into a durable character change.
 
+        P1: Requires scoped owner approval before mutating learned_character.
+        """
         if not summary.strip() or not lesson.strip() or not changed_behavior.strip():
             raise ValueError("experience_summary_lesson_behavior_required")
+        # P1: Gate behind owner approval
+        if not owner_approval_id:
+            raise PermissionError(
+                "owner_approval_required: record_experience requires a scoped "
+                "owner approval ID for soul mutation"
+            )
         refs = self._require_evidence(evidence_refs)
         experience = SoulExperience(
             experience_id=new_id("soul_exp"),
