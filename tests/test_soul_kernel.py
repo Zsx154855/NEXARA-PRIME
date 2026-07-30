@@ -45,6 +45,7 @@ def test_experience_requires_evidence_and_changes_future_character() -> None:
         "Separate technical pass from governance pass",
         ["evidence:pr-review"],
         source_type="failure",
+        owner_approval_id="approval:test-001",
     )
     assert experience.evidence_refs == ("evidence:pr-review",)
     assert "Separate technical pass from governance pass" in soul.snapshot()["learned_character"]
