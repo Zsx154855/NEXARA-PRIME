@@ -3,6 +3,7 @@ NEXARA Mission Intelligence Profiler V1
 
 Analyses mission characteristics and produces a MissionIntelligenceProfile
 that guides model routing, strategy selection, and governance decisions.
+Supports native RiskLevel R0-R4 mapping.
 
 NSEC V2.1 §5.B
 """
@@ -73,6 +74,7 @@ class MissionIntelligenceProfile:
     # constraints
     latency_target_ms: int = 10_000
     token_budget: int = 100_000
+    context_size: int = 0
     privacy_required: bool = False
     owner_approval_required: bool = False
     # recommended strategy
@@ -82,6 +84,22 @@ class MissionIntelligenceProfile:
     created_at: str = field(default_factory=now_iso)
 
 
+# ── RiskLevel native mapping (R0-R4) ────────────────────
+
+_NATIVE_RISK_MAP: dict[str, Impact] = {
+    "R0": Impact.NONE,
+    "R1": Impact.LOW,
+    "R2": Impact.MEDIUM,
+    "R3": Impact.HIGH,
+    "R4": Impact.CRITICAL,
+    "none": Impact.NONE,
+    "low": Impact.LOW,
+    "medium": Impact.MEDIUM,
+    "high": Impact.HIGH,
+    "critical": Impact.CRITICAL,
+}
+
+
 class MissionIntelligenceProfiler:
     """Analyses a mission and produces a routing profile."""
 
@@ -89,21 +107,30 @@ class MissionIntelligenceProfiler:
         """Derive profile from mission characteristics."""
         obj = mission.get("objective", "")
         complexity = mission.get("complexity", "medium")
-        risk = mission.get("risk_level", "medium")
+        risk_raw = mission.get("risk_level", "medium")
         ctx_size = mission.get("context_size", 0) or 0
         latency = mission.get("latency_target_ms", 0) or 10_000
-        budget = mission.get("token_budget", 0) or 100_000
+        # token_budget: preserve 0, default only if key is missing
+        budget_raw = mission.get("token_budget")
+        if budget_raw is None:
+            budget = 100_000
+        else:
+            budget = int(budget_raw)  # 0 stays 0
         tools = mission.get("tool_requirement", "none")
         approval = mission.get("owner_approval_required", False)
         mission_id = mission.get("mission_id", "")
+
         # difficulty
-        diff_map = {"trivial": Difficulty.TRIVIAL, "low": Difficulty.LOW,
-                     "medium": Difficulty.MEDIUM, "high": Difficulty.HIGH, "extreme": Difficulty.EXTREME}
+        diff_map = {
+            "trivial": Difficulty.TRIVIAL, "low": Difficulty.LOW,
+            "medium": Difficulty.MEDIUM, "high": Difficulty.HIGH,
+            "extreme": Difficulty.EXTREME,
+        }
         difficulty = diff_map.get(complexity, Difficulty.MEDIUM)
-        # impact
-        imp_map = {"none": Impact.NONE, "low": Impact.LOW, "medium": Impact.MEDIUM,
-                   "high": Impact.HIGH, "critical": Impact.CRITICAL}
-        impact = imp_map.get(risk, Impact.MEDIUM)
+
+        # impact — use native R0-R4 mapping first, then string fallback
+        impact = _NATIVE_RISK_MAP.get(str(risk_raw), Impact.MEDIUM)
+
         # uncertainty
         if "unknown" in obj.lower():
             uncertainty = Uncertainty.HIGH
@@ -111,23 +138,38 @@ class MissionIntelligenceProfiler:
             uncertainty = Uncertainty.MEDIUM
         else:
             uncertainty = Uncertainty.LOW
+
         # tool requirement
-        tool_map = {"none": SkillRequirement.NONE, "optional": SkillRequirement.OPTIONAL,
-                    "required": SkillRequirement.REQUIRED, "critical": SkillRequirement.CRITICAL}
+        tool_map = {
+            "none": SkillRequirement.NONE, "optional": SkillRequirement.OPTIONAL,
+            "required": SkillRequirement.REQUIRED, "critical": SkillRequirement.CRITICAL,
+        }
         tool_req = tool_map.get(tools, SkillRequirement.NONE)
-        # recommended strategy
-        strategy, tier = self._choose_strategy(difficulty, impact, uncertainty, approval, ctx_size)
+
+        # recommended strategy — risk level takes priority over context overflow
+        strategy, tier = self._choose_strategy(
+            difficulty, impact, uncertainty, approval, ctx_size, budget,
+        )
         return MissionIntelligenceProfile(
             mission_id=mission_id,
             difficulty=difficulty,
             uncertainty=uncertainty,
             impact=impact,
             factuality_requirement=SkillRequirement.REQUIRED,
-            coding_requirement=SkillRequirement.REQUIRED if "code" in obj.lower() or "fix" in obj.lower() else SkillRequirement.NONE,
+            coding_requirement=(
+                SkillRequirement.REQUIRED
+                if "code" in obj.lower() or "fix" in obj.lower()
+                else SkillRequirement.NONE
+            ),
             tool_use_requirement=tool_req,
-            verification_requirement=SkillRequirement.REQUIRED if impact in (Impact.HIGH, Impact.CRITICAL) else SkillRequirement.OPTIONAL,
+            verification_requirement=(
+                SkillRequirement.REQUIRED
+                if impact in (Impact.HIGH, Impact.CRITICAL)
+                else SkillRequirement.OPTIONAL
+            ),
             latency_target_ms=latency,
             token_budget=budget,
+            context_size=ctx_size,
             privacy_required=mission.get("privacy_required", False),
             owner_approval_required=approval,
             recommended_strategy=strategy,
@@ -141,30 +183,34 @@ class MissionIntelligenceProfiler:
         uncertainty: Uncertainty,
         owner_approval: bool,
         context_size: int,
+        token_budget: int,
     ) -> tuple[str, int]:
-        # Context overflow → pro (check FIRST — overrides flash)
-        if context_size > 32_000:
-            return "DIRECT_SINGLE", 2  # pro
+        # Budget exhaustion guard: 0 means STOP
+        if token_budget == 0:
+            return "HUMAN_ESCALATION", 0
 
-        # High impact → Pro + verifier
+        # High/critical impact → verifier FIRST (before context overflow)
         if impact in (Impact.HIGH, Impact.CRITICAL):
             return "PRO_WITH_VERIFIER", 2
 
+        # Owner approval → pro with verifier
+        if owner_approval:
+            return "PRO_WITH_VERIFIER", 2
+
+        # Context overflow → pro (but preserve verifier if impact already required it)
+        if context_size > 32_000:
+            return "DIRECT_SINGLE", 2  # pro tier, single route
+
         # S0/S1 + low risk → flash
-        if difficulty in (Difficulty.TRIVIAL, Difficulty.LOW) and impact in (Impact.NONE, Impact.LOW) and not owner_approval:
+        if (
+            difficulty in (Difficulty.TRIVIAL, Difficulty.LOW)
+            and impact in (Impact.NONE, Impact.LOW)
+        ):
             return "DIRECT_SINGLE", 1  # flash
 
         # High uncertainty → pro
         if uncertainty == Uncertainty.HIGH:
             return "DIRECT_SINGLE", 2  # pro
-
-        # Context overflow → pro
-        if context_size > 32_000:
-            return "DIRECT_SINGLE", 2  # pro
-
-        # Owner approval → pro
-        if owner_approval:
-            return "PRO_WITH_VERIFIER", 2
 
         # Default: pro
         return "DIRECT_SINGLE", 2

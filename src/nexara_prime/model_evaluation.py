@@ -3,6 +3,7 @@ NEXARA Model Evaluation Engine V1
 
 Evaluates model outputs deterministically where possible, uses verifier model
 for semantic validation. Never self-evaluates.
+Never fabricates PASS_WITH_WARNINGS — INCONCLUSIVE when no real verifier.
 
 NSEC V2.1 §5.F
 """
@@ -18,7 +19,6 @@ from .models import now_iso
 
 class EvaluationStatus(str, Enum):
     PASS = "pass"
-    PASS_WITH_WARNINGS = "pass_with_warnings"
     FAIL = "fail"
     INCONCLUSIVE = "inconclusive"
 
@@ -50,7 +50,7 @@ class ModelEvaluationResult:
 
     @property
     def is_pass(self) -> bool:
-        return self.status in (EvaluationStatus.PASS, EvaluationStatus.PASS_WITH_WARNINGS)
+        return self.status == EvaluationStatus.PASS
 
     @property
     def is_clear_pass(self) -> bool:
@@ -73,29 +73,52 @@ class ModelEvaluationEngine:
         evidence: list | None = None,
         invocation_id: str = "",
         mission_id: str = "",
+        evidence_store=None,
     ) -> ModelEvaluationResult:
         findings: list[str] = []
 
         # 1. Schema validation (deterministic)
         schema_valid = True
-        if expected_schema and isinstance(output, dict):
-            schema_valid = self._validate_schema(output, expected_schema, findings)
+        if expected_schema is not None:
+            if not isinstance(output, dict):
+                findings.append("Schema validation failed: output is not a dictionary")
+                schema_valid = False
+            else:
+                schema_valid = self._validate_schema(output, expected_schema, findings)
 
         # 2. Contract compliance (deterministic)
         contract_ok = True
-        if contract and isinstance(output, dict):
-            contract_ok = self._validate_contract(output, contract, findings)
+        if contract is not None:
+            if not isinstance(output, dict):
+                findings.append("Contract validation failed: output is not a dictionary")
+                contract_ok = False
+            else:
+                contract_ok = self._validate_contract(output, contract, findings)
 
         # 3. Evidence coverage (deterministic)
         evidence_cov = 1.0
-        if evidence and isinstance(output, dict):
-            evidence_cov = self._check_evidence_coverage(output, evidence, findings)
+        if evidence is not None:
+            if not isinstance(output, dict):
+                evidence_cov = 0.0
+                findings.append("Evidence coverage: output is not a dictionary")
+            else:
+                # Verify evidence integrity before using
+                if evidence_store is not None:
+                    for idx, e_item in enumerate(evidence):
+                        if isinstance(e_item, dict) and "evidence_id" in e_item:
+                            try:
+                                evidence_store.verify(e_item.get("evidence_id", ""))
+                            except (ValueError, RuntimeError, LookupError):
+                                findings.append(
+                                    f"Evidence integrity failed for item {idx}"
+                                )
+                evidence_cov = self._check_evidence_coverage(output, evidence, findings)
 
         # 4. Synthesise result
         if not schema_valid or not contract_ok or evidence_cov < 0.5:
             status = EvaluationStatus.FAIL
         elif findings:
-            status = EvaluationStatus.PASS_WITH_WARNINGS
+            status = EvaluationStatus.FAIL  # any finding → FAIL, no PASS_WITH_WARNINGS
         else:
             status = EvaluationStatus.PASS
 
@@ -128,37 +151,50 @@ class ModelEvaluationEngine:
             expected = inv.get("value")
             actual = output.get(field)
             if expected is not None and actual != expected:
-                findings.append(f"Contract violation: {field} expected={expected}, got={actual}")
+                findings.append(
+                    f"Contract violation: {field} expected={expected}, got={actual}"
+                )
                 return False
         return True
 
     @staticmethod
-    def _check_evidence_coverage(output: dict, evidence: list, findings: list[str]) -> float:
+    def _check_evidence_coverage(
+        output: dict, evidence: list, findings: list[str]
+    ) -> float:
+        """Compare evidence VALUES against output, not just key names."""
         if not evidence:
             return 1.0
-        evidence_keys = set()
+        evidence_values: set[str] = set()
         for e in evidence:
             if isinstance(e, dict):
-                evidence_keys.update(e.keys())
-        output_keys = set(output.keys())
-        overlap = evidence_keys & output_keys
+                for k, v in e.items():
+                    evidence_values.add(f"{k}:{v}")
+        output_values: set[str] = set()
+        for k, v in output.items():
+            output_values.add(f"{k}:{v}")
+        overlap = evidence_values & output_values
         if not overlap:
-            findings.append("Output has no overlap with evidence keys")
+            findings.append("Output has no value-level overlap with evidence")
             return 0.0
-        return len(overlap) / max(len(evidence_keys), 1)
+        return len(overlap) / max(len(evidence_values), 1)
 
     def run_verifier(
         self, output: dict, verifier_model: str, verifier_provider: str
     ) -> ModelEvaluationResult:
-        """Placeholder for verifier-model evaluation. Called by orchestration engine."""
+        """
+        Placeholder for verifier-model evaluation.
+        When no real independent verifier is available, returns INCONCLUSIVE.
+        Never fabricates PASS_WITH_WARNINGS.
+        """
         return ModelEvaluationResult(
             verifier_model=verifier_model,
             verifier_provider=verifier_provider,
-            status=EvaluationStatus.PASS_WITH_WARNINGS,
-            factual_consistency=True,
-            hallucination_risk=0.1,
-            tool_result_consistency=True,
-            governance_compliance=True,
-            answer_completeness=0.9,
+            status=EvaluationStatus.INCONCLUSIVE,
+            factual_consistency=None,
+            hallucination_risk=1.0,
+            tool_result_consistency=None,
+            governance_compliance=False,
+            answer_completeness=0.0,
             contradiction_count=0,
+            findings=["No real independent verifier available — result INCONCLUSIVE"],
         )
