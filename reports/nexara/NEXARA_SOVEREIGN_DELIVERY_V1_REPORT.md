@@ -1,13 +1,13 @@
 # NEXARA Sovereign Delivery Transition V1
 
 - PARENT_HEAD / BASE_SHA: `52de47c14a7e08f290f47ba2e997aba982431b60`
-- ACCEPTANCE_HEAD: `1e5004fb03a0827fb53ac74083be8a01cac69a02`
-- TESTED_HEAD: `1e5004fb03a0827fb53ac74083be8a01cac69a02`
-- ARTIFACT_HEAD: `1e5004fb03a0827fb53ac74083be8a01cac69a02`
-- TREE_HASH: `eb1f5779cbdbe2fe1c1ead085dee64d0290669de`
-- ALLOWLIST_HASH: `e986adca97269945d507cab4cc080cf49610b746c1c735a8df939fe4f053512d`
+- ACCEPTANCE_HEAD: `c6cf5015418b8f309d11fb7d51c32861aadfddea`
+- TESTED_HEAD: `c6cf5015418b8f309d11fb7d51c32861aadfddea`
+- ARTIFACT_HEAD: `c6cf5015418b8f309d11fb7d51c32861aadfddea`
+- TREE_HASH: `7f22eb1a195f54c8ab44cddecd208ee619e507ed`
+- ALLOWLIST_HASH: `aae51811a2274b6c6cfdafefd44cf66901883f1f4721f2fcc33af48427c8f492`
 - NEW_REGRESSIONS: `0`
-- GENERATED_AT_UTC: `2026-07-30T11:11:23Z`
+- GENERATED_AT_UTC: `2026-07-30T11:11:53Z`
 
 NEXARA owns the validation authority in this delivery candidate. The GitHub adapter is transport and review metadata only; no external CI result is used to manufacture local PASS. The branch contains the baseline repairs for the previously observed 25 collection errors, 26 canonical Ruff errors, 2 MemoryKind wire-truth failures, and 2 G4 model import failures, followed by Soul Constitution/Kernel and V4 hardening/lint integration.
 
@@ -19,10 +19,14 @@ Local gates: Soul `8 passed`; full suite `1614 passed, 3 subtests passed`; SDK w
 - `contracts/nexara/NEXARA_SOUL_CONSTITUTION_V1.json`
 - `evidence/nexara/NEXARA_MAIN_BASELINE_REPAIR_EVIDENCE_V1.json`
 - `evidence/nexara/NEXARA_MAIN_BASELINE_REPAIR_RECEIPT_V1.json`
+- `evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_EVIDENCE_V3.json`
+- `evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_RECEIPT_V3.json`
+- `evidence/nexara/NEXARA_SOVEREIGN_DELIVERY_PROOF_V1.json`
 - `evidence/nexara/commit_chain_proof.json`
 - `evidence/nexara/delivery_freeze_v1.json`
 - `platform/sdk/python/nexara_sdk/models.py`
 - `reports/nexara/NEXARA_MAIN_BASELINE_REPAIR_V1_REPORT.md`
+- `reports/nexara/NEXARA_SOVEREIGN_DELIVERY_V1_REPORT.md`
 - `src/nexara_prime/__init__.py`
 - `src/nexara_prime/brain/kernel.py`
 - `src/nexara_prime/brain/long_term_memory.py`

@@ -6,32 +6,32 @@
   "local_gate_complete": true,
   "external_platform_is_only_transport": true,
   "parent_head": "52de47c14a7e08f290f47ba2e997aba982431b60",
-  "acceptance_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
-  "tested_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
-  "artifact_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
-  "tree_hash": "eb1f5779cbdbe2fe1c1ead085dee64d0290669de",
-  "allowlist_hash": "e986adca97269945d507cab4cc080cf49610b746c1c735a8df939fe4f053512d",
+  "acceptance_head": "c6cf5015418b8f309d11fb7d51c32861aadfddea",
+  "tested_head": "c6cf5015418b8f309d11fb7d51c32861aadfddea",
+  "artifact_head": "c6cf5015418b8f309d11fb7d51c32861aadfddea",
+  "tree_hash": "7f22eb1a195f54c8ab44cddecd208ee619e507ed",
+  "allowlist_hash": "aae51811a2274b6c6cfdafefd44cf66901883f1f4721f2fcc33af48427c8f492",
   "new_regressions": 0,
-  "evidence_sha256": "71a9c037001d0d27c59fb65a0b9df1f97c2267cf9ceef6b2931442381aaaf971",
-  "receipt_sha256": "9d1091acbdc82a1c133444658f511bec25784b1bef3fa55cced6f18291b703c1",
-  "receipt_self_hash": "8b736a1259a6435effcbc888c17d83d52af3018163530afb86f0eee901a25f00",
+  "evidence_sha256": "05b210b3f098414cdd7c32ab858ca408d887121a3b03422f9ce5ad5868279d9b",
+  "receipt_sha256": "9ca0c8667fdf4628b84935593d036d5d6bae8202fbeb5e7761aa35bee392d7f6",
+  "receipt_self_hash": "b7687d1e7c70d818a4b131a9a6871ab6f06f57e6aaece2f422956623451e9b0f",
   "artifact_hashes": [
     {
       "path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_EVIDENCE_V3.json",
-      "sha256": "71a9c037001d0d27c59fb65a0b9df1f97c2267cf9ceef6b2931442381aaaf971",
-      "size": 5298
+      "sha256": "05b210b3f098414cdd7c32ab858ca408d887121a3b03422f9ce5ad5868279d9b",
+      "size": 5587
     },
     {
       "path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_RECEIPT_V3.json",
-      "sha256": "9d1091acbdc82a1c133444658f511bec25784b1bef3fa55cced6f18291b703c1",
+      "sha256": "9ca0c8667fdf4628b84935593d036d5d6bae8202fbeb5e7761aa35bee392d7f6",
       "size": 3607
     },
     {
       "path": "reports/nexara/NEXARA_SOVEREIGN_DELIVERY_V1_REPORT.md",
-      "sha256": "c5957955dbbf550004df2ebd5900c64d6285daaa3c590714515e7c9d5296a702",
-      "size": 2814
+      "sha256": "42d591ead3ed2b91fffa524d8cb0e745828fe816978e9f0286745c61d824875c",
+      "size": 3091
     }
   ],
   "timestamp_order_valid": true,
-  "generated_at_utc": "2026-07-30T11:11:23Z"
+  "generated_at_utc": "2026-07-30T11:11:53Z"
 }

@@ -4,19 +4,23 @@
   "final_result": "PASS",
   "parent_head": "52de47c14a7e08f290f47ba2e997aba982431b60",
   "base_sha": "52de47c14a7e08f290f47ba2e997aba982431b60",
-  "acceptance_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
-  "tested_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
-  "artifact_head": "1e5004fb03a0827fb53ac74083be8a01cac69a02",
-  "tree_hash": "eb1f5779cbdbe2fe1c1ead085dee64d0290669de",
+  "acceptance_head": "c6cf5015418b8f309d11fb7d51c32861aadfddea",
+  "tested_head": "c6cf5015418b8f309d11fb7d51c32861aadfddea",
+  "artifact_head": "c6cf5015418b8f309d11fb7d51c32861aadfddea",
+  "tree_hash": "7f22eb1a195f54c8ab44cddecd208ee619e507ed",
   "allowlist": [
     "constitution/NEXARA_SOUL_CONSTITUTION_V1.md",
     "contracts/nexara/NEXARA_SOUL_CONSTITUTION_V1.json",
     "evidence/nexara/NEXARA_MAIN_BASELINE_REPAIR_EVIDENCE_V1.json",
     "evidence/nexara/NEXARA_MAIN_BASELINE_REPAIR_RECEIPT_V1.json",
+    "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_EVIDENCE_V3.json",
+    "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_IMPLEMENTATION_RECEIPT_V3.json",
+    "evidence/nexara/NEXARA_SOVEREIGN_DELIVERY_PROOF_V1.json",
     "evidence/nexara/commit_chain_proof.json",
     "evidence/nexara/delivery_freeze_v1.json",
     "platform/sdk/python/nexara_sdk/models.py",
     "reports/nexara/NEXARA_MAIN_BASELINE_REPAIR_V1_REPORT.md",
+    "reports/nexara/NEXARA_SOVEREIGN_DELIVERY_V1_REPORT.md",
     "src/nexara_prime/__init__.py",
     "src/nexara_prime/brain/kernel.py",
     "src/nexara_prime/brain/long_term_memory.py",
@@ -36,16 +40,16 @@
     "tests/brain/phase3/test_world_model.py",
     "tests/test_soul_kernel.py"
   ],
-  "allowlist_hash": "e986adca97269945d507cab4cc080cf49610b746c1c735a8df939fe4f053512d",
+  "allowlist_hash": "aae51811a2274b6c6cfdafefd44cf66901883f1f4721f2fcc33af48427c8f492",
   "artifact_hashes": [
     {
       "path": "reports/nexara/NEXARA_SOVEREIGN_DELIVERY_V1_REPORT.md",
-      "sha256": "c5957955dbbf550004df2ebd5900c64d6285daaa3c590714515e7c9d5296a702",
-      "size": 2814
+      "sha256": "42d591ead3ed2b91fffa524d8cb0e745828fe816978e9f0286745c61d824875c",
+      "size": 3091
     }
   ],
   "artifact_sizes": [
-    2814
+    3091
   ],
   "timestamp_order_valid": true,
   "new_regressions": 0,
@@ -131,7 +135,7 @@
       "name": "changed_file_allowlist",
       "command": "git diff --check 52de47c14a7e08f290f47ba2e997aba982431b60...HEAD and scoped allowlist audit",
       "exit_code": 0,
-      "actual": "26 files, all scoped",
+      "actual": "30 files, all scoped",
       "observed_at_utc": "2026-07-30T11:08:00Z"
     }
   ],
@@ -141,5 +145,5 @@
     "report_path": "reports/nexara/NEXARA_SOVEREIGN_DELIVERY_V1_REPORT.md",
     "baseline_repair_receipt_path": "evidence/nexara/NEXARA_MAIN_BASELINE_REPAIR_RECEIPT_V1.json"
   },
-  "generated_at_utc": "2026-07-30T11:11:23Z"
+  "generated_at_utc": "2026-07-30T11:11:53Z"
 }
