@@ -79,10 +79,20 @@ class CompositeOrchestrationEngine:
         self, mission: dict, anchors: KnowledgeAnchor, force_mode: str = ""
     ) -> RouteResult:
         profile = self.profiler.profile(mission)
-        mode = (
-            OrchestrationMode(force_mode) if force_mode
-            else self._derive_mode(profile)
-        )
+        derived = self._derive_mode(profile)
+        # Prevent forced modes from downgrading high-risk missions
+        if force_mode:
+            forced = OrchestrationMode(force_mode)
+            # HIGH/CRITICAL impact must NEVER be downgraded below PRO_WITH_VERIFIER
+            if profile.impact.name in ("HIGH", "CRITICAL") and forced in (
+                OrchestrationMode.DIRECT_SINGLE,
+                OrchestrationMode.FLASH_THEN_PRO,
+            ):
+                mode = derived  # keep the safer derived mode
+            else:
+                mode = forced
+        else:
+            mode = derived
 
         # Mandatory governance anchors check
         if not anchors.has_mandatory_anchors():
@@ -158,6 +168,7 @@ class CompositeOrchestrationEngine:
             "SEQUENTIAL_RELAY": OrchestrationMode.SEQUENTIAL_RELAY,
             "PARALLEL_COUNCIL": OrchestrationMode.PARALLEL_COUNCIL,
             "SPECIALIST_DELEGATION": OrchestrationMode.SPECIALIST_DELEGATION,
+            "HUMAN_ESCALATION": OrchestrationMode.HUMAN_ESCALATION,
         }
         return mode_map.get(strategy, OrchestrationMode.DIRECT_SINGLE)
 

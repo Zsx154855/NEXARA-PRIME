@@ -104,21 +104,39 @@ class ModelEvaluationEngine:
             else:
                 # Verify evidence integrity before using
                 if evidence_store is not None:
+                    all_verified = True
+                    verified_evidence = []
                     for idx, e_item in enumerate(evidence):
                         if isinstance(e_item, dict) and "evidence_id" in e_item:
                             try:
                                 evidence_store.verify(e_item.get("evidence_id", ""))
+                                verified_evidence.append(e_item)
                             except (ValueError, RuntimeError, LookupError):
+                                all_verified = False
                                 findings.append(
                                     f"Evidence integrity failed for item {idx}"
                                 )
+                    if not all_verified:
+                        evidence_cov = 0.0
+                        findings.append("Evidence verification failed — fail closed")
+                        evidence = []  # discard unverified evidence
+                    else:
+                        evidence = verified_evidence
                 evidence_cov = self._check_evidence_coverage(output, evidence, findings)
 
         # 4. Synthesise result
-        if not schema_valid or not contract_ok or evidence_cov < 0.5:
+        # If no validation was even attempted, return INCONCLUSIVE
+        no_validation_ran = (
+            expected_schema is None
+            and contract is None
+            and evidence is None
+        )
+        if no_validation_ran:
+            status = EvaluationStatus.INCONCLUSIVE
+        elif not schema_valid or not contract_ok or evidence_cov < 0.5:
             status = EvaluationStatus.FAIL
         elif findings:
-            status = EvaluationStatus.FAIL  # any finding → FAIL, no PASS_WITH_WARNINGS
+            status = EvaluationStatus.FAIL
         else:
             status = EvaluationStatus.PASS
 

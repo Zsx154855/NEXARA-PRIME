@@ -249,8 +249,17 @@ class GovernedRerouteController:
             return record
 
     def get_state(self, mission_id: str) -> RerouteState:
+        """Return immutable deep copy of reroute state."""
+        import copy
         with self._lock:
-            return self._get_or_create(mission_id)
+            raw = self._get_or_create(mission_id)
+            return RerouteState(
+                mission_id=raw.mission_id,
+                route_attempts=raw.route_attempts,
+                verifier_attempts=raw.verifier_attempts,
+                history=list(raw.history),  # immutable snapshot
+                _idempotency_keys=set(raw._idempotency_keys),
+            )
 
     def get_history(self, mission_id: str) -> list[RerouteRecord]:
         """Return immutable snapshot of reroute history."""

@@ -213,15 +213,51 @@ class ModelRouter:
                 "context_size": context_size,
                 "latency_target_ms": latency_target_ms,
                 "token_budget": token_budget,
+                "provider_health": provider_health or {},
             }
+            # Apply provider_health to portfolio before routing
+            if provider_health:
+                for pname, healthy in provider_health.items():
+                    if not healthy:
+                        try:
+                            from .model_portfolio_registry import ModelHealth
+                            self._portfolio.update_health(pname, ModelHealth.UNHEALTHY)
+                        except (KeyError, ValueError):
+                            pass
             from .knowledge_anchor import KnowledgeAnchor
 
             anchors = KnowledgeAnchor()
             result = self._orchestrator.route(mission, anchors)
             # Sync circuit breaker state into portfolio health
             self._sync_breaker_to_portfolio()
-            provider = result.primary_entry.provider if result.primary_entry else "mock"
-            model = result.primary_entry.model_name if result.primary_entry else "mock"
+            # P1-01: HUMAN_ESCALATION must NOT become Mock RoutingDecision
+            if result.mode.value == "HUMAN_ESCALATION":
+                from .models import ModelRoutingDecision
+                return ModelRoutingDecision(
+                    mission_id=mission_id,
+                    selected_provider="",
+                    selected_model="",
+                    reason=f"V2 HUMAN_ESCALATION: {result.reason}",
+                    alternatives=[],
+                    estimated_tokens=0,
+                    estimated_cost=0.0,
+                    fallback="",
+                    created_at=now_iso(),
+                )
+            provider = result.primary_entry.provider if result.primary_entry else ""
+            model = result.primary_entry.model_name if result.primary_entry else ""
+            if not provider:
+                return ModelRoutingDecision(
+                    mission_id=mission_id,
+                    selected_provider="",
+                    selected_model="",
+                    reason=f"V2 routing failed — no provider: {result.reason}",
+                    alternatives=[],
+                    estimated_tokens=0,
+                    estimated_cost=0.0,
+                    fallback="",
+                    created_at=now_iso(),
+                )
             return ModelRoutingDecision(
                 mission_id=mission_id,
                 selected_provider=provider,
@@ -290,18 +326,21 @@ class ModelRouter:
         return "R0"
 
     def _sync_breaker_to_portfolio(self) -> None:
-        """Sync CircuitBreaker open state into portfolio health."""
+        """Sync CircuitBreaker open state into portfolio health. Restore when closed."""
         if not self._v2_enabled:
             return
+        from .model_portfolio_registry import ModelHealth
         for provider_name in _PROVIDERS:
-            if self.breaker.is_open(provider_name):
-                try:
-                    self._portfolio.update_health(
-                        provider_name,
-                        __import__("nexara_prime.model_portfolio_registry", fromlist=["ModelHealth"]).ModelHealth.UNHEALTHY,
-                    )
-                except (KeyError, ValueError):
-                    pass
+            try:
+                if self.breaker.is_open(provider_name):
+                    self._portfolio.update_health(provider_name, ModelHealth.UNHEALTHY)
+                else:
+                    # Restore health when breaker closes
+                    entry = self._portfolio.get(provider_name)
+                    if entry and entry.health == ModelHealth.UNHEALTHY:
+                        self._portfolio.update_health(provider_name, ModelHealth.HEALTHY)
+            except (KeyError, ValueError):
+                pass
 
     # ── Track result ─────────────────────────────────────────────────────────
 

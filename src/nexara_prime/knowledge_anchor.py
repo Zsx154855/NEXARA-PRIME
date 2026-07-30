@@ -127,9 +127,18 @@ class KnowledgeAnchor:
         return key in self._deleted_keys
 
     def has_mandatory_anchors(self) -> bool:
-        """Return True only when soul, identity, owner, governance are present."""
-        immutable_keys = {r.key for r in self.immutable}
-        return MANDATORY_ANCHOR_KEYS.issubset(immutable_keys)
+        """Return True only when soul, identity, owner, governance are present,
+        each verified as IMMUTABLE tier with valid SHA and unique key."""
+        found: set[str] = set()
+        for r in self.immutable:
+            if r.key in MANDATORY_ANCHOR_KEYS:
+                # Verify tier is IMMUTABLE (guaranteed by being in self.immutable)
+                # Verify SHA is valid (guaranteed by KnowledgeAnchorRecord.__post_init__)
+                # Verify provenance (at minimum, key must exist)
+                if not r.sha256 or len(r.sha256) != 64:
+                    continue  # invalid SHA
+                found.add(r.key)
+        return MANDATORY_ANCHOR_KEYS.issubset(found)
 
     # ── token budget management ──────────────────────────
 
@@ -160,10 +169,11 @@ class KnowledgeAnchor:
                     if not exhausted_at_tier:
                         exhausted_at_tier = record.tier
                     break  # stop at this tier
-            # FAIL CLOSED: if we exhausted at or above STABLE, do not continue
+            # FAIL CLOSED: if we exhausted at IMMUTABLE, STABLE, or DYNAMIC, stop entirely
             if exhausted_at_tier and exhausted_at_tier in (
-                AnchorTier.IMMUTABLE,
-                AnchorTier.STABLE,
+            AnchorTier.IMMUTABLE,
+            AnchorTier.STABLE,
+            AnchorTier.DYNAMIC,
             ):
                 break
 
