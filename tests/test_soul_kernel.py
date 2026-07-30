@@ -8,7 +8,6 @@ from nexara_prime.brain.kernel import ChiefBrainKernel
 from nexara_prime.soul import (
     MoralValue,
     SoulDisposition,
-    SoulExpression,
     SoulKernel,
 )
 
