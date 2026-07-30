@@ -385,13 +385,13 @@ class SoulKernel:
         """
         if not summary.strip() or not lesson.strip() or not changed_behavior.strip():
             raise ValueError("experience_summary_lesson_behavior_required")
-        # P1: Gate behind owner approval
+        refs = self._require_evidence(evidence_refs)
+        # P1: Gate behind owner approval (after evidence check for testability)
         if not owner_approval_id:
             raise PermissionError(
                 "owner_approval_required: record_experience requires a scoped "
                 "owner approval ID for soul mutation"
             )
-        refs = self._require_evidence(evidence_refs)
         experience = SoulExperience(
             experience_id=new_id("soul_exp"),
             summary=summary.strip(),

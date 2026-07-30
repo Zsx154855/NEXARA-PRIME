@@ -186,9 +186,10 @@ class SandboxEscapeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             runtime = NexaraRuntime(Settings(root / "runtime.db", root / "workspace", root / "reports", "mock", True, "127.0.0.1", 8765))
-            result = runtime.tools._code_exec({"code": "__import__('pathlib').Path('/private/tmp/nexara-tool-runtime-test-escape').write_text('escape')"}, 5)
-            self.assertFalse(marker.exists(), result)
-            self.assertNotEqual(result["returncode"], 0)
+            # P1: code policy now raises PermissionError for forbidden tokens
+            with self.assertRaises(PermissionError, msg="forbidden token must be rejected"):
+                runtime.tools._code_exec({"code": "__import__('pathlib').Path('/private/tmp/nexara-tool-runtime-test-escape').write_text('escape')"}, 5)
+            self.assertFalse(marker.exists())
             runtime.store.close()
         marker.unlink(missing_ok=True)
 
