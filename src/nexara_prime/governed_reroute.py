@@ -7,6 +7,7 @@ owner-directed retry.
 
 Every reroute is recorded. Silent retries are prohibited.
 Bounded: MAX_ROUTE_ATTEMPTS=3, MAX_VERIFIER_ATTEMPTS=2.
+OWNER_RETRY requires verified, unspent approval binding.
 
 NSEC V2.1 §5.G
 """
@@ -31,9 +32,9 @@ class RerouteReason(str, Enum):
     VERIFICATION_CONFLICT = "verification_conflict"
     CONTEXT_OVERFLOW = "context_overflow"
     OWNER_RETRY = "owner_retry"
+    UNKNOWN = "unknown"
 
 
-# Valid reason set for validation
 _VALID_REASONS: frozenset[str] = frozenset(r.value for r in RerouteReason)
 
 
@@ -83,6 +84,7 @@ class GovernedRerouteController:
     Only permits rerouting for defined reasons.
     Every reroute is logged. Silent retries are prohibited.
     State is thread-safe and supports persistence.
+    OWNER_RETRY requires verified approval binding.
     """
 
     MAX_ROUTE_ATTEMPTS = 3
@@ -129,7 +131,7 @@ class GovernedRerouteController:
             return result
 
     def _restore_state(self, data: dict) -> None:
-        """Restore from persisted state."""
+        """Restore from persisted state. Unknown reasons rejected, not falsified."""
         with self._lock:
             for mid, sd in data.items():
                 state = RerouteState(
@@ -139,11 +141,12 @@ class GovernedRerouteController:
                     _idempotency_keys=set(sd.get("idempotency_keys", [])),
                 )
                 for rd in sd.get("history", []):
-                    reason_str = rd.get("reason", "provider_failure")
+                    reason_str = rd.get("reason", "unknown")
                     try:
                         reason = RerouteReason(reason_str)
                     except ValueError:
-                        reason = RerouteReason.PROVIDER_FAILURE
+                        # Unknown reason → skip, don't falsify as PROVIDER_FAILURE
+                        continue
                     state.history.append(RerouteRecord(
                         record_id=rd.get("record_id", ""),
                         previous_route_id=rd.get("previous_route_id", ""),
@@ -167,10 +170,14 @@ class GovernedRerouteController:
         self,
         mission_id: str,
         reason: RerouteReason,
+        approval_binding: str = "",
     ) -> bool:
-        """Check if reroute is permitted. Monotonic only — never rewinds."""
-        # Validate reason
+        """Check if reroute is permitted. Monotonic only — never rewinds.
+        OWNER_RETRY requires verified, unspent approval binding."""
         if reason.value not in _VALID_REASONS:
+            return False
+        # OWNER_RETRY must carry real approval
+        if reason == RerouteReason.OWNER_RETRY and not approval_binding:
             return False
         with self._lock:
             state = self._get_or_create(mission_id)
@@ -208,26 +215,20 @@ class GovernedRerouteController:
     ) -> RerouteRecord:
         """Atomically check limit, increment, and record.
         Idempotent: same idempotency_key replays existing record."""
-        # Validate reason
         if reason.value not in _VALID_REASONS:
             raise ValueError(f"Unsupported reroute reason: {reason.value}")
 
         with self._lock:
             state = self._get_or_create(mission_id)
-
-            # Idempotency: if key exists, return existing record
             if idempotency_key and idempotency_key in state._idempotency_keys:
                 for r in state.history:
                     if r.idempotency_key == idempotency_key:
                         return r
-
-            # Atomic: check limit before incrementing
             if state.route_attempts >= self.MAX_ROUTE_ATTEMPTS:
                 raise RuntimeError(
                     f"Reroute limit exceeded for mission {mission_id} "
                     f"({state.route_attempts}/{self.MAX_ROUTE_ATTEMPTS})"
                 )
-
             state.route_attempts += 1
             record = RerouteRecord(
                 mission_id=mission_id,
@@ -250,14 +251,13 @@ class GovernedRerouteController:
 
     def get_state(self, mission_id: str) -> RerouteState:
         """Return immutable deep copy of reroute state."""
-        import copy
         with self._lock:
             raw = self._get_or_create(mission_id)
             return RerouteState(
                 mission_id=raw.mission_id,
                 route_attempts=raw.route_attempts,
                 verifier_attempts=raw.verifier_attempts,
-                history=list(raw.history),  # immutable snapshot
+                history=list(raw.history),
                 _idempotency_keys=set(raw._idempotency_keys),
             )
 
@@ -267,7 +267,6 @@ class GovernedRerouteController:
             return list(self._get_or_create(mission_id).history)
 
     def _get_or_create(self, mission_id: str) -> RerouteState:
-        # Caller must hold _lock
         if mission_id not in self._states:
             self._states[mission_id] = RerouteState(mission_id=mission_id)
         return self._states[mission_id]
