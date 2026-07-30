@@ -272,14 +272,30 @@ class ToolRuntime:
             "PATH": os.environ.get("PATH", ""),
             "NEXARA_ALLOWED_DIRS": ":".join(dict.fromkeys(allowed_dirs)),
         }
-        receipt = self.sandbox.execute(SandboxInvocation(
+        invocation = SandboxInvocation(
             argv=argv,
             cwd=str(self.workspace_root),
             env=env,
             timeout=timeout_seconds,
             max_output_bytes=self.MAX_OUTPUT_BYTES,
             workspace_root=str(self.workspace_root),
-        ))
+        )
+        receipt = self.sandbox.execute(invocation)
+        os_sandbox_denied = (
+            receipt.exit_code == 71
+            and "sandbox_apply" in receipt.stderr
+            and "Operation not permitted" in receipt.stderr
+        )
+        if os_sandbox_denied:
+            self._fallback_sandbox = self._fallback_sandbox or ProcessConstrainedBackend()
+            receipt = self._fallback_sandbox.execute(invocation)
+            receipt.degraded = True
+            receipt.policy_decisions.append({
+                "decision": "sandbox_degraded_fallback",
+                "from": "macos_sandbox",
+                "to": "workspace_jail",
+                "reason": "sandbox_apply_operation_not_permitted",
+            })
         # posix_spawn failure is now handled in MacOSSandboxBackend
         # by properly including Python.app in the sandbox profile
         if receipt.timed_out:

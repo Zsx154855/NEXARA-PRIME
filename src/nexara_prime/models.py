@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -394,6 +394,10 @@ class MemoryRecord(NModel):
     key: str
     content: str
     source_evidence_id: str | None = None
+    receipt_id: str | None = None
+    idempotency_key: str | None = None
+    supersedes: str | None = None
+    superseded_by: str | None = None
     confidence: float = 1.0
     status: str = "committed"
     verified: bool = False
@@ -405,6 +409,92 @@ class MemoryRecord(NModel):
     correlation_id: str | None = None
     provenance: str | None = None
     evidence_refs: list[str] = Field(default_factory=list)
+
+
+class KnowledgeObject(NModel):
+    object_id: str = Field(default_factory=lambda: new_id("kobj"))
+    object_type: Literal["evidence", "memory", "receipt"]
+    mission_id: str | None = None
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str | None = None
+    sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    envelope_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    idempotency_key: str | None = None
+    source_event_id: str | None = None
+    trace_id: str = ""
+    provenance: str = "runtime"
+    status: Literal[
+        "committed", "candidate", "conflict", "superseded", "pending_review",
+        "cleared", "unverified", "verified", "corrupt",
+    ] = "committed"
+    superseded_by: str | None = None
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    verified: bool = False
+    canonical: bool = False
+
+
+class KnowledgeRelation(NModel):
+    relation_id: str = Field(default_factory=lambda: new_id("rel"))
+    source_id: str
+    target_id: str
+    relation_type: Literal[
+        "evidence_backing", "receipt_attests", "memory_derived_from", "supersedes",
+        "conflicts_with", "references", "parent_of", "child_of", "depends_on",
+        "produced_by", "verified_by",
+    ]
+    mission_id: str | None = None
+    created_at: str = Field(default_factory=now_iso)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    evidence_id: str | None = None
+    bidirectional: bool = False
+    weight: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class KnowledgeRecall(NModel):
+    query: str = Field(min_length=1)
+    layers: list[Literal["working", "episodic", "semantic", "procedural"]] | None = None
+    top_k: int = Field(default=10, ge=0, le=100)
+    mission_id: str | None = None
+    min_confidence: float = Field(default=0.3, ge=0.0, le=1.0)
+    include_candidates: bool = False
+    include_superseded: bool = False
+    trace_id: str = ""
+    results: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class KnowledgeCommit(NModel):
+    kind: MemoryKind
+    key: str = Field(min_length=1)
+    content: str = Field(min_length=1)
+    trace_id: str
+    mission_id: str | None = None
+    source_evidence_id: str | None = None
+    idempotency_key: str = Field(min_length=1)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    receipt_id: str | None = None
+    auto_commit: bool = False
+    provenance: str = "runtime"
+
+
+class CapabilityHistory(NModel):
+    record_id: str = Field(default_factory=lambda: new_id("caphist"))
+    capability_id: str
+    mission_id: str | None = None
+    provider: str = ""
+    model: str = ""
+    success: bool = True
+    failure_kind: str | None = None
+    latency_ms: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost: float = 0.0
+    retry_count: int = 0
+    recovery: bool = False
+    evaluation_score: float | None = None
+    evidence_id: str | None = None
+    idempotency_key: str = ""
+    timestamp: str = Field(default_factory=now_iso)
+    schema_version: int = 1
 
 
 class EvaluationResult(NModel):

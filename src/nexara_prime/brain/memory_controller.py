@@ -33,7 +33,7 @@ from .provenance import ProvenanceTracker
 EVIDENCE_REQUIRED_KINDS: set[str] = {
     "decision", "failure", "failure_experience", "patch",
     "skill_improvement", "system_rule",
-    "fact", "user_fact", "project_fact", "preference",
+    "fact", "user_fact", "project_fact", "preference", "experience",
 }
 
 EVIDENCE_OPTIONAL_KINDS: set[str] = {
