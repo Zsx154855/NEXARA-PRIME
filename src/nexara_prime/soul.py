@@ -414,11 +414,20 @@ class SoulKernel:
         if not envelope or envelope.get("record_type") != "approval":
             raise PermissionError(f"owner_approval_not_found: {owner_approval_id}")
         payload = envelope.get("payload", {})
-        if payload.get("status") != "approved":
-            raise PermissionError(
-                f"owner_approval_not_approved: {owner_approval_id} "
-                f"status={payload.get('status')}"
-            )
+        # Validate using ApprovalEngine schema if available
+        try:
+            from .governance import ApprovalRequest as GovApproval
+            approval = GovApproval.model_validate(payload)
+            if approval.status != "approved":
+                raise PermissionError(
+                    f"owner_approval_not_approved: {owner_approval_id} status={approval.status}"
+                )
+        except ImportError:
+            if payload.get("status") != "approved":
+                raise PermissionError(
+                    f"owner_approval_not_approved: {owner_approval_id} "
+                    f"status={payload.get('status')}"
+                )
         owner = payload.get("owner_id", "")
         if owner and hasattr(self, "_owner_id") and getattr(self, "_owner_id", "") and owner != self._owner_id:
             raise PermissionError(
@@ -662,7 +671,13 @@ class SoulKernel:
         elif uncertainty >= 0.5:
             disposition, reason = SoulDisposition.PAUSE, "Uncertainty is above the execution threshold."
         else:
+            # Only PROCEED after verifying ALL evidence is real
             disposition, reason = SoulDisposition.PROCEED, "Evidence, authorization, and certainty are sufficient."
+            if refs:
+                try:
+                    self._require_evidence(refs)
+                except (ValueError, RuntimeError) as e:
+                    disposition, reason = SoulDisposition.ASK, f"Evidence verification failed: {e}"
         requires_confirmation = disposition in {SoulDisposition.ASK, SoulDisposition.ESCALATE}
         self._expression = SoulExpression.WAITING if requires_confirmation else SoulExpression.NEUTRAL
         self._append_audit(
@@ -744,6 +759,41 @@ class SoulKernel:
             "expression_state": self._expression.value,
             "model_is_identity": False,
         }
+
+    # ── persistence ──────────────────────────────────────
+
+    def to_dict(self) -> dict[str, Any]:
+        """Full serialisation for persistence and restart recovery."""
+        return {
+            "constitution": _enum_value(asdict(self._constitution)),
+            "identity_fingerprint": self.identity_fingerprint,
+            "_owner_id": self._owner_id,
+            "narrative": _enum_value(asdict(self._narrative)),
+            "learned_character": list(self._learned_character),
+            "expression": self._expression.value,
+            "experiences": [_enum_value(asdict(e)) for e in self._experiences],
+            "audit": [_enum_value(asdict(e)) for e in self._audit],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SoulKernel":
+        """Restore Soul from persisted state after restart."""
+        soul = cls(owner_id=data.get("_owner_id", ""))
+        soul._learned_character = list(data.get("learned_character", []))
+        soul._expression = SoulExpression(data.get("expression", "neutral"))
+        # Restore narrative
+        n_data = data.get("narrative", {})
+        soul._narrative = NarrativeState(
+            origin=n_data.get("origin", ""),
+            milestones=tuple(n_data.get("milestones", ())),
+            failures=tuple(n_data.get("failures", ())),
+            lessons=tuple(n_data.get("lessons", ())),
+            capabilities_gained=tuple(n_data.get("capabilities_gained", ())),
+            values_strengthened=tuple(n_data.get("values_strengthened", ())),
+            unresolved_limitations=tuple(n_data.get("unresolved_limitations", ())),
+            future_direction=n_data.get("future_direction", ""),
+        )
+        return soul
 
 
 __all__ = [

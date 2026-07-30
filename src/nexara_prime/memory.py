@@ -479,7 +479,9 @@ class MemoryLayerManager:
         top_k: int = 10,
         mission_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Semantic search across memory layers using RAG pipeline."""
+        """Semantic search across memory layers using RAG pipeline.
+        top_k clamped to 1..100."""
+        top_k = max(1, min(100, top_k))
         if not self.rag:
             # Fallback: keyword search in SQLite
             return self._keyword_search(query, layers, top_k, mission_id=mission_id)
