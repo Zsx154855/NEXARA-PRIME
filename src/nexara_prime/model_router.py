@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from .models import ModelRoutingDecision, now_iso
 
-
 # ── Provider definitions ─────────────────────────────────────────────────────
 
 
@@ -144,32 +143,36 @@ class CircuitBreaker:
 
 
 class ModelRouter:
-    """Routes mission requests to the most appropriate model provider based on
-    complexity, risk, context size, latency targets, and token budget.
+    """Routes mission requests via V1 (direct) or V2 (Governed Adaptive Composite).
 
-    Supports three providers: `mock`, `deepseek-v4-flash`, `deepseek-v4-pro`.
-    Uses a circuit breaker to fall back when providers are failing.
+    V1: Uses tier-based routing with CircuitBreaker.
+    V2: Uses CompositeOrchestrationEngine with Portfolio, Profiler, Reroute.
 
-    Rules:
-      - S0 / S1 missions default to flash (or mock when no budget).
-      - S2 / S3 missions default to pro.
-      - Context > 64K tokens forces pro.
-      - Latency target < 2000 ms forces flash.
-      - Circuit breaker redirects to fallback when primary is open.
-
-    Usage::
-
-        router = ModelRouter()
-        decision = router.route("mission-001", complexity=0.1, risk=0.1, ...)
-        # ... call provider ...
-        router.track_result(decision.selected_provider, success=True, ...)
+    Backward-compatible: All V1 callers continue to work.
+    Enable V2 with: router = ModelRouter(use_composite_v2=True)
     """
 
-    def __init__(self, circuit_breaker_threshold: int = 3, circuit_breaker_timeout_s: int = 60, breaker: CircuitBreaker | None = None) -> None:
+    def __init__(
+        self,
+        circuit_breaker_threshold: int = 3,
+        circuit_breaker_timeout_s: int = 60,
+        breaker: CircuitBreaker | None = None,
+        *,
+        use_composite_v2: bool = False,
+    ) -> None:
         self.breaker = breaker if breaker is not None else CircuitBreaker(
             threshold=circuit_breaker_threshold,
             timeout_s=circuit_breaker_timeout_s,
         )
+        self._v2_enabled = use_composite_v2
+        self._reroute_controller = None  # type: ignore
+        if use_composite_v2:
+            from .composite_orchestration import CompositeOrchestrationEngine
+            from .governed_reroute import GovernedRerouteController
+            from .model_portfolio_registry import ModelPortfolioRegistry
+            self._portfolio = ModelPortfolioRegistry()
+            self._orchestrator = CompositeOrchestrationEngine(self._portfolio)
+            self._reroute_controller = GovernedRerouteController()
 
     # ── Available providers ──────────────────────────────────────────────────
 
@@ -352,3 +355,23 @@ class ModelRouter:
         input_cost = (tokens / 1000.0) * provider.cost_per_1k_input_tokens
         output_cost = ((tokens * 0.25) / 1000.0) * provider.cost_per_1k_output_tokens
         return round(input_cost + output_cost, 8)
+
+    # ── V2 Governed Adaptive Composite ────────────────────────────────────────
+
+    def route_v2(self, mission: dict, anchors=None, force_mode: str = ""):
+        """Route via composite orchestration engine. Returns RouteResult."""
+        if not self._v2_enabled:
+            return self.route(mission)  # fallback to V1
+        from .knowledge_anchor import KnowledgeAnchor
+        if anchors is None:
+            anchors = KnowledgeAnchor()
+        return self._orchestrator.route(mission, anchors, force_mode)
+
+    @property
+    def v2_enabled(self) -> bool:
+        return self._v2_enabled
+
+    @property
+    def portfolio(self):
+        return self._portfolio if self._v2_enabled else None
+
