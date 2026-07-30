@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "artifact": "NEXARA_SOVEREIGN_DELIVERY_TRANSITION_V1_COMMIT_CHAIN_PROOF",
+  "delivery_base_sha": "52de47c14a7e08f290f47ba2e997aba982431b60",
+  "source_commits": [
+    {
+      "sha": "4e42d7e3a414964856fe1086cd19f59dd5d4900e",
+      "readable": true,
+      "parent": "48f848eb95e71d459629fcfd7fbceb2dd3ffb828",
+      "tree": "9657c38aade7270229d99b0b1ff835997c3edf79",
+      "artifact_source": ["src/nexara_prime/soul.py", "constitution/NEXARA_SOUL_CONSTITUTION_V1.md", "contracts/nexara/NEXARA_SOUL_CONSTITUTION_V1.json"]
+    },
+    {
+      "sha": "9c60a6b8f2cc631735fcb26f170ebd20b6623798",
+      "readable": true,
+      "parent": "4e42d7e3a414964856fe1086cd19f59dd5d4900e",
+      "tree": "b644c0f680b403666afe67a47562c671d81f5b5c",
+      "artifact_source": ["src/nexara_prime/sandbox_v2.py", "src/nexara_prime/tools.py"]
+    },
+    {
+      "sha": "86d512eb07bb8e532ed894a6595b4d355562c212",
+      "readable": true,
+      "parent": "9c60a6b8f2cc631735fcb26f170ebd20b6623798",
+      "tree": "c987febe30bdf8e593be208e4ad1c2f8632de3b3",
+      "artifact_source": ["src/nexara_prime/brain/long_term_memory.py", "src/nexara_prime/brain/reasoning/kernel.py", "tests/brain/phase2a/test_knowledge_graph.py"]
+    },
+    {
+      "sha": "1e0f631c9809a08bb1b69f650e1c114f50e93eca",
+      "readable": true,
+      "parent": "af2f4e3e52e3b9851ab60d3735c9fceda7006bbe",
+      "tree": "54a822e343e0667501fab1668412c5d2091fa5ca",
+      "artifact_source": ["evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_EVIDENCE_V4.json", "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_RECEIPT_V4.json"]
+    }
+  ],
+  "parent_chain_valid": true,
+  "artifact_sources_readable": true,
+  "generated_at_utc": "2026-07-30T10:20:00Z"
+}
