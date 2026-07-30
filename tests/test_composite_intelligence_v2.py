@@ -6,6 +6,7 @@ Each Codex finding gets at least one test that must fail before the fix and pass
 """
 
 import json
+
 import pytest
 
 from nexara_prime.composite_orchestration import (
@@ -19,10 +20,10 @@ from nexara_prime.governed_reroute import (
     RerouteRecord,
 )
 from nexara_prime.knowledge_anchor import (
+    MANDATORY_ANCHOR_KEYS,
     AnchorTier,
     KnowledgeAnchor,
     KnowledgeAnchorRecord,
-    MANDATORY_ANCHOR_KEYS,
 )
 from nexara_prime.mission_intelligence_profiler import (
     Difficulty,
@@ -40,7 +41,6 @@ from nexara_prime.model_portfolio_registry import (
     ProviderCapability,
 )
 from nexara_prime.model_router import ModelRouter
-
 
 # ═══════════════════════════════════════════════════════════
 # KnowledgeAnchor — Codex Regression
@@ -186,7 +186,6 @@ class TestEvaluationRegression:
 
     def test_no_pass_with_warnings_status(self):
         """P1: PASS_WITH_WARNINGS enum removed — no fabricating success."""
-        engine = ModelEvaluationEngine()
         with pytest.raises(ValueError):
             EvaluationStatus("pass_with_warnings")
 
@@ -396,8 +395,6 @@ class TestModelRouterRegression:
         for _ in range(3):
             r.breaker.record_failure("deepseek-v4-pro")
         r._sync_breaker_to_portfolio()
-        # Portfolio should reflect unhealthy
-        entry = r._portfolio.get("deepseek-v4-pro")
         # Breaker open → sync should mark unhealthy
         assert r.breaker.is_open("deepseek-v4-pro")
 
