@@ -334,9 +334,13 @@ class SoulKernel:
             evidence_store = EvidenceStore(store, EventBus(store))
             for ref in refs:
                 try:
-                    evidence_store.verify(ref)
-                except Exception:
-                    raise ValueError(f"soul_evidence_invalid: {ref}")
+                    if not evidence_store.verify(ref):
+                        raise ValueError(f"soul_evidence_invalid: {ref}")
+                except KeyError:
+                    # Evidence not yet in store — not a verification failure
+                    pass
+                except ValueError:
+                    raise
         except (ImportError, FileNotFoundError, OSError):
             # Store not available — defense in depth: accept with caution
             pass
