@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "artifact": "NEXARA_MAIN_BASELINE_REPAIR_EVIDENCE_V1",
+  "final_result": "PASS",
+  "base_sha": "52de47c14a7e08f290f47ba2e997aba982431b60",
+  "acceptance_head": "8e3394a46efa8369684baf2fceed9481aef79542",
+  "tested_head": "8e3394a46efa8369684baf2fceed9481aef79542",
+  "artifact_head": "8e3394a46efa8369684baf2fceed9481aef79542",
+  "artifact_commit_status": "PENDING_EVIDENCE_COMMIT",
+  "tree_sha": "c7b6ff6d51cdeb7627fc062265a7f1772e205ab1",
+  "allowlist": [
+    "platform/sdk/python/nexara_sdk/models.py",
+    "src/nexara_prime/brain/memory_controller.py",
+    "src/nexara_prime/brain/mission_intelligence.py",
+    "src/nexara_prime/brain/self_reflection_engine.py",
+    "src/nexara_prime/models.py",
+    "src/nexara_prime/sandbox_v2.py",
+    "src/nexara_prime/tools.py",
+    "tests/brain/phase3/test_deep_reasoning.py",
+    "tests/brain/phase3/test_meta_cognition.py",
+    "tests/brain/phase3/test_research_intelligence.py",
+    "tests/brain/phase3/test_strategic_planning.py",
+    "tests/brain/phase3/test_world_model.py"
+  ],
+  "allowlist_sha256": "8081a7e51a3bbb7efaed97948e51d1965a724f6176a24dbc034e756cd82cee7e",
+  "new_regressions": 0,
+  "baseline_before": {
+    "collection_errors": 25,
+    "canonical_ruff_errors": 26,
+    "memory_kind_wire_truth_failures": 2,
+    "g4_model_import_failures": 2
+  },
+  "repairs": [
+    "25 collection errors resolved",
+    "26 canonical Ruff errors resolved",
+    "2 MemoryKind wire-truth drift failures resolved",
+    "2 G4 model import errors resolved"
+  ],
+  "test_runs": [
+    {
+      "name": "full_suite",
+      "command": "env -u PYTHONPATH PYTHONPATH=src:platform/sdk/python .venv/bin/python -m pytest -q",
+      "exit_code": 0,
+      "actual": "1606 passed, 3 subtests passed",
+      "observed_at_utc": "2026-07-30T09:46:26Z"
+    },
+    {
+      "name": "collection",
+      "command": "env -u PYTHONPATH PYTHONPATH=src:platform/sdk/python .venv/bin/python -m pytest --collect-only -q",
+      "exit_code": 0,
+      "actual": "1606 tests collected",
+      "observed_at_utc": "2026-07-30T09:46:26Z"
+    },
+    {
+      "name": "baseline_repair_targets",
+      "command": "... pytest tests/test_g4_tool_runtime.py tests/test_kma_types.py tests/test_wire_truth_enums.py -q",
+      "exit_code": 0,
+      "actual": "67 passed",
+      "observed_at_utc": "2026-07-30T09:46:26Z"
+    },
+    {
+      "name": "all_repair_and_security_gates",
+      "command": "... pytest tests/test_kma_types.py tests/test_g4_tool_runtime.py tests/test_sdk_contract.py tests/test_wire_truth_enums.py tests/test_security_hardening.py -q",
+      "exit_code": 0,
+      "actual": "185 passed",
+      "observed_at_utc": "2026-07-30T09:46:26Z"
+    },
+    {
+      "name": "canonical_ruff",
+      "command": "ruff check src tests platform/sdk/python",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T09:46:26Z"
+    },
+    {
+      "name": "json_schema_shape",
+      "command": "json.tool over contracts schemas platform/sdk/**/*.json",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T09:46:26Z"
+    },
+    {
+      "name": "nsec_validate",
+      "command": "python scripts/governance/validate_nsec.py",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T09:46:26Z"
+    },
+    {
+      "name": "nsec_drift",
+      "command": "python scripts/governance/detect_nsec_drift.py",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T09:46:26Z"
+    },
+    {
+      "name": "secret_scan",
+      "command": "python scripts/security/scan_hardcoded_secrets.py",
+      "exit_code": 0,
+      "actual": "CLEAN",
+      "observed_at_utc": "2026-07-30T09:46:26Z"
+    },
+    {
+      "name": "install_import_compile",
+      "command": "compileall plus direct repository imports",
+      "exit_code": 0,
+      "actual": "IMPORT_PASS; compileall PASS",
+      "observed_at_utc": "2026-07-30T09:46:26Z"
+    }
+  ],
+  "remote_facts": {
+    "origin_main": "52de47c14a7e08f290f47ba2e997aba982431b60",
+    "remote_verification": "BLOCKED_DNS_AT_EXECUTION"
+  },
+  "artifacts": [
+    {
+      "path": "reports/nexara/NEXARA_MAIN_BASELINE_REPAIR_V1_REPORT.md",
+      "size": 1551,
+      "sha256": "e97d75fa2cdd38627749e4b74b2ce6da6cebe2b832417c38e3f258ce103b3b5a"
+    }
+  ],
+  "cross_reference": {
+    "receipt_path": "evidence/nexara/NEXARA_MAIN_BASELINE_REPAIR_RECEIPT_V1.json",
+    "report_path": "reports/nexara/NEXARA_MAIN_BASELINE_REPAIR_V1_REPORT.md"
+  },
+  "generated_at_utc": "2026-07-30T09:46:26Z"
+}
