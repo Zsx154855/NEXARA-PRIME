@@ -307,7 +307,6 @@ class TestV1V2Compat:
         """§10.29: Same inputs → same route."""
         r = ModelPortfolioRegistry()
         e = CompositeOrchestrationEngine(r)
-        a = KnowledgeAnchor()
         m = {"objective": "test", "complexity": "medium", "risk_level": "medium"}
         r1 = e.route(dict(m), KnowledgeAnchor())
         r2 = e.route(dict(m), KnowledgeAnchor())

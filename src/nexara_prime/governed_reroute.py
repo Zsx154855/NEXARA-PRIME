@@ -88,9 +88,7 @@ class GovernedRerouteController:
         state = self._get_or_create(mission_id)
         if current_attempts >= 0:
             state.route_attempts = current_attempts
-        if state.route_attempts >= self.MAX_ROUTE_ATTEMPTS:
-            return False
-        return True
+        return state.route_attempts < self.MAX_ROUTE_ATTEMPTS
 
     def record_reroute(
         self,
