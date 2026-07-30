@@ -274,6 +274,8 @@ class MemoryKernel:
         Unverified inferences remain candidates and are never written to canonical memory.
         Safe patches may use the explicit auto policy when backed by evidence.
         """
+        # Normalize kind to MemoryKind enum (accepts strings for backward compat)
+        kind = _safe_memory_kind(kind, MemoryKind.FACT) if isinstance(kind, str) else kind
         # Idempotency check: if this key was already proposed, compare all fields.
         if idempotency_key:
             existing = self.store.find_record_envelope("memory_idempotency", "idempotency_key", idempotency_key)
