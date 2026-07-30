@@ -73,6 +73,8 @@ class SandboxReceipt:
     network_attempts: int = 0
     policy_decisions: list[dict] = field(default_factory=list)
     resource_usage: dict = field(default_factory=dict)
+    sandbox_mechanism: str = ""
+    degraded: bool = False
 
 
 class SandboxBackend(ABC):
@@ -248,6 +250,7 @@ class MacOSSandboxBackend(SandboxBackend):
                         exit_code=proc.returncode,
                         stdout=stdout, stderr=stderr, duration_ms=elapsed,
                         sandbox_profile_hash=_hash_str(profile),
+                        sandbox_mechanism="macos_sandbox",
                     )
                 except subprocess.TimeoutExpired:
                     try:
@@ -264,6 +267,7 @@ class MacOSSandboxBackend(SandboxBackend):
                         timed_out=True, was_killed=True,
                         duration_ms=(time.time() - started) * 1000,
                         error="timeout", sandbox_profile_hash=_hash_str(profile),
+                        sandbox_mechanism="macos_sandbox",
                     )
             except Exception as exc:
                 return SandboxReceipt(
@@ -297,7 +301,9 @@ class ProcessConstrainedBackend(SandboxBackend):
         return SandboxCapability(flags=[WORKSPACE_JAIL_ENFORCED], sandbox_mechanism="workspace_jail")
 
     def execute(self, invocation: SandboxInvocation) -> SandboxReceipt:
-        return _workspace_jail_execute(invocation)
+        receipt = _workspace_jail_execute(invocation)
+        receipt.sandbox_mechanism = "workspace_jail"
+        return receipt
 
 
 class TestSandboxBackend(SandboxBackend):

@@ -239,9 +239,18 @@ class ToolRuntime:
         code = str(arguments.get("code", "print('nexara-prime local execution check')"))
         if len(code) > 4_000:
             raise ValueError("code_payload_too_large")
-        forbidden = ("os.remove", "os.unlink", "shutil.rmtree", "subprocess", "socket", "requests", "httpx", "open('/", "open(\"/", "os.system", "eval(")
+        forbidden = (
+            "os.remove", "os.unlink", "shutil.rmtree", "subprocess", "socket", "requests", "httpx",
+            "pathlib", "Path(", "write_text", "write_bytes", "unlink(", "remove(",
+            "open('/", "open(\"/", "os.system", "eval(",
+        )
         if any(token in code for token in forbidden):
-            raise PermissionError("code_policy_rejected")
+            return {
+                "returncode": 126,
+                "stdout": "",
+                "stderr": "code_policy_rejected",
+                "truncated": False,
+            }
         argv = [os.path.realpath(sys.executable), "-I", "-c", code]
         receipt = self._sandbox_execute(argv, timeout_seconds)
         return {"returncode": receipt.exit_code, "stdout": receipt.stdout, "stderr": receipt.stderr, "truncated": len(receipt.stdout) >= self.MAX_OUTPUT_BYTES or len(receipt.stderr) >= self.MAX_OUTPUT_BYTES}
@@ -272,14 +281,33 @@ class ToolRuntime:
             "PATH": os.environ.get("PATH", ""),
             "NEXARA_ALLOWED_DIRS": ":".join(dict.fromkeys(allowed_dirs)),
         }
-        receipt = self.sandbox.execute(SandboxInvocation(
+        invocation = SandboxInvocation(
             argv=argv,
             cwd=str(self.workspace_root),
             env=env,
             timeout=timeout_seconds,
             max_output_bytes=self.MAX_OUTPUT_BYTES,
             workspace_root=str(self.workspace_root),
-        ))
+        )
+        receipt = self.sandbox.execute(invocation)
+        # Some managed macOS runners expose sandbox-exec but deny sandbox_apply.
+        # Degrade explicitly to the existing workspace jail, never to plain
+        # execution, and leave an audit decision on the returned receipt.
+        os_sandbox_denied = (
+            receipt.exit_code == 71
+            and "sandbox_apply" in receipt.stderr
+            and "Operation not permitted" in receipt.stderr
+        )
+        if os_sandbox_denied:
+            self._fallback_sandbox = self._fallback_sandbox or ProcessConstrainedBackend()
+            receipt = self._fallback_sandbox.execute(invocation)
+            receipt.degraded = True
+            receipt.policy_decisions.append({
+                "decision": "sandbox_degraded_fallback",
+                "from": "macos_sandbox",
+                "to": "workspace_jail",
+                "reason": "sandbox_apply_operation_not_permitted",
+            })
         # posix_spawn failure is now handled in MacOSSandboxBackend
         # by properly including Python.app in the sandbox profile
         if receipt.timed_out:
