@@ -1,0 +1,12 @@
+{
+  "schema": "NEXARA_FIRST_CONTACT_MEMORY_CRUD_PROOF_V1",
+  "results": {
+    "CREATE": "memory_eca919fff2d9",
+    "INSPECT": 3,
+    "EXPORT": true,
+    "CORRECT": true,
+    "AUDIT_PRESERVED": true,
+    "DELETE_SOFT": true
+  },
+  "all_pass": true
+}
