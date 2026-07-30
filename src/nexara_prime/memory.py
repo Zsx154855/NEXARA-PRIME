@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .db import SQLiteStore
 from .events import EventBus
@@ -65,7 +65,7 @@ class PatchReview:
 
 
 
-def _safe_memory_kind(kind_str: str, default: "MemoryKind" = None) -> "MemoryKind":
+def _safe_memory_kind(kind_str: str, default: MemoryKind = None) -> MemoryKind:
     '''Parse MemoryKind safely, falling back to default on bad input.'''
     from .models import MemoryKind
     try:
@@ -74,7 +74,7 @@ def _safe_memory_kind(kind_str: str, default: "MemoryKind" = None) -> "MemoryKin
         return default or MemoryKind.FACT
 
 class MemoryKernel:
-    def __init__(self, store: SQLiteStore, events: EventBus, evidence: "EvidenceStore | None" = None):
+    def __init__(self, store: SQLiteStore, events: EventBus, evidence: EvidenceStore | None = None):
         self.store = store
         self.events = events
         self.evidence = evidence
@@ -364,7 +364,7 @@ class MemoryLayerManager:
     def __init__(
         self,
         kernel: MemoryKernel,
-        rag: "RAGPipeline | None" = None,
+        rag: RAGPipeline | None = None,
         *,
         enable_patch_review: bool = True,
         auto_clear_working: bool = True,

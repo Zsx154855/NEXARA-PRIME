@@ -776,7 +776,7 @@ class SoulKernel:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "SoulKernel":
+    def from_dict(cls, data: dict[str, Any]) -> SoulKernel:
         """Restore Soul from persisted state after restart."""
         soul = cls(owner_id=data.get("_owner_id", ""))
         soul._learned_character = list(data.get("learned_character", []))
