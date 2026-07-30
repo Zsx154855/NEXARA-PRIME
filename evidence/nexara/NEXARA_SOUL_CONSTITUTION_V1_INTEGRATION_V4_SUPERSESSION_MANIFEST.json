@@ -1,0 +1,27 @@
+{
+  "schema_version": "4.0",
+  "artifact": "NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_SUPERSESSION_MANIFEST",
+  "supersedes": [
+    "NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_EVIDENCE_V1",
+    "NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_EVIDENCE_V2",
+    "NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_EVIDENCE_V3"
+  ],
+  "preserves": [
+    "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_EVIDENCE_V3.json",
+    "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_RECEIPT_V3.json",
+    "reports/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V3_REPORT.md"
+  ],
+  "replacement": {
+    "evidence": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_EVIDENCE_V4.json",
+    "receipt": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_RECEIPT_V4.json",
+    "report": "reports/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_REPORT.md"
+  },
+  "base_sha": "f200082f18fcc37e1e16453f01889d1ef2fd4d73",
+  "acceptance_head": "b5a271774bf87065f2193aa79778e00728979717",
+  "tested_head": "b5a271774bf87065f2193aa79778e00728979717",
+  "artifact_head": "b5a271774bf87065f2193aa79778e00728979717",
+  "tree_sha": "daa6558c0e4b6d866eb7e65390f81d97585c0529",
+  "allowlist_sha256": "dd702a8d0ca9debce72a68e1f6695e0e4f2e6a7faa1f241069a05ca6213c743d",
+  "new_regressions": 0,
+  "generated_at_utc": "2026-07-30T09:58:15Z"
+}

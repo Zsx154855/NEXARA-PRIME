@@ -1,0 +1,134 @@
+{
+  "schema_version": "4.0",
+  "artifact": "NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_EVIDENCE_V4",
+  "final_result": "PASS",
+  "base_sha": "f200082f18fcc37e1e16453f01889d1ef2fd4d73",
+  "acceptance_head": "b5a271774bf87065f2193aa79778e00728979717",
+  "tested_head": "b5a271774bf87065f2193aa79778e00728979717",
+  "artifact_head": "b5a271774bf87065f2193aa79778e00728979717",
+  "artifact_commit_status": "PENDING_EVIDENCE_COMMIT",
+  "tree_sha": "daa6558c0e4b6d866eb7e65390f81d97585c0529",
+  "allowlist": [
+    "constitution/NEXARA_SOUL_CONSTITUTION_V1.md",
+    "contracts/nexara/NEXARA_SOUL_CONSTITUTION_V1.json",
+    "src/nexara_prime/__init__.py",
+    "src/nexara_prime/brain/kernel.py",
+    "src/nexara_prime/brain/long_term_memory.py",
+    "src/nexara_prime/brain/reasoning/kernel.py",
+    "src/nexara_prime/soul.py",
+    "tests/brain/phase2a/test_knowledge_graph.py",
+    "tests/test_soul_kernel.py"
+  ],
+  "allowlist_sha256": "dd702a8d0ca9debce72a68e1f6695e0e4f2e6a7faa1f241069a05ca6213c743d",
+  "new_regressions": 0,
+  "source_commits": [
+    "4e42d7e3a414964856fe1086cd19f59dd5d4900e",
+    "9c60a6b8f2cc631735fcb26f170ebd20b6623798",
+    "86d512eb07bb8e532ed894a6595b4d355562c212"
+  ],
+  "remote_facts": {
+    "pr32_state": "OPEN",
+    "pr32_head": "86d512eb07bb8e532ed894a6595b4d355562c212",
+    "remote_verification": "LIVE_CONNECTOR_VERIFIED",
+    "baseline_pr": 33,
+    "baseline_pr_state": "OPEN_CI_QUEUED"
+  },
+  "test_runs": [
+    {
+      "name": "soul_tests",
+      "command": "env -u PYTHONPATH PYTHONPATH=src:platform/sdk/python .venv/bin/python -m pytest tests/test_soul_kernel.py -q",
+      "exit_code": 0,
+      "actual": "8 passed",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    },
+    {
+      "name": "full_suite",
+      "command": "env -u PYTHONPATH PYTHONPATH=src:platform/sdk/python .venv/bin/python -m pytest -q",
+      "exit_code": 0,
+      "actual": "1614 passed, 3 subtests passed",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    },
+    {
+      "name": "sdk_wire_truth_g4_security",
+      "command": "... pytest tests/test_sdk_contract.py tests/test_wire_truth_enums.py tests/test_g4_tool_runtime.py tests/test_security_hardening.py -q",
+      "exit_code": 0,
+      "actual": "143 passed",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    },
+    {
+      "name": "canonical_ruff",
+      "command": "ruff check src tests platform/sdk/python",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    },
+    {
+      "name": "json_schema_shape",
+      "command": "json.tool over contracts schemas platform/sdk/**/*.json",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    },
+    {
+      "name": "contract_runtime_alignment",
+      "command": "SoulKernel constitution vs NEXARA_SOUL_CONSTITUTION_V1.json",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    },
+    {
+      "name": "nsec_validate",
+      "command": "python scripts/governance/validate_nsec.py",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    },
+    {
+      "name": "nsec_drift",
+      "command": "python scripts/governance/detect_nsec_drift.py",
+      "exit_code": 0,
+      "actual": "PASS",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    },
+    {
+      "name": "secret_scan",
+      "command": "python scripts/security/scan_hardcoded_secrets.py",
+      "exit_code": 0,
+      "actual": "CLEAN",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    },
+    {
+      "name": "install_import_compile",
+      "command": "compileall plus direct repository imports",
+      "exit_code": 0,
+      "actual": "IMPORT_PASS; compileall PASS",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    },
+    {
+      "name": "changed_file_allowlist",
+      "command": "git diff --check f200082f18fcc37e1e16453f01889d1ef2fd4d73...HEAD and allowlist audit",
+      "exit_code": 0,
+      "actual": "9 files, all scoped",
+      "observed_at_utc": "2026-07-30T09:58:15Z"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "reports/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_REPORT.md",
+      "size": 1873,
+      "sha256": "3151f0ca551bdc0a87f941ff0319ebf5519158971ce630e493633fe2184e9510"
+    },
+    {
+      "path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_SUPERSESSION_MANIFEST.json",
+      "size": 1321,
+      "sha256": "a6bc975593b70d52ab1fcc362f34baa05b9dd07afa7d2c018985f0ee86872247"
+    }
+  ],
+  "cross_reference": {
+    "receipt_path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_RECEIPT_V4.json",
+    "report_path": "reports/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_REPORT.md",
+    "supersession_manifest_path": "evidence/nexara/NEXARA_SOUL_CONSTITUTION_V1_INTEGRATION_V4_SUPERSESSION_MANIFEST.json",
+    "baseline_repair_receipt_path": "evidence/nexara/NEXARA_MAIN_BASELINE_REPAIR_RECEIPT_V1.json"
+  },
+  "generated_at_utc": "2026-07-30T09:58:15Z"
+}
