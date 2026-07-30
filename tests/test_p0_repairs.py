@@ -72,7 +72,7 @@ class ApprovalBindingTests(unittest.TestCase):
 
     def test_agent_identity_first_party_defaults(self):
         """G1: AgentIdentity must carry first-party defaults — not model-dependent."""
-        from nexara_prime.identity import AgentIdentity, AGENT_DEFAULT_PERMISSIONS
+        from nexara_prime.identity import AGENT_DEFAULT_PERMISSIONS, AgentIdentity
         aid = AgentIdentity()
         self.assertEqual(aid.agent_id, "nexara_prime.agent")
         self.assertEqual(aid.display_name, "NEXARA")
@@ -170,8 +170,9 @@ class SandboxEscapeTests(unittest.TestCase):
         self.assertFalse(ok)
 
     def test_macos_sandbox_probe(self):
-        from nexara_prime.sandbox_v2 import MacOSSandboxBackend, OS_SANDBOX_CAPABLE
         import platform
+
+        from nexara_prime.sandbox_v2 import OS_SANDBOX_CAPABLE, MacOSSandboxBackend
         sb = MacOSSandboxBackend(self.tmpdir)
         cap = sb.probe_capability()
         if platform.system() == "Darwin":

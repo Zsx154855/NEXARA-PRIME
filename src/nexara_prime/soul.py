@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 from .models import new_id, now_iso
 
@@ -324,11 +325,12 @@ class SoulKernel:
         # P1: Verify evidence integrity via EvidenceStore before accepting
         # Graceful: if store unavailable, accept but log (defense in depth)
         try:
-            from .evidence import EvidenceStore
-            from .db import SQLiteStore
-            from .events import EventBus
             import os
             from pathlib import Path
+
+            from .db import SQLiteStore
+            from .events import EventBus
+            from .evidence import EvidenceStore
             db_path = os.environ.get("NEXARA_DB_PATH", "nexara.db")
             store = SQLiteStore(path=Path(db_path))
             evidence_store = EvidenceStore(store, EventBus(store))
