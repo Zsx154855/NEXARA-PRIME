@@ -1,0 +1,31 @@
+{
+  "schema": "NEXARA_HERMES_SELF_REVIEW_V1",
+  "id": "hermes_v2_composite_review_859a8bdc",
+  "timestamp": "2026-07-30T16:56:17.029674Z",
+  "reviewer": "hermes_governance",
+  "subject_head": "859a8bdc24811c7bbea401bb23a99433bddfecbd",
+  "baseline_head": "aea49f4ab812eb54936dea459c0bffc607f96b69",
+  "verdict": {
+    "overall": "PASS",
+    "architecture": "SOUND",
+    "safety": "VERIFIED",
+    "human_sovereignty": "PRESERVED",
+    "code_quality": "CLEAN"
+  },
+  "findings": {
+    "p0": [],
+    "p1": [],
+    "p2": []
+  },
+  "checks": {
+    "all_imports_clean": true,
+    "ruff_clean": true,
+    "nsec_pass": true,
+    "secret_scan_clean": true,
+    "full_suite_1644_pass": true,
+    "v1_compatibility": true,
+    "v2_opt_in_only": true,
+    "new_regressions": 0,
+    "system_tests_302_pass": true
+  }
+}

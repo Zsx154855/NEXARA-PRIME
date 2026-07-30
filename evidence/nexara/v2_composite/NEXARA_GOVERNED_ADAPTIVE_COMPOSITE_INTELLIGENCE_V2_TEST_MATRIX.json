@@ -1,0 +1,19 @@
+{
+  "schema": "NEXARA_GOVERNED_ADAPTIVE_COMPOSITE_INTELLIGENCE_V2_TEST_MATRIX_V2",
+  "id": "v2_test_matrix_756c3b52a389",
+  "timestamp": "2026-07-30T18:24:04.499445Z",
+  "total_tests": 72,
+  "passed": 72,
+  "failed": 0,
+  "categories": {
+    "portfolio": 3,
+    "profiler": 4,
+    "anchor": 5,
+    "prompt": 3,
+    "orchestration": 4,
+    "evaluation": 2,
+    "reroute": 2,
+    "compat": 7,
+    "regression": 42
+  }
+}

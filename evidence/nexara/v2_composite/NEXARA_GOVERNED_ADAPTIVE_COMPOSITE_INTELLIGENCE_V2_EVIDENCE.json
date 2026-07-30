@@ -1,0 +1,29 @@
+{
+  "schema": "NEXARA_GOVERNED_ADAPTIVE_COMPOSITE_INTELLIGENCE_V2_EVIDENCE_V2",
+  "id": "v2_composite_final_756c3b52a389",
+  "timestamp": "2026-07-30T18:24:04.499445Z",
+  "binding": {
+    "code_acceptance_head": "756c3b52a389d291da473c4655f80d0c60935576",
+    "code_acceptance_tree": "fatal: path '{tree}' does not exist in 'HEAD'\nHEAD:{tree}",
+    "base_head": "aea49f4ab812eb54936dea459c0bffc607f96b69",
+    "pr": 35,
+    "branch": "work/nexara-governed-adaptive-composite-intelligence-v2"
+  },
+  "test_results": {
+    "full_suite_passed": 1686,
+    "full_suite_subtests": 3,
+    "full_suite_exit": 0,
+    "v2_tests": "72/72 PASS",
+    "adaptive_runtime": "121/121 PASS",
+    "new_regressions": 0
+  },
+  "quality_gates": {
+    "ruff": "CLEAN",
+    "nsec": "PASS",
+    "secret_scan": "CLEAN",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0
+  },
+  "verdict": "PASS"
+}

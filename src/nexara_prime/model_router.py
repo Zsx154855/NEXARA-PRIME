@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from .models import ModelRoutingDecision, now_iso
 
-
 # ── Provider definitions ─────────────────────────────────────────────────────
 
 
@@ -82,7 +81,9 @@ class CircuitBreaker:
         failure_threshold: int | None = None,
         cooldown_seconds: float | None = None,
     ) -> None:
-        self._threshold = failure_threshold if failure_threshold is not None else threshold
+        self._threshold = (
+            failure_threshold if failure_threshold is not None else threshold
+        )
         if cooldown_seconds is not None:
             if cooldown_seconds < 0:
                 raise ValueError(
@@ -102,7 +103,6 @@ class CircuitBreaker:
         state = self._get(provider)
         if not state.open:
             return False
-        # Auto-reset after timeout
         if time.monotonic() - state.opened_at >= self._timeout_s:
             state.open = False
             state.failure_count = 0
@@ -121,21 +121,22 @@ class CircuitBreaker:
             state.open = True
             state.opened_at = time.monotonic()
 
-    # ── Backward-compatible aliases (Phase 2: model_gateway CB migration) ──
+    def get_state(self, provider: str) -> CircuitBreakerState:
+        return self._get(provider)
+
+    # ── Backward-compatible aliases ──
 
     _DEFAULT_PROVIDER = "default"
 
     def failure(self) -> None:
-        """Backward-compat: deprecated, use record_failure(provider)."""
         self.record_failure(self._DEFAULT_PROVIDER)
 
     def success(self) -> None:
-        """Backward-compat: deprecated, use record_success(provider)."""
         self.record_success(self._DEFAULT_PROVIDER)
 
     def before_call(self) -> None:
-        """Backward-compat: deprecated, use is_open(provider) check."""
         from .model_gateway import ProviderUnavailable
+
         if self.is_open(self._DEFAULT_PROVIDER):
             raise ProviderUnavailable("provider_circuit_open")
 
@@ -144,32 +145,41 @@ class CircuitBreaker:
 
 
 class ModelRouter:
-    """Routes mission requests to the most appropriate model provider based on
-    complexity, risk, context size, latency targets, and token budget.
+    """Routes mission requests via V1 (direct) or V2 (Governed Adaptive Composite).
 
-    Supports three providers: `mock`, `deepseek-v4-flash`, `deepseek-v4-pro`.
-    Uses a circuit breaker to fall back when providers are failing.
+    V1: Uses tier-based routing with CircuitBreaker.
+    V2: Uses CompositeOrchestrationEngine with Portfolio, Profiler, Reroute.
 
-    Rules:
-      - S0 / S1 missions default to flash (or mock when no budget).
-      - S2 / S3 missions default to pro.
-      - Context > 64K tokens forces pro.
-      - Latency target < 2000 ms forces flash.
-      - Circuit breaker redirects to fallback when primary is open.
-
-    Usage::
-
-        router = ModelRouter()
-        decision = router.route("mission-001", complexity=0.1, risk=0.1, ...)
-        # ... call provider ...
-        router.track_result(decision.selected_provider, success=True, ...)
+    Backward-compatible: All V1 callers continue to work.
+    Enable V2 with: router = ModelRouter(use_composite_v2=True)
     """
 
-    def __init__(self, circuit_breaker_threshold: int = 3, circuit_breaker_timeout_s: int = 60, breaker: CircuitBreaker | None = None) -> None:
-        self.breaker = breaker if breaker is not None else CircuitBreaker(
-            threshold=circuit_breaker_threshold,
-            timeout_s=circuit_breaker_timeout_s,
+    def __init__(
+        self,
+        circuit_breaker_threshold: int = 3,
+        circuit_breaker_timeout_s: int = 60,
+        breaker: CircuitBreaker | None = None,
+        *,
+        use_composite_v2: bool = False,
+    ) -> None:
+        self.breaker = (
+            breaker
+            if breaker is not None
+            else CircuitBreaker(
+                threshold=circuit_breaker_threshold,
+                timeout_s=circuit_breaker_timeout_s,
+            )
         )
+        self._v2_enabled = use_composite_v2
+        self._reroute_controller = None  # type: ignore
+        if use_composite_v2:
+            from .composite_orchestration import CompositeOrchestrationEngine
+            from .governed_reroute import GovernedRerouteController
+            from .model_portfolio_registry import ModelPortfolioRegistry
+
+            self._portfolio = ModelPortfolioRegistry()
+            self._orchestrator = CompositeOrchestrationEngine(self._portfolio)
+            self._reroute_controller = GovernedRerouteController()
 
     # ── Available providers ──────────────────────────────────────────────────
 
@@ -187,62 +197,103 @@ class ModelRouter:
         context_size: int,
         latency_target_ms: int,
         token_budget: int,
-        provider_health: dict[str, bool] | None = None,  # external liveness
+        provider_health: dict[str, bool] | None = None,
     ) -> ModelRoutingDecision:
         """Select the best model provider for the given mission parameters.
 
-        Parameters
-        ----------
-        mission_id : str
-            Unique mission identifier.
-        complexity : float
-            Complexity score from MissionTriageEngine (0.0–1.0).
-        risk : float
-            Risk score from MissionTriageEngine (0.0–1.0).
-        context_size : int
-            Estimated context size in tokens.
-        latency_target_ms : int
-            Maximum acceptable latency in milliseconds.
-        token_budget : int
-            Total token budget allocated to the mission.
-        provider_health : dict[str, bool] | None
-            External liveness check per provider (True = healthy).  When
-            provided, unhealthy providers are skipped even if the breaker is
-            closed.
-
-        Returns
-        -------
-        ModelRoutingDecision with the selected provider and fallback info.
+        When use_composite_v2=True, dispatches through V2 orchestrator.
         """
-        # 1. Determine the preferred tier from mission characteristics
-        preferred_tier = self._choose_tier(complexity, risk, context_size, latency_target_ms)
+        # ── V2 path: route through composite orchestrator ──
+        if self._v2_enabled:
+            mission = {
+                "mission_id": mission_id,
+                "objective": f"complexity={complexity:.2f},risk={risk:.2f}",
+                "complexity": self._map_complexity(complexity),
+                "risk_level": self._map_risk(risk),
+                "context_size": context_size,
+                "latency_target_ms": latency_target_ms,
+                "token_budget": token_budget,
+                "provider_health": provider_health or {},
+            }
+            # Apply provider_health to portfolio before routing
+            if provider_health:
+                for pname, healthy in provider_health.items():
+                    if not healthy:
+                        try:
+                            from .model_portfolio_registry import ModelHealth
+                            self._portfolio.update_health(pname, ModelHealth.UNHEALTHY)
+                        except (KeyError, ValueError):
+                            pass
+            from .knowledge_anchor import KnowledgeAnchor
 
-        # 2. Rank providers by tier match, cost, and latency
-        candidates = self._rank_candidates(preferred_tier, context_size, latency_target_ms)
+            anchors = KnowledgeAnchor()
+            result = self._orchestrator.route(mission, anchors)
+            # Sync circuit breaker state into portfolio health
+            self._sync_breaker_to_portfolio()
+            # P1-01: HUMAN_ESCALATION must NOT become Mock RoutingDecision
+            if result.mode.value == "HUMAN_ESCALATION":
+                return ModelRoutingDecision(
+                    mission_id=mission_id,
+                    selected_provider="",
+                    selected_model="",
+                    reason=f"V2 HUMAN_ESCALATION: {result.reason}",
+                    alternatives=[],
+                    estimated_tokens=0,
+                    estimated_cost=0.0,
+                    fallback="",
+                    created_at=now_iso(),
+                )
+            provider = result.primary_entry.provider if result.primary_entry else ""
+            model = result.primary_entry.model_name if result.primary_entry else ""
+            if not provider:
+                return ModelRoutingDecision(
+                    mission_id=mission_id,
+                    selected_provider="",
+                    selected_model="",
+                    reason=f"V2 routing failed — no provider: {result.reason}",
+                    alternatives=[],
+                    estimated_tokens=0,
+                    estimated_cost=0.0,
+                    fallback="",
+                    created_at=now_iso(),
+                )
+            return ModelRoutingDecision(
+                mission_id=mission_id,
+                selected_provider=provider,
+                selected_model=model,
+                reason=f"V2 {result.mode.value}: {result.reason}",
+                alternatives=[],
+                estimated_tokens=token_budget,
+                estimated_cost=0.0,
+                fallback="",
+                created_at=now_iso(),
+            )
 
-        # 3. Apply circuit breaker and health checks, pick the first healthy
+        # ── V1 path (original) ──
+        preferred_tier = self._choose_tier(
+            complexity, risk, context_size, latency_target_ms
+        )
+        candidates = self._rank_candidates(
+            preferred_tier, context_size, latency_target_ms
+        )
         primary, fallback = self._select_healthy(
             candidates, provider_health or {},
         )
-
-        # 4. Rough cost estimate
-        estimated_tokens = min(token_budget, context_size + 4000)  # assume ~4K output
+        estimated_tokens = min(token_budget, context_size + 4000)
         estimated_cost = self._estimate_cost(primary, estimated_tokens)
-
         alternatives = [
             {"provider": p.name, "model": p.model_name, "tier": p.tier}
             for p in candidates[:5]
             if p.name != primary.name
         ]
-
-        record = ModelRoutingDecision(
+        return ModelRoutingDecision(
             mission_id=mission_id,
             selected_provider=primary.name,
             selected_model=primary.model_name,
             reason=(
-                f"Tier={preferred_tier}, complexity={complexity:.2f}, risk={risk:.2f}, "
-                f"context={context_size}, latency_target={latency_target_ms}ms → "
-                f"selected {primary.name}"
+                f"Tier={preferred_tier}, complexity={complexity:.2f}, "
+                f"risk={risk:.2f}, context={context_size}, "
+                f"latency_target={latency_target_ms}ms → selected {primary.name}"
             ),
             alternatives=alternatives,
             estimated_tokens=estimated_tokens,
@@ -250,7 +301,45 @@ class ModelRouter:
             fallback=fallback.name if fallback else "",
             created_at=now_iso(),
         )
-        return record
+
+    # ── V1-V2 mapping helpers ────────────────────────────────────────────────
+
+    @staticmethod
+    def _map_complexity(score: float) -> str:
+        if score >= 0.7:
+            return "high"
+        if score >= 0.4:
+            return "medium"
+        return "low"
+
+    @staticmethod
+    def _map_risk(score: float) -> str:
+        if score >= 0.8:
+            return "R4"
+        if score >= 0.6:
+            return "R3"
+        if score >= 0.4:
+            return "R2"
+        if score >= 0.2:
+            return "R1"
+        return "R0"
+
+    def _sync_breaker_to_portfolio(self) -> None:
+        """Sync CircuitBreaker open state into portfolio health. Restore when closed."""
+        if not self._v2_enabled:
+            return
+        from .model_portfolio_registry import ModelHealth
+        for provider_name in _PROVIDERS:
+            try:
+                if self.breaker.is_open(provider_name):
+                    self._portfolio.update_health(provider_name, ModelHealth.UNHEALTHY)
+                else:
+                    # Restore health when breaker closes
+                    entry = self._portfolio.get(provider_name)
+                    if entry and entry.health == ModelHealth.UNHEALTHY:
+                        self._portfolio.update_health(provider_name, ModelHealth.HEALTHY)
+            except (KeyError, ValueError):
+                pass
 
     # ── Track result ─────────────────────────────────────────────────────────
 
@@ -261,14 +350,12 @@ class ModelRouter:
         latency_ms: int,
         tokens: int,
     ) -> None:
-        """Report a provider result so the circuit breaker can update its state.
-
-        Call this after each model invocation.
-        """
         if success:
             self.breaker.record_success(provider)
         else:
             self.breaker.record_failure(provider)
+        # Sync breaker state into V2 portfolio if enabled
+        self._sync_breaker_to_portfolio()
 
     # ── Internal helpers ─────────────────────────────────────────────────────
 
@@ -279,14 +366,6 @@ class ModelRouter:
         context_size: int,
         latency_target_ms: int,
     ) -> str:
-        """Choose 'flash' or 'pro' based on mission characteristics.
-
-        Rules (in priority order):
-          1. context_size > 64K → pro
-          2. latency_target < 2000 ms → flash
-          3. complexity >= 0.4 or risk >= 0.4 → pro
-          4. default → flash
-        """
         if context_size > 64_000:
             return "pro"
         if latency_target_ms < 2000:
@@ -301,8 +380,6 @@ class ModelRouter:
         context_size: int,
         latency_target_ms: int,
     ) -> list[ProviderInfo]:
-        """Rank supported providers: exact tier match first, then cost
-        ascending, then latency ascending."""
         candidates = list(_PROVIDERS.values())
 
         def sort_key(p: ProviderInfo) -> tuple:
@@ -319,36 +396,82 @@ class ModelRouter:
         candidates: list[ProviderInfo],
         health: dict[str, bool],
     ) -> tuple[ProviderInfo, ProviderInfo | None]:
-        """Pick the first candidate that is neither circuit-broken nor
-        externally unhealthy.  Returns (primary, fallback)."""
         primary: ProviderInfo | None = None
         fallback: ProviderInfo | None = None
-
         for p in candidates:
-            # Check external health (if provided)
             if health and p.name in health and not health[p.name]:
                 if fallback is None:
                     fallback = p
                 continue
-            # Check circuit breaker
             if self.breaker.is_open(p.name):
                 if fallback is None:
                     fallback = p
                 continue
-            # Healthy
             if primary is None:
                 primary = p
             elif fallback is None:
                 fallback = p
-
-        # If no healthy candidate found at all, fall back to mock
         if primary is None:
             primary = _PROVIDERS["mock"]
         return primary, fallback
 
     @staticmethod
     def _estimate_cost(provider: ProviderInfo, tokens: int) -> float:
-        """Rough per-invocation cost estimate (input + output * 1K ratio)."""
         input_cost = (tokens / 1000.0) * provider.cost_per_1k_input_tokens
         output_cost = ((tokens * 0.25) / 1000.0) * provider.cost_per_1k_output_tokens
         return round(input_cost + output_cost, 8)
+
+    # ── V2 Governed Adaptive Composite ────────────────────────────────────────
+
+    def route_v2(
+        self, mission: dict, anchors=None, force_mode: str = ""
+    ):
+        """Route via composite orchestration engine. Returns RouteResult."""
+        if not self._v2_enabled:
+            # V1 fallback: map mission dict to V1 route() parameters
+            try:
+                return self.route(
+                    mission_id=mission.get("mission_id", "v1-fallback"),
+                    complexity={
+                        "trivial": 0.1, "low": 0.2, "medium": 0.5,
+                        "high": 0.7, "extreme": 0.9,
+                    }.get(mission.get("complexity", "medium"), 0.5),
+                    risk={
+                        "R0": 0.05, "R1": 0.25, "R2": 0.5,
+                        "R3": 0.75, "R4": 0.95,
+                        "none": 0.05, "low": 0.2, "medium": 0.5,
+                        "high": 0.8, "critical": 0.95,
+                    }.get(mission.get("risk_level", "medium"), 0.5),
+                    context_size=mission.get("context_size", 0) or 0,
+                    latency_target_ms=mission.get("latency_target_ms", 0) or 10_000,
+                    token_budget=mission.get("token_budget", 100_000),
+                )
+            except (TypeError, ValueError, KeyError):
+                from .models import ModelRoutingDecision
+                return ModelRoutingDecision(
+                    mission_id=mission.get("mission_id", "error"),
+                    selected_provider="mock",
+                    selected_model="mock",
+                    reason="V1 fallback failed — explicit reject",
+                    created_at=now_iso(),
+                )
+        from .knowledge_anchor import KnowledgeAnchor
+
+        if anchors is None:
+            anchors = KnowledgeAnchor()
+        # Mandatory governance anchors check
+        if not anchors.has_mandatory_anchors():
+            from .composite_orchestration import OrchestrationMode, RouteResult
+            return RouteResult(
+                mode=OrchestrationMode.HUMAN_ESCALATION,
+                reason="Missing mandatory governance anchors — fail closed",
+            )
+        return self._orchestrator.route(mission, anchors, force_mode)
+
+    @property
+    def v2_enabled(self) -> bool:
+        return self._v2_enabled
+
+    @property
+    def portfolio(self):
+        return self._portfolio if self._v2_enabled else None

@@ -1,0 +1,13 @@
+{
+  "schema": "NEXARA_GOVERNED_ADAPTIVE_COMPOSITE_INTELLIGENCE_V2_RECEIPT_V2",
+  "id": "v2_composite_receipt_756c3b52a389",
+  "timestamp": "2026-07-30T18:24:04.499445Z",
+  "code_acceptance_head": "756c3b52a389d291da473c4655f80d0c60935576",
+  "code_acceptance_tree": "fatal: path '{tree}' does not exist in 'HEAD'\nHEAD:{tree}",
+  "base_head": "aea49f4ab812eb54936dea459c0bffc607f96b69",
+  "pr": 35,
+  "evidence_id": "v2_composite_final_756c3b52a389",
+  "evidence_sha256": "e9352379d09bcbeda996188f9f2c1c1caded60379de0fe806368b8f0b9d61bd1",
+  "test_summary": "1686/1686 PASS, 0 regressions",
+  "verdict": "PASS"
+}
