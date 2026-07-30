@@ -239,9 +239,32 @@ class ToolRuntime:
         code = str(arguments.get("code", "print('nexara-prime local execution check')"))
         if len(code) > 4_000:
             raise ValueError("code_payload_too_large")
-        forbidden = ("os.remove", "os.unlink", "shutil.rmtree", "subprocess", "socket", "requests", "httpx", "open('/", "open(\"/", "os.system", "eval(")
+        forbidden = (
+            "os.remove",
+            "os.unlink",
+            "shutil.rmtree",
+            "subprocess",
+            "socket",
+            "requests",
+            "httpx",
+            "pathlib",
+            "Path(",
+            "write_text",
+            "write_bytes",
+            "unlink(",
+            "remove(",
+            "open('/",
+            "open(\"/",
+            "os.system",
+            "eval(",
+        )
         if any(token in code for token in forbidden):
-            raise PermissionError("code_policy_rejected")
+            return {
+                "returncode": 126,
+                "stdout": "",
+                "stderr": "code_policy_rejected",
+                "truncated": False,
+            }
         argv = [os.path.realpath(sys.executable), "-I", "-c", code]
         receipt = self._sandbox_execute(argv, timeout_seconds)
         return {"returncode": receipt.exit_code, "stdout": receipt.stdout, "stderr": receipt.stderr, "truncated": len(receipt.stdout) >= self.MAX_OUTPUT_BYTES or len(receipt.stderr) >= self.MAX_OUTPUT_BYTES}
