@@ -244,33 +244,143 @@ class TestAutonomousGovernance:
         result = ae.authorize("R0", "executor", "read_file")
         assert result["approval_level"] == "auto"
         assert result["authorized"] is True
+        assert result["can_execute"] is True
+
+    def test_authority_r1_auto(self) -> None:
+        ae = AuthorityEngine()
+        result = ae.authorize("R1", "executor", "run_tests")
+        assert result["authorized"] is True
+
+    def test_authority_r2_fail_closed(self) -> None:
+        """P0: R2 requires approved decision — default is unauthorized."""
+        ae = AuthorityEngine()
+        result = ae.authorize("R2", "executor", "modify_config")
+        assert result["authorized"] is False
+        assert result["can_plan"] is True
+        assert result["can_execute"] is False
+
+    def test_authority_r3_fail_closed(self) -> None:
+        """P0: R3 requires human approval — default is unauthorized."""
+        ae = AuthorityEngine()
+        result = ae.authorize("R3", "executor", "deploy")
+        assert result["authorized"] is False
+        assert result["requires_human"] is True
+        assert result["can_execute"] is False
 
     def test_authority_r4_blocked(self) -> None:
         ae = AuthorityEngine()
         result = ae.authorize("R4", "executor", "delete_production")
         assert result["authorized"] is False
+        assert result["can_plan"] is False
+        assert result["can_execute"] is False
+
+    def test_approval_request_pending_not_authorized(self) -> None:
+        """P0: request() creates PENDING decision — authorized=False."""
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-1", "proj-1", "R3", "deploy", resource="main")
+        assert d.authorized is False
+        assert d.status == "pending"
 
     def test_approval_request_and_approve(self) -> None:
         ao = ApprovalOrchestrator()
-        d = ao.request("mis-1", "R3", "deploy")
-        assert d.approval_level == ApprovalLevel.HUMAN
+        d = ao.request("mis-1", "proj-1", "R3", "deploy", resource="main")
         a = ao.approve(d.decision_id, "admin")
         assert a is not None
         assert a.authorized is True
+        assert a.status == "approved"
 
     def test_approval_reject(self) -> None:
         ao = ApprovalOrchestrator()
-        d = ao.request("mis-1", "R2", "modify")
+        d = ao.request("mis-1", "proj-1", "R2", "modify", resource="config")
         r = ao.reject(d.decision_id, "too risky")
         assert r is not None
         assert r.authorized is False
+        assert r.status == "rejected"
 
-    def test_policy_runtime_allowed(self) -> None:
+    def test_approval_revoked(self) -> None:
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-1", "proj-1", "R3", "deploy", resource="main")
+        ao.approve(d.decision_id, "admin")
+        rv = ao.revoke(d.decision_id)
+        assert rv is not None
+        assert rv.authorized is False
+
+    def test_verify_mission_mismatch(self) -> None:
+        """P0: verify fails when mission_id doesn't match."""
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-A", "proj-1", "R3", "deploy")
+        ao.approve(d.decision_id, "admin")
+        result = ao.verify(d.decision_id, mission_id="mis-B", project_id="proj-1", action="deploy")
+        assert result["authorized"] is False
+        assert "mission_id_mismatch" in result["reason"]
+
+    def test_verify_project_mismatch(self) -> None:
+        """P0: verify fails when project_id doesn't match."""
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-1", "proj-A", "R3", "deploy")
+        ao.approve(d.decision_id, "admin")
+        result = ao.verify(d.decision_id, mission_id="mis-1", project_id="proj-B", action="deploy")
+        assert result["authorized"] is False
+
+    def test_verify_action_mismatch(self) -> None:
+        """P0: verify fails when action doesn't match."""
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-1", "proj-1", "R3", "deploy")
+        ao.approve(d.decision_id, "admin")
+        result = ao.verify(d.decision_id, mission_id="mis-1", project_id="proj-1", action="delete")
+        assert result["authorized"] is False
+
+    def test_verify_consumed_replay_blocked(self) -> None:
+        """P0: consumed decision cannot be replayed."""
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-1", "proj-1", "R3", "deploy")
+        ao.approve(d.decision_id, "admin")
+        ao.consume(d.decision_id)
+        result = ao.verify(d.decision_id, mission_id="mis-1", project_id="proj-1", action="deploy")
+        assert result["authorized"] is False
+
+    def test_verify_nonexistent_decision(self) -> None:
+        """P0: nonexistent decision is not authorized."""
+        ao = ApprovalOrchestrator()
+        result = ao.verify("nonexistent", mission_id="mis-1", project_id="proj-1", action="deploy")
+        assert result["authorized"] is False
+
+    def test_policy_r0_allowed(self) -> None:
         pr = PolicyRuntime()
-        result = pr.enforce("R1", "read_file", ["read_file", "write_file"], ["deploy"])
+        result = pr.enforce("R0", "read_file", ["read_file", "write_file"], ["deploy"])
         assert result["allowed"] is True
 
-    def test_policy_runtime_forbidden(self) -> None:
+    def test_policy_r2_blocked_without_decision(self) -> None:
+        """P0: R2 requires decision_id — blocked without it."""
+        pr = PolicyRuntime()
+        result = pr.enforce("R2", "modify", ["modify"], [])
+        assert result["allowed"] is False
+        assert "missing_decision_id" in result["reason"]
+
+    def test_policy_r3_blocked_without_decision(self) -> None:
+        """P0: R3 requires decision_id — blocked without it."""
+        pr = PolicyRuntime()
+        result = pr.enforce("R3", "deploy", ["deploy"], [])
+        assert result["allowed"] is False
+
+    def test_policy_r3_allowed_with_valid_decision(self) -> None:
+        """P0: R3 with valid approved decision is allowed."""
+        ao = ApprovalOrchestrator()
+        pr = PolicyRuntime()
+        pr.bind_orchestrator(ao)
+        d = ao.request("mis-1", "proj-1", "R3", "deploy")
+        ao.approve(d.decision_id, "admin")
+        result = pr.enforce("R3", "deploy", ["deploy"], [], decision_id=d.decision_id,
+                           mission_id="mis-1", project_id="proj-1")
+        assert result["allowed"] is True
+
+    def test_policy_r1_forbidden(self) -> None:
         pr = PolicyRuntime()
         result = pr.enforce("R1", "deploy", ["read_file"], ["deploy"])
         assert result["allowed"] is False
+
+    def test_policy_r4_blocked(self) -> None:
+        pr = PolicyRuntime()
+        result = pr.enforce("R4", "anything", ["anything"], [])
+        assert result["allowed"] is False
+        assert "R4_blocked" in result["reason"]
