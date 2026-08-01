@@ -6,14 +6,12 @@ SQLite runtime (cross-connection persistence), and memory isolation.
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 
-import pytest
 
 from nexara_prime.brain.governance.autonomous_governance import (
-    AuthorityEngine, ApprovalOrchestrator, PolicyRuntime, DecisionStatus,
+    AuthorityEngine, ApprovalOrchestrator, PolicyRuntime,
 )
 from nexara_prime.brain.runtime.persistent_runtime import (
     StateManager, RecoveryEngine, Checkpoint,
