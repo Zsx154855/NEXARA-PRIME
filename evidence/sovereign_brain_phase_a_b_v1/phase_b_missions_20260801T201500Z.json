@@ -1,0 +1,39 @@
+{
+  "phase": "B",
+  "missions": {
+    "b1": {
+      "status": "created",
+      "mission_id": "mission_8fd2e7faff43",
+      "risk": "R0",
+      "objective": "audit the local NEXARA repository for code quality and test coverage",
+      "contract_hash": "aa30336190b63a00928e3281275782dd54d093f5e7f3ba0e7ebed43f404d3891"
+    },
+    "b2": {
+      "status": "created",
+      "mission_id": "mission_0af387cfe184",
+      "risk": "R3",
+      "approval_required": true,
+      "dry_run": true
+    },
+    "b3": {
+      "status": "created",
+      "mission_id": "mission_7873c9f3311a",
+      "risk": "R1",
+      "idempotency_key": "71531e45ba80a454fab7958ded8060027a21bda1bf5d0017d71101926adb1e6a"
+    }
+  },
+  "runtime_url": "http://127.0.0.1:8770",
+  "compiler_health": {
+    "component": "mission_compiler",
+    "compiled_count": 3,
+    "duplicate_prevention": 3
+  },
+  "registry_health": {
+    "component": "capability_registry",
+    "total_capabilities": 10,
+    "healthy": 0,
+    "degraded": 0,
+    "unavailable": 0
+  },
+  "timestamp": 1785615917.819604
+}
