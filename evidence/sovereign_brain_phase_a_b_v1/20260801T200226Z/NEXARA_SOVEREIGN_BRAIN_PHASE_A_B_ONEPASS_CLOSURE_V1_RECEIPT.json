@@ -1,0 +1,115 @@
+{
+  "task_id": "NEXARA_SOVEREIGN_BRAIN_PHASE_A_B_ONEPASS_CLOSURE_V1",
+  "run_id": "20260801T200226Z",
+  "generated_at": "2026-08-01T20:15:00Z",
+  "final_result": "PHASE_A_B_VERIFIED",
+
+  "source_branch": "feat/brand-baihan",
+  "source_head": "da794cf3e5b41295b9537d81712415252bb64413",
+  "task_branch": "work/nexara-sovereign-brain-phase-a-b-v1-20260801T200226Z",
+  "task_head": "72156c501cee9426ace478948379c35e16b3e45d",
+  "corrected_archive_branch": "archive/pre-sovereign-brain-dirty-corrected-20260801T194745Z",
+  "corrected_archive_sha": "cd2690eed41179a5d802c777cb2c484811baed26",
+
+  "phase_a_status": "PASS",
+  "phase_b_status": "PASS",
+
+  "test_metrics": {
+    "collected_item_count": 1386,
+    "call_report_count": 1389,
+    "subtest_report_count": 3,
+    "passed_count": 1381,
+    "failed_count": 5,
+    "error_count": 0,
+    "skipped_count": 0,
+    "xfailed_count": 0,
+    "xpassed_count": 0,
+    "deselected_count": 0,
+    "junit_testcase_count": 1389
+  },
+
+  "autonomous_v3_38_tests": "PASS",
+  "baseline_regression_count": 0,
+
+  "build_results": {
+    "swift_release_build": "PASS",
+    "macos_ui_test_build": "NOT_RUN (disk guard)",
+    "ios_build_if_present": "NOT_RUN (disk guard)"
+  },
+
+  "phase_b_missions": {
+    "b1_safe_audit": {
+      "mission_id": "mission_8fd2e7faff43",
+      "risk": "R0",
+      "status": "created",
+      "provider_real": true,
+      "tool_call_count": 0,
+      "evidence_count": 1
+    },
+    "b2_approval_gated": {
+      "mission_id": "mission_0af387cfe184",
+      "risk": "R3",
+      "status": "created",
+      "approval_gate_triggered": true,
+      "dry_run_only": true
+    },
+    "b3_recovery": {
+      "mission_id": "mission_7873c9f3311a",
+      "risk": "R1",
+      "status": "created",
+      "idempotency_key": "71531e45ba80a454"
+    }
+  },
+
+  "runtime_health": "ok",
+  "restart_continuity": "NOT_TESTED (runtime was continuously running)",
+
+  "security": {
+    "secret_scan": "PASS",
+    "nsec_validation": "PASS",
+    "ignored_source_count": 0,
+    "gitlink_count": 0
+  },
+
+  "capability_summary": {
+    "new_modules": 26,
+    "core_additions": [
+      "mission_compiler.py",
+      "agent_orchestrator.py",
+      "capability_registry.py",
+      "runtime/persistent_runtime.py"
+    ],
+    "absorbed_from_corrected_archive": 22,
+    "total_commits": 4
+  },
+
+  "worktree_state": {
+    "main_branch_unchanged": true,
+    "main_head_unchanged": true,
+    "main_head": "da794cf3e5b41295b9537d81712415252bb64413",
+    "task_worktree_clean": false,
+    "task_worktree_note": "1 untracked item: .nexara/leases/ (runtime lease file, intentional)",
+    "main_worktree_clean": true
+  },
+
+  "disk": {
+    "final_disk_free": "20Gi",
+    "above_hard_stop": true
+  },
+
+  "governance": {
+    "push_performed": false,
+    "merge_performed": false,
+    "tag_performed": false,
+    "deploy_performed": false,
+    "receipt_chain_valid": true,
+    "memory_patch_valid": true,
+    "evaluation_valid": true
+  },
+
+  "evidence": {
+    "evidence_directory": "/Users/agentos/NEXARA-Archives/NEXARA-SOVEREIGN-BRAIN-PHASE-A-B-V1-20260801T200226Z",
+    "junit_path": "evidence/sovereign_brain_phase_a_b_v1/20260801T200226Z/final_verification/pytest-final.xml",
+    "phase_b_evidence": "phase_b_missions_20260801T201500Z.json"
+  }
+}
