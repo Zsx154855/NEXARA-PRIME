@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from nexara_prime.brain.mission_manager_v3 import MissionManagerV3, MissionLifecycle, ManagedMission
-from nexara_prime.brain.runtime.persistent_runtime import StateManager, RecoveryEngine, RuntimeState
+from nexara_prime.brain.runtime.persistent_runtime import StateManager, RecoveryEngine, RuntimeState, Checkpoint
+from nexara_prime.models import new_id
 from nexara_prime.brain.environment.intelligence import EventListener, EventType, ChangeDetector, SignalAnalyzer, EnvironmentEvent
 from nexara_prime.brain.scheduler.autonomous_scheduler import MissionScheduler, TriggerType, TriggerEngine
 from nexara_prime.brain.agent_identity.registry import AgentRegistry, AgentRole, CapabilityProfile
@@ -78,36 +81,141 @@ class TestMissionManagerV3:
 
 class TestPersistentRuntime:
     def test_save_and_load(self) -> None:
-        sm = StateManager()
-        sm.save("mis-1", "executing", agent_state={"step": 3})
-        state = sm.load("mis-1")
-        assert state is not None
-        assert state.agent_state["step"] == 3
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            sm = StateManager(db_path=f.name)
+            cp = Checkpoint(
+                checkpoint_id=new_id("cp"), mission_id="mis-1", project_id="proj-1",
+                run_id=new_id("run"), trace_id=new_id("tr"), state="executing",
+                step_index=3, data={"step": 3},
+            )
+            sm.save_checkpoint(cp)
+            loaded = sm.load_checkpoint("mis-1", "proj-1")
+            assert loaded is not None
+            assert loaded.data["step"] == 3
+            assert loaded.state == "executing"
 
     def test_load_nonexistent(self) -> None:
-        assert StateManager().load("nonexistent") is None
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            assert StateManager(db_path=f.name).load_checkpoint("nope", "nope") is None
 
-    def test_validate(self) -> None:
-        sm = StateManager()
-        s = sm.save("m1", "planning")
-        assert sm.validate(s.checkpoint_id) is True
+    def test_save_and_reload_new_instance(self) -> None:
+        """P1: Save via process A, load via process B simulation."""
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            sm1 = StateManager(db_path=db_path)
+            cp = Checkpoint(
+                checkpoint_id=new_id("cp"), mission_id="mis-2", project_id="proj-1",
+                run_id=new_id("run"), trace_id=new_id("tr"), state="executing", step_index=5,
+            )
+            sm1.save_checkpoint(cp)
+            sm1.close()
+            del sm1
+            sm2 = StateManager(db_path=db_path)
+            loaded = sm2.load_checkpoint("mis-2", "proj-1")
+            assert loaded is not None
+            assert loaded.state == "executing"
+            assert loaded.step_index == 5
+            sm2.close()
+        finally:
+            os.unlink(db_path)
 
     def test_recovery_can_recover(self) -> None:
-        sm = StateManager()
-        sm.save("m1", "executing")
-        re = RecoveryEngine(sm)
-        assert re.can_recover("m1") is True
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            sm = StateManager(db_path=f.name)
+            cp = Checkpoint(new_id("cp"), "m1", "proj-1", new_id("run"), new_id("tr"), "executing", 0)
+            sm.save_checkpoint(cp)
+            re = RecoveryEngine(sm)
+            assert re.can_recover("m1", "proj-1") is True
 
     def test_recovery_no_checkpoint(self) -> None:
-        re = RecoveryEngine(StateManager())
-        assert re.recover("unknown") is None
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            re = RecoveryEngine(StateManager(db_path=f.name))
+            assert re.recover("unknown", "proj-1") is None
+
+    def test_recovery_or_fail_raises(self) -> None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            re = RecoveryEngine(StateManager(db_path=f.name))
+            with pytest.raises(RuntimeError, match="recovery_failed"):
+                re.recover_or_fail("unknown", "proj-1")
 
     def test_multiple_checkpoints(self) -> None:
-        sm = StateManager()
-        sm.save("m1", "planning")
-        sm.save("m1", "executing")
-        assert len(sm.list_checkpoints("m1")) == 2
-        assert sm.load("m1").execution_state == "executing"
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            sm = StateManager(db_path=f.name)
+            sm.save_checkpoint(Checkpoint(new_id("cp1"), "m1", "proj-1", new_id("r1"), new_id("t1"), "planning", 0))
+            sm.save_checkpoint(Checkpoint(new_id("cp2"), "m1", "proj-1", new_id("r2"), new_id("t2"), "executing", 3))
+            cps = sm.list_checkpoints("proj-1")
+            assert len(cps) == 2
+            latest = sm.load_checkpoint("m1", "proj-1")
+            assert latest is not None
+            assert latest.state == "executing"
+
+    def test_idempotency_duplicate_blocked(self) -> None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            sm = StateManager(db_path=f.name)
+            assert sm.record_effect("proj-1", "mis-1", "write", "key-123", "hash1") is True
+            assert sm.record_effect("proj-1", "mis-1", "write", "key-123", "hash1") is False
+            assert sm.is_duplicate("proj-1", "mis-1", "write", "key-123") is True
+
+    def test_idempotency_different_project_independent(self) -> None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            sm = StateManager(db_path=f.name)
+            assert sm.record_effect("proj-A", "mis-1", "write", "key-1", "h1") is True
+            assert sm.record_effect("proj-B", "mis-1", "write", "key-1", "h1") is True
+
+    def test_idempotency_different_mission_independent(self) -> None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            sm = StateManager(db_path=f.name)
+            assert sm.record_effect("proj-1", "mis-A", "write", "key-1", "h1") is True
+            assert sm.record_effect("proj-1", "mis-B", "write", "key-1", "h1") is True
+
+    def test_idempotency_different_action_independent(self) -> None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            sm = StateManager(db_path=f.name)
+            assert sm.record_effect("proj-1", "mis-1", "read", "key-1", "h1") is True
+            assert sm.record_effect("proj-1", "mis-1", "write", "key-1", "h1") is True
+
+    def test_checkpoint_has_trace_binding(self) -> None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            sm = StateManager(db_path=f.name)
+            cp = Checkpoint(new_id("cp"), "mis-1", "proj-1", "run-abc", "trace-xyz", "completed", 10)
+            sm.save_checkpoint(cp)
+            loaded = sm.load_checkpoint("mis-1", "proj-1")
+            assert loaded is not None
+            assert loaded.run_id == "run-abc"
+            assert loaded.trace_id == "trace-xyz"
+            assert loaded.schema_version >= 1
+
+    def test_stats(self) -> None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            sm = StateManager(db_path=f.name)
+            sm.save_checkpoint(Checkpoint(new_id("cp1"), "m1", "proj-1", new_id("r1"), new_id("t1"), "s", 0))
+            sm.record_effect("proj-1", "m1", "write", "k1", "h1")
+            st = sm.stats()
+            assert st["checkpoints"] >= 1
+            assert st["idempotency_records"] >= 1
+
+    def test_delete_checkpoint(self) -> None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            sm = StateManager(db_path=f.name)
+            cp = Checkpoint(new_id("cp"), "m1", "proj-1", new_id("r1"), new_id("t1"), "done", 1)
+            sm.save_checkpoint(cp)
+            assert sm.delete_checkpoint(cp.checkpoint_id) is True
+            assert sm.load_checkpoint("m1", "proj-1") is None
 
 
 # ═══ V3-B: Environment Intelligence (6 tests) ═════════════════════════════════
