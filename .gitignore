@@ -79,6 +79,15 @@ dist/
 .build/
 *.xcuserdata/
 DerivedData/
+.derivedData/
+LivingInterface/.derivedData/
+LivingInterface/build/
+LivingInterface/.build/
+xcuserdata/
+*.xcuserstate
+.venv-fresh/
+.venv-gate/
+.venv-final-gate-*/
 platform/sdk/typescript/platform/
 platform/sdk/typescript/node_modules/
 
