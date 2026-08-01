@@ -17,12 +17,11 @@ import json
 import os
 import sqlite3
 import threading
-import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from nexara_prime.models import new_id, now_iso
+from nexara_prime.models import now_iso
 
 
 class RuntimeState(str, Enum):

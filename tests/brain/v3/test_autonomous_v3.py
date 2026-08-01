@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from nexara_prime.brain.mission_manager_v3 import MissionManagerV3, MissionLifecycle, ManagedMission
-from nexara_prime.brain.runtime.persistent_runtime import StateManager, RecoveryEngine, RuntimeState, Checkpoint
+from nexara_prime.brain.mission_manager_v3 import MissionManagerV3, MissionLifecycle
+from nexara_prime.brain.runtime.persistent_runtime import StateManager, RecoveryEngine, Checkpoint
 from nexara_prime.models import new_id
 from nexara_prime.brain.environment.intelligence import EventListener, EventType, ChangeDetector, SignalAnalyzer, EnvironmentEvent
 from nexara_prime.brain.scheduler.autonomous_scheduler import MissionScheduler, TriggerType, TriggerEngine
-from nexara_prime.brain.agent_identity.registry import AgentRegistry, AgentRole, CapabilityProfile
-from nexara_prime.brain.governance.autonomous_governance import AuthorityEngine, ApprovalOrchestrator, PolicyRuntime, ApprovalLevel, RISK_APPROVAL_MAP
+from nexara_prime.brain.agent_identity.registry import AgentRegistry, AgentRole
+from nexara_prime.brain.governance.autonomous_governance import AuthorityEngine, ApprovalOrchestrator, PolicyRuntime
 
 
 # ═══ V3-A: Mission Manager (8 tests) ══════════════════════════════════════════
@@ -102,7 +102,8 @@ class TestPersistentRuntime:
 
     def test_save_and_reload_new_instance(self) -> None:
         """P1: Save via process A, load via process B simulation."""
-        import tempfile, os
+        import tempfile
+        import os
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
         try:
