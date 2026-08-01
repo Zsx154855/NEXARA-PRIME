@@ -276,6 +276,12 @@ class ApprovalOrchestrator:
         if d.resource != resource and d.resource != "*":
             return {"valid": False, "authorized": False, "reason": "resource_mismatch"}
 
+        # R4/BLOCKED: permanently fail-closed, even with an APPROVED decision.
+        # The existence of an approval fact does NOT authorize R4 actions.
+        # R4 requires a separate sovereign governance process outside this module.
+        if d.approval_level == ApprovalLevel.BLOCKED:
+            return {"valid": False, "authorized": False, "reason": "r4_blocked_fail_closed"}
+
         return {
             "valid": True,
             "authorized": True,

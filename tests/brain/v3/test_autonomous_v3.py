@@ -558,3 +558,83 @@ class TestAutonomousGovernance:
                           action="deploy")
         assert result["authorized"] is False
         assert "mission_id_mismatch" in result["reason"]
+
+    # ═══ R4 Fail-Closed Tests (verify() blocks BLOCKED decisions) ═══════════
+
+    def test_r4_without_approval_fails_closed(self) -> None:
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-r4", "proj-1", "R4", "delete_production")
+        result = ao.verify(d.decision_id, mission_id="mis-r4", project_id="proj-1",
+                          action="delete_production")
+        assert result["authorized"] is False
+
+    def test_r4_approved_still_fails_closed(self) -> None:
+        """R4 with APPROVED decision → still denied."""
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-r4", "proj-1", "R4", "delete_production")
+        approved = ao.approve(d.decision_id, "admin")
+        assert approved is not None
+        assert approved.status == "approved"
+        result = ao.verify(d.decision_id, mission_id="mis-r4", project_id="proj-1",
+                          action="delete_production")
+        assert result["authorized"] is False
+        assert "r4_blocked_fail_closed" in result["reason"]
+
+    def test_approved_alone_denied_by_policy(self) -> None:
+        """APPROVED status alone denied without decision_id in PolicyRuntime."""
+        ao = ApprovalOrchestrator()
+        pr = PolicyRuntime()
+        pr.bind_orchestrator(ao)
+        d = ao.request("mis-1", "proj-1", "R3", "deploy")
+        ao.approve(d.decision_id, "admin")
+        r = pr.enforce("R3", "deploy", ["deploy"], [], mission_id="mis-1", project_id="proj-1")
+        assert r["allowed"] is False
+
+    def test_policy_denial_overrides_approval(self) -> None:
+        ao = ApprovalOrchestrator()
+        pr = PolicyRuntime()
+        pr.bind_orchestrator(ao)
+        d = ao.request("mis-1", "proj-1", "R2", "deploy")
+        ao.approve(d.decision_id, "admin")
+        r = pr.enforce("R2", "deploy", ["read_file"], [], decision_id=d.decision_id,
+                      mission_id="mis-1", project_id="proj-1")
+        assert r["allowed"] is False
+        assert "not_allowed" in r["reason"]
+
+    def test_approval_replay_cannot_authorize_new_request(self) -> None:
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-old", "proj-1", "R3", "deploy")
+        ao.approve(d.decision_id, "admin")
+        result = ao.verify(d.decision_id, mission_id="mis-new", project_id="proj-1",
+                          action="deploy")
+        assert result["authorized"] is False
+        assert "mission_id_mismatch" in result["reason"]
+
+    def test_r3_valid_path_no_regression(self) -> None:
+        """R3 with APPROVED + policy ALLOW → authorized."""
+        ao = ApprovalOrchestrator()
+        pr = PolicyRuntime()
+        pr.bind_orchestrator(ao)
+        d = ao.request("mis-3", "proj-3", "R3", "deploy")
+        ao.approve(d.decision_id, "admin")
+        r = pr.enforce("R3", "deploy", ["deploy"], [], decision_id=d.decision_id,
+                      mission_id="mis-3", project_id="proj-3")
+        assert r["allowed"] is True
+
+    def test_forged_approved_decision_blocked(self) -> None:
+        ao = ApprovalOrchestrator()
+        result = ao.verify("forged-id", mission_id="mis-1", project_id="proj-1",
+                          action="deploy")
+        assert result["authorized"] is False
+        assert "decision_not_found" in result["reason"]
+
+    def test_r4_policy_enforce_also_blocked(self) -> None:
+        ao = ApprovalOrchestrator()
+        pr = PolicyRuntime()
+        pr.bind_orchestrator(ao)
+        d = ao.request("mis-r4", "proj-1", "R4", "delete_production")
+        ao.approve(d.decision_id, "admin")
+        r = pr.enforce("R4", "delete_production", ["delete_production"], [],
+                      decision_id=d.decision_id, mission_id="mis-r4", project_id="proj-1")
+        assert r["allowed"] is False
+        assert "R4_blocked" in r["reason"]
