@@ -43,10 +43,10 @@ class TestPhaseBIntegration:
         """B2: R3 deploy is authorized after matching approval."""
         ao = ApprovalOrchestrator()
         d = ao.request("mis-1", "proj-1", "R3", "deploy", resource="main")
-        assert d.authorized is False
+        assert d.status == "pending"
         approved = ao.approve(d.decision_id, "human-operator")
         assert approved is not None
-        assert approved.authorized is True
+        assert approved.status == "approved"
         verify = ao.verify(d.decision_id, mission_id="mis-1", project_id="proj-1",
                           action="deploy", resource="main")
         assert verify["authorized"] is True

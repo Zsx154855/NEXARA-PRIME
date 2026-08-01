@@ -384,27 +384,32 @@ class TestAutonomousGovernance:
         assert result["can_execute"] is False
 
     def test_approval_request_pending_not_authorized(self) -> None:
-        """P0: request() creates PENDING decision — authorized=False."""
+        """P0: request() creates PENDING — verify() denies authorization."""
         ao = ApprovalOrchestrator()
         d = ao.request("mis-1", "proj-1", "R3", "deploy", resource="main")
-        assert d.authorized is False
         assert d.status == "pending"
+        # Authorization must come from verify(), not d.authorized (field removed)
+        result = ao.verify(d.decision_id, mission_id="mis-1", project_id="proj-1", action="deploy")
+        assert result["authorized"] is False  # not APPROVED yet
 
     def test_approval_request_and_approve(self) -> None:
         ao = ApprovalOrchestrator()
         d = ao.request("mis-1", "proj-1", "R3", "deploy", resource="main")
         a = ao.approve(d.decision_id, "admin")
         assert a is not None
-        assert a.authorized is True
         assert a.status == "approved"
+        # Authorization from verify(), NOT from a.authorized (field removed)
+        result = ao.verify(d.decision_id, mission_id="mis-1", project_id="proj-1", action="deploy", resource="main")
+        assert result["authorized"] is True
 
     def test_approval_reject(self) -> None:
         ao = ApprovalOrchestrator()
         d = ao.request("mis-1", "proj-1", "R2", "modify", resource="config")
         r = ao.reject(d.decision_id, "too risky")
         assert r is not None
-        assert r.authorized is False
         assert r.status == "rejected"
+        result = ao.verify(d.decision_id, mission_id="mis-1", project_id="proj-1", action="modify")
+        assert result["authorized"] is False
 
     def test_approval_revoked(self) -> None:
         ao = ApprovalOrchestrator()
@@ -412,7 +417,8 @@ class TestAutonomousGovernance:
         ao.approve(d.decision_id, "admin")
         rv = ao.revoke(d.decision_id)
         assert rv is not None
-        assert rv.authorized is False
+        result = ao.verify(d.decision_id, mission_id="mis-1", project_id="proj-1", action="deploy")
+        assert result["authorized"] is False
 
     def test_verify_mission_mismatch(self) -> None:
         """P0: verify fails when mission_id doesn't match."""
@@ -493,3 +499,62 @@ class TestAutonomousGovernance:
         result = pr.enforce("R4", "anything", ["anything"], [])
         assert result["allowed"] is False
         assert "R4_blocked" in result["reason"]
+
+    # ═══ P0-001 Regression Tests (approve does NOT authorize) ═══════════════
+
+    def test_r4_without_approval_fail_closed(self) -> None:
+        """P0 regression: R4 mission without approved decision — all denied."""
+        ae = AuthorityEngine()
+        result = ae.authorize("R4", "executor", "delete_production")
+        assert result["authorized"] is False
+        assert result["can_execute"] is False
+        assert result["can_plan"] is False
+
+        pr = PolicyRuntime()
+        r = pr.enforce("R4", "delete_production", ["delete_production"], [])
+        assert r["allowed"] is False
+
+    def test_approval_does_not_bypass_policy(self) -> None:
+        """P0 regression: approve() records status only — does NOT authorize.
+        Authorization requires verify() or PolicyRuntime.enforce()."""
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-1", "proj-1", "R3", "deploy", resource="main")
+        approved = ao.approve(d.decision_id, "admin")
+        assert approved is not None
+        assert approved.status == "approved"
+        # KEY: approve() does NOT have authorized field anymore
+        assert not hasattr(approved, "authorized"), \
+            "P0 FAIL: approval should not carry authorization — field must not exist"
+        # Authorization only from verify():
+        result = ao.verify(d.decision_id, mission_id="mis-1", project_id="proj-1",
+                          action="deploy", resource="main")
+        assert result["authorized"] is True
+
+    def test_authorization_requires_policy_evaluation(self) -> None:
+        """P0 regression: no Policy Decision → execution blocked.
+        Even with an APPROVED decision, enforce() is the gate."""
+        ao = ApprovalOrchestrator()
+        pr = PolicyRuntime()
+        pr.bind_orchestrator(ao)
+        d = ao.request("mis-2", "proj-2", "R3", "deploy")
+        ao.approve(d.decision_id, "admin")
+        # Without passing decision_id → blocked
+        r = pr.enforce("R3", "deploy", ["deploy"], [], mission_id="mis-2", project_id="proj-2")
+        assert r["allowed"] is False
+        assert "missing_decision_id" in r["reason"]
+        # With decision_id → allowed (policy evaluation passed)
+        r2 = pr.enforce("R3", "deploy", ["deploy"], [], decision_id=d.decision_id,
+                       mission_id="mis-2", project_id="proj-2")
+        assert r2["allowed"] is True
+
+    def test_approval_replay_cannot_escalate(self) -> None:
+        """P0 regression: old approval record cannot authorize a new mission.
+        Replay blocked by mission_id mismatch in verify()."""
+        ao = ApprovalOrchestrator()
+        d = ao.request("mis-old", "proj-1", "R3", "deploy")
+        ao.approve(d.decision_id, "admin")
+        # Try to use old approval for new mission
+        result = ao.verify(d.decision_id, mission_id="mis-new", project_id="proj-1",
+                          action="deploy")
+        assert result["authorized"] is False
+        assert "mission_id_mismatch" in result["reason"]

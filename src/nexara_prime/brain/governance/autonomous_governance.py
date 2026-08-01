@@ -2,16 +2,24 @@
 
 Inherits R0-R4 Risk Model. Enforces: Mission→Risk→Authority→Approval→Execution.
 
-FAIL-CLOSED SEMANTICS (v2):
+FAIL-CLOSED SEMANTICS (v3 — P0-001 remediated):
   R0, R1: AUTO — authorized if no conflicts.
   R2, R3: REQUIRE an explicit, matching, non-expired, non-revoked APPROVED decision.
            Default: authorized=false, allowed=false, can_execute=false.
-  R4:      BLOCKED — always denied; requires explicit human sovereign approval
-           outside the automated system.
+  R4:      BLOCKED — always denied.
+
+AUTHORIZATION CHAIN (single source of truth):
+  Mission Request → Risk Classification → Approval Request → Approval Record
+  → Policy Evaluation → Authorization Decision → Capability Permission → Execution
+
+  Approval decision.status=APPROVED is a factual record, NOT an authorization.
+  Only PolicyRuntime.enforce() or ApprovalOrchestrator.verify() produce authorization.
+  approval_does_not_bypass_policy: No code path can derive authorized=true
+  from decision.status alone.
 
 Key distinction:
   can_plan / can_dry_run → allowed (planning is safe)
-  can_execute             → requires approved decision for R2+
+  can_execute             → requires policy evaluation result
 """
 
 from __future__ import annotations
@@ -48,7 +56,6 @@ RISK_APPROVAL_MAP: dict[str, ApprovalLevel] = {
     "R4": ApprovalLevel.BLOCKED,
 }
 
-# R2+ REQUIRE approval — fail closed by default
 REQUIRES_APPROVAL: set[str] = {"R2", "R3", "R4"}
 
 
@@ -70,7 +77,6 @@ class AuthorityEngine:
                 "reason": "R4_blocked_permanently",
             }
         if risk_level in REQUIRES_APPROVAL:
-            # FAIL-CLOSED: planning/dry-run allowed, execution requires approved decision
             return {
                 "risk_level": risk_level, "agent_role": agent_role, "action": action,
                 "approval_level": approval.value, "authorized": False,
@@ -79,7 +85,6 @@ class AuthorityEngine:
                 "requires_confirmation": True,
                 "reason": "requires_approved_decision",
             }
-        # R0, R1: auto-approved
         return {
             "risk_level": risk_level, "agent_role": agent_role, "action": action,
             "approval_level": approval.value, "authorized": True,
@@ -91,6 +96,12 @@ class AuthorityEngine:
 
 @dataclass
 class ApprovalDecision:
+    """An approval record — documents that approval was granted/denied.
+
+    IMPORTANT: status=APPROVED is a factual record, NOT an authorization.
+    Authorization comes ONLY from PolicyRuntime.enforce() or verify().
+    There is no `authorized` field on this dataclass — that bypass is removed.
+    """
     decision_id: str
     mission_id: str
     project_id: str
@@ -100,7 +111,6 @@ class ApprovalDecision:
     scope: str
     approval_level: ApprovalLevel
     status: DecisionStatus = DecisionStatus.PENDING
-    authorized: bool = False
     reason: str = ""
     approved_by: str = ""
     approved_at: str = ""
@@ -110,7 +120,9 @@ class ApprovalDecision:
     nonce: str = field(default_factory=lambda: new_id("nonce"))
 
     def is_valid(self) -> bool:
-        """Check if this decision is currently valid for execution."""
+        """Check if this decision is currently valid for policy evaluation.
+        Does NOT authorize — only confirms the record is APPROVED and non-expired.
+        """
         if self.status != DecisionStatus.APPROVED:
             return False
         if self.expires_at and self.expires_at < now_iso():
@@ -119,15 +131,13 @@ class ApprovalDecision:
 
 
 class ApprovalOrchestrator:
-    """Orchestrates approval workflow for autonomous actions.
+    """Orchestrates approval workflow.
 
-    FAIL-CLOSED: request() creates a PENDING decision (authorized=False).
-    Only an explicit approve() call transitions to APPROVED (authorized=True).
-    reject() transitions to REJECTED. revoke() to REVOKED.
-    consume() marks as CONSUMED (one-time use).
+    FAIL-CLOSED: request() creates PENDING. approve() records APPROVED status.
+    Neither produces authorization — only verify() does, after policy evaluation.
 
-    Verify requires: matching action, resource, mission_id, project_id,
-    non-expired, non-revoked, non-consumed, status=APPROVED.
+    approve_does_not_bypass_policy: approve() only changes status to APPROVED.
+    No authorized=True anywhere in this class. Policy evaluation is required.
     """
 
     def __init__(self) -> None:
@@ -143,7 +153,7 @@ class ApprovalOrchestrator:
         resource: str = "*",
         scope: str = "local",
     ) -> ApprovalDecision:
-        """Create a PENDING approval request. FAIL-CLOSED: authorized=False."""
+        """Create a PENDING approval request. No authorization granted."""
         approval = RISK_APPROVAL_MAP.get(risk_level, ApprovalLevel.CONFIRM)
         did = new_id("dec")
         d = ApprovalDecision(
@@ -156,7 +166,6 @@ class ApprovalOrchestrator:
             scope=scope,
             approval_level=approval,
             status=DecisionStatus.PENDING,
-            authorized=False,
             reason="pending_approval",
         )
         self._decisions[did] = d
@@ -165,6 +174,9 @@ class ApprovalOrchestrator:
         return d
 
     def approve(self, decision_id: str, approved_by: str = "human") -> ApprovalDecision | None:
+        """Record APPROVED status. Does NOT authorize — only marks the decision.
+        Authorization must come through verify() → PolicyRuntime.enforce().
+        """
         d = self._decisions.get(decision_id)
         if d is None:
             return None
@@ -178,7 +190,6 @@ class ApprovalOrchestrator:
             scope=d.scope,
             approval_level=d.approval_level,
             status=DecisionStatus.APPROVED,
-            authorized=True,
             reason="approved",
             approved_by=approved_by,
             approved_at=now_iso(),
@@ -200,7 +211,7 @@ class ApprovalOrchestrator:
             decision_id=d.decision_id, mission_id=d.mission_id, project_id=d.project_id,
             risk_level=d.risk_level, action=d.action, resource=d.resource, scope=d.scope,
             approval_level=d.approval_level, status=DecisionStatus.REJECTED,
-            authorized=False, reason=reason, issued_at=d.issued_at, nonce=d.nonce,
+            reason=reason, issued_at=d.issued_at, nonce=d.nonce,
         )
         self._decisions[decision_id] = updated
         if decision_id in self._pending:
@@ -215,13 +226,15 @@ class ApprovalOrchestrator:
             decision_id=d.decision_id, mission_id=d.mission_id, project_id=d.project_id,
             risk_level=d.risk_level, action=d.action, resource=d.resource, scope=d.scope,
             approval_level=d.approval_level, status=DecisionStatus.REVOKED,
-            authorized=False, reason="revoked", issued_at=d.issued_at, nonce=d.nonce,
+            reason="revoked", issued_at=d.issued_at, nonce=d.nonce,
         )
         self._decisions[decision_id] = updated
         return updated
 
     def consume(self, decision_id: str) -> ApprovalDecision | None:
-        """Mark a decision as consumed (one-time use)."""
+        """Mark a decision as consumed (one-time use).
+        Does NOT authorize — consume is an administrative action.
+        """
         d = self._decisions.get(decision_id)
         if d is None or not d.is_valid():
             return None
@@ -229,7 +242,7 @@ class ApprovalOrchestrator:
             decision_id=d.decision_id, mission_id=d.mission_id, project_id=d.project_id,
             risk_level=d.risk_level, action=d.action, resource=d.resource, scope=d.scope,
             approval_level=d.approval_level, status=DecisionStatus.CONSUMED,
-            authorized=True, reason="consumed", approved_by=d.approved_by,
+            reason="consumed", approved_by=d.approved_by,
             approved_at=d.approved_at, issued_at=d.issued_at,
             expires_at=d.expires_at, evidence_id=d.evidence_id, nonce=d.nonce,
         )
@@ -245,12 +258,13 @@ class ApprovalOrchestrator:
         action: str,
         resource: str = "*",
     ) -> dict[str, Any]:
-        """Verify an approval decision is valid for execution. FAIL-CLOSED."""
+        """Sole authorization source — verifies decision against parameters.
+        FAIL-CLOSED: any mismatch = authorized=False.
+        Only this method (or PolicyRuntime.enforce() calling it) produces authorization.
+        """
         d = self._decisions.get(decision_id)
         if d is None:
             return {"valid": False, "authorized": False, "reason": "decision_not_found"}
-
-        # Fail-closed: any mismatch = denied
         if not d.is_valid():
             return {"valid": False, "authorized": False, "reason": f"decision_not_valid: status={d.status.value}"}
         if d.mission_id != mission_id:
@@ -293,6 +307,7 @@ class PolicyRuntime:
 
     FAIL-CLOSED: R2+ requires a verified approved decision.
     Default allowed=False unless auto-approved (R0/R1) or decision-bound.
+    This is the ONLY place where execution permission is granted.
     """
 
     def __init__(self) -> None:
@@ -314,8 +329,9 @@ class PolicyRuntime:
         project_id: str = "",
         resource: str = "*",
     ) -> dict[str, Any]:
-        """Enforce policy. FAIL-CLOSED for R2+ without valid decision."""
-        # Forbidden actions always blocked
+        """Enforce policy. FAIL-CLOSED for R2+ without valid decision.
+        This is the sole source of `allowed=True` for R2+ actions.
+        """
         if action in forbidden_actions:
             self._violations.append({
                 "risk": risk_level, "action": action, "result": "BLOCKED",
@@ -323,7 +339,6 @@ class PolicyRuntime:
             })
             return {"allowed": False, "reason": "forbidden_action"}
 
-        # Not in allowed actions → blocked
         if action not in allowed_actions:
             self._violations.append({
                 "risk": risk_level, "action": action, "result": "BLOCKED",
@@ -333,7 +348,6 @@ class PolicyRuntime:
 
         approval = RISK_APPROVAL_MAP.get(risk_level, ApprovalLevel.CONFIRM)
 
-        # R4: always blocked
         if approval == ApprovalLevel.BLOCKED:
             self._violations.append({
                 "risk": risk_level, "action": action, "result": "BLOCKED",
@@ -341,7 +355,6 @@ class PolicyRuntime:
             })
             return {"allowed": False, "reason": "R4_blocked"}
 
-        # R2, R3: require verified approved decision
         if risk_level in REQUIRES_APPROVAL:
             if decision_id is None:
                 return {"allowed": False, "reason": "missing_decision_id", "approval_level": approval.value}
@@ -359,7 +372,6 @@ class PolicyRuntime:
                 return {"allowed": False, "reason": result["reason"], "approval_level": approval.value}
             return {"allowed": True, "approval_level": approval.value, "decision_id": decision_id}
 
-        # R0, R1: auto-approved
         return {"allowed": True, "approval_level": approval.value}
 
     def violations(self) -> list[dict[str, Any]]:
