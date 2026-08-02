@@ -532,4 +532,32 @@ export class NexaraAPI {
   getReceipts(id?: string) { return fetchReceipts(id); }
   checkRecovery() { return checkRecovery(); }
   getAdaptiveStatus() { return fetchAdaptiveStatus(); }
+
+  // ── Phase C: Sovereign Control Endpoints ──
+  getControlOverview() { return request<Record<string, unknown>>("GET", "/api/control/overview"); }
+  getMissionControl(id: string) { return request<Record<string, unknown>>("GET", `/api/missions/${encodeURIComponent(id)}/control`); }
+  cancelMission(id: string, actorId?: string, reason?: string) {
+    return request<Record<string, unknown>>("POST", `/api/missions/${encodeURIComponent(id)}/cancel`,
+      { action: "cancel", actor_id: actorId || "human", reason: reason || "" });
+  }
+  takeoverMission(id: string, actorId?: string, reason?: string) {
+    return request<Record<string, unknown>>("POST", `/api/missions/${encodeURIComponent(id)}/takeover`,
+      { action: "takeover", actor_id: actorId || "human", reason: reason || "" });
+  }
+  releaseTakeover(id: string, actorId?: string, reason?: string) {
+    return request<Record<string, unknown>>("POST", `/api/missions/${encodeURIComponent(id)}/release-takeover`,
+      { action: "release_takeover", actor_id: actorId || "human", reason: reason || "" });
+  }
+  recoverMission(id: string, actorId?: string, reason?: string) {
+    return request<Record<string, unknown>>("POST", `/api/missions/${encodeURIComponent(id)}/recover`,
+      { action: "recover", actor_id: actorId || "human", reason: reason || "" });
+  }
+  getPendingApprovals() { return request<Record<string, unknown>[]>("GET", "/api/approvals/pending"); }
+  decideApproval(decisionId: string, decision: string, actor?: string) {
+    return request<Record<string, unknown>>("POST", `/api/approvals/${encodeURIComponent(decisionId)}/decision`,
+      { decision, actor: actor || "human" });
+  }
+  revokeApproval(decisionId: string) {
+    return request<Record<string, unknown>>("POST", `/api/approvals/${encodeURIComponent(decisionId)}/revoke`);
+  }
 }

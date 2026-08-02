@@ -22,6 +22,8 @@ const SCREEN_LABELS: Record<Screen, string> = {
   evidence: "证据与回执",
   capabilities: "能力注册",
   health: "系统健康",
+  "human-control": "人工控制",
+  recovery: "恢复",
 };
 
 export function TopBar({ screen, overview, loading, error, onRefresh }: TopBarProps) {

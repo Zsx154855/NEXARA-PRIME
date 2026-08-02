@@ -14,11 +14,15 @@ try:
 except ImportError:
     scan_vault = None
 from .runtime import NexaraRuntime
+from .sovereign_coordinator import (
+    ControlAction, ControlRequest, SovereignExecutionCoordinator,
+)
 
 
 class MissionCreateRequest(BaseModel):
     objective: str
     source_dir: str | None = None
+    risk: str | None = "R0"
 
 
 class ApprovalRequestBody(BaseModel):
@@ -33,12 +37,24 @@ class SafeModeBody(BaseModel):
     enabled: bool = True
 
 
+class ControlRequestBody(BaseModel):
+    """Phase C control request body — action/actor/reason/scope."""
+    action: str = ""
+    actor_id: str = "human"
+    reason: str = ""
+    scope: str = "local"
+
+
 def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     runtime = runtime or NexaraRuntime(Settings.from_env(Path.cwd()))
     app = FastAPI(title="NEXARA PRIME", version="0.1.0")
     app.state.runtime = runtime
     default_vault = Path(__file__).resolve().parents[2] / "docs"
     app.state.knowledge_vault = Path(os.environ.get("NEXARA_VAULT_PATH", default_vault))
+
+    # Phase C: Sovereign Execution Coordinator (bridges brain→runtime)
+    coordinator = SovereignExecutionCoordinator(runtime)
+    app.state.coordinator = coordinator
 
     def get_mission(mission_id: str):
         try:
@@ -175,6 +191,87 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     @app.post("/api/recovery/check")
     def recovery_check() -> dict[str, Any]:
         return runtime.recover().__dict__
+
+    # ═══ Phase C: Sovereign Control API ═══════════════════════════════════════
+
+    @app.get("/api/control/overview")
+    def control_overview() -> dict[str, Any]:
+        return coordinator.runtime_overview()
+
+    @app.get("/api/missions/{mission_id}/control")
+    def mission_control(mission_id: str) -> dict[str, Any]:
+        return coordinator.mission_control_status(mission_id)
+
+    @app.post("/api/missions/{mission_id}/cancel")
+    def cancel_mission(mission_id: str, body: ControlRequestBody) -> dict[str, Any]:
+        req = ControlRequest(
+            request_id=f"req_{os.urandom(8).hex()}",
+            actor_id=body.actor_id, mission_id=mission_id, project_id="nexara",
+            trace_id=f"tr_{os.urandom(8).hex()}",
+            action=ControlAction.CANCEL, reason=body.reason, scope=body.scope,
+        )
+        result = coordinator.handle_control(req)
+        if not result.ok:
+            raise HTTPException(status_code=409, detail=result.reason_message)
+        return result.__dict__
+
+    @app.post("/api/missions/{mission_id}/takeover")
+    def takeover_mission(mission_id: str, body: ControlRequestBody) -> dict[str, Any]:
+        req = ControlRequest(
+            request_id=f"req_{os.urandom(8).hex()}",
+            actor_id=body.actor_id, mission_id=mission_id, project_id="nexara",
+            trace_id=f"tr_{os.urandom(8).hex()}",
+            action=ControlAction.TAKEOVER, reason=body.reason, scope=body.scope,
+        )
+        result = coordinator.handle_control(req)
+        if not result.ok:
+            raise HTTPException(status_code=409, detail=result.reason_message)
+        return result.__dict__
+
+    @app.post("/api/missions/{mission_id}/release-takeover")
+    def release_takeover(mission_id: str, body: ControlRequestBody) -> dict[str, Any]:
+        req = ControlRequest(
+            request_id=f"req_{os.urandom(8).hex()}",
+            actor_id=body.actor_id, mission_id=mission_id, project_id="nexara",
+            trace_id=f"tr_{os.urandom(8).hex()}",
+            action=ControlAction.RELEASE_TAKEOVER, reason=body.reason, scope=body.scope,
+        )
+        result = coordinator.handle_control(req)
+        if not result.ok:
+            raise HTTPException(status_code=409, detail=result.reason_message)
+        return result.__dict__
+
+    @app.post("/api/missions/{mission_id}/recover")
+    def recover_mission(mission_id: str, body: ControlRequestBody) -> dict[str, Any]:
+        req = ControlRequest(
+            request_id=f"req_{os.urandom(8).hex()}",
+            actor_id=body.actor_id, mission_id=mission_id, project_id="nexara",
+            trace_id=f"tr_{os.urandom(8).hex()}",
+            action=ControlAction.RECOVER, reason=body.reason, scope=body.scope,
+        )
+        result = coordinator.handle_control(req)
+        if not result.ok:
+            raise HTTPException(status_code=404, detail=result.reason_message)
+        return result.__dict__
+
+    @app.get("/api/approvals/pending")
+    def pending_approvals() -> list[dict[str, Any]]:
+        return coordinator.pending_approvals()
+
+    @app.post("/api/approvals/{decision_id}/decision")
+    def approval_decision(decision_id: str, body: ApprovalRequestBody) -> dict[str, Any]:
+        d = body.decision or ("approved" if body.approved else "rejected")
+        result = coordinator.decide_approval(decision_id, d, body.actor)
+        if not result.get("ok"):
+            raise HTTPException(status_code=404, detail=result.get("reason", "unknown"))
+        return result
+
+    @app.post("/api/approvals/{decision_id}/revoke")
+    def revoke_approval(decision_id: str) -> dict[str, Any]:
+        result = coordinator.revoke_approval(decision_id)
+        if not result.get("ok"):
+            raise HTTPException(status_code=404, detail=result.get("reason", "unknown"))
+        return result
 
     @app.get("/api/knowledge-universe")
     def knowledge_universe() -> dict[str, Any]:

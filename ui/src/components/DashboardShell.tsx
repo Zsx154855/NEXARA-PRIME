@@ -13,6 +13,7 @@ import { ApprovalCenter } from "@/components/screens/ApprovalCenter";
 import { EvidenceViewer } from "@/components/screens/EvidenceViewer";
 import { CapabilityRegistry } from "@/components/screens/CapabilityRegistry";
 import { RuntimeHealth } from "@/components/screens/RuntimeHealth";
+import { HumanControl } from "@/components/screens/HumanControl";
 
 export type Screen =
   | "overview"
@@ -22,7 +23,9 @@ export type Screen =
   | "approvals"
   | "evidence"
   | "capabilities"
-  | "health";
+  | "health"
+  | "human-control"
+  | "recovery";
 
 export default function DashboardShell() {
   const [screen, setScreen] = useState<Screen>("overview");
@@ -109,6 +112,12 @@ export default function DashboardShell() {
             <CapabilityRegistry api={api} overview={overview} />
           )}
           {screen === "health" && (
+            <RuntimeHealth api={api} overview={overview} />
+          )}
+          {screen === "human-control" && selectedMissionId && (
+            <HumanControl api={api} missionId={selectedMissionId} />
+          )}
+          {screen === "recovery" && (
             <RuntimeHealth api={api} overview={overview} />
           )}
         </main>
