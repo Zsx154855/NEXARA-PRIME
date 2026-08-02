@@ -1,0 +1,274 @@
+name: NEXARA Live Mac Truth Audit
+
+on:
+  push:
+    branches:
+      - audit/nexara-live-truth-20260802
+
+permissions:
+  contents: read
+
+jobs:
+  live-truth-audit:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Inspect current Mac runtime truth (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import tempfile
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from typing import Any
+
+          TARGET = Path('/Users/agentos/NEXARA-PRIME')
+          RUN_ID = os.environ.get('GITHUB_RUN_ID', 'manual')
+          ARCHIVE = Path('/Users/agentos/NEXARA-Archives') / f'NEXARA-LIVE-TRUTH-AUDIT-{RUN_ID}'
+          ARCHIVE.mkdir(parents=True, exist_ok=True)
+          REPORT_PATH = ARCHIVE / 'LOCAL_RUNTIME_TRUTH.json'
+
+          def run(cmd: list[str], cwd: Path | None = None, timeout: int = 15) -> tuple[int, str, str]:
+              try:
+                  p = subprocess.run(
+                      cmd,
+                      cwd=str(cwd) if cwd else None,
+                      text=True,
+                      capture_output=True,
+                      timeout=timeout,
+                      check=False,
+                  )
+                  return p.returncode, p.stdout.strip(), p.stderr.strip()
+              except Exception as exc:
+                  return 124, '', f'{type(exc).__name__}: {exc}'
+
+          def git(*args: str) -> str | None:
+              rc, out, _ = run(['git', *args], cwd=TARGET)
+              return out if rc == 0 else None
+
+          def fetch_json(url: str, name: str) -> dict[str, Any]:
+              out_file = Path(tempfile.gettempdir()) / f'nexara_audit_{RUN_ID}_{name}.json'
+              rc, code, err = run([
+                  'curl', '-sS', '-m', '3', '-o', str(out_file), '-w', '%{http_code}', url
+              ], timeout=6)
+              result: dict[str, Any] = {'url': url, 'http_code': code if rc == 0 else '000'}
+              if rc != 0:
+                  result['error_class'] = 'curl_failed'
+                  return result
+              try:
+                  data = json.loads(out_file.read_text(encoding='utf-8'))
+                  result['json'] = data
+              except Exception:
+                  result['json'] = None
+              return result
+
+          report: dict[str, Any] = {
+              'audit_version': '1.0',
+              'generated_at': datetime.now(timezone.utc).isoformat(),
+              'target_exists': TARGET.exists(),
+              'target_path': str(TARGET),
+              'git': {},
+              'ports': {},
+              'http': {},
+              'api': {},
+              'ui': {},
+              'database': {},
+              'gates': {},
+          }
+
+          # Git truth — no fetch, no checkout, no mutation.
+          if TARGET.exists() and (TARGET / '.git').exists():
+              status = git('status', '--porcelain=v1') or ''
+              lines = [line for line in status.splitlines() if line.strip()]
+              untracked = sum(1 for line in lines if line.startswith('??'))
+              tracked = len(lines) - untracked
+              report['git'] = {
+                  'branch': git('branch', '--show-current'),
+                  'head': git('rev-parse', 'HEAD'),
+                  'origin_main': git('rev-parse', 'origin/main'),
+                  'dirty_total': len(lines),
+                  'tracked_changes': tracked,
+                  'untracked_changes': untracked,
+              }
+              counts = git('rev-list', '--left-right', '--count', 'origin/main...HEAD')
+              if counts:
+                  parts = counts.split()
+                  if len(parts) == 2:
+                      report['git']['behind_origin_main'] = int(parts[0])
+                      report['git']['ahead_origin_main'] = int(parts[1])
+          else:
+              report['git'] = {'error': 'target_not_git_repo'}
+
+          # Known service ports; expose only process basename and PID.
+          known_ports = [8420, 8770, 8787, 8788, 8765, 17777, 5173, 3000, 3001, 8080, 8089]
+          for port in known_ports:
+              rc, out, _ = run(['lsof', '-nP', f'-iTCP:{port}', '-sTCP:LISTEN', '-F', 'pc'], timeout=5)
+              processes: list[dict[str, str]] = []
+              current: dict[str, str] = {}
+              if rc == 0:
+                  for line in out.splitlines():
+                      if line.startswith('p'):
+                          if current:
+                              processes.append(current)
+                          current = {'pid': line[1:]}
+                      elif line.startswith('c'):
+                          current['process'] = Path(line[1:]).name
+                  if current:
+                      processes.append(current)
+              report['ports'][str(port)] = {'listening': bool(processes), 'processes': processes}
+
+          # HTTP probes. curl always writes to disk first; JSON is parsed afterwards.
+          candidate_bases = ['http://127.0.0.1:8420', 'http://127.0.0.1:8770', 'http://127.0.0.1:8787', 'http://127.0.0.1:8788', 'http://127.0.0.1:8765']
+          live_bases: list[str] = []
+          openapi_paths: set[str] = set()
+          health_public: dict[str, Any] = {}
+          for idx, base in enumerate(candidate_bases):
+              health = fetch_json(base + '/health', f'health_{idx}')
+              http_code = str(health.get('http_code', '000'))
+              safe_health: dict[str, Any] = {'http_code': http_code}
+              payload = health.get('json')
+              if isinstance(payload, dict):
+                  for key in ('status', 'ok', 'healthy', 'provider', 'provider_status', 'mock', 'identity', 'version'):
+                      value = payload.get(key)
+                      if isinstance(value, (str, int, float, bool)) or value is None:
+                          safe_health[key] = value
+              health_public[base] = safe_health
+              if http_code == '200':
+                  live_bases.append(base)
+
+              openapi = fetch_json(base + '/openapi.json', f'openapi_{idx}')
+              if str(openapi.get('http_code')) == '200' and isinstance(openapi.get('json'), dict):
+                  paths = openapi['json'].get('paths', {})
+                  if isinstance(paths, dict):
+                      openapi_paths.update(str(path) for path in paths)
+
+          report['http']['health'] = health_public
+          report['http']['live_bases'] = live_bases
+          report['api']['openapi_path_count'] = len(openapi_paths)
+          report['api']['conversation_paths'] = sorted(
+              path for path in openapi_paths
+              if any(token in path.lower() for token in ('chat', 'conversation', 'message'))
+          )
+          report['api']['mission_paths'] = sorted(path for path in openapi_paths if '/missions' in path)[:30]
+          report['api']['control_paths'] = sorted(
+              path for path in openapi_paths
+              if any(token in path.lower() for token in ('control', 'takeover', 'cancel', 'recover'))
+          )[:30]
+          report['api']['approval_paths'] = sorted(path for path in openapi_paths if 'approval' in path.lower())[:30]
+
+          # UI wiring check — boolean-only; no source content leaves the Mac.
+          first_contact = TARGET / 'LivingInterface/Sources/LivingInterface/Views/FirstContactConversation.swift'
+          mission_composer = TARGET / 'LivingInterface/Sources/LivingInterface/Views/MissionComposer.swift'
+          view_model = TARGET / 'LivingInterface/Sources/LivingInterface/ViewModels/RuntimeViewModel.swift'
+
+          def read_text(path: Path) -> str:
+              try:
+                  return path.read_text(encoding='utf-8', errors='replace')
+              except Exception:
+                  return ''
+
+          first_text = read_text(first_contact)
+          composer_text = read_text(mission_composer)
+          vm_text = read_text(view_model)
+          report['ui'] = {
+              'first_contact_file_exists': first_contact.exists(),
+              'first_contact_has_text_input': bool(re.search(r'\b(TextField|TextEditor)\s*\(', first_text)),
+              'first_contact_has_send_action': bool(re.search(r'\b(send|submit|message|conversation)\b', first_text, re.I)),
+              'runtime_viewmodel_has_conversation_method': bool(re.search(r'func\s+\w*(send|chat|conversation|message)\w*\s*\(', vm_text, re.I)),
+              'mission_composer_file_exists': mission_composer.exists(),
+              'mission_composer_network_wired': bool(re.search(r'(URLSession|/api/missions|createMission|submitMission|model\.\w*(create|submit))', composer_text, re.I)),
+              'swift_release_binary_present': any(TARGET.glob('LivingInterface/.build/**/release/NEXARA')),
+              'web_static_export_present': (TARGET / 'ui/out/index.html').exists(),
+          }
+
+          # SQLite integrity and schema presence; no row contents are read.
+          db_files: list[Path] = []
+          if TARGET.exists():
+              for pattern in ('*.db', '*.sqlite', '*.sqlite3'):
+                  for path in TARGET.rglob(pattern):
+                      if any(part in {'.git', 'node_modules', '.venv', 'venv'} for part in path.parts):
+                          continue
+                      if path.is_file():
+                          db_files.append(path)
+                      if len(db_files) >= 40:
+                          break
+                  if len(db_files) >= 40:
+                      break
+          db_results: list[dict[str, Any]] = []
+          sqlite_available = shutil.which('sqlite3') is not None
+          for path in db_files[:40]:
+              item: dict[str, Any] = {'relative_path': str(path.relative_to(TARGET)), 'size_bytes': path.stat().st_size}
+              if sqlite_available:
+                  rc, out, _ = run(['sqlite3', str(path), 'PRAGMA quick_check;'], timeout=8)
+                  item['quick_check'] = out.splitlines()[0] if rc == 0 and out else 'failed'
+                  rc, out, _ = run(['sqlite3', str(path), "SELECT count(*) FROM sqlite_master WHERE type='table';"], timeout=8)
+                  item['table_count'] = int(out) if rc == 0 and out.isdigit() else None
+              db_results.append(item)
+          report['database'] = {
+              'sqlite_cli_available': sqlite_available,
+              'database_count': len(db_files),
+              'databases': db_results,
+          }
+
+          db_ok = bool(db_results) and all(item.get('quick_check') == 'ok' for item in db_results if 'quick_check' in item)
+          conversation_api = bool(report['api']['conversation_paths'])
+          ui_conversation = bool(
+              report['ui']['first_contact_has_text_input']
+              and report['ui']['runtime_viewmodel_has_conversation_method']
+          )
+          mission_ui = bool(report['ui']['mission_composer_network_wired'])
+          runtime_health = bool(live_bases)
+          control_api = bool(report['api']['control_paths'])
+          approval_api = bool(report['api']['approval_paths'])
+
+          report['gates'] = {
+              'G1_LOCAL_REPO_PRESENT': bool(report['target_exists']),
+              'G2_RUNTIME_HEALTH_REACHABLE': runtime_health,
+              'G3_CONVERSATION_API_PRESENT': conversation_api,
+              'G4_UI_CONVERSATION_WIRED': ui_conversation,
+              'G5_UI_MISSION_SUBMIT_WIRED': mission_ui,
+              'G6_SQLITE_INTEGRITY': db_ok,
+              'G7_HUMAN_CONTROL_API_PRESENT': control_api and approval_api,
+              'G8_ZERO_COPY_PASTE_READY': bool(runtime_health and conversation_api and ui_conversation and mission_ui and db_ok and control_api and approval_api),
+          }
+
+          REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+
+          public_summary = {
+              'report_saved_locally': str(REPORT_PATH),
+              'git': report['git'],
+              'listening_ports': [int(port) for port, value in report['ports'].items() if value['listening']],
+              'live_http_bases': live_bases,
+              'database_count': report['database']['database_count'],
+              'gates': report['gates'],
+          }
+          print('NEXARA_LIVE_AUDIT_SUMMARY_BEGIN')
+          print(json.dumps(public_summary, ensure_ascii=False, sort_keys=True))
+          print('NEXARA_LIVE_AUDIT_SUMMARY_END')
+
+          summary_path = Path(os.environ['GITHUB_STEP_SUMMARY'])
+          with summary_path.open('a', encoding='utf-8') as fh:
+              fh.write('# NEXARA Live Mac Truth Audit\n\n')
+              fh.write(f'- Full report retained locally: `{REPORT_PATH}`\n')
+              fh.write(f'- Current branch: `{report["git"].get("branch")}`\n')
+              fh.write(f'- Current HEAD: `{report["git"].get("head")}`\n')
+              fh.write(f'- Dirty entries: `{report["git"].get("dirty_total")}`\n')
+              fh.write(f'- Listening known ports: `{public_summary["listening_ports"]}`\n')
+              fh.write(f'- Live HTTP bases: `{live_bases}`\n')
+              fh.write(f'- SQLite DB count: `{report["database"]["database_count"]}`\n\n')
+              fh.write('## Gates\n')
+              for name, value in report['gates'].items():
+                  fh.write(f'- {name}: **{"PASS" if value else "FAIL"}**\n')
+          PY
