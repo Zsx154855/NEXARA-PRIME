@@ -33,6 +33,7 @@ Thumbs.db
 *.db-shm
 *.sqlite3
 runtime/
+!src/nexara_prime/brain/runtime/
 
 # ── Test & coverage ──
 coverage.xml
