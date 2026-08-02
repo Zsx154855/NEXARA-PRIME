@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - audit/nexara-live-truth-20260802
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -60,7 +63,7 @@ jobs:
 
           def fetch_json(url: str, name: str) -> dict[str, Any]:
               out_file = Path(tempfile.gettempdir()) / f'nexara_audit_{RUN_ID}_{name}.json'
-              rc, code, err = run([
+              rc, code, _ = run([
                   'curl', '-sS', '-m', '3', '-o', str(out_file), '-w', '%{http_code}', url
               ], timeout=6)
               result: dict[str, Any] = {'url': url, 'http_code': code if rc == 0 else '000'}
@@ -88,7 +91,6 @@ jobs:
               'gates': {},
           }
 
-          # Git truth — no fetch, no checkout, no mutation.
           if TARGET.exists() and (TARGET / '.git').exists():
               status = git('status', '--porcelain=v1') or ''
               lines = [line for line in status.splitlines() if line.strip()]
@@ -111,7 +113,6 @@ jobs:
           else:
               report['git'] = {'error': 'target_not_git_repo'}
 
-          # Known service ports; expose only process basename and PID.
           known_ports = [8420, 8770, 8787, 8788, 8765, 17777, 5173, 3000, 3001, 8080, 8089]
           for port in known_ports:
               rc, out, _ = run(['lsof', '-nP', f'-iTCP:{port}', '-sTCP:LISTEN', '-F', 'pc'], timeout=5)
@@ -129,7 +130,6 @@ jobs:
                       processes.append(current)
               report['ports'][str(port)] = {'listening': bool(processes), 'processes': processes}
 
-          # HTTP probes. curl always writes to disk first; JSON is parsed afterwards.
           candidate_bases = ['http://127.0.0.1:8420', 'http://127.0.0.1:8770', 'http://127.0.0.1:8787', 'http://127.0.0.1:8788', 'http://127.0.0.1:8765']
           live_bases: list[str] = []
           openapi_paths: set[str] = set()
@@ -168,7 +168,6 @@ jobs:
           )[:30]
           report['api']['approval_paths'] = sorted(path for path in openapi_paths if 'approval' in path.lower())[:30]
 
-          # UI wiring check — boolean-only; no source content leaves the Mac.
           first_contact = TARGET / 'LivingInterface/Sources/LivingInterface/Views/FirstContactConversation.swift'
           mission_composer = TARGET / 'LivingInterface/Sources/LivingInterface/Views/MissionComposer.swift'
           view_model = TARGET / 'LivingInterface/Sources/LivingInterface/ViewModels/RuntimeViewModel.swift'
@@ -193,7 +192,6 @@ jobs:
               'web_static_export_present': (TARGET / 'ui/out/index.html').exists(),
           }
 
-          # SQLite integrity and schema presence; no row contents are read.
           db_files: list[Path] = []
           if TARGET.exists():
               for pattern in ('*.db', '*.sqlite', '*.sqlite3'):
