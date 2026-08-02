@@ -103,7 +103,7 @@ class SovereignExecutionCoordinator:
     All API endpoints that need approval/authorization MUST route through here.
     """
 
-    def __init__(self, runtime: Any) -> None:
+    def __init__(self, runtime: Any, db_path: str = "runtime/nexara_durable_phase_c.db") -> None:
         self._runtime = runtime
         self._store = runtime.store if hasattr(runtime, 'store') else None
         self._governance = ApprovalOrchestrator()
@@ -111,7 +111,7 @@ class SovereignExecutionCoordinator:
         self._policy.bind_orchestrator(self._governance)
         self._authority = AuthorityEngine()
         self._brain_compiler = BrainMissionCompiler()
-        self._state_manager = StateManager(db_path="runtime/nexara_durable_phase_c.db")
+        self._state_manager = StateManager(db_path=db_path)
         self._recovery = RecoveryEngine(self._state_manager)
         self._safe_mode = False
         # mission_id → ControlState
