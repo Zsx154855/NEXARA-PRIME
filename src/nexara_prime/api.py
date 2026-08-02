@@ -37,6 +37,14 @@ class SafeModeBody(BaseModel):
     enabled: bool = True
 
 
+class ControlRequestBody(BaseModel):
+    """Phase C control request body — action/actor/reason/scope."""
+    action: str = ""
+    actor_id: str = "human"
+    reason: str = ""
+    scope: str = "local"
+
+
 def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     runtime = runtime or NexaraRuntime(Settings.from_env(Path.cwd()))
     app = FastAPI(title="NEXARA PRIME", version="0.1.0")
@@ -185,12 +193,6 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
         return runtime.recover().__dict__
 
     # ═══ Phase C: Sovereign Control API ═══════════════════════════════════════
-
-    class ControlRequestBody(BaseModel):
-        action: str
-        actor_id: str = "human"
-        reason: str = ""
-        scope: str = "local"
 
     @app.get("/api/control/overview")
     def control_overview() -> dict[str, Any]:
