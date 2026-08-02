@@ -31,7 +31,7 @@ from enum import Enum
 from typing import Any
 
 from .brain.governance.autonomous_governance import (
-    ApprovalLevel, ApprovalOrchestrator, AuthorityEngine, DecisionStatus,
+    ApprovalLevel, ApprovalOrchestrator, AuthorityEngine,
     PolicyRuntime, RISK_APPROVAL_MAP, REQUIRES_APPROVAL,
 )
 from .brain.mission_compiler import MissionCompiler as BrainMissionCompiler
@@ -124,7 +124,7 @@ class SovereignExecutionCoordinator:
         return RISK_APPROVAL_MAP.get(rk, ApprovalLevel.CONFIRM)
 
     def requires_approval(self, risk: RiskLevel | str) -> bool:
-        rk = risk.value if isinstance(risk, RiskLevel) else str(rk)
+        rk = risk.value if isinstance(risk, RiskLevel) else str(risk)
         return rk in REQUIRES_APPROVAL
 
     # ── Mission Lifecycle ─────────────────────────────────────────────────
