@@ -3,13 +3,8 @@
 import { Screen } from "./DashboardShell";
 import { RuntimeOverview } from "@/types";
 import {
-  LayoutDashboard,
-  PlusCircle,
-  Bot,
-  ShieldCheck,
-  FileSearch,
-  Puzzle,
-  Activity,
+  LayoutDashboard, PlusCircle, Bot, ShieldCheck,
+  FileSearch, Puzzle, Activity, Hand, RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +16,8 @@ const NAV_ITEMS: { id: Screen; label: string; icon: typeof LayoutDashboard }[] =
   { id: "evidence", label: "证据与回执", icon: FileSearch },
   { id: "capabilities", label: "能力注册", icon: Puzzle },
   { id: "health", label: "系统健康", icon: Activity },
+  { id: "human-control", label: "人工控制", icon: Hand },
+  { id: "recovery", label: "恢复", icon: RotateCcw },
 ];
 
 interface SidebarProps {
