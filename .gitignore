@@ -46,6 +46,9 @@ workspace/tmp/
 workspace/cache/
 evidence/raw/
 
+# ── Auto-generated per-mission build receipts (tests generate these) ──
+evidence/receipts/BUILD_RECEIPT_mis-*
+
 # ── Reports tmp / draft ──
 reports/tmp/
 reports/acceptance-*/
