@@ -1,0 +1,76 @@
+# NEXARA Council — Risk Policy
+# Governs risk assessment, classification, and mitigation
+
+version: "2.0.0"
+governed_by: "NSEC V2.1"
+
+risk_levels:
+  R0_NEGLIGIBLE:
+    description: "No measurable impact"
+    action: "LOG_ONLY"
+    escalation: "NONE"
+
+  R1_LOW:
+    description: "Minor impact, easily reversible"
+    action: "MONITOR"
+    escalation: "H-STAFF"
+
+  R2_MODERATE:
+    description: "Moderate impact, requires rollback plan"
+    action: "MITIGATE"
+    escalation: "H-CHAIRMAN"
+    rollback_required: true
+
+  R3_HIGH:
+    description: "Significant impact, may affect production"
+    action: "BLOCK"
+    escalation: "H-RED + H-JUDGE"
+    rollback_required: true
+    evidence_required: true
+
+  R4_CRITICAL:
+    description: "Existential risk to system or data"
+    action: "HALT_ALL"
+    escalation: "FULL_COUNCIL"
+    rollback_required: true
+    evidence_required: true
+    human_approval_required: true
+
+risk_categories:
+  - SECURITY:
+      description: "Authentication, authorization, data exposure, injection"
+      owner: "H-RED"
+  - RELIABILITY:
+      description: "System stability, crash recovery, data integrity"
+      owner: "H-CODE"
+  - ARCHITECTURE:
+      description: "Design flaws, coupling, scalability"
+      owner: "H-ARCH"
+  - GOVERNANCE:
+      description: "NSEC violations, procedural errors, approval bypass"
+      owner: "H-JUDGE"
+  - PERFORMANCE:
+      description: "Latency, throughput, resource exhaustion"
+      owner: "H-TOKEN"
+  - MEMORY:
+      description: "Data loss, corruption, version drift"
+      owner: "H-MEM"
+
+red_team_rules:
+  must_challenge: true
+  challenge_types:
+    - "ADVERSARIAL_INPUT": "Malformed or malicious input"
+    - "BOUNDARY_VIOLATION": "Crossing system boundaries"
+    - "RACE_CONDITION": "Concurrent access issues"
+    - "RESOURCE_EXHAUSTION": "Memory/CPU/disk saturation"
+    - "AUTH_BYPASS": "Authentication/authorization bypass"
+    - "DATA_LEAK": "Unintended data exposure"
+    - "PROMPT_INJECTION": "LLM prompt injection vectors"
+  min_challenges_per_mission: 3
+  evidence_required: true
+
+rollback_requirements:
+  snapshot_before_action: true
+  rollback_plan_required: "R2+"
+  rollback_test_required: "R3+"
+  rollback_timeout_seconds: 300

@@ -1,0 +1,89 @@
+# NEXARA Council — Approval Policy
+# Governs how decisions are approved within the Council
+
+version: "2.0.0"
+governed_by: "NSEC V2.1"
+
+approval_levels:
+  L0_ROUTINE:
+    description: "Routine operations — code changes within existing modules, test additions, documentation"
+    required: ["H-CODE"]
+    quorum: 1
+    veto_applies: false
+
+  L1_STANDARD:
+    description: "Standard changes — new modules, API changes, config modifications"
+    required: ["H-CODE", "H-ARCH"]
+    quorum: 2
+    veto_applies: false
+
+  L2_SIGNIFICANT:
+    description: "Significant changes — architecture modifications, new subsystems, database schema changes"
+    required: ["H-CHAIRMAN", "H-ARCH", "H-CODE"]
+    quorum: 3
+    veto_applies: true
+
+  L3_CRITICAL:
+    description: "Critical changes — runtime behavior, governance, security, production deployment"
+    required: ["H-CHAIRMAN", "H-ARCH", "H-CODE", "H-RED", "H-JUDGE"]
+    quorum: 5
+    veto_applies: true
+    supermajority: true
+
+  L4_CONSTITUTIONAL:
+    description: "Constitutional amendments, council restructuring, NSEC changes"
+    required: ["ALL_SEATS"]
+    quorum: 7
+    veto_applies: true
+    supermajority: true
+
+approval_flow:
+  steps:
+    - name: "PROPOSAL"
+      actor: "any_agent"
+      action: "submit_proposal"
+
+    - name: "STAFF_REVIEW"
+      actor: "H-STAFF"
+      action: "classify_level"
+      output: "approval_level"
+
+    - name: "RED_SCAN"
+      actor: "H-RED"
+      action: "risk_assessment"
+      condition: "level >= L2_SIGNIFICANT"
+
+    - name: "ARCH_REVIEW"
+      actor: "H-ARCH"
+      action: "architecture_review"
+      condition: "level >= L1_STANDARD"
+
+    - name: "VOTE"
+      actor: "required_seats"
+      action: "cast_votes"
+
+    - name: "JUDGE_REVIEW"
+      actor: "H-JUDGE"
+      action: "compliance_check"
+      condition: "level >= L2_SIGNIFICANT"
+
+    - name: "CHAIRMAN_APPROVAL"
+      actor: "H-CHAIRMAN"
+      action: "final_approve_or_reject"
+
+timeouts:
+  L0_ROUTINE: "1 hour"
+  L1_STANDARD: "4 hours"
+  L2_SIGNIFICANT: "24 hours"
+  L3_CRITICAL: "72 hours"
+  L4_CONSTITUTIONAL: "7 days"
+
+urgent_override:
+  enabled: true
+  activator: "H-CHAIRMAN"
+  min_seats: 3
+  ratification_window: "24 hours"
+  conditions:
+    - "Production incident"
+    - "Security breach"
+    - "Data loss risk"
