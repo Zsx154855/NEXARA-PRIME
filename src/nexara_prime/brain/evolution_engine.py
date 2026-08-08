@@ -16,6 +16,8 @@ from typing import Any
 
 from ..models import new_id, now_iso
 
+from .memory_controller import MemoryController
+
 
 @dataclass
 class EvolutionProposal:
@@ -103,7 +105,7 @@ class EvolutionController:
     apply → verify → archive.
     """
 
-    def __init__(self, mc: Any) -> None:
+    def __init__(self, mc: MemoryController) -> None:
         self._mc = mc
         self._history: list[EvolutionProposal] = []
 
