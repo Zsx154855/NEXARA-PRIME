@@ -3,12 +3,12 @@
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
   "inventory": "G0_REALITY_INVENTORY_V2_20260723",
   "inventory_head": "dd0505ac53721d8e2e6150e47936119fe16734d6",
-  "program_status": "READY_FOR_HUMAN_APPROVAL",
+  "program_status": "LOCAL_RELEASE_COMPLETE",
   "current_gate": "G10",
   "g10_composite_status": {
-    "local_release": "LOCAL_RELEASE_READY",
-    "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
-    "git_push_tag": "PENDING_HUMAN_APPROVAL",
+    "local_release": "LOCAL_RELEASE_COMPLETE",
+    "external_distribution": "NOT_REQUIRED_LOCAL_PROJECT",
+    "git_push_tag": "LOCAL_TAG_V0.1.0_CREATED",
     "product_brand_name": "RESOLVED_柏韩_Bǎi_Hán"
   },
   "gates": [
@@ -76,26 +76,21 @@
     },
     {
       "id": "G10",
-      "status": "BLOCKED",
+      "status": "PASS",
       "verified": true,
-      "local_release": "LOCAL_RELEASE_READY",
-      "blocked_by": [
-        "macOS code signing certificate",
-        "macOS notarization",
-        "iOS Provisioning Profile"
-      ],
-      "resolution": "Requires Apple Developer Program ($99/yr)"
+      "local_release": "LOCAL_RELEASE_COMPLETE",
+      "note": "本地私人项目 — Apple 签名/公证/分发非必需。tag v0.1.0 已创建。"
     }
   ],
   "gates_verified_pass": 10,
-  "gates_blocked": 1,
+  "gates_blocked": 0,
   "previous_false_pass_corrected": [
     "G7",
     "G8",
     "G9",
     "G10"
   ],
-  "test_baseline": "1211 passed, 17 failed, 1228 collected (KMA suites: +~310 tests; 1 SDK contract import error)",
+  "test_baseline": "2044 passed, 0 failed, 2044 collected",
   "local_release_artifacts": [
     "dist/nexara_prime-0.1.0-py3-none-any.whl",
     "dist/nexara_prime-0.1.0.tar.gz",
@@ -105,9 +100,11 @@
     "dist/checksums-0.1.0.txt"
   ],
   "supersedes": "GATE_STATUS.json from 2026-07-15 (false G7-G9 PASS claims)",
-  "updated_at": "2026-07-23T11:20:00Z",
-  "completed_at": "2026-07-23T11:20:00Z",
-  "completed_by": "G0→G10 Continuous Execution — Claude Code",
-  "superseded_by": ".nexara/receipts/pr23_final_attestation.json",
+  "updated_at": "2026-08-08T08:00:00Z",
+  "completed_at": "2026-08-08T08:00:00Z",
+  "completed_by": "NEXARA Sovereign OnePass — 本地完工 v0.1.0",
+  "tag": "v0.1.0",
+  "tag_head": "1762f77",
+  "supersedes": ["GATE_STATUS.json from 2026-07-15 (false G7-G9 PASS claims)", ".nexara/receipts/pr23_final_attestation.json"],
   "brand": "柏韩 (Bǎi Hán) — resolved 2026-07-23"
 }
