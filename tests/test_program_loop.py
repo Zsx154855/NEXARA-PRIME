@@ -1051,7 +1051,7 @@ class TestIntegrationFullLoop:
             config=ProgramLoopConfig(
                 tick_interval_seconds=0.01,
                 max_cycles=5,
-                heartbeat_interval_seconds=0.05,
+                heartbeat_interval_seconds=0.02,
                 checkpoint_interval=2,
             ),
         )
