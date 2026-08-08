@@ -1,12 +1,9 @@
 """Tests: Memory Brain persistence layer."""
 
-import os
 import pytest
-from pathlib import Path
 
 from src.nexara_prime.brain.db import BrainDB
 from src.nexara_prime.brain.memory_controller import MemoryController
-from src.nexara_prime.models import now_iso, new_id
 
 
 @pytest.fixture

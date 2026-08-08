@@ -17,11 +17,10 @@ from __future__ import annotations
 
 import threading
 import time
-from unittest.mock import MagicMock, PropertyMock, call, patch
+from unittest.mock import MagicMock
 
-import pytest
 
-from nexara_prime.models import MissionState, new_id, now_iso
+from nexara_prime.models import MissionState, now_iso
 from nexara_prime.program_loop import (
     PROGRAM_LOOP_ACTIVE,
     PROGRAM_LOOP_BACKPRESSURE,

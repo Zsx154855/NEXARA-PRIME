@@ -1,6 +1,5 @@
 """Tests: Memory Retrieval Adapter — isolation, no brain.db import."""
 
-import pytest
 from src.nexara_prime.brain.reasoning import MemoryRetrievalAdapter
 
 

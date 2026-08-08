@@ -15,8 +15,9 @@ if TYPE_CHECKING:
 class StrategicPlanningEngine:
     """Goal→Strategy→Program→Mission→Action planning with dependency tracking."""
 
-    def __init__(self, memory_controller: MemoryController) -> None:
+    def __init__(self, memory_controller: MemoryController, project_id: str = "nexara") -> None:
         self._mc = memory_controller
+        self._project_id = project_id
 
     def create_plan(self, goal: str, success_criteria: list[str] | None = None,
                     horizon: str = "medium") -> StrategicPlan:
@@ -64,18 +65,24 @@ class StrategicPlanningEngine:
         plan.confidence = max(0.1, plan.confidence - 0.1)
         return plan
 
-    def record_plan(self, plan: StrategicPlan) -> str:
+    def record_plan(self, plan: StrategicPlan, *,
+                    evidence_id: str | None = None, mission_id: str = "global") -> str:
+        if not evidence_id:
+            raise ValueError("record_plan requires evidence_id for durable plan write")
         content = json.dumps({
             "plan_id": plan.plan_id, "owner_goal": plan.owner_goal,
             "success_criteria": plan.success_criteria, "status": plan.status,
             "confidence": plan.confidence, "horizon": plan.planning_horizon,
+            "project_id": self._project_id,
         })
         return self._mc.commit(
-            mission_id="global", key=f"plan:{plan.plan_id}",
+            mission_id=mission_id, key=f"plan:{self._project_id}:{plan.plan_id}",
             content=content, kind="procedural", confidence=plan.confidence,
+            evidence_id=evidence_id,
         )
 
     def summarize(self) -> dict[str, Any]:
-        records = self._mc.recall("global", layer="procedural")
-        plans = [r for r in records if r.get("key", "").startswith("plan:")]
+        records = self._mc.recall(self._project_id, layer="procedural")
+        key_prefix = f"plan:{self._project_id}:"
+        plans = [r for r in records if r.get("key", "").startswith(key_prefix)]
         return {"total_plans": len(plans)}

@@ -13,10 +13,14 @@ if TYPE_CHECKING:
 
 
 class ResearchIntelligenceEngine:
-    """Research question → source collection → claim extraction → synthesis → brief."""
+    """Research question → source collection → claim extraction → synthesis → brief.
 
-    def __init__(self, memory_controller: MemoryController) -> None:
+    All durable writes require evidence_id and are scoped to project_id.
+    """
+
+    def __init__(self, memory_controller: MemoryController, project_id: str = "nexara") -> None:
         self._mc = memory_controller
+        self._project_id = project_id
 
     def create_task(self, question: str, scope: str = "", budget: int = 0,
                     time_limit: int = 0) -> ResearchTask:
@@ -67,19 +71,25 @@ class ResearchIntelligenceEngine:
         }
 
     def emit_brief(self, task: ResearchTask, claims: list[dict],
-                   synthesis: dict, evidence_refs: list[str] | None = None) -> str:
+                   synthesis: dict, evidence_refs: list[str] | None = None, *,
+                   evidence_id: str | None = None, mission_id: str = "global") -> str:
+        if not evidence_id:
+            raise ValueError("emit_brief requires evidence_id for durable research write")
         content = json.dumps({
             "research_id": task.research_id, "question": task.question,
             "scope": task.scope, "total_claims": len(claims),
             "synthesis": synthesis, "evidence_refs": evidence_refs or [],
             "status": "COMPLETED", "created_at": now_iso(),
+            "project_id": self._project_id,
         })
         return self._mc.commit(
-            mission_id="global", key=f"research:{task.research_id}",
+            mission_id=mission_id, key=f"research:{self._project_id}:{task.research_id}",
             content=content, kind="procedural", confidence=0.7,
+            evidence_id=evidence_id,
         )
 
     def summarize(self) -> dict[str, Any]:
-        records = self._mc.recall("global", layer="procedural")
-        research = [r for r in records if r.get("key", "").startswith("research:")]
+        records = self._mc.recall(self._project_id, layer="procedural")
+        key_prefix = f"research:{self._project_id}:"
+        research = [r for r in records if r.get("key", "").startswith(key_prefix)]
         return {"total_research_tasks": len(research)}
