@@ -632,7 +632,7 @@ class NexaraRuntime:
                 elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(mission.created_at)).total_seconds()
                 if elapsed > max_seconds:
                     mission.result["timeout"] = {"elapsed_seconds": elapsed, "max_seconds": max_seconds}
-                    self._advance(mission, MissionState.CANCELLED, "runtime")
+                    self._advance(mission, MissionState.FAILED, "runtime")
                     self._save_mission(mission)
                     raise TimeoutError(f"mission_timeout: {elapsed:.0f}s > {max_seconds}s")
         try:
