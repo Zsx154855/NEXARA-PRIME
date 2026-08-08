@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +31,7 @@ from .security_audit import SecurityAuditLedger
 from .state_machine import MissionStateMachine
 from .token_compiler import TokenCompiler
 from .tools import ToolRuntime
-from .chief_brain_kernel import ChiefBrainKernel
+from .brain.kernel import ChiefBrainKernel
 from .mission_triage import MissionTriageEngine
 from .orchestration import RuntimeOrchestrator
 from .adaptive_scheduler import AdaptiveMultiAgentScheduler
@@ -624,6 +625,16 @@ class NexaraRuntime:
         processor = _DISPATCH.get(mission.state)
         if processor is None:
             raise ValueError(f"mission_not_ready_to_run:{mission.state}")
+        # ── Timeout check (Runtime Productization v1) ──
+        if mission.state not in {MissionState.COMPLETED.value, MissionState.ROLLED_BACK.value, MissionState.FAILED.value}:
+            max_seconds = self.settings.max_execution_seconds
+            if max_seconds and max_seconds > 0:
+                elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(mission.created_at)).total_seconds()
+                if elapsed > max_seconds:
+                    mission.result["timeout"] = {"elapsed_seconds": elapsed, "max_seconds": max_seconds}
+                    self._advance(mission, MissionState.CANCELLED, "runtime")
+                    self._save_mission(mission)
+                    raise TimeoutError(f"mission_timeout: {elapsed:.0f}s > {max_seconds}s")
         try:
             return processor(mission)
         except ProviderUnavailable:

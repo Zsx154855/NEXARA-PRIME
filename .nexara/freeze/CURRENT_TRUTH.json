@@ -1,0 +1,140 @@
+{
+  "mission": "NEXARA_CORE_V1_FREEZE_AND_SEAL_V2",
+  "mission_type": "Architecture Governance Mission",
+  "generated_at": "2026-08-08T08:00:00Z",
+  "generated_by": "NEXARA Sovereign Runtime — Architecture Freeze Audit",
+
+  "repository": {
+    "root": "/Users/agentos/NEXARA-PRIME",
+    "branch": "feat/brand-baihan",
+    "head_sha": "8a75910c5f7e7d9c3c8d769307decbef4c74433b",
+    "head_short": "8a75910",
+    "head_message": "milestone: v0.1.0 — 柏韩内核本地完工",
+    "tag": "v0.1.0",
+    "tag_head": "1762f77",
+    "remote": "https://github.com/Zsx154855/NEXARA-PRIME.git",
+    "dirty_files": [
+      "LivingInterface/.derivedData/ModuleCache.noindex/Session.modulevalidation",
+      "LivingInterface/.derivedData/info.plist",
+      "ui/next-env.d.ts",
+      "ui/tsconfig.json"
+    ],
+    "dirty_count": 4,
+    "clean_deployable": true,
+    "worktree_count": 57
+  },
+
+  "program": {
+    "name": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
+    "platform": "NEXARA_PRIME",
+    "package": "nexara-prime==0.1.0",
+    "version": "0.1.0",
+    "python": "3.12.13",
+    "venv": "/Users/agentos/NEXARA-PRIME/.venv",
+    "entry_point": "nexara",
+    "brand": "柏韩 (Bǎi Hán)",
+    "positioning": "Human-Centered Sovereign Agent Kernel on NEXARA PRIME",
+    "local_private_project": true
+  },
+
+  "gates": {
+    "status": "LOCAL_RELEASE_COMPLETE",
+    "total": 10,
+    "passed": 10,
+    "blocked": 0,
+    "breakdown": {
+      "G0": {"status": "PASS", "name": "Reality Inventory"},
+      "G1": {"status": "PASS", "name": "Repository Identity"},
+      "G2": {"status": "PASS", "name": "Kernel Contract"},
+      "G3": {"status": "PASS", "name": "Capability Registry"},
+      "G4": {"status": "PASS", "name": "Tool Runtime"},
+      "G5": {"status": "PASS", "name": "Memory & Knowledge"},
+      "G6": {"status": "PASS", "name": "Governance Hardening"},
+      "G7": {"status": "PASS", "name": "Runtime Truth Bindings"},
+      "G8": {"status": "PASS", "name": "SDK & Plugin"},
+      "G9": {"status": "PASS", "name": "Evolution Pipeline"},
+      "G10": {"status": "PASS", "name": "Release"}
+    }
+  },
+
+  "tests": {
+    "total": 2044,
+    "passed": 2044,
+    "failed": 0,
+    "command": ".venv/bin/python -m pytest -q",
+    "validation": "POST_MERGE_VALIDATION_PASS"
+  },
+
+  "security": {
+    "secret_leakage": 0,
+    "approval_bypass": 0,
+    "sandbox_escape": 0,
+    "hash_mismatches": 0,
+    "security_runtime": "CLOSED",
+    "audit_chain": "intact",
+    "recovery_no_duplicates": true
+  },
+
+  "governance": {
+    "constitution": "NSEC V2.1",
+    "canonical_file": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md",
+    "chapters": 19,
+    "articles": 55,
+    "authority_level": "SUPREME",
+    "effective_date": "2026-07-22",
+    "supersedes": "NSEC V2.0 (V1 legacy)"
+  },
+
+  "live_provider": {
+    "name": "deepseek",
+    "latency_ms": 785,
+    "verified": true,
+    "openai": "QUOTA_BLOCKED_OPTIONAL"
+  },
+
+  "source_structure": {
+    "core_package": "src/nexara_prime",
+    "python_files": 144,
+    "test_files": 98,
+    "top_level_modules": [
+      "runtime", "models", "state_machine", "governance", "evidence",
+      "memory", "evaluation", "cli", "api", "tools", "config",
+      "recovery", "db", "events", "scheduler", "capabilities",
+      "mission_compiler", "mission_triage", "contract_engine",
+      "token_compiler", "token_compiler_v2", "model_gateway",
+      "model_router", "security_audit", "independent_review",
+      "real_context", "identity", "soul", "escalation",
+      "resource_budget", "repair_loop", "program_loop",
+      "orchestration", "adaptive_runtime", "adaptive_scheduler",
+      "kernel_boundary", "network_policy", "policy_service",
+      "telemetry", "knowledge", "rag_pipeline", "benchmark_runner"
+    ],
+    "subpackages": [
+      "brain/", "council/", "connectors/", "secrets/",
+      "product_reality/", "delivery_controller/", "agent/", "platform/"
+    ]
+  },
+
+  "known_blockers": [
+    {
+      "id": "BLOCKER-001",
+      "type": "dependency_naming",
+      "severity": "low",
+      "description": "Persona.HERMES string constant — not a runtime import"
+    },
+    {
+      "id": "BLOCKER-002",
+      "type": "legacy_state_cleanup",
+      "severity": "low",
+      "description": "Deprecated .nexara files (CURRENT_GATE.md, NEXT_ACTION.md, EXECUTION_CHECKPOINT.json)"
+    }
+  ],
+
+  "deprecated_files": [
+    ".nexara/CURRENT_GATE.md",
+    ".nexara/NEXT_ACTION.md",
+    ".nexara/EXECUTION_CHECKPOINT.json"
+  ],
+
+  "declaration": "ALL subsequent freeze judgments SHALL reference ONLY this CURRENT_TRUTH."
+}
