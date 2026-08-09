@@ -65,6 +65,10 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
         data["missions"] = enriched
         return data
 
+    @app.get("/api/runtime/stats")
+    def stats() -> dict[str, Any]:
+        return runtime.stats()
+
     @app.get("/api/missions")
     def list_missions() -> list[dict[str, Any]]:
         return runtime.list_missions()

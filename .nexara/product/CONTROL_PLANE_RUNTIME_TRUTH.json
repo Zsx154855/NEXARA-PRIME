@@ -1,0 +1,59 @@
+{
+  "product": "NEXARA Control Plane V1",
+  "seal_type": "RUNTIME_TRUTH",
+  "generated_at": "2026-08-09T05:55:00+00:00",
+  "base_runtime_seal": "ceae37fe33820c6e39354bc1f74ed7ea3254f74b",
+  "current_head": "ceae37fe33820c6e39354bc1f74ed7ea3254f74b",
+  "runtime_drift": "EXPECTED_PRODUCTIZATION_CHANGE",
+  "core_seal": "8a75910",
+  "branch": "feat/brand-baihan",
+  "runtime_invariants": {
+    "no_silent_mock_fallback": true,
+    "no_raw_store_bypass": true,
+    "no_self_transitions": true,
+    "no_state_regression": true,
+    "no_duplicate_side_effects": true,
+    "approval_integrity": true,
+    "evidence_integrity": true,
+    "provider_unavailable_resumable": true,
+    "adaptive_states_rejected": true,
+    "sdk_compatibility_inline": true
+  },
+  "runtime_modifications": [
+    {
+      "file": "src/nexara_prime/runtime.py",
+      "change": "N1 stats() method — read-only aggregation, 30 lines added after health()",
+      "type": "ADDITIVE",
+      "state_mutation": false,
+      "db_schema_change": false,
+      "core_contract_change": false
+    },
+    {
+      "file": "src/nexara_prime/api.py",
+      "change": "GET /api/runtime/stats route — 4 lines, read-only endpoint",
+      "type": "ADDITIVE",
+      "state_mutation": false,
+      "db_schema_change": false,
+      "core_contract_change": false
+    }
+  ],
+  "n1_stats": {
+    "endpoint": "GET /api/runtime/stats",
+    "read_only": true,
+    "state_mutation": false,
+    "governance_bypass": false,
+    "db_direct_access": false,
+    "fields": [
+      "total_missions", "active_missions", "completed_missions",
+      "failed_missions", "blocked_missions", "pending_approvals",
+      "total_evidence", "provider", "provider_available",
+      "mock_mode", "recovery_state", "last_event_at"
+    ]
+  },
+  "core_frozen": true,
+  "product_ui_additive_only": true,
+  "no_second_runtime": true,
+  "no_second_db": true,
+  "no_second_kernel": true,
+  "verification_timestamp": "2026-08-09T05:55:00+00:00"
+}

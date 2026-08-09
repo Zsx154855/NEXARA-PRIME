@@ -1,7 +1,7 @@
 "use client";
 
 import type { NexaraAPI } from "@/lib/api";
-import type { RuntimeOverview } from "@/types";
+import type { RuntimeOverview, RuntimeStats } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   Activity,
@@ -27,6 +27,7 @@ import {
 interface RuntimeHealthProps {
   api: NexaraAPI;
   overview: RuntimeOverview | null;
+  stats?: RuntimeStats | null;
 }
 
 function HealthBadge({ healthy, label }: { healthy: boolean; label?: string }) {

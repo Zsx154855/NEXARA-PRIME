@@ -2,31 +2,28 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { NexaraAPI } from "@/lib/api";
-import { RuntimeOverview } from "@/types";
+import { RuntimeOverview, RuntimeStats } from "@/types";
 import { Sidebar } from "@/components/Sidebar";
 import { TopBar } from "@/components/TopBar";
-import { AgentTeam } from "@/components/screens/AgentTeam";
 import { Overview } from "@/components/screens/Overview";
 import { MissionCreator } from "@/components/screens/MissionCreator";
 import { MissionWorkspace } from "@/components/screens/MissionWorkspace";
 import { ApprovalCenter } from "@/components/screens/ApprovalCenter";
 import { EvidenceViewer } from "@/components/screens/EvidenceViewer";
-import { CapabilityRegistry } from "@/components/screens/CapabilityRegistry";
 import { RuntimeHealth } from "@/components/screens/RuntimeHealth";
 
 export type Screen =
-  | "overview"
-  | "mission-creator"
+  | "dashboard"
+  | "missions"
   | "mission-workspace"
-  | "agent-team"
-  | "approvals"
   | "evidence"
-  | "capabilities"
-  | "health";
+  | "governance"
+  | "runtime-health";
 
 export default function DashboardShell() {
-  const [screen, setScreen] = useState<Screen>("overview");
+  const [screen, setScreen] = useState<Screen>("dashboard");
   const [overview, setOverview] = useState<RuntimeOverview | null>(null);
+  const [stats, setStats] = useState<RuntimeStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMissionId, setSelectedMissionId] = useState<string | null>(null);
@@ -34,10 +31,11 @@ export default function DashboardShell() {
 
   const api = new NexaraAPI();
 
-  const loadOverview = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
-      const data = await api.getOverview();
-      setOverview(data);
+      const [ov, st] = await Promise.all([api.getOverview(), api.getStats()]);
+      setOverview(ov);
+      setStats(st);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "无法连接到 NEXARA Runtime");
@@ -47,10 +45,10 @@ export default function DashboardShell() {
   }, []);
 
   useEffect(() => {
-    loadOverview();
-    const interval = setInterval(loadOverview, 10000);
+    loadData();
+    const interval = setInterval(loadData, 10000);
     return () => clearInterval(interval);
-  }, [loadOverview, missionCreated]);
+  }, [loadData, missionCreated]);
 
   const handleMissionSelect = (missionId: string) => {
     setSelectedMissionId(missionId);
@@ -59,57 +57,55 @@ export default function DashboardShell() {
 
   const handleMissionCreated = () => {
     setMissionCreated((c) => c + 1);
-    setScreen("overview");
+    setScreen("missions");
+  };
+
+  const handleCreateMission = () => {
+    setScreen("missions");
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-ivory text-graphite">
-      {/* Left Sidebar Navigation */}
       <Sidebar screen={screen} onNavigate={setScreen} onMissionSelect={handleMissionSelect} overview={overview} />
 
-      {/* Main Content Area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar
           screen={screen}
           overview={overview}
           loading={loading}
           error={error}
-          onRefresh={loadOverview}
+          onRefresh={loadData}
         />
 
         <main className="flex-1 overflow-auto p-6">
-          {screen === "overview" && (
+          {screen === "dashboard" && (
             <Overview
               overview={overview}
+              stats={stats}
               loading={loading}
               error={error}
               onMissionSelect={handleMissionSelect}
+              onCreateMission={handleCreateMission}
             />
           )}
-          {screen === "mission-creator" && (
-            <MissionCreator api={api} onCreated={handleMissionCreated} />
+          {screen === "missions" && (
+            <MissionCreator api={api} onCreated={handleMissionCreated} overview={overview} onMissionSelect={handleMissionSelect} />
           )}
           {screen === "mission-workspace" && selectedMissionId && (
             <MissionWorkspace
               api={api}
               missionId={selectedMissionId}
-              onBack={() => setScreen("overview")}
+              onBack={() => setScreen("missions")}
             />
-          )}
-          {screen === "agent-team" && (
-            <AgentTeam api={api} overview={overview} />
-          )}
-          {screen === "approvals" && (
-            <ApprovalCenter api={api} />
           )}
           {screen === "evidence" && (
             <EvidenceViewer api={api} overview={overview} />
           )}
-          {screen === "capabilities" && (
-            <CapabilityRegistry api={api} overview={overview} />
+          {screen === "governance" && (
+            <ApprovalCenter api={api} />
           )}
-          {screen === "health" && (
-            <RuntimeHealth api={api} overview={overview} />
+          {screen === "runtime-health" && (
+            <RuntimeHealth api={api} overview={overview} stats={stats} />
           )}
         </main>
       </div>

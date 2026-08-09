@@ -1,0 +1,85 @@
+{
+  "product": "NEXARA Control Plane V1",
+  "seal_type": "UI_EVIDENCE",
+  "generated_at": "2026-08-09T05:55:00+00:00",
+  "ui_stack": {
+    "framework": "Next.js 16",
+    "react": "React 19",
+    "language": "TypeScript strict",
+    "styling": "Tailwind v4",
+    "icons": "Lucide React",
+    "no_shadcn": true,
+    "output": "static export",
+    "base_path": "/console"
+  },
+  "ui_strategy": "EXTEND",
+  "design_tokens": {
+    "background": "ivory",
+    "text": "graphite",
+    "surface": "mist-gray",
+    "border": "taupe",
+    "accent": "champagne",
+    "success": "moss-green",
+    "warning": "amber",
+    "error": "warm-red",
+    "muted": "stone"
+  },
+  "navigation": {
+    "items": [
+      {"id": "dashboard", "label": "控制台", "icon": "LayoutDashboard"},
+      {"id": "missions", "label": "任务", "icon": "Rocket"},
+      {"id": "evidence", "label": "证据", "icon": "FileSearch"},
+      {"id": "governance", "label": "治理", "icon": "ShieldCheck"},
+      {"id": "runtime-health", "label": "健康", "icon": "Activity"}
+    ],
+    "total_items": 5,
+    "brand": "柏韩 · Control Plane",
+    "footer": "NSEC V2.1 · 人类控制"
+  },
+  "screens": {
+    "Dashboard": {
+      "component": "ui/src/components/screens/Overview.tsx",
+      "stats_source": "N1 GET /api/runtime/stats",
+      "stat_cards": ["active_missions", "completed_missions", "active_missions (Play)", "failed_missions", "pending_approvals"],
+      "mission_stream": "last 20 missions, reversed, clickable",
+      "empty_state": "Rocket icon + CTA",
+      "error_state": "Runtime unavailable message",
+      "loading_state": "Skeleton animation"
+    },
+    "Missions": {
+      "component": "ui/src/components/screens/MissionCreator.tsx",
+      "features": ["search bar", "status filter dropdown", "mission cards with state badges", "create mission form overlay", "3-step creation wizard"],
+      "states_supported": ["Intent", "Approval", "Execution", "Completed", "Failed", "Blocked"]
+    },
+    "Mission Detail": {
+      "component": "ui/src/components/screens/MissionCreator.tsx (view mode)",
+      "features": ["stage rail (7 stages)", "mission info", "contract info", "execution plan", "event timeline", "recovery pointer", "tool invocations"]
+    },
+    "Evidence": {
+      "features": ["evidence list", "mission filter dropdown", "evidence cards with type/timestamp/copy"]
+    },
+    "Governance": {
+      "features": ["approval center", "decided by input", "notes input", "pending/approved tab switcher", "summary counts"]
+    },
+    "Runtime Health": {
+      "features": ["system health overview", "provider info", "safe mode status", "NSEC governance status", "recovery status", "storage stats", "API status", "adapter status", "recovery JSON", "task status overview"]
+    }
+  },
+  "shell": {
+    "component": "ui/src/components/DashboardShell.tsx",
+    "features": ["dual polling (overview + stats)", "auto-refresh", "error boundary", "loading states"],
+    "refresh_interval": "5s"
+  },
+  "browser_qa_screenshots": [
+    "/tmp/nexara_qa_01_dashboard.png",
+    "/tmp/nexara_qa_02_missions_list.png",
+    "/tmp/nexara_qa_02b_search_e2e.png",
+    "/tmp/nexara_qa_02c_create_form.png",
+    "/tmp/nexara_qa_03_mission_detail.png",
+    "/tmp/nexara_qa_04_evidence.png",
+    "/tmp/nexara_qa_05_governance.png",
+    "/tmp/nexara_qa_06_health.png"
+  ],
+  "typescript_compiles": true,
+  "no_console_errors": true
+}

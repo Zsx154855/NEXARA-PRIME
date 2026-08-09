@@ -994,6 +994,36 @@ class NexaraRuntime:
     def health(self) -> dict:
         return {"status": "ok", "provider": self.models.provider.name, "db_path": str(self.settings.db_path), "event_count": len(self.store.list_events()), "recovery": self.recover().__dict__}
 
+    def stats(self) -> dict:
+        """Aggregated runtime statistics — lightweight polling endpoint."""
+        missions = self.list_missions()
+        total = len(missions)
+        active = sum(1 for m in missions if m.get("state") not in ("Completed", "Failed", "RolledBack"))
+        completed = sum(1 for m in missions if m.get("state") == "Completed")
+        failed = sum(1 for m in missions if m.get("state") == "Failed")
+        blocked = sum(1 for m in missions if m.get("state") == "Blocked")
+        pending_approvals = len([a for a in self.approvals.list() if a.get("status") == "pending"])
+        total_evidence = len(self.evidence.list())
+        provider_available = self.models.provider.name != "UnavailableProvider"
+        last_event = ""
+        events = self.store.list_events()
+        if events:
+            last_event = events[-1].get("timestamp", "")
+        return {
+            "total_missions": total,
+            "active_missions": active,
+            "completed_missions": completed,
+            "failed_missions": failed,
+            "blocked_missions": blocked,
+            "pending_approvals": pending_approvals,
+            "total_evidence": total_evidence,
+            "provider": self.models.provider.name,
+            "provider_available": provider_available,
+            "mock_mode": self.settings.mock_model,
+            "recovery_state": self.recover().__dict__.get("state", "healthy"),
+            "last_event_at": last_event,
+        }
+
     # ── Adaptive Runtime Methods ──
 
     def _get_adaptive(self) -> AdaptiveOrchestrator | None:

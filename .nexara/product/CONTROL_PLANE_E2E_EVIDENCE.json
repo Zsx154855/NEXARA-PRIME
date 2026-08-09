@@ -1,0 +1,42 @@
+{
+  "product": "NEXARA Control Plane V1",
+  "seal_type": "E2E_EVIDENCE",
+  "generated_at": "2026-08-09T05:55:00+00:00",
+  "mission_id": "mission_83d40fa1c3e1",
+  "mission_title": "E2E Control Plane Verification Mission",
+  "lifecycle": {
+    "create": {"timestamp": "2026-08-09T05:49:50.844235+00:00", "state": "Intent", "success": true},
+    "plan": {"timestamp": "2026-08-09T05:49:52+00:00", "state": "Approval", "success": true},
+    "approve": {"timestamp": "2026-08-09T05:49:54+00:00", "state": "Execution", "approval_id": "approval_73df6d9b3d28", "success": true},
+    "run": {"timestamp": "2026-08-09T05:49:56+00:00", "state": "Completed", "success": true}
+  },
+  "state_transitions": [
+    "Intent",
+    "Context",
+    "Contract",
+    "Plan",
+    "Simulation",
+    "Approval",
+    "Execution",
+    "Verification",
+    "Evidence",
+    "MemoryPatch",
+    "Evaluation",
+    "Completed"
+  ],
+  "final_state": "Completed",
+  "approval_status": "consumed",
+  "evidence_count": 16,
+  "event_count": 59,
+  "memory_committed": true,
+  "evaluation_completed": true,
+  "tool_invocations": 2,
+  "recovery_checked": true,
+  "report_generated": "reports/mission_83d40fa1c3e1/mission-report.md",
+  "verification": {
+    "full_lifecycle_completed": true,
+    "all_stages_passed": true,
+    "no_errors": true,
+    "api_chain_verified": "CREATE → PLAN → APPROVE → RUN → COMPLETED"
+  }
+}
