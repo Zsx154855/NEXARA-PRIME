@@ -1,0 +1,107 @@
+{
+  "manifest": "NEXARA_V1_RELEASE_MANIFEST",
+  "version": "1.0.0",
+  "core_version": "1.0.0",
+  "runtime_version": "1.0.0",
+  "product_version": "1.0.0",
+  "release_candidate": true,
+  "commit": "cb37509ca35dcf0abe4f5cede71abd8cd4a6ce03",
+  "commit_short": "cb37509",
+  "branch": "feat/brand-baihan",
+  "core_seal": "8a75910c5f7e7d9c3c8d769307decbef4c74433b",
+  "runtime_seal": "ceae37fe33820c6e39354bc1f74ed7ea3254f74b",
+  "product_seal": "CONTROL_PLANE_V1_SEAL",
+  "product_commit": "9a6536356f9801848d895109332a2cac39fa32cc",
+  "test_baseline": {
+    "total": 2044,
+    "passed": 2044,
+    "failed": 0,
+    "duration_seconds": 60.18,
+    "command": "python3 -m pytest -q --tb=no"
+  },
+  "artifacts": {
+    "backend": {
+      "api": "src/nexara_prime/api.py",
+      "runtime": "src/nexara_prime/runtime.py",
+      "db": "src/nexara_prime/db.py (SQLiteStore — single authority)",
+      "kernel": "src/nexara_prime/brain/kernel.py (ChiefBrainKernel — single authority)",
+      "core_objects": 11,
+      "runtime_invariants": 10,
+      "endpoints": 26,
+      "endpoints_healthy": 25,
+      "endpoints_degraded": 1,
+      "server": "uvicorn, port 8000"
+    },
+    "frontend": {
+      "framework": "Next.js 16",
+      "react": "React 19",
+      "language": "TypeScript strict",
+      "styling": "Tailwind v4",
+      "icons": "Lucide React",
+      "output": "static export",
+      "base_path": "/console",
+      "screens": [
+        "Dashboard",
+        "Mission Control",
+        "Mission Creator",
+        "Evidence Explorer",
+        "Governance Console",
+        "Runtime Health"
+      ]
+    },
+    "evidence": {
+      "core_freeze": ".nexara/freeze/ (10 files)",
+      "runtime_seal": ".nexara/runtime/ (6 files)",
+      "product_seal": ".nexara/product/ (12 files)",
+      "final_acceptance": [
+        ".nexara/product/NEXARA_V1_FINAL_TRUTH.json",
+        ".nexara/product/NEXARA_V1_FINAL_EVIDENCE.json",
+        ".nexara/product/NEXARA_V1_FINAL_ACCEPTANCE_REPORT.md",
+        ".nexara/product/NEXARA_V1_RELEASE_MANIFEST.json"
+      ]
+    }
+  },
+  "known_limitations": [
+    {
+      "id": "F-001",
+      "severity": "LOW",
+      "description": "/api/knowledge-universe returns 503 — optional brain module (scan_vault) import failure. Does not affect Core, Runtime, or Control Plane functionality.",
+      "classification": "PRE-EXISTING",
+      "release_blocking": false
+    },
+    {
+      "id": "RECEIPT-ENV-001",
+      "severity": "LOW",
+      "description": "Receipt validator requires clean worktree for self-referencing checks. Environmental constraint, not a functional defect.",
+      "classification": "ENVIRONMENTAL",
+      "release_blocking": false
+    }
+  ],
+  "release_status": "RELEASE_CANDIDATE_ACCEPTED",
+  "human_approval_required": true,
+  "human_approval_article": "NSEC Article 37 — High-Impact Approval",
+  "approval_gates": [
+    "No auto push",
+    "No auto merge",
+    "No auto tag (v1.0.0)",
+    "No auto release",
+    "No auto deploy"
+  ],
+  "governance": {
+    "framework": "NSEC V2.1",
+    "chapters": 19,
+    "articles": 55,
+    "canonical_file": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md",
+    "drift_status": "NO_DRIFT",
+    "verified_articles": [1, 8, 9, 26, 28, 37, 45, 55]
+  },
+  "seal_chain": [
+    {"commit": "8a75910", "description": "CORE FROZEN — v0.1.0 milestone"},
+    {"commit": "ceae37f", "description": "RUNTIME SEALED — timeout fix, F1/F2 consolidation"},
+    {"commit": "9a65363", "description": "CONTROL PLANE IMPLEMENTED — Product UI on SEALED Runtime"},
+    {"commit": "3c9124a", "description": "SEAL UPDATE — regression 2044/2044, worktree CLEAN"},
+    {"commit": "cb37509", "description": "EVIDENCE — Browser E2E screenshots + E2E mission report"}
+  ],
+  "generated_at": "2026-08-09T06:30:00+00:00",
+  "auditor": "NEXARA PRIME Sovereign Agent — Final Acceptance Audit"
+}
