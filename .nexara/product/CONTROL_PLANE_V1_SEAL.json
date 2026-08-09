@@ -20,7 +20,7 @@
     "browser_qa_pass": true,
     "security_pass": true,
     "governance_pass": true,
-    "regression": "2039/2044 (5 dirty-worktree, not regression)"
+    "regression": "2044/2044 (ALL PASSED after commit, clean worktree)"
   },
   "n1_implementation": {
     "endpoint": "GET /api/runtime/stats",
@@ -61,12 +61,12 @@
   },
   "regression": {
     "total": 2044,
-    "passed": 2039,
-    "failed": 5,
-    "duration_seconds": 65.30,
+    "passed": 2044,
+    "failed": 0,
+    "duration_seconds": 61.25,
     "baseline": 2044,
-    "delta": -5,
-    "root_cause": "5 receipt_self_reference tests fail due to dirty worktree (12 uncommitted Control Plane files + 2 untracked dirs). NOT a regression — will self-resolve after commit."
+    "delta": 0,
+    "root_cause": "N/A — all tests pass on clean worktree after commit 9a65363"
   },
   "browser_qa": {
     "screens_verified": 6,
@@ -94,12 +94,12 @@
     "all_invariants_preserved": true
   },
   "worktree": {
-    "modified_files": 12,
-    "untracked_dirs": 2,
-    "clean_required_for_seal": false,
-    "pending_commit": true,
-    "is_dirty": true,
-    "note": "Worktree is dirty due to uncommitted Control Plane changes. Per HARD GUARD 9, all changes must be committed before final push. The seal itself is valid; worktree cleanup is a commit-time operation."
+    "modified_files": 0,
+    "untracked_dirs": 0,
+    "clean_required_for_seal": true,
+    "pending_commit": false,
+    "is_dirty": false,
+    "note": "Worktree is CLEAN after commit 9a65363. All Control Plane changes committed."
   },
   "evidence_files": {
     "CONTROL_PLANE_RUNTIME_TRUTH.json": "Generated",
@@ -116,5 +116,8 @@
     "status": "PRODUCT_UI_V1_SEALED",
     "not": "DESIGN_COMPLETE, IMPLEMENTATION_READY, MOSTLY_COMPLETE, or READY_FOR_NEXT_PHASE"
   },
-  "signature": "SEALED at 2026-08-09T05:55:00+00:00 — NEXARA Control Plane V1 Productization Mission"
+  "commit": "9a6536356f9801848d895109332a2cac39fa32cc",
+  "final_regression": "2044/2044 PASSED — 61.25s",
+  "worktree_status": "CLEAN",
+  "signature": "SEALED at 2026-08-09T05:55:00+00:00 — NEXARA Control Plane V1 Productization Mission — FINAL"
 }
