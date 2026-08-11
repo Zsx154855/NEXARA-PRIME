@@ -10,7 +10,11 @@ created_at: 2026-07-11
 updated_at: 2026-07-11
 supersedes: []
 related: []
-tags: [acceptance, knowledge-fabric, migration]
+tags:
+  - acceptance
+  - knowledge-fabric
+  - migration
+aliases:
 ---
 
 # Knowledge Fabric Acceptance Report
