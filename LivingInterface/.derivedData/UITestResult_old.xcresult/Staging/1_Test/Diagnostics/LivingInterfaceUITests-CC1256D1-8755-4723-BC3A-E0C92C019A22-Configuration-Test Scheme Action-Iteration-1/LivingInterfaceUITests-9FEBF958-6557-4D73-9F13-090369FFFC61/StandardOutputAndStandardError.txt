@@ -1,0 +1,329 @@
+2026-07-30 11:31:24.455834+0700 LivingInterfaceUITests-Runner[69030:335853] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-07-30 11:31:26.792.
+Test Suite 'LivingInterfaceUITests.xctest' started at 2026-07-30 11:31:26.795.
+Test Suite 'LivingInterfaceUITests' started at 2026-07-30 11:31:26.795.
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testAllTabsExist]' started.
+    t =     0.01s Start Test at 2026-07-30 11:31:26.805
+    t =     0.17s Set Up
+    t =     0.17s     Open com.nexara.livinginterface.ios
+    t =     0.17s         Launch com.nexara.livinginterface.ios
+    t =     0.17s             Terminate com.nexara.livinginterface.ios:49740
+objc[69030]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x10a958310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x109c30398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     3.92s             Setting up automation session
+    t =     5.15s             Wait for com.nexara.livinginterface.ios to idle
+    t =     7.15s Waiting 3.0s for "今日标签" Button to exist
+    t =     8.18s     Checking `Expect predicate `existsNoRetry == 1` for object "今日标签" Button`
+    t =     8.18s         Checking existence of `"今日标签" Button`
+    t =     8.32s Waiting 3.0s for "记忆标签" Button to exist
+    t =     9.35s     Checking `Expect predicate `existsNoRetry == 1` for object "记忆标签" Button`
+    t =     9.36s         Checking existence of `"记忆标签" Button`
+    t =     9.41s Waiting 3.0s for "学习标签" Button to exist
+    t =    10.44s     Checking `Expect predicate `existsNoRetry == 1` for object "学习标签" Button`
+    t =    10.44s         Checking existence of `"学习标签" Button`
+    t =    10.47s Waiting 3.0s for "审批标签" Button to exist
+    t =    11.50s     Checking `Expect predicate `existsNoRetry == 1` for object "审批标签" Button`
+    t =    11.50s         Checking existence of `"审批标签" Button`
+    t =    11.53s Waiting 3.0s for "状态标签" Button to exist
+    t =    12.55s     Checking `Expect predicate `existsNoRetry == 1` for object "状态标签" Button`
+    t =    12.56s         Checking existence of `"状态标签" Button`
+    t =    12.59s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testAllTabsExist]' passed (13.022 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testBrainAboveModeSelector]' started.
+    t =     0.00s Start Test at 2026-07-30 11:31:39.829
+    t =     0.06s Set Up
+    t =     0.06s     Open com.nexara.livinginterface.ios
+    t =     0.06s         Launch com.nexara.livinginterface.ios
+    t =     0.06s             Terminate com.nexara.livinginterface.ios:69055
+    t =     1.58s             Setting up automation session
+    t =     2.54s             Wait for com.nexara.livinginterface.ios to idle
+    t =     4.03s Waiting 3.0s for "living.brain" Any to exist
+    t =     5.05s     Checking `Expect predicate `existsNoRetry == 1` for object "living.brain" Any`
+    t =     5.06s         Checking existence of `"living.brain" Any`
+    t =     5.16s Waiting 3.0s for "静默" Button to exist
+    t =     6.19s     Checking `Expect predicate `existsNoRetry == 1` for object "静默" Button`
+    t =     6.19s         Checking existence of `"静默" Button`
+    t =     6.24s Find the "living.brain" Any
+    t =     6.28s Find the "静默" Button
+    t =     6.30s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testBrainAboveModeSelector]' passed (6.539 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testBrainExists]' started.
+    t =     0.00s Start Test at 2026-07-30 11:31:46.369
+    t =     0.03s Set Up
+    t =     0.03s     Open com.nexara.livinginterface.ios
+    t =     0.03s         Launch com.nexara.livinginterface.ios
+    t =     0.03s             Terminate com.nexara.livinginterface.ios:69084
+    t =     1.30s             Setting up automation session
+    t =     2.18s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.60s Waiting 3.0s for "living.brain" Any to exist
+    t =     4.62s     Checking `Expect predicate `existsNoRetry == 1` for object "living.brain" Any`
+    t =     4.63s         Checking existence of `"living.brain" Any`
+    t =     4.73s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testBrainExists]' passed (4.950 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testComposerAboveTabBar]' started.
+    t =     0.00s Start Test at 2026-07-30 11:31:51.319
+    t =     0.03s Set Up
+    t =     0.03s     Open com.nexara.livinginterface.ios
+    t =     0.03s         Launch com.nexara.livinginterface.ios
+    t =     0.03s             Terminate com.nexara.livinginterface.ios:69098
+    t =     1.30s             Setting up automation session
+    t =     2.22s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.66s Waiting 3.0s for "指令输入框" TextField to exist
+    t =     4.69s     Checking `Expect predicate `existsNoRetry == 1` for object "指令输入框" TextField`
+    t =     4.69s         Checking existence of `"指令输入框" TextField`
+    t =     4.76s Waiting 3.0s for "今日标签" Button to exist
+    t =     5.78s     Checking `Expect predicate `existsNoRetry == 1` for object "今日标签" Button`
+    t =     5.79s         Checking existence of `"今日标签" Button`
+    t =     5.83s Find the "指令输入框" TextField
+    t =     5.89s Find the "今日标签" Button
+    t =     5.92s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testComposerAboveTabBar]' passed (6.164 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testComposerAcceptsInput]' started.
+    t =     0.00s Start Test at 2026-07-30 11:31:57.484
+    t =     0.03s Set Up
+    t =     0.03s     Open com.nexara.livinginterface.ios
+    t =     0.03s         Launch com.nexara.livinginterface.ios
+    t =     0.03s             Terminate com.nexara.livinginterface.ios:69124
+    t =     1.29s             Setting up automation session
+    t =     2.20s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.70s Waiting 3.0s for "指令输入框" TextField to exist
+    t =     4.73s     Checking `Expect predicate `existsNoRetry == 1` for object "指令输入框" TextField`
+    t =     4.73s         Checking existence of `"指令输入框" TextField`
+    t =     4.84s Tap "指令输入框" TextField
+    t =     4.84s     Wait for com.nexara.livinginterface.ios to idle
+    t =     4.84s     Find the "指令输入框" TextField
+    t =     4.86s     Check for interrupting elements affecting "living.root" TextField
+    t =     4.92s     Synthesize event
+    t =     5.34s     Wait for com.nexara.livinginterface.ios to idle
+    t =     5.84s Type '测试指令' into "living.root" TextField
+    t =     5.84s     Wait for com.nexara.livinginterface.ios to idle
+    t =     5.84s     Find the "living.root" TextField
+    t =     5.89s     Check for interrupting elements affecting "living.root" TextField
+    t =     5.92s     Synthesize event
+    t =     6.19s     Wait for com.nexara.livinginterface.ios to idle
+    t =     6.41s Find the "living.root" TextField
+    t =     6.47s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testComposerAcceptsInput]' passed (6.719 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testComposerExists]' started.
+    t =     0.00s Start Test at 2026-07-30 11:32:04.205
+    t =     0.04s Set Up
+    t =     0.04s     Open com.nexara.livinginterface.ios
+    t =     0.04s         Launch com.nexara.livinginterface.ios
+    t =     0.04s             Terminate com.nexara.livinginterface.ios:69132
+    t =     1.50s             Setting up automation session
+    t =     2.96s             Wait for com.nexara.livinginterface.ios to idle
+    t =     4.84s Waiting 3.0s for "指令输入框" TextField to exist
+    t =     5.85s     Checking `Expect predicate `existsNoRetry == 1` for object "指令输入框" TextField`
+    t =     5.85s         Checking existence of `"指令输入框" TextField`
+    t =     5.96s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testComposerExists]' passed (6.205 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testKeyboardAppearsOnFocus]' started.
+    t =     0.00s Start Test at 2026-07-30 11:32:10.410
+    t =     0.03s Set Up
+    t =     0.03s     Open com.nexara.livinginterface.ios
+    t =     0.03s         Launch com.nexara.livinginterface.ios
+    t =     0.03s             Terminate com.nexara.livinginterface.ios:69144
+    t =     1.50s             Setting up automation session
+    t =     2.31s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.98s Waiting 3.0s for "指令输入框" TextField to exist
+    t =     5.01s     Checking `Expect predicate `existsNoRetry == 1` for object "指令输入框" TextField`
+    t =     5.01s         Checking existence of `"指令输入框" TextField`
+    t =     5.10s Tap "指令输入框" TextField
+    t =     5.10s     Wait for com.nexara.livinginterface.ios to idle
+    t =     5.10s     Find the "指令输入框" TextField
+    t =     5.21s     Check for interrupting elements affecting "living.root" TextField
+    t =     5.27s     Synthesize event
+    t =     5.57s     Wait for com.nexara.livinginterface.ios to idle
+    t =     5.97s Waiting 3.0s for Keyboard (First Match) to exist
+    t =     7.00s     Checking `Expect predicate `existsNoRetry == 1` for object Keyboard (First Match)`
+    t =     7.00s         Checking existence of `Keyboard (First Match)`
+    t =     7.02s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testKeyboardAppearsOnFocus]' passed (7.262 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testKeyboardGeometryNoIllegalOverlap]' started.
+    t =     0.00s Start Test at 2026-07-30 11:32:17.673
+    t =     0.02s Set Up
+    t =     0.02s     Open com.nexara.livinginterface.ios
+    t =     0.02s         Launch com.nexara.livinginterface.ios
+    t =     0.02s             Terminate com.nexara.livinginterface.ios:69155
+    t =     1.49s             Setting up automation session
+    t =     2.65s             Wait for com.nexara.livinginterface.ios to idle
+    t =     4.60s Waiting 3.0s for "指令输入框" TextField to exist
+    t =     5.63s     Checking `Expect predicate `existsNoRetry == 1` for object "指令输入框" TextField`
+    t =     5.63s         Checking existence of `"指令输入框" TextField`
+    t =     5.76s Tap "指令输入框" TextField
+    t =     5.76s     Wait for com.nexara.livinginterface.ios to idle
+    t =     5.76s     Find the "指令输入框" TextField
+    t =     5.78s     Check for interrupting elements affecting "living.root" TextField
+    t =     5.81s     Synthesize event
+    t =     6.11s     Wait for com.nexara.livinginterface.ios to idle
+    t =     6.28s Waiting 3.0s for Keyboard (First Match) to exist
+    t =     7.31s     Checking `Expect predicate `existsNoRetry == 1` for object Keyboard (First Match)`
+    t =     7.31s         Checking existence of `Keyboard (First Match)`
+    t =     7.34s Checking existence of `"发送指令" Button`
+    t =     7.39s Checking existence of `"今日标签" Button`
+    t =     7.42s Find the "living.root" TextField
+    t =     7.46s Find the "living.root" TextField
+    t =     7.49s Find the "living.root" TextField
+    t =     7.53s Find the "living.root" TextField
+    t =     7.56s Find the "发送指令" Button
+    t =     7.60s Find the "living.root" Button
+    t =     7.64s Find the "living.root" Button
+    t =     7.68s Find the "living.root" Button
+    t =     7.72s Find the "今日标签" Button
+    t =     7.76s Find the "living.root" Button
+    t =     7.80s Find the "living.root" Button
+    t =     7.85s Find the "living.root" Button
+    t =     7.89s Find the Keyboard (First Match)
+    t =     7.91s Find the Keyboard at {{0.0, 1010.0}, {430.0, 243.0}}
+    t =     7.94s Find the Keyboard at {{0.0, 1010.0}, {430.0, 243.0}}
+    t =     7.95s Find the Keyboard at {{0.0, 1010.0}, {430.0, 243.0}}
+    t =     7.97s Added attachment named 'keyboard_geometry'
+    t =     7.97s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testKeyboardGeometryNoIllegalOverlap]' passed (8.254 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testModeChipsExist]' started.
+    t =     0.00s Start Test at 2026-07-30 11:32:25.928
+    t =     0.04s Set Up
+    t =     0.04s     Open com.nexara.livinginterface.ios
+    t =     0.04s         Launch com.nexara.livinginterface.ios
+    t =     0.04s             Terminate com.nexara.livinginterface.ios:69173
+    t =     1.27s             Setting up automation session
+    t =     2.36s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.85s Waiting 3.0s for "静默" Button to exist
+    t =     4.86s     Checking `Expect predicate `existsNoRetry == 1` for object "静默" Button`
+    t =     4.86s         Checking existence of `"静默" Button`
+    t =     4.96s Waiting 3.0s for "思考" Button to exist
+    t =     5.98s     Checking `Expect predicate `existsNoRetry == 1` for object "思考" Button`
+    t =     5.98s         Checking existence of `"思考" Button`
+    t =     6.02s Waiting 3.0s for "执行" Button to exist
+    t =     7.05s     Checking `Expect predicate `existsNoRetry == 1` for object "执行" Button`
+    t =     7.05s         Checking existence of `"执行" Button`
+    t =     7.08s Waiting 3.0s for "学习" Button to exist
+    t =     8.10s     Checking `Expect predicate `existsNoRetry == 1` for object "学习" Button`
+    t =     8.10s         Checking existence of `"学习" Button`
+    t =     8.13s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testModeChipsExist]' passed (8.400 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testModeSelectorExists]' started.
+    t =     0.00s Start Test at 2026-07-30 11:32:34.328
+    t =     0.03s Set Up
+    t =     0.03s     Open com.nexara.livinginterface.ios
+    t =     0.03s         Launch com.nexara.livinginterface.ios
+    t =     0.03s             Terminate com.nexara.livinginterface.ios:69186
+    t =     1.48s             Setting up automation session
+    t =     2.52s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.98s Waiting 3.0s for "静默" Button to exist
+    t =     5.01s     Checking `Expect predicate `existsNoRetry == 1` for object "静默" Button`
+    t =     5.01s         Checking existence of `"静默" Button`
+    t =     5.10s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testModeSelectorExists]' passed (5.322 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testMultilineInputVisibleWithKeyboard]' started.
+    t =     0.00s Start Test at 2026-07-30 11:32:39.652
+    t =     0.03s Set Up
+    t =     0.03s     Open com.nexara.livinginterface.ios
+    t =     0.03s         Launch com.nexara.livinginterface.ios
+    t =     0.03s             Terminate com.nexara.livinginterface.ios:69199
+    t =     1.29s             Setting up automation session
+    t =     2.22s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.65s Waiting 3.0s for "指令输入框" TextField to exist
+    t =     4.69s     Checking `Expect predicate `existsNoRetry == 1` for object "指令输入框" TextField`
+    t =     4.69s         Checking existence of `"指令输入框" TextField`
+    t =     4.78s Tap "指令输入框" TextField
+    t =     4.78s     Wait for com.nexara.livinginterface.ios to idle
+    t =     4.78s     Find the "指令输入框" TextField
+    t =     4.80s     Check for interrupting elements affecting "living.root" TextField
+    t =     4.82s     Synthesize event
+    t =     5.12s     Wait for com.nexara.livinginterface.ios to idle
+    t =     5.22s Waiting 3.0s for Keyboard (First Match) to exist
+    t =     6.25s     Checking `Expect predicate `existsNoRetry == 1` for object Keyboard (First Match)`
+    t =     6.25s         Checking existence of `Keyboard (First Match)`
+    t =     6.27s Type '这是第一行输入' into "living.root" TextField
+    t =     6.27s     Wait for com.nexara.livinginterface.ios to idle
+    t =     6.28s     Find the "living.root" TextField
+    t =     6.32s     Check for interrupting elements affecting "living.root" TextField
+    t =     6.35s     Synthesize event
+    t =     6.67s     Wait for com.nexara.livinginterface.ios to idle
+    t =     6.84s Type '
+' into "living.root" TextField
+    t =     6.84s     Wait for com.nexara.livinginterface.ios to idle
+    t =     6.84s     Find the "living.root" TextField
+    t =     6.89s     Check for interrupting elements affecting "living.root" TextField
+    t =     6.93s     Synthesize event
+    t =     7.14s     Wait for com.nexara.livinginterface.ios to idle
+    t =     7.15s Type '这是第二行输入' into "living.root" TextField
+    t =     7.15s     Wait for com.nexara.livinginterface.ios to idle
+    t =     7.15s     Find the "living.root" TextField
+    t =     7.20s     Check for interrupting elements affecting "living.root" TextField
+    t =     7.23s     Synthesize event
+    t =     7.55s     Wait for com.nexara.livinginterface.ios to idle
+    t =     7.55s Find the "living.root" TextField
+    t =     7.77s Added attachment named 'keyboard_open'
+    t =     7.77s Checking existence of `"发送指令" Button`
+    t =     7.81s Type '
+' into "living.root" TextField
+    t =     7.81s     Wait for com.nexara.livinginterface.ios to idle
+    t =     7.81s     Find the "living.root" TextField
+    t =     7.85s     Check for interrupting elements affecting "living.root" TextField
+    t =     7.89s     Synthesize event
+    t =     8.11s     Wait for com.nexara.livinginterface.ios to idle
+    t =     9.27s Added attachment named 'keyboard_closed_after_input'
+    t =     9.28s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testMultilineInputVisibleWithKeyboard]' passed (9.539 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testNoContentClippedByStatusBar]' started.
+    t =     0.00s Start Test at 2026-07-30 11:32:49.191
+    t =     0.02s Set Up
+    t =     0.02s     Open com.nexara.livinginterface.ios
+    t =     0.02s         Launch com.nexara.livinginterface.ios
+    t =     0.02s             Terminate com.nexara.livinginterface.ios:69209
+    t =     1.26s             Setting up automation session
+    t =     2.17s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.61s Waiting 3.0s for "静默" StaticText to exist
+    t =     4.63s     Checking `Expect predicate `existsNoRetry == 1` for object "静默" StaticText`
+    t =     4.63s         Checking existence of `"静默" StaticText`
+    t =     4.72s Find the "静默" StaticText
+    t =     4.75s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testNoContentClippedByStatusBar]' passed (4.974 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testRootViewExists]' started.
+    t =     0.00s Start Test at 2026-07-30 11:32:54.166
+    t =     0.03s Set Up
+    t =     0.03s     Open com.nexara.livinginterface.ios
+    t =     0.03s         Launch com.nexara.livinginterface.ios
+    t =     0.03s             Terminate com.nexara.livinginterface.ios:69229
+    t =     1.30s             Setting up automation session
+    t =     2.26s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.67s Waiting 3.0s for "living.root" Any to exist
+    t =     4.71s     Checking `Expect predicate `existsNoRetry == 1` for object "living.root" Any`
+    t =     4.71s         Checking existence of `"living.root" Any`
+    t =     4.75s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testRootViewExists]' passed (4.969 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testSendButtonDisabledWhenEmpty]' started.
+    t =     0.00s Start Test at 2026-07-30 11:32:59.136
+    t =     0.03s Set Up
+    t =     0.03s     Open com.nexara.livinginterface.ios
+    t =     0.03s         Launch com.nexara.livinginterface.ios
+    t =     0.03s             Terminate com.nexara.livinginterface.ios:69239
+    t =     1.30s             Setting up automation session
+    t =     2.20s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.63s Waiting 3.0s for "发送指令" Button to exist
+    t =     4.65s     Checking `Expect predicate `existsNoRetry == 1` for object "发送指令" Button`
+    t =     4.66s         Checking existence of `"发送指令" Button`
+    t =     4.75s Find the "发送指令" Button
+    t =     4.77s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testSendButtonDisabledWhenEmpty]' passed (4.988 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testSendButtonExists]' started.
+    t =     0.00s Start Test at 2026-07-30 11:33:04.124
+    t =     0.03s Set Up
+    t =     0.03s     Open com.nexara.livinginterface.ios
+    t =     0.03s         Launch com.nexara.livinginterface.ios
+    t =     0.03s             Terminate com.nexara.livinginterface.ios:69249
+    t =     1.30s             Setting up automation session
+    t =     2.16s             Wait for com.nexara.livinginterface.ios to idle
+    t =     3.58s Waiting 3.0s for "发送指令" Button to exist
+    t =     4.61s     Checking `Expect predicate `existsNoRetry == 1` for object "发送指令" Button`
+    t =     4.61s         Checking existence of `"发送指令" Button`
+    t =     4.70s Tear Down
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testSendButtonExists]' passed (4.927 seconds).
+Test Case '-[LivingInterfaceUITests.LivingInterfaceUITests testSendButtonHitTarget]' started.
+    t =     0.00s Start Test at 2026-07-30 11:33:09.052
+    t =     0.03s Set Up
+    t =     0.03s     Open com.nexara.livinginterface.ios
+    t =     0.03s         Launch com.nexara.livinginterface.ios
+    t =     0.03s             Terminate com.nexara.livinginterface.ios:69261

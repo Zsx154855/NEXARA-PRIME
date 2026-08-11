@@ -1,0 +1,86 @@
+{
+  "evidence_id": "freeze_evidence_v1",
+  "mission": "NEXARA_CORE_V1_FREEZE_AND_SEAL_V2",
+  "decisions": [
+    {
+      "id": "D001",
+      "decision": "FREEZE models.py as single source of truth for ALL canonical types",
+      "evidence": "models.py (909L) contains 33 enums + 40+ Pydantic models; all other modules import from it; no competing type definitions found",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    },
+    {
+      "id": "D002",
+      "decision": "FREEZE state_machine.py as single authority for state transitions",
+      "evidence": "TRANSITIONS matrix covers 33 states; MissionStateMachine.transition() is only path to state change; verified by 2044 tests",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    },
+    {
+      "id": "D003",
+      "decision": "FREEZE governance.py (PolicyEngine + ApprovalEngine + WriterLeaseManager)",
+      "evidence": "ApprovalEngine uses integrity-validated transitions with event sourcing; PolicyEngine enforces R2-R4 approval; WriterLeaseManager prevents concurrent writes",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    },
+    {
+      "id": "D004",
+      "decision": "FREEZE evidence.py as single evidence authority",
+      "evidence": "EvidenceStore uses SHA-256 + envelope integrity; idempotency_key prevents duplicates; receipt_status() is single receipt authority",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    },
+    {
+      "id": "D005",
+      "decision": "FREEZE memory.py as single memory authority",
+      "evidence": "MemoryKernel enforces evidence-bound patches (source_evidence_id required); MemoryLayerManager provides layered recall; 14 MemoryKind types",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    },
+    {
+      "id": "D006",
+      "decision": "FREEZE runtime.py 5-stage pipeline (execute→verify→evidence→memory→eval)",
+      "evidence": "Pipeline verified by 2044 tests; 10 invariants documented and enforced; ProviderUnavailable is resumable not terminal",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    },
+    {
+      "id": "D007",
+      "decision": "MERGE brain/db.py → db.py (CONDITION — does not block freeze)",
+      "evidence": "brain/db.py (249L) duplicates top-level db.py (1294L); both have SQLite store semantics; top-level is canonical authority",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    },
+    {
+      "id": "D008",
+      "decision": "MERGE chief_brain_kernel.py → brain/kernel.py (CONDITION — does not block freeze)",
+      "evidence": "Two ChiefBrainKernel classes; top-level delegates to brain/kernel.py; brain/kernel.py is canonical",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    },
+    {
+      "id": "D009",
+      "decision": "DELETE capability_registry_v2.py (10L thin wrapper)",
+      "evidence": "10 lines, no unique functionality, wraps capabilities.py",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    },
+    {
+      "id": "D010",
+      "decision": "DELETE 3 deprecated .nexara files",
+      "evidence": "CURRENT_GATE.md, NEXT_ACTION.md, EXECUTION_CHECKPOINT.json all marked DEPRECATED with content migrated to GATE_STATUS.json/PROGRAM_STATE.json",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    },
+    {
+      "id": "D011",
+      "decision": "ALL 7 Freeze Gates PASS",
+      "evidence": "Object Gate ✅, Capability Gate ✅, Contract Gate ✅, Dependency Gate ✅, Bootstrap Gate ✅, Architecture Audit Gate ✅, Evidence Gate ✅",
+      "timestamp": "2026-08-08T08:00:00Z",
+      "actor": "NEXARA Sovereign Runtime"
+    }
+  ],
+  "repository_sha": "8a75910c5f7e7d9c3c8d769307decbef4c74433b",
+  "timestamp": "2026-08-08T08:00:00Z",
+  "actor": "NEXARA Sovereign Runtime — Architecture Freeze Mission"
+}

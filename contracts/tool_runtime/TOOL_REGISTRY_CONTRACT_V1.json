@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/tool_runtime/tool_registry_contract_v1.json",
+  "title": "NEXARA Tool Registry — Design Contract V1",
+  "description": "Remediation for P1: ToolRegistry absent. Defines formal tool registry bridging existing ToolRuntime string dispatch to contract-based tool IDs.",
+  "frozen_at": "2026-07-27T06:00:00Z",
+  "remediates": "Claude review deleg_c7583290 — REGISTRY_MODEL=BLOCKED",
+  "tool_registry": {
+    "principle": "Capability-scoped tool discovery. Tools registered by contract, discovered by capability, invoked by id.",
+    "bridge_to_existing": "Wraps existing ToolRuntime methods (execute, read, write) behind typed tool_id dispatch. Does not replace ToolRuntime — adds contract layer above.",
+    "entry_schema": {
+      "tool_id": "tool.{category}.{name} — unique",
+      "version": "semver — tool contract version",
+      "category": "BROWSER | CODE_EXECUTION | SHELL | API | FILE_OPERATION",
+      "capability_requirements": [
+        "cap.code.read"
+      ],
+      "permission_requirements": [
+        "READ",
+        "WRITE"
+      ],
+      "risk_ceiling": "R0-R4 — max mission risk level",
+      "sandbox_level": "NONE | PROCESS | CONTAINER",
+      "adapter_reference": "Existing ToolRuntime method name or function ref",
+      "parameters_schema": "JSON Schema for tool input validation",
+      "output_schema": "JSON Schema for tool output validation",
+      "timeout_s": 30,
+      "max_output_bytes": 100000,
+      "idempotent": true,
+      "deprecated": false
+    },
+    "interface": {
+      "register": "registry.register(entry) → tool_id",
+      "unregister": "registry.unregister(tool_id) → bool",
+      "update": "registry.update(tool_id, patch) → entry",
+      "find_by_capability": "registry.find_by_capability(capability_id) → list[entry]",
+      "find_by_category": "registry.find_by_category(category) → list[entry]",
+      "get": "registry.get(tool_id) → entry | None",
+      "resolve_adapter": "registry.resolve(tool_id) → callable (existing ToolRuntime method)"
+    }
+  },
+  "registered_tools": [
+    {
+      "tool_id": "tool.file.read",
+      "category": "FILE_OPERATION",
+      "capability_requirements": [
+        "cap.code.read"
+      ],
+      "sandbox_level": "NONE",
+      "adapter": "ToolRuntime.read"
+    },
+    {
+      "tool_id": "tool.file.write",
+      "category": "FILE_OPERATION",
+      "capability_requirements": [
+        "cap.code.write"
+      ],
+      "sandbox_level": "PROCESS",
+      "adapter": "ToolRuntime.write"
+    },
+    {
+      "tool_id": "tool.file.patch",
+      "category": "FILE_OPERATION",
+      "capability_requirements": [
+        "cap.code.write"
+      ],
+      "sandbox_level": "PROCESS",
+      "adapter": "ToolRuntime.patch"
+    },
+    {
+      "tool_id": "tool.file.list",
+      "category": "FILE_OPERATION",
+      "capability_requirements": [
+        "cap.code.read"
+      ],
+      "sandbox_level": "NONE",
+      "adapter": "ToolRuntime.list_directory"
+    },
+    {
+      "tool_id": "tool.file.stat",
+      "category": "FILE_OPERATION",
+      "capability_requirements": [
+        "cap.code.read"
+      ],
+      "sandbox_level": "NONE",
+      "adapter": "ToolRuntime.stat"
+    },
+    {
+      "tool_id": "tool.shell.exec",
+      "category": "SHELL",
+      "capability_requirements": [
+        "cap.code.execute"
+      ],
+      "sandbox_level": "CONTAINER",
+      "adapter": "ToolRuntime.execute"
+    },
+    {
+      "tool_id": "tool.api.call",
+      "category": "API",
+      "capability_requirements": [
+        "cap.api.invoke"
+      ],
+      "sandbox_level": "PROCESS",
+      "adapter": "ToolRuntime.api_call"
+    },
+    {
+      "tool_id": "tool.api.poll",
+      "category": "API",
+      "capability_requirements": [
+        "cap.api.invoke"
+      ],
+      "sandbox_level": "PROCESS",
+      "adapter": "ToolRuntime.api_poll"
+    },
+    {
+      "tool_id": "tool.browser.navigate",
+      "category": "BROWSER",
+      "capability_requirements": [
+        "cap.browser.control"
+      ],
+      "sandbox_level": "CONTAINER",
+      "adapter": "ToolRuntime.browser_navigate"
+    },
+    {
+      "tool_id": "tool.browser.screenshot",
+      "category": "BROWSER",
+      "capability_requirements": [
+        "cap.browser.control"
+      ],
+      "sandbox_level": "CONTAINER",
+      "adapter": "ToolRuntime.browser_screenshot"
+    },
+    {
+      "tool_id": "tool.browser.extract",
+      "category": "BROWSER",
+      "capability_requirements": [
+        "cap.browser.control"
+      ],
+      "sandbox_level": "CONTAINER",
+      "adapter": "ToolRuntime.browser_extract"
+    }
+  ],
+  "integration": {
+    "existing": "ToolRuntime in src/nexara_prime/tools.py — adapter_reference maps to existing methods",
+    "non_invasive": "Registry is additive. Existing ToolRuntime.method() calls unchanged. Registry adds discover+validate layer above."
+  }
+}

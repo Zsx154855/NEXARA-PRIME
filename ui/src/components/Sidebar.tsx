@@ -4,23 +4,19 @@ import { Screen } from "./DashboardShell";
 import { RuntimeOverview } from "@/types";
 import {
   LayoutDashboard,
-  PlusCircle,
-  Bot,
-  ShieldCheck,
+  Rocket,
   FileSearch,
-  Puzzle,
+  ShieldCheck,
   Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS: { id: Screen; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "overview", label: "主脑总览", icon: LayoutDashboard },
-  { id: "mission-creator", label: "任务创建", icon: PlusCircle },
-  { id: "agent-team", label: "智能体团队", icon: Bot },
-  { id: "approvals", label: "审批中心", icon: ShieldCheck },
-  { id: "evidence", label: "证据与回执", icon: FileSearch },
-  { id: "capabilities", label: "能力注册", icon: Puzzle },
-  { id: "health", label: "系统健康", icon: Activity },
+  { id: "dashboard", label: "控制台", icon: LayoutDashboard },
+  { id: "missions", label: "任务", icon: Rocket },
+  { id: "evidence", label: "证据", icon: FileSearch },
+  { id: "governance", label: "治理", icon: ShieldCheck },
+  { id: "runtime-health", label: "健康", icon: Activity },
 ];
 
 interface SidebarProps {
@@ -55,7 +51,7 @@ export function Sidebar({ screen, onNavigate, onMissionSelect, overview }: Sideb
           </div>
           <div>
             <div className="text-sm font-bold tracking-wider text-graphite">柏韩</div>
-            <div className="text-[10px] uppercase tracking-widest text-stone/60">主脑控制台</div>
+            <div className="text-[10px] uppercase tracking-widest text-stone/60">Control Plane</div>
           </div>
         </div>
 
@@ -130,7 +126,7 @@ export function Sidebar({ screen, onNavigate, onMissionSelect, overview }: Sideb
 
       {/* Mobile Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-taupe bg-ivory px-2 py-1.5 lg:hidden shadow-lg">
-        {NAV_ITEMS.slice(0, 5).map((item) => {
+        {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = screen === item.id;
           return (
@@ -143,23 +139,10 @@ export function Sidebar({ screen, onNavigate, onMissionSelect, overview }: Sideb
               )}
             >
               <Icon className="h-5 w-5" />
-              <span className="leading-tight">{item.label.slice(0, 3)}</span>
+              <span className="leading-tight">{item.label}</span>
             </button>
           );
         })}
-        {/* More menu item for remaining screens */}
-        <button
-          onClick={() => {
-            const remaining = NAV_ITEMS.slice(5).map(i => i.id);
-            const currentIdx = remaining.indexOf(screen);
-            const next = remaining[(currentIdx + 1) % remaining.length] ?? remaining[0];
-            if (next) onNavigate(next);
-          }}
-          className="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] text-stone/50 transition-colors"
-        >
-          <Puzzle className="h-5 w-5" />
-          <span className="leading-tight">更多</span>
-        </button>
       </nav>
       {/* Spacer for mobile bottom nav */}
       <div className="h-14 lg:hidden" />

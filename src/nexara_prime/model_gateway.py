@@ -202,9 +202,12 @@ class ModelGateway:
         self.breaker = breaker if breaker is not None else CircuitBreaker()
         self.last_usage: dict[str, Any] = {}
 
-    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "") -> ModelResponse:
+    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", budget_remaining: float | None = None) -> ModelResponse:
         last_error: Exception | None = None
         provider_name = getattr(self.provider, 'name', 'unknown')
+        # ── Quota enforcement (Runtime Productization v1) ──
+        if budget_remaining is not None and budget_remaining <= 0:
+            raise ProviderUnavailable("budget_exhausted: remaining={:.6f}".format(budget_remaining))
         for attempt in range(1, self.max_attempts + 1):
             try:
                 if self.breaker.is_open(provider_name):

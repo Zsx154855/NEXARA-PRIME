@@ -18,8 +18,6 @@ class MockMC:
     def recall(s,mid,layer=None,**kw):
         res=[]
         for m,recs in s.store.items():
-            if mid!='global' and m!=mid:
-                continue
             for r in recs:
                 if r['status']!='active':
                     continue
@@ -35,25 +33,25 @@ def wm(mc): return GovernedWorldModel(mc)
 
 class TestIngestion:
     def test_ingest_fact(self, wm):
-        cid = wm.ingest_observation("event","source_x",{"detail":"test"},classification="FACT")
+        cid = wm.ingest_observation("event","source_x",{"detail":"test"},classification="FACT",evidence_id="test")
         assert cid is not None
     def test_ingest_inference(self, wm):
-        cid = wm.ingest_observation("event","src",{},classification="INFERENCE")
+        cid = wm.ingest_observation("event","src",{},classification="INFERENCE",evidence_id="test")
         assert cid is not None
     def test_invalid_classification_defaults(self, wm):
-        cid = wm.ingest_observation("e","src",{},classification="INVALID")
+        cid = wm.ingest_observation("e","src",{},classification="INVALID",evidence_id="test")
         assert cid is not None
     def test_ingest_with_evidence(self, wm):
-        cid = wm.ingest_observation("type","src",{},evidence_refs=["ev1","ev2"])
+        cid = wm.ingest_observation("type","src",{},evidence_refs=["ev1","ev2"],evidence_id="test")
         assert cid is not None
 
 class TestRetrieval:
     def test_get_entity(self, wm):
-        wm.ingest_observation("event","src",{"detail":"x"})
+        wm.ingest_observation("event","src",{"detail":"x"},evidence_id="test")
         entities = wm._mc.recall("global","procedural")
         for r in entities:
             if r["key"].startswith("world:"):
-                eid = r["key"].replace("world:","")
+                eid = r["key"].replace("world:nexara:","")
                 ent = wm.get_entity(eid)
                 assert ent is not None
                 break
@@ -62,28 +60,28 @@ class TestRetrieval:
 
 class TestClassification:
     def test_classify_entity(self, wm):
-        wm.ingest_observation("event","src",{})
+        wm.ingest_observation("event","src",{},evidence_id="test")
         entities = wm._mc.recall("global","procedural")
-        eid = entities[0]["key"].replace("world:","")
+        eid = entities[0]["key"].replace("world:nexara:","")
         assert wm.classify_entity(eid, "RETRACTED")
     def test_invalid_classification_fails(self, wm):
-        wm.ingest_observation("event","src",{})
+        wm.ingest_observation("event","src",{},evidence_id="test")
         entities = wm._mc.recall("global","procedural")
-        eid = entities[0]["key"].replace("world:","")
+        eid = entities[0]["key"].replace("world:nexara:","")
         assert not wm.classify_entity(eid, "INVALID")
 
 class TestMaintenance:
     def test_detect_stale(self, wm):
-        wm.ingest_observation("event","src",{})
+        wm.ingest_observation("event","src",{},evidence_id="test")
         stale = wm.detect_stale()
         assert isinstance(stale, list)
     def test_expire_unverified(self, wm):
-        wm.ingest_observation("event","src",{},classification="HYPOTHESIS")
+        wm.ingest_observation("event","src",{},classification="HYPOTHESIS",evidence_id="test")
         count = wm.expire_unverified()
         assert count >= 0
     def test_summarize(self, wm):
-        wm.ingest_observation("event","src",{},classification="FACT")
-        wm.ingest_observation("event","src",{},classification="INFERENCE")
+        wm.ingest_observation("event","src",{},evidence_id="test",classification="FACT")
+        wm.ingest_observation("event","src",{},evidence_id="test",classification="INFERENCE")
         s = wm.summarize()
         assert s["facts"] >= 1
         assert s["inferences"] >= 1

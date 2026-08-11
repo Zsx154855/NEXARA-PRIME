@@ -432,6 +432,22 @@ export interface AdaptiveStatusResponse {
   missions: AdaptiveMissionProfile[];
 }
 
+/** GET /api/runtime/stats response — aggregated runtime statistics. */
+export interface RuntimeStats {
+  total_missions: number;
+  active_missions: number;
+  completed_missions: number;
+  failed_missions: number;
+  blocked_missions: number;
+  pending_approvals: number;
+  total_evidence: number;
+  provider: string;
+  provider_available: boolean;
+  mock_mode: boolean;
+  recovery_state: string;
+  last_event_at: string;
+}
+
 // ── Request Bodies ──
 
 export interface MissionCreateRequest {

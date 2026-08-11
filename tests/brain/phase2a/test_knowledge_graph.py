@@ -126,7 +126,7 @@ class TestRelationInference:
         assert kg.relation_count() >= 0
 
     def test_entity_without_memory_ids(self, kg):
-        Entity(entity_type="Concept", label="Orphan")
+        e = Entity(entity_type="Concept", label="Orphan")
         entities = kg.extract_entities([{"memory_id": "m1", "content": "test", "kind": "fact", "confidence": 0.5}])
         assert len(entities) == 1
 

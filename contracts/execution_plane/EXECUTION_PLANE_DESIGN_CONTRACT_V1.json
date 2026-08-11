@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/execution_plane/execution_plane_design_contract_v1.json",
+  "title": "NEXARA Execution Plane — Architecture Design Contract V1",
+  "frozen_at": "2026-07-27T04:00:00Z",
+  "governed_by": "NSEC V2.1",
+  "ground_truth": "PR24 (a0f9d16b)",
+  "layer_model": {
+    "control_plane": "Mission Lifecycle Manager",
+    "execution_plane": "Agent workers, tool boundary, permissions, evidence",
+    "runtime": "NexaraRuntime"
+  },
+  "agent_worker_model": {
+    "phases": {
+      "DISPATCH": {
+        "question": "How does Agent receive Mission?",
+        "mechanism": "Coordinator transitions to ASSIGNED. Agent notified via event bus."
+      },
+      "CAPABILITY_REQUEST": {
+        "question": "How does Agent request Capability?",
+        "mechanism": "Declared in mission contract. Coordinator grants lease at ASSIGNED."
+      },
+      "TOOL_INVOCATION": {
+        "question": "How does Agent call Tools?",
+        "mechanism": "ToolInvocationBoundary gates every call.",
+        "rules": [
+          "tool in scope.mutations",
+          "target in scope.allowlist",
+          "target NOT in scope.denylist",
+          "idempotency_key required",
+          "output size limit 10MB"
+        ]
+      },
+      "EVIDENCE_EMISSION": {
+        "question": "How does Agent produce Evidence?",
+        "mechanism": "EvidenceStore.add() through execution plane. CrossRefValidator ensures chain."
+      },
+      "FAILURE_RECOVERY": {
+        "question": "How does Agent recover?",
+        "mechanism": "Checkpoint on every transition. Replay from checkpoint."
+      },
+      "STOP": {
+        "question": "How is Agent stopped?",
+        "mechanism": "Coordinator transitions to BLOCKED/CANCELLED. Graceful (30s) then forced."
+      }
+    }
+  },
+  "execution_lease": {
+    "writer_lease": {
+      "duration_s": 3600,
+      "max_renewals": 3,
+      "exclusivity": "EXCLUSIVE",
+      "files_locked": true
+    },
+    "reviewer_lease": {
+      "duration_s": 1800,
+      "max_renewals": 0,
+      "exclusivity": "EXCLUSIVE",
+      "files_locked": false
+    },
+    "coordinator_lease": {
+      "duration_s": 7200,
+      "max_renewals": 2,
+      "exclusivity": "EXCLUSIVE",
+      "files_locked": false
+    },
+    "verifier_lease": {
+      "duration_s": 900,
+      "max_renewals": 1,
+      "exclusivity": "SHARED",
+      "files_locked": false
+    }
+  },
+  "tool_invocation_boundary": {
+    "pre_invocation": {
+      "checks": [
+        "lease ACTIVE",
+        "tool in scope",
+        "target in allowlist",
+        "target not in denylist",
+        "role permits action"
+      ]
+    },
+    "post_invocation": {
+      "checks": [
+        "output size ok",
+        "no secret leak",
+        "references in scope"
+      ]
+    },
+    "evidence_binding": {
+      "checks": [
+        "invocation record",
+        "evidence artifact",
+        "SHA256 computed"
+      ]
+    }
+  },
+  "failure_handling": {
+    "TRANSIENT": {
+      "codes": [
+        "PROVIDER_UNAVAILABLE",
+        "TOOL_TIMEOUT"
+      ],
+      "action": "retry",
+      "max_retries": 3
+    },
+    "PERMANENT": {
+      "codes": [
+        "APPROVAL_MISSING",
+        "INTEGRITY_HASH_MISMATCH"
+      ],
+      "action": "halt",
+      "max_retries": 0
+    },
+    "AGENT_CRASH": {
+      "codes": [
+        "AGENT_UNRESPONSIVE"
+      ],
+      "action": "reassign",
+      "max_retries": 2
+    },
+    "SCOPE_VIOLATION": {
+      "codes": [
+        "POLICY_VIOLATION"
+      ],
+      "action": "reject",
+      "escalation": "3 in 5min -> BLOCKED"
+    }
+  },
+  "retry_policy": {
+    "default": {
+      "max_retries": 3,
+      "backoff": "exponential",
+      "base_delay_s": 30,
+      "max_delay_s": 600
+    },
+    "circuit_breaker": {
+      "threshold": 5,
+      "cooldown_s": 300
+    }
+  },
+  "evidence_emission": {
+    "per_invocation": "ToolInvocation -> EvidenceArtifact (kind=tool_invocation)",
+    "per_transition": "Event -> EvidenceArtifact (kind=state_transition)",
+    "per_checkpoint": "Checkpoint -> EvidenceArtifact (kind=checkpoint)"
+  },
+  "pr24_ground_truth": {
+    "hermes_writer": "DISPATCH->CAPABILITY->TOOLS->EVIDENCE->REVIEW->STOP",
+    "claude_reviewer": "DISPATCH->CAPABILITY(read-only)->TOOLS->EVIDENCE(review)->STOP",
+    "agentos_coordinator": "DISPATCH->ORCHESTRATE->GATE->STOP"
+  },
+  "integration": {
+    "validators": 5,
+    "tests": 71,
+    "non_invasive": true
+  }
+}

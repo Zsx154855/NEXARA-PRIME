@@ -14,14 +14,12 @@ interface TopBarProps {
 }
 
 const SCREEN_LABELS: Record<Screen, string> = {
-  overview: "主脑总览",
-  "mission-creator": "任务创建",
-  "mission-workspace": "任务工作区",
-  "agent-team": "智能体团队",
-  approvals: "审批中心",
-  evidence: "证据与回执",
-  capabilities: "能力注册",
-  health: "系统健康",
+  dashboard: "控制台",
+  missions: "任务",
+  "mission-workspace": "任务详情",
+  evidence: "证据",
+  governance: "治理",
+  "runtime-health": "运行时健康",
 };
 
 export function TopBar({ screen, overview, loading, error, onRefresh }: TopBarProps) {

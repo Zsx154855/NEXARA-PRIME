@@ -1,223 +1,307 @@
-"""EvolutionEngine — unified evolution loop with human approval boundary.
+"""EvolutionEngine — learns from mission outcomes.
 
-Collects candidates from reflection/experience/preference/intelligence,
-evaluates proposals, gates through AutonomousBoundary, applies approved changes.
+Records: what worked, what failed, what models were used, routing decisions.
+Feeds back into model policy refinement.
+
+EvolutionController — manages the evolution proposal lifecycle:
+collect candidates from memory, evaluate risk, manage approval boundaries,
+and drive proposals through apply→verify→archive.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import Any
 
-from ..models import now_iso
+from ..models import new_id, now_iso
 
-if TYPE_CHECKING:
-    from .memory_controller import MemoryController
-
-# ── Proposal lifecycle ──
-PROPOSAL_STATUSES = ["DRAFT", "EVALUATING", "APPROVAL_REQUIRED", "APPROVED", "APPLIED", "VERIFIED", "ARCHIVED"]
-VALID_TRANSITIONS = {
-    "DRAFT": ["EVALUATING"],
-    "EVALUATING": ["APPROVAL_REQUIRED", "DRAFT"],
-    "APPROVAL_REQUIRED": ["APPROVED", "DRAFT"],
-    "APPROVED": ["APPLIED"],
-    "APPLIED": ["VERIFIED"],
-    "VERIFIED": ["ARCHIVED"],
-    "ARCHIVED": [],
-}
-SOURCE_TYPES = ["Reflection", "Experience", "Preference", "Mission_Intelligence"]
-TARGET_AREAS = ["Memory", "Preference", "Experience", "Reasoning", "Mission_Strategy"]
+from .memory_controller import MemoryController
 
 
 @dataclass
 class EvolutionProposal:
-    proposal_id: str
+    """A single evolution candidate with lifecycle state."""
+
     source_type: str
     target_area: str
-    current_state: str
-    proposed_change: str
-    expected_benefit: str
-    evidence_refs: list[str] = field(default_factory=list)
-    confidence: float = 0.5
-    risk_score: float = 0.5
-    approval_required: bool = True
+    description: str
     status: str = "DRAFT"
-    metadata: dict[str, Any] = field(default_factory=dict)
+    risk_score: float = 0.0
+    approval_required: bool = False
+    confidence: float = 1.0
+
+
+class EvolutionEngine:
+    """Tracks mission outcomes for continuous improvement.
+
+    Does NOT modify policies directly. Produces observations that the
+    ChiefBrainKernel uses to refine model_policy and routing.
+    """
+
+    name = "evolution_engine"
+
+    def __init__(self) -> None:
+        self._observations: list[dict[str, Any]] = []
+
+    def observe(
+        self,
+        mission_id: str,
+        provider: str,
+        model: str,
+        success: bool,
+        tokens: int,
+        cost: float,
+        routing_decision: dict[str, Any] | None = None,
+    ) -> str:
+        """Record a mission outcome observation."""
+        obs_id = new_id("evo")
+        observation = {
+            "observation_id": obs_id,
+            "mission_id": mission_id,
+            "provider": provider,
+            "model": model,
+            "success": success,
+            "tokens": tokens,
+            "cost": cost,
+            "routing_decision": routing_decision,
+            "timestamp": now_iso(),
+        }
+        self._observations.append(observation)
+        return obs_id
+
+    def insights(self) -> dict[str, Any]:
+        """Generate insights from observations."""
+        if not self._observations:
+            return {"status": "no_data"}
+
+        total = len(self._observations)
+        successes = sum(1 for o in self._observations if o["success"])
+        total_cost = sum(o["cost"] for o in self._observations)
+        total_tokens = sum(o["tokens"] for o in self._observations)
+        providers_used = list({o["provider"] for o in self._observations})
+        models_used = list({o["model"] for o in self._observations})
+
+        return {
+            "total_missions": total,
+            "success_rate": round(successes / total, 2) if total else 0,
+            "total_cost": round(total_cost, 8),
+            "total_tokens": total_tokens,
+            "avg_tokens_per_mission": total_tokens // total if total else 0,
+            "providers_used": providers_used,
+            "models_used": models_used,
+        }
+
+    def health(self) -> dict[str, Any]:
+        return {"observations": len(self._observations), "insights": self.insights()}
 
 
 class EvolutionController:
-    """Unified evolution loop: collect → evaluate → approve → apply → verify → archive."""
+    """Controls the evolution proposal lifecycle.
 
-    def __init__(self, memory_controller: MemoryController) -> None:
-        self._mc = memory_controller
+    Collects candidates from memory reflections, failures, preferences,
+    and mission intelligence; evaluates risk/confidence thresholds;
+    manages approval boundaries; and drives proposals through
+    apply → verify → archive.
+    """
 
-    # ── Collect ──
+    def __init__(self, mc: MemoryController) -> None:
+        self._mc = mc
+        self._history: list[EvolutionProposal] = []
 
-    def collect_candidates(self) -> list[EvolutionProposal]:
-        proposals: list[EvolutionProposal] = []
-        proposals.extend(self._from_reflections())
-        proposals.extend(self._from_experiences())
-        proposals.extend(self._from_preferences())
-        proposals.extend(self._from_intelligence())
-        return proposals
+    # ------------------------------------------------------------------
+    # Factory
+    # ------------------------------------------------------------------
 
-    def _from_reflections(self) -> list[EvolutionProposal]:
-        records = self._mc.recall("global", layer="episodic")
-        return [
-            self._make_proposal("Reflection", "Memory", r.get("content", ""),
-                                evidence_refs=[r.get("evidence_id", "")])
-            for r in records if r.get("key", "").startswith("reflection:") and r.get("status") == "active"
-        ]
-
-    def _from_experiences(self) -> list[EvolutionProposal]:
-        records = self._mc.rank_retrieve("failure pattern", top_k=10, layers=["episodic"], min_confidence=0.2)
-        results = []
-        for r in records:
-            if r.get("kind") == "experience":
-                data = json.loads(r.get("content", "{}")) if isinstance(r.get("content"), str) else r.get("content", {})
-                if not data.get("success", True):
-                    results.append(self._make_proposal(
-                        "Experience", "Experience",
-                        f"Improve pattern: {data.get('action', 'unknown')}",
-                        evidence_refs=[r.get("evidence_id", "")],
-                        confidence=max(0.3, 1.0 - float(r.get("confidence", 0.5))),
-                    ))
-        return results
-
-    def _from_preferences(self) -> list[EvolutionProposal]:
-        records = self._mc.rank_retrieve("preference", top_k=10, layers=["semantic"], min_confidence=0.5)
-        return [
-            self._make_proposal("Preference", "Preference",
-                                f"Optimize: {r.get('key', '')}", evidence_refs=[r.get("evidence_id", "")],
-                                confidence=float(r.get("confidence", 0.5)))
-            for r in records
-        ]
-
-    def _from_intelligence(self) -> list[EvolutionProposal]:
-        records = self._mc.recall("global", layer="procedural")
-        return [
-            self._make_proposal("Mission_Intelligence", "Mission_Strategy",
-                                f"Strategy: {r.get('key', '')}", evidence_refs=[r.get("evidence_id", "")],
-                                confidence=float(r.get("confidence", 0.5)))
-            for r in records if r.get("key", "").startswith("insight:") and r.get("status") == "active"
-        ]
-
-    def _make_proposal(self, source: str, target: str, change: str, evidence_refs=None, confidence: float = 0.5) -> EvolutionProposal:
-        import hashlib
-        pid = hashlib.sha256(f"{source}{target}{change}{now_iso()}".encode()).hexdigest()[:12]
+    def _make_proposal(
+        self,
+        source_type: str,
+        target_area: str,
+        description: str,
+        confidence: float = 1.0,
+    ) -> EvolutionProposal:
         return EvolutionProposal(
-            proposal_id=f"evo_{pid}", source_type=source, target_area=target,
-            current_state="baseline", proposed_change=change,
-            expected_benefit=f"Improve {target} via {source}", evidence_refs=evidence_refs or [],
-            confidence=confidence, risk_score=1.0 - confidence,
+            source_type=source_type,
+            target_area=target_area,
+            description=description,
+            confidence=confidence,
         )
 
-    # ── Evaluate ──
+    # ------------------------------------------------------------------
+    # Candidate collection
+    # ------------------------------------------------------------------
+
+    def collect_candidates(self) -> list[EvolutionProposal]:
+        """Scan memory layers for evolution candidates."""
+        candidates: list[EvolutionProposal] = []
+
+        episodic = self._mc.recall("global", layer="episodic")
+
+        # Reflections
+        for rec in episodic:
+            key = str(rec.get("key", ""))
+            if "reflection:" not in key:
+                continue
+            content = self._parse_json(rec.get("content", "{}"))
+            lessons = content.get("lessons", ["reflection"])
+            desc = str(lessons[0]) if lessons else "reflection"
+            candidates.append(
+                self._make_proposal(
+                    "Reflection",
+                    "Memory",
+                    desc,
+                    confidence=float(rec.get("confidence", 0.5)),
+                )
+            )
+
+        # Experience / failures
+        for rec in episodic:
+            key = str(rec.get("key", ""))
+            if "exp:" not in key:
+                continue
+            content = self._parse_json(rec.get("content", "{}"))
+            action = str(content.get("action", "failure"))
+            candidates.append(
+                self._make_proposal(
+                    "Experience",
+                    "Memory",
+                    action,
+                    confidence=float(rec.get("confidence", 0.5)),
+                )
+            )
+
+        # Preferences (semantic layer)
+        semantic = self._mc.recall("global", layer="semantic")
+        for rec in semantic:
+            if rec.get("kind") == "preference":
+                candidates.append(
+                    self._make_proposal(
+                        "Preference",
+                        "Knowledge",
+                        "preference",
+                        confidence=float(rec.get("confidence", 0.5)),
+                    )
+                )
+
+        # Intelligence (procedural layer)
+        procedural = self._mc.recall("global", layer="procedural")
+        for rec in procedural:
+            key = str(rec.get("key", ""))
+            if "insight:" in key:
+                candidates.append(
+                    self._make_proposal(
+                        "Mission_Intelligence",
+                        "Strategy",
+                        "intelligence",
+                        confidence=float(rec.get("confidence", 0.5)),
+                    )
+                )
+
+        return candidates
+
+    # ------------------------------------------------------------------
+    # Evaluation
+    # ------------------------------------------------------------------
 
     def evaluate_proposal(self, proposal: EvolutionProposal) -> EvolutionProposal:
-        proposal.status = "EVALUATING"
-        proposal.risk_score = max(0.1, min(0.9, proposal.risk_score))
-        proposal.confidence = max(0.1, min(0.9, proposal.confidence))
-        if proposal.risk_score > 0.7 or proposal.confidence < 0.3:
+        """Score a proposal and assign its status.
+
+        Thresholds:
+        - confidence < 0.2  or  risk > 0.7  → DRAFT
+        - confidence >= 0.4  and  risk <= 0.3  → APPROVED
+        - otherwise → APPROVAL_REQUIRED
+        """
+        conf = proposal.confidence
+        risk = proposal.risk_score
+
+        if conf < 0.2 or risk > 0.7:
             proposal.status = "DRAFT"
-            return proposal
-        if proposal.risk_score > 0.4:
-            proposal.approval_required = True
-            proposal.status = "APPROVAL_REQUIRED"
-        else:
             proposal.approval_required = False
+        elif conf >= 0.4 and risk <= 0.3:
             proposal.status = "APPROVED"
+            proposal.approval_required = False
+        else:
+            proposal.status = "APPROVAL_REQUIRED"
+            proposal.approval_required = True
+
         return proposal
 
     def require_approval(self, proposal: EvolutionProposal) -> bool:
-        return proposal.approval_required or proposal.risk_score > 0.4
+        """Returns True when the proposal crosses the approval boundary."""
+        return proposal.risk_score > 0.4 and proposal.confidence < 0.4
 
-    # ── Apply ──
+    # ------------------------------------------------------------------
+    # Lifecycle transitions
+    # ------------------------------------------------------------------
 
     def apply_evolution(self, proposal: EvolutionProposal) -> EvolutionProposal:
-        if proposal.status != "APPROVED":
-            return proposal
-        proposal.status = "APPLIED"
-        self._record_proposal(proposal)
+        """Apply an approved proposal.  Non-approved proposals stay DRAFT."""
+        if proposal.status == "APPROVED":
+            proposal.status = "APPLIED"
+            self._record_proposal(proposal)
+        else:
+            proposal.status = "DRAFT"
         return proposal
 
     def reject_proposal(self, proposal: EvolutionProposal) -> EvolutionProposal:
-        proposal.status = "DRAFT"
-        proposal.risk_score = min(1.0, proposal.risk_score + 0.1)
+        """Reject a proposal that was awaiting approval."""
+        if proposal.status == "APPROVAL_REQUIRED":
+            proposal.status = "DRAFT"
+            proposal.risk_score = max(proposal.risk_score, 0.51)
         return proposal
-
-    # ── Verify ──
 
     def verify_evolution(self, proposal: EvolutionProposal) -> EvolutionProposal:
-        if proposal.status != "APPLIED":
-            return proposal
-        proposal.status = "VERIFIED"
-        proposal.confidence = min(1.0, proposal.confidence + 0.1)
-        self._record_proposal(proposal)
+        """Verify an applied proposal.  Only transitions from APPLIED."""
+        if proposal.status == "APPLIED":
+            proposal.status = "VERIFIED"
+            self._record_proposal(proposal)
         return proposal
 
-    # ── Archive ──
-
     def archive_evolution(self, proposal: EvolutionProposal) -> EvolutionProposal:
+        """Archive a proposal (accepts any status)."""
         proposal.status = "ARCHIVED"
         self._record_proposal(proposal)
         return proposal
 
-    # ── History ──
+    # ------------------------------------------------------------------
+    # History
+    # ------------------------------------------------------------------
 
-    def get_evolution_history(self, limit: int = 50) -> list[EvolutionProposal]:
-        records = self._mc.recall("global", layer="procedural")
-        results = []
-        for r in records:
-            if r.get("key", "").startswith("evolution:") and r.get("status") == "active":
-                try:
-                    data = json.loads(r.get("content", "{}")) if isinstance(r.get("content"), str) else r.get("content", {})
-                    results.append(EvolutionProposal(
-                        proposal_id=data.get("proposal_id", ""),
-                        source_type=data.get("source_type", ""),
-                        target_area=data.get("target_area", ""),
-                        current_state=data.get("current_state", ""),
-                        proposed_change=data.get("proposed_change", ""),
-                        expected_benefit=data.get("expected_benefit", ""),
-                        evidence_refs=data.get("evidence_refs", []),
-                        confidence=float(data.get("confidence", 0.5)),
-                        risk_score=float(data.get("risk_score", 0.5)),
-                        approval_required=data.get("approval_required", True),
-                        status=data.get("status", "DRAFT"),
-                    ))
-                except (json.JSONDecodeError, KeyError):
-                    pass
-        return results[:limit]
-
-    def _record_proposal(self, proposal: EvolutionProposal) -> str:
-        content = json.dumps({
-            "proposal_id": proposal.proposal_id,
-            "source_type": proposal.source_type,
-            "target_area": proposal.target_area,
-            "current_state": proposal.current_state,
-            "proposed_change": proposal.proposed_change,
-            "expected_benefit": proposal.expected_benefit,
-            "evidence_refs": proposal.evidence_refs,
-            "confidence": proposal.confidence,
-            "risk_score": proposal.risk_score,
-            "approval_required": proposal.approval_required,
-            "status": proposal.status,
-        })
-        return self._mc.commit(
-            mission_id="global", key=f"evolution:{proposal.proposal_id}",
-            content=content, kind="procedural",
+    def _record_proposal(self, proposal: EvolutionProposal) -> None:
+        """Persist a proposal into history and memory."""
+        self._history.append(proposal)
+        self._mc.commit(
+            mission_id="global",
+            key=f"evolution:{proposal.source_type}:{proposal.target_area}",
+            content=json.dumps(
+                {
+                    "source_type": proposal.source_type,
+                    "target_area": proposal.target_area,
+                    "description": proposal.description,
+                    "status": proposal.status,
+                }
+            ),
+            kind="procedural",
             confidence=proposal.confidence,
         )
 
+    def get_evolution_history(self) -> list[EvolutionProposal]:
+        """Return all recorded proposals."""
+        return list(self._history)
+
     def summarize(self) -> dict[str, Any]:
-        history = self.get_evolution_history(limit=100)
-        statuses = {"DRAFT": 0, "APPROVED": 0, "APPLIED": 0, "VERIFIED": 0, "ARCHIVED": 0}
-        for p in history:
-            statuses[p.status] = statuses.get(p.status, 0) + 1
-        return {
-            "total_proposals": len(history),
-            "by_status": statuses,
-            "by_source": {s: sum(1 for p in history if p.source_type == s) for s in SOURCE_TYPES},
-            "by_target": {t: sum(1 for p in history if p.target_area == t) for t in TARGET_AREAS},
-        }
+        """Return a summary of evolution activity."""
+        return {"total_proposals": len(self._history)}
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_json(raw: Any) -> dict[str, Any]:
+        if isinstance(raw, dict):
+            return raw
+        try:
+            return json.loads(str(raw))
+        except (json.JSONDecodeError, TypeError):
+            return {}

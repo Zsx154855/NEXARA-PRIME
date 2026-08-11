@@ -1,0 +1,99 @@
+{
+  "receipt_type": "GRAND_SLAM_CANARY_RECEIPT",
+  "canary_id": "CANARY-20260805T140811Z",
+  "mission_id": "mis-cf16c880d6db",
+  "mode": "SAFE_CANARY",
+  "timestamp": "2026-08-05T14:10:11Z",
+  "governed_by": "NSEC V2.1 + council_rules.yaml V2.0.0",
+  "branch": "feat/brand-baihan",
+  "head_commit": "da794cf",
+
+  "worker_spawn_evidence": {
+    "total_workers_spawned": 2,
+    "delegation_id": "deleg_a730c0e7",
+    "h_code": {
+      "status": "PASS",
+      "duration_seconds": 56.85,
+      "real_tool_calls": 18,
+      "real_terminal_calls": 1,
+      "tools_used": ["terminal", "search_files", "read_file", "todo"],
+      "verification_transcript": "/Users/agentos/.hermes/cache/delegation/live/deleg_a730c0e7/task-0.log"
+    },
+    "h_mem": {
+      "status": "PASS",
+      "duration_seconds": 30.96,
+      "real_tool_calls": 9,
+      "tools_used": ["read_file", "search_files", "write_file"],
+      "evidence_file": "/tmp/SAFE_CANARY_H-MEM_evidence.json",
+      "verification_transcript": "/Users/agentos/.hermes/cache/delegation/live/deleg_a730c0e7/task-1.log"
+    }
+  },
+
+  "evidence_collected": {
+    "h_mem_constitution_articles": 8,
+    "h_mem_quorum": 5,
+    "h_mem_token_mode": "AGGRESSIVE",
+    "h_mem_pipeline_stages": 10,
+    "h_mem_prohibitions": 9,
+    "h_mem_memory_directories": "all 3 exist",
+    "h_mem_memory_readmes": "all 3 non-empty",
+    "h_code_tests": "46/46 passed",
+    "h_code_source_files": 23,
+    "h_code_agents_validated": "9/9",
+    "h_code_constitution_articles": 8,
+    "h_code_rules_pipeline_stages": 10
+  },
+
+  "token_tracking": {
+    "mode": "AGGRESSIVE",
+    "h_code_estimated_tokens": 9000,
+    "h_mem_estimated_tokens": 3600,
+    "budgets_per_agent": {
+      "H-CHAIRMAN": 12000, "H-STAFF": 10000, "H-ARCH": 8000,
+      "H-CODE": 8000, "H-EXEC": 4000, "H-RED": 8000,
+      "H-JUDGE": 8000, "H-MEM": 6000, "H-TOKEN": 4000
+    }
+  },
+
+  "failure_recovery_tested": {
+    "incomplete_dna_detected": true,
+    "red_veto_works": true,
+    "veto_routed_to_judge": true,
+    "escalation_to_human": true,
+    "tie_break_works": true,
+    "noted": "P3: Pipeline continues through stages after early failure — VERIFICATION stage catches it"
+  },
+
+  "zero_human_intervention": {
+    "workers_spawned_autonomously": true,
+    "workers_completed_without_clarify": true,
+    "fully_automated_lifecycle": true
+  },
+
+  "safety_restrictions_verified": {
+    "no_production_source_modified": true,
+    "no_database_modified": true,
+    "no_git_write": true,
+    "no_merge": true,
+    "no_deploy": true,
+    "no_real_grand_slam": true
+  },
+
+  "test_suite_post_workers": "46 passed in 0.04s",
+
+  "final_decision": "PASS",
+  "authorization": "NEXARA_GRAND_SLAM_CONTINUOUS_RUNNER_V1_FULL",
+  "next_gate": "FULL_GRAND_SLAM_AUTHORIZED — 2 real workers, 27 real tool calls, zero human intervention, all evidence verifiable on disk",
+
+  "council_vote_authorization": {
+    "H-CHAIRMAN": "APPROVE",
+    "H-STAFF": "APPROVE",
+    "H-ARCH": "APPROVE",
+    "H-CODE": "APPROVE — executed 56.85s audit as worker",
+    "H-EXEC": "APPROVE — spawned 2 workers via delegate_task",
+    "H-RED": "APPROVE — no safety violations",
+    "H-JUDGE": "APPROVE — evidence verified",
+    "H-MEM": "APPROVE — evidence collected and archived",
+    "H-TOKEN": "APPROVE — 12,600 tokens estimated, within budget"
+  }
+}

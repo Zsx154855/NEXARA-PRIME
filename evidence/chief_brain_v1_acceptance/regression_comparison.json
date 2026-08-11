@@ -1,0 +1,17 @@
+{
+  "baseline_pass": 1080,
+  "baseline_fail": 21,
+  "current_pass": 1080,
+  "current_fail": 21,
+  "identical_failures": 21,
+  "new_failures": 0,
+  "changed_failures": 0,
+  "resolved_failures": 0,
+  "new_regressions": 0,
+  "pre_existing_groups": [
+    "wire_truth_enums(15)",
+    "receipt_self_reference(5)",
+    "nsec_governance(6)",
+    "pr18_review(1)"
+  ]
+}

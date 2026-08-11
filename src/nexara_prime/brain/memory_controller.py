@@ -31,9 +31,9 @@ from .provenance import ProvenanceTracker
 
 # Kind classification that requires evidence binding
 EVIDENCE_REQUIRED_KINDS: set[str] = {
-    "decision", "failure", "failure_experience", "patch",
+    "decision", "experience", "failure", "failure_experience", "patch",
     "skill_improvement", "system_rule",
-    "fact", "user_fact", "project_fact", "preference", "experience",
+    "fact", "user_fact", "project_fact", "preference",
 }
 
 EVIDENCE_OPTIONAL_KINDS: set[str] = {

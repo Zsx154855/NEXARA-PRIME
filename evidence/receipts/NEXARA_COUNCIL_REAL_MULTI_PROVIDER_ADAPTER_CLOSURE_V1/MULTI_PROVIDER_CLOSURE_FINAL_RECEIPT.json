@@ -1,0 +1,118 @@
+{
+  "receipt_type": "MULTI_PROVIDER_CLOSURE_FINAL",
+  "task_id": "NEXARA_COUNCIL_REAL_MULTI_PROVIDER_ADAPTER_CLOSURE_V1",
+  "timestamp": "2026-08-05T14:40:00Z",
+  "governed_by": "NSEC V2.1 + council_rules.yaml V2.0.0",
+
+  "adapters_built": 6,
+  "adapters_fully_functional": 2,
+
+  "adapter_status": {
+    "openai": {
+      "ready": false,
+      "reason": "OPENAI_API_KEY found in .env but returned HTTP 401 — key is invalid or expired",
+      "discovery": "READY (credential found, model resolved)",
+      "canary": "FAIL (HTTP 401)",
+      "fix": "Update OPENAI_API_KEY in ~/.hermes/.env"
+    },
+    "anthropic": {
+      "ready": false,
+      "reason": "ANTHROPIC_API_KEY not in .env; Keychain item exists but password read blocked by macOS access control (requires user interaction for -w flag)",
+      "discovery": "AUTH_FAILED",
+      "fix": "Add ANTHROPIC_API_KEY to ~/.hermes/.env or grant keychain access to terminal processes"
+    },
+    "codex_cli": {
+      "ready": false,
+      "reason": "Codex CLI binary found (v0.146.0) but CLI auth probe failed — likely needs OAuth device flow re-login",
+      "discovery": "AUTH_FAILED",
+      "fix": "Run 'codex login' or 'codex auth' to re-authenticate"
+    },
+    "xai": {
+      "ready": false,
+      "reason": "XAI_API_KEY not in .env; Keychain item exists but password read blocked by macOS access control",
+      "discovery": "AUTH_FAILED",
+      "fix": "Add XAI_API_KEY to ~/.hermes/.env or grant keychain access"
+    },
+    "deepseek": {
+      "ready": true,
+      "canary": "PASS (1025ms + 879ms)",
+      "model": "deepseek-chat",
+      "note": "Two adapter instances (H-STAFF, H-MEM) share one backend identity"
+    },
+    "hermes_executor": {
+      "ready": true,
+      "canary": "PASS (7958ms)",
+      "model": "deepseek-v4-pro",
+      "note": "Hermes binary spawns real subprocess"
+    }
+  },
+
+  "real_canary_results": {
+    "participants_tested": 3,
+    "participants_passed": 3,
+    "deepseek_h_staff": {"latency_ms": 1025, "backend": "deepseek:deepseek-chat", "status": "PASS"},
+    "deepseek_h_mem": {"latency_ms": 879, "backend": "deepseek:deepseek-chat", "status": "PASS"},
+    "hermes_h_exec": {"latency_ms": 7958, "backend": "hermes:deepseek-v4-pro", "status": "PASS"}
+  },
+
+  "contract_thresholds": {
+    "REAL_PARTICIPANT_COUNT": {"required": 4, "actual": 2, "met": false},
+    "UNIQUE_ADAPTER_COUNT": {"required": 4, "actual": 3, "met": false},
+    "UNIQUE_PROVIDER_COUNT": {"required": 3, "actual": 2, "met": false},
+    "UNIQUE_BACKEND_IDENTITY_COUNT": {"required": 4, "actual": 2, "met": false},
+    "DUPLICATE_RESPONSE_HASH_COUNT": {"required": 0, "actual": 0, "met": true},
+    "SIMULATED_PARTICIPANT_COUNT": {"required": 0, "actual": 0, "met": true}
+  },
+
+  "source_files_created": [
+    "src/nexara_prime/council/adapters/__init__.py",
+    "src/nexara_prime/council/adapters/base.py",
+    "src/nexara_prime/council/adapters/schemas.py",
+    "src/nexara_prime/council/adapters/redaction.py",
+    "src/nexara_prime/council/adapters/registry.py",
+    "src/nexara_prime/council/adapters/openai_adapter.py",
+    "src/nexara_prime/council/adapters/anthropic_adapter.py",
+    "src/nexara_prime/council/adapters/codex_cli_adapter.py",
+    "src/nexara_prime/council/adapters/xai_adapter.py",
+    "src/nexara_prime/council/adapters/deepseek_adapter.py",
+    "src/nexara_prime/council/adapters/hermes_adapter.py"
+  ],
+  "files_count": 11,
+
+  "final_decision": {
+    "status": "INCIDENT_REPORT_GENERATED",
+    "full_runner_authorized": false,
+    "next_task": "NONE",
+    "blockers": [
+      "OPENAI_API_KEY invalid (HTTP 401)",
+      "ANTHROPIC_API_KEY not accessible (Keychain only, not in .env)",
+      "Codex CLI auth not working",
+      "XAI_API_KEY not accessible (Keychain only, not in .env)",
+      "UNIQUE_BACKEND_IDENTITY_COUNT=2 (< 4 required)",
+      "REAL_PARTICIPANT_COUNT=2 (< 4 required)"
+    ],
+    "honest_note": "6 adapters built and structurally sound. 3/6 canary passed. 4 model providers unreachable due to credential issues (invalid key + keychain access). Cannot fake multi-model participation per contract Section 5."
+  },
+
+  "what_was_achieved": [
+    "Complete adapter framework built (base, schemas, redaction, registry)",
+    "6 independent adapters created (openai, anthropic, codex_cli, xai, deepseek, hermes)",
+    "Credential resolution working (.env → Keychain fallback)",
+    "Secret redaction module active",
+    "Canary protocol implemented and tested",
+    "DeepSeek adapter: VERIFIED with real API calls (2 seats)",
+    "Hermes executor: VERIFIED with real subprocess spawn",
+    "OpenAI adapter: BUILT and structurally valid, blocked by invalid API key",
+    "Anthropic adapter: BUILT, blocked by keychain access control",
+    "Codex CLI adapter: BUILT, blocked by CLI auth state",
+    "xAI adapter: BUILT, blocked by keychain access control"
+  ],
+
+  "remediation_path": [
+    "1. Update OPENAI_API_KEY in ~/.hermes/.env with a valid key",
+    "2. Add ANTHROPIC_API_KEY to ~/.hermes/.env (cannot read from Keychain programmatically)",
+    "3. Run 'codex login' to re-authenticate Codex CLI",
+    "4. Add XAI_API_KEY to ~/.hermes/.env",
+    "5. After all 4 keys are valid, re-run canary + council debate"
+  ]
+}

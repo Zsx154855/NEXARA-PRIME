@@ -1,0 +1,216 @@
+{
+  "document": "PHASE13_ACCEPTANCE_EVIDENCE",
+  "version": "1.0.0",
+  "generated": "2026-08-09T00:00:00Z",
+  "audit": "NEXARA_CONTROL_PLANE_ARCHITECTURE_ACCEPTANCE_V1",
+  "evidence_sources": [
+    {
+      "phase": "PHASE_0_REALITY_SNAPSHOT",
+      "evidence_type": "CLI_OUTPUT",
+      "commands": [
+        "git branch --show-current",
+        "git rev-parse HEAD",
+        "git status --short",
+        "file existence check for 8 .nexara/product/* files"
+      ],
+      "result": {
+        "branch": "feat/brand-baihan",
+        "head": "ceae37fe33820c6e39354bc1f74ed7ea3254f74b",
+        "worktree": "CLEAN",
+        "documents": "8/8 EXIST"
+      }
+    },
+    {
+      "phase": "PHASE_0_SEAL_CHECK",
+      "evidence_type": "JSON_COMPARISON",
+      "files_compared": [
+        ".nexara/freeze/CORE_V1_SEAL.json",
+        ".nexara/runtime/RUNTIME_V1_FINAL_SEAL.json",
+        "current git HEAD"
+      ],
+      "result": {
+        "core_freeze_sha_matches_frozen": true,
+        "runtime_seal_sha_matches_head": true,
+        "core_status": "FROZEN",
+        "runtime_status": "SEALED",
+        "test_baseline": "2044/2044"
+      }
+    },
+    {
+      "phase": "PHASE_1_RUNTIME_ZERO_DRIFT",
+      "evidence_type": "DOCUMENT_ANALYSIS",
+      "documents_reviewed": [
+        "PRODUCT_UI_TRUTH.md",
+        "CONTROL_PLANE_BOUNDARY.md",
+        "API_REQUIREMENT_AUDIT.md"
+      ],
+      "checks": {
+        "runtime_contract_modified": false,
+        "core_contract_modified": false,
+        "state_machine_modified": false,
+        "capability_registry_modified": false,
+        "database_authority_modified": false,
+        "kernel_modified": false,
+        "new_python_modules": false,
+        "new_db_tables": false,
+        "control_plane_pure_frontend": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "phase": "PHASE_2_API_REUSE_GATE",
+      "evidence_type": "ENDPOINT_AUDIT",
+      "endpoints_total": 26,
+      "classifications": {
+        "KEEP": 20,
+        "EXTEND": 5,
+        "NEW": 1,
+        "REJECT": 1
+      },
+      "deep_review": {
+        "E1_missions_list_fields": "PASS — read-only enrichment, 5 fields from existing data",
+        "E2_mission_detail_fields": "PASS — 2 computed fields, zero complexity",
+        "E3_approval_context": "PASS — joined mission data, read-only",
+        "E4_overview_stats": "FINDING F1 — duplicates N1, recommend REMOVE",
+        "E5_failure_details": "PASS — 2 new fields, most already exist",
+        "N1_stats_endpoint": "PASS — genuinely needed for lightweight dashboard polling",
+        "R1_knowledge_universe": "PASS — correctly deferred"
+      },
+      "verdict": "PASS",
+      "notes": "E4 should be removed per F1 finding"
+    },
+    {
+      "phase": "PHASE_3_UI_RUNTIME_BOUNDARY",
+      "evidence_type": "BOUNDARY_VERIFICATION",
+      "data_flow": "UI → HTTP → FastAPI → NexaraRuntime → SQLiteStore",
+      "forbidden_paths_checked": [
+        "UI → SQLite (direct DB): BLOCKED ✅",
+        "UI → State Machine (direct mutation): BLOCKED ✅",
+        "UI → Capability Implementation (direct): BLOCKED ✅",
+        "UI → Tool (direct execution): BLOCKED ✅",
+        "UI → Evidence Store (direct write): BLOCKED ✅"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "phase": "PHASE_4_GOVERNANCE_GATE",
+      "evidence_type": "FLOW_ANALYSIS",
+      "operations_verified": {
+        "approve": "POST /api/missions/{id}/approve → Runtime.approve_mission() → ApprovalEngine",
+        "reject": "POST /api/missions/{id}/approve {approved: false} → Runtime",
+        "retry": "Manual new mission creation → POST /api/missions",
+        "rollback": "POST /api/missions/{id}/rollback → Runtime.rollback()",
+        "pause": "POST /api/missions/{id}/pause → Runtime.pause()",
+        "resume": "POST /api/missions/{id}/resume → Runtime.resume()",
+        "kill_switch": "POST /api/missions/{id}/safe-mode → Runtime.safe_mode_toggle()",
+        "recovery": "POST /api/recovery/check → Runtime"
+      },
+      "governance_bypass_detected": false,
+      "nsec_article_37_intact": true,
+      "verdict": "PASS"
+    },
+    {
+      "phase": "PHASE_5_PRODUCT_SCOPE_GATE",
+      "evidence_type": "SCOPE_SCAN",
+      "forbidden_expansions_checked": [
+        "Marketplace: NOT_FOUND",
+        "Plugin Center: NOT_FOUND",
+        "Skill Center: NOT_FOUND",
+        "Prompt Studio: NOT_FOUND",
+        "Workflow Builder: NOT_FOUND",
+        "Agent Social: NOT_FOUND",
+        "Agent Avatar: NOT_FOUND",
+        "Knowledge Studio: NOT_FOUND"
+      ],
+      "scope_drift_detected": false,
+      "verdict": "PASS"
+    },
+    {
+      "phase": "PHASE_6_UI_CONTRACT_GATE",
+      "evidence_type": "CONTRACT_VERIFICATION",
+      "pages_verified": {
+        "Mission List": {
+          "INPUT": "GET /api/missions ✅",
+          "OUTPUT": "Defined (7 display columns) ✅",
+          "STATE": "Filters + sort defined ✅",
+          "ERROR": "Global error table applies ✅",
+          "EMPTY": "Explicit empty state defined ✅",
+          "LOADING": "Skeleton table defined ✅",
+          "PERMISSION": "Read-only (list) ✅"
+        },
+        "Mission Detail": {
+          "INPUT": "GET /api/missions/{id} + events/evidence/memory ✅",
+          "OUTPUT": "7 tabs fully defined ✅",
+          "STATE": "Status badge, approval indicator, pause/safe-mode ✅",
+          "ERROR": "404 + terminal reason defined ✅",
+          "EMPTY": "Plan/memory/eval empty states defined ✅",
+          "LOADING": "Skeleton + button spinner defined ✅",
+          "PERMISSION": "Read + human actions bounded ✅"
+        },
+        "Evidence Explorer": {
+          "INPUT": "GET /api/evidence + receipts ✅",
+          "OUTPUT": "List + Detail + Receipt Chain ✅",
+          "STATE": "Filters + hash verification defined ✅",
+          "ERROR": "Covered by global error handling ✅",
+          "EMPTY": "Explicit empty state defined ✅",
+          "LOADING": "Skeleton defined ✅",
+          "PERMISSION": "Read-only ✅"
+        },
+        "Governance Console": {
+          "INPUT": "GET /api/approvals + events ✅",
+          "OUTPUT": "Queue + History + Policy + Audit ✅",
+          "STATE": "Approval status states defined ✅",
+          "ERROR": "Permission denied + already-processed defined ✅",
+          "EMPTY": "Explicit empty state defined ✅",
+          "LOADING": "Button spinner on actions ✅",
+          "PERMISSION": "NSEC Article 37 referenced ✅"
+        },
+        "Runtime Health": {
+          "INPUT": "GET /health + /api/runtime/overview + /adaptive/* ✅",
+          "OUTPUT": "Provider/Worker/Resources/Recovery panels ✅",
+          "STATE": "Online/degraded/unavailable indicators ✅",
+          "ERROR": "Connection Lost + retry defined ✅",
+          "EMPTY": "Relevant messages defined ✅",
+          "LOADING": "Skeleton cards defined ✅",
+          "PERMISSION": "Read-only monitoring ✅"
+        }
+      },
+      "verdict": "PASS"
+    },
+    {
+      "phase": "PHASE_7_PRODUCT_GATE_AUDIT",
+      "evidence_type": "GATE_REVERIFICATION",
+      "gates": {
+        "Gate1_Architecture_Alignment": "PASS — independently verified 7/7 checks",
+        "Gate2_Runtime_Contract_Compliance": "PASS — 10/10 invariants respected",
+        "Gate3_Security_Boundary": "PASS — HTTP-only, no auth for local (with note)",
+        "Gate4_UX_Validation": "PASS — tokens/states/responsive/motion/a11y all defined",
+        "Gate5_Production_Readiness": "PASS — tech stack/build/integration/test all defined"
+      },
+      "verdict": "PASS"
+    }
+  ],
+  "findings_summary": {
+    "total": 7,
+    "severity": {
+      "LOW": 1,
+      "MEDIUM": 1,
+      "INFO": 5
+    },
+    "action_required": [
+      {
+        "id": "F1",
+        "type": "REMOVE",
+        "detail": "Remove E4 from EXTEND implementation scope"
+      }
+    ],
+    "acknowledged": [
+      "F2 (N1 contract commitment)",
+      "F3 (EXTEND items confirmed)",
+      "F4 (R1 correctly deferred)",
+      "F5 (SEALED module additive extension)",
+      "F6 (boundary well-defined)",
+      "F7 (auth deferred)"
+    ]
+  }
+}

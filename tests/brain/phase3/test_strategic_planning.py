@@ -18,8 +18,6 @@ class MockMC:
     def recall(s,mid,layer=None,**kw):
         res=[]
         for m,recs in s.store.items():
-            if mid!='global' and m!=mid:
-                continue
             for r in recs:
                 if r['status']!='active':
                     continue
@@ -68,10 +66,10 @@ class TestPlanning:
         assert rp.status == "REPLANNING"
     def test_record_plan(self, engine, mc):
         p = engine.create_plan("goal")
-        cid = engine.record_plan(p)
+        cid = engine.record_plan(p, evidence_id="test")
         assert cid is not None
     def test_summarize(self, engine, mc):
         p = engine.create_plan("goal")
-        engine.record_plan(p)
+        engine.record_plan(p, evidence_id="test")
         s = engine.summarize()
         assert s["total_plans"] >= 1

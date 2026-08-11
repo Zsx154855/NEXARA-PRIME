@@ -1,0 +1,10 @@
+{
+  "receipt_id": "cr_chief_brain_v1_entry_closure",
+  "timestamp": "2026-07-25T11:05:10.532721+00:00",
+  "head_sha": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "verdict": "PASS",
+  "files_changed": 4,
+  "new_regressions": 0,
+  "real_missions": 2,
+  "content_hash": "8c417039779d672eff9f87026c02756cb23c85cf35e2daf60102ddf24d860d07"
+}

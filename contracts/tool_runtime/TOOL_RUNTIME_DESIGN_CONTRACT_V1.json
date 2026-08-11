@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nexara://contracts/tool_runtime/tool_runtime_design_v1.json",
+  "title": "NEXARA Tool Runtime — Architecture Design Contract V1",
+  "frozen_at": "2026-07-27T05:30:00Z",
+  "governed_by": "NSEC V2.1",
+  "principle": "Tools are capability-gated, sandboxed, evidence-bound execution primitives connecting agents to the external world.",
+  "problem_statements": {
+    "p1": {
+      "title": "Agent如何知道可用工具？",
+      "answer": "ToolRegistry.find_by_capability(capability_id) returns tool list. Agent discovers tools through capability lease, not global list."
+    },
+    "p2": {
+      "title": "工具如何防止越权？",
+      "answer": "PermissionGate enforces 5 checks pre-invocation: lease, capability, scope, denylist, role."
+    },
+    "p3": {
+      "title": "工具失败如何恢复？",
+      "answer": "Idempotency key + retry policy + evidence record. Transient failures retry. Permanent failures escalate."
+    },
+    "p4": {
+      "title": "工具结果如何进入Evidence？",
+      "answer": "ToolInvocation → EvidenceArtifact (kind=tool_invocation, sha256=hash(output)). CrossRefValidator ensures chain."
+    },
+    "p5": {
+      "title": "工具支持哪些类型？",
+      "answer": "BROWSER, CODE_EXECUTION, SHELL, API, FILE_OPERATION. Each with typed contract."
+    }
+  },
+  "tool_contract": {
+    "description": "Every tool declares its interface, permissions, and evidence contract.",
+    "schema": {
+      "tool_id": "tool.{category}.{name}  e.g. tool.file.read, tool.shell.exec, tool.browser.navigate",
+      "category": "BROWSER | CODE_EXECUTION | SHELL | API | FILE_OPERATION",
+      "name": "Human-readable name",
+      "description": "What this tool does",
+      "required_capability": "cap.{domain}.{name} — agent must hold this capability",
+      "parameters_schema": "JSON Schema for tool input",
+      "output_schema": "JSON Schema for tool output",
+      "permissions": [
+        "tool permissions needed"
+      ],
+      "sandbox_level": "NONE | PROCESS | CONTAINER | VM",
+      "timeout_s": 30,
+      "max_output_bytes": 100000,
+      "idempotent": true,
+      "evidence_required": true
+    },
+    "examples": {
+      "tool.file.read": {
+        "category": "FILE_OPERATION",
+        "required_capability": "cap.code.read",
+        "sandbox_level": "PROCESS",
+        "timeout_s": 10,
+        "max_output_bytes": 100000
+      },
+      "tool.file.write": {
+        "category": "FILE_OPERATION",
+        "required_capability": "cap.code.write",
+        "sandbox_level": "PROCESS",
+        "timeout_s": 30,
+        "max_output_bytes": 500000
+      },
+      "tool.shell.exec": {
+        "category": "SHELL",
+        "required_capability": "cap.code.execute",
+        "sandbox_level": "CONTAINER",
+        "timeout_s": 300,
+        "max_output_bytes": 50000
+      },
+      "tool.api.call": {
+        "category": "API",
+        "required_capability": "cap.api.invoke",
+        "sandbox_level": "PROCESS",
+        "timeout_s": 60,
+        "max_output_bytes": 100000
+      },
+      "tool.browser.navigate": {
+        "category": "BROWSER",
+        "required_capability": "cap.browser.control",
+        "sandbox_level": "CONTAINER",
+        "timeout_s": 120,
+        "max_output_bytes": 1000000
+      }
+    }
+  },
+  "tool_registry": {
+    "description": "Capability-scoped tool discovery. Agents see only tools their capabilities allow.",
+    "interface": {
+      "register": "registry.register(tool_contract) → tool_id",
+      "find_by_capability": "registry.find_by_capability(capability_id) → list[ToolContract]",
+      "find_by_category": "registry.find_by_category(category) → list[ToolContract]",
+      "get": "registry.get(tool_id) → ToolContract"
+    },
+    "existing": "ToolRuntime in src/nexara_prime/tools.py — wraps, does not replace"
+  },
+  "tool_capability_mapping": {
+    "mappings": {
+      "cap.code.read": [
+        "tool.file.read",
+        "tool.file.list",
+        "tool.file.stat"
+      ],
+      "cap.code.write": [
+        "tool.file.write",
+        "tool.file.patch",
+        "tool.shell.exec"
+      ],
+      "cap.code.test": [
+        "tool.shell.exec",
+        "tool.file.read"
+      ],
+      "cap.review.architecture": [
+        "tool.file.read"
+      ],
+      "cap.evidence.generate": [
+        "tool.file.write"
+      ],
+      "cap.browser.control": [
+        "tool.browser.navigate",
+        "tool.browser.screenshot",
+        "tool.browser.extract"
+      ],
+      "cap.api.invoke": [
+        "tool.api.call",
+        "tool.api.poll"
+      ],
+      "cap.orchestrate": [
+        "tool.file.read",
+        "tool.file.write"
+      ]
+    },
+    "principle": "Capability grants tool access. No capability = tools invisible to agent."
+  },
+  "permission_gate": {
+    "description": "5-layer pre-invocation check. Fail at any layer = invocation rejected.",
+    "layers": [
+      {
+        "layer": 1,
+        "name": "Lease Check",
+        "check": "Agent execution lease ACTIVE?",
+        "failure": "LEASE_EXPIRED → reject"
+      },
+      {
+        "layer": 2,
+        "name": "Capability Check",
+        "check": "Agent holds required_capability?",
+        "failure": "CAPABILITY_MISSING → reject"
+      },
+      {
+        "layer": 3,
+        "name": "Scope Check",
+        "check": "Tool target in scope.allowlist AND NOT in scope.denylist?",
+        "failure": "SCOPE_VIOLATION → reject + audit"
+      },
+      {
+        "layer": 4,
+        "name": "Denylist Check",
+        "check": "Tool parameters contain forbidden patterns?",
+        "failure": "FORBIDDEN_PATTERN → reject + security alert"
+      },
+      {
+        "layer": 5,
+        "name": "Role Check",
+        "check": "Agent role permits this tool invocation?",
+        "failure": "ROLE_VIOLATION → reject"
+      }
+    ]
+  },
+  "tool_sandbox": {
+    "description": "Execution containment per tool category.",
+    "levels": {
+      "NONE": {
+        "description": "No sandbox — safe operations only (read text files)",
+        "tools": [
+          "tool.file.read"
+        ]
+      },
+      "PROCESS": {
+        "description": "Process-level containment — path jail, resource limits",
+        "tools": [
+          "tool.file.write",
+          "tool.file.patch",
+          "tool.api.call"
+        ],
+        "existing": "ProcessConstrainedBackend in sandbox_v2.py"
+      },
+      "CONTAINER": {
+        "description": "Container-level isolation — network gating, filesystem overlay",
+        "tools": [
+          "tool.shell.exec",
+          "tool.browser.navigate"
+        ],
+        "existing": "MacOSSandboxBackend in sandbox_v2.py"
+      }
+    },
+    "path_jailing": "All file operations confined to workspace_root. _safe_path() prevents traversal.",
+    "forbidden_patterns": [
+      "sudo",
+      "rm -rf",
+      "curl | sh",
+      "chmod 777",
+      "osascript",
+      "launchctl"
+    ]
+  },
+  "tool_execution_context": {
+    "description": "Immutable context passed to every tool invocation.",
+    "fields": {
+      "invocation_id": "ti_{uuid4().hex[:12]}",
+      "tool_id": "string",
+      "agent_id": "string",
+      "mission_id": "string",
+      "capability_id": "string — capability being exercised",
+      "parameters": "dict — tool-specific input",
+      "workspace_root": "Path — sandbox root",
+      "timestamp": "ISO8601",
+      "idempotency_key": "string"
+    }
+  },
+  "tool_result_verification": {
+    "description": "Post-execution output validation.",
+    "checks": [
+      {
+        "check": "Output size",
+        "rule": "≤ tool.max_output_bytes",
+        "on_fail": "Truncate + warn"
+      },
+      {
+        "check": "Secret leakage",
+        "rule": "No API keys, tokens, passwords in output",
+        "on_fail": "Redact + security alert"
+      },
+      {
+        "check": "SHA256 integrity",
+        "rule": "hash(output) computed and stored",
+        "on_fail": "Mark evidence corrupt"
+      },
+      {
+        "check": "Exit code",
+        "rule": "0 = success, non-zero = failure",
+        "on_fail": "Record failure_code"
+      },
+      {
+        "check": "Scope containment",
+        "rule": "Output references within mission scope",
+        "on_fail": "Redact external refs + warn"
+      }
+    ]
+  },
+  "tool_evidence_binding": {
+    "flow": "ToolInvocation → EvidenceArtifact(kind=tool_invocation) → CrossRefValidator → Receipt",
+    "per_invocation": {
+      "record": "ToolInvocation stored in SQLiteStore (record_type=tool_invocation)",
+      "evidence": "EvidenceArtifact with sha256=hash(output), actor=agent_id, source=tool_runtime",
+      "chain": "idempotency_key links ToolInvocation → EvidenceArtifact → cross_ref_validator → receipt"
+    },
+    "integrity": "CrossRefValidator checks: missing artifact → FAIL, digest mismatch → FAIL, mission mismatch → FAIL"
+  },
+  "pr24_ground_truth": {
+    "hermes_tools": [
+      "terminal (shell.exec)",
+      "read_file (file.read)",
+      "write_file (file.write)",
+      "patch (file.patch)",
+      "gh (api.call)",
+      "delegate_task (orchestrate)"
+    ],
+    "claude_tools": [
+      "read_file (file.read)"
+    ],
+    "agentos_tools": [
+      "gh (api.call)",
+      "read_file (file.read)"
+    ],
+    "all_gated_by": "Execution Plane ToolInvocationBoundary → existing ToolRuntime"
+  },
+  "integration": {
+    "above": "Execution Plane — agent dispatch, tool invocation boundary, permission checkpoints",
+    "below": "Existing ToolRuntime (tools.py), SandboxBackend (sandbox_v2.py), SecurityAuditLedger",
+    "existing_reused": [
+      "ToolRuntime",
+      "ToolInvocation model",
+      "MacOSSandboxBackend",
+      "ProcessConstrainedBackend",
+      "SecurityAuditLedger"
+    ],
+    "non_invasive": true
+  }
+}

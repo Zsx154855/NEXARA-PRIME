@@ -1,0 +1,93 @@
+{
+  "version": "1.0.0",
+  "status": "FROZEN",
+  "repository_sha": "8a75910c5f7e7d9c3c8d769307decbef4c74433b",
+  "repository_short": "8a75910",
+  "branch": "feat/brand-baihan",
+  "previous_tag": "v0.1.0",
+  "previous_tag_head": "1762f77",
+  "gates": "PASS",
+  "gates_detail": {
+    "object_gate": "PASS",
+    "capability_gate": "CONDITIONAL_PASS",
+    "contract_gate": "PASS",
+    "dependency_gate": "CONDITIONAL_PASS",
+    "bootstrap_gate": "PASS",
+    "architecture_audit_gate": "PASS",
+    "evidence_gate": "PASS"
+  },
+  "conditions": [
+    "F1: Merge brain/db.py into top-level db.py (single DB authority)",
+    "F2: Merge chief_brain_kernel.py into brain/kernel.py (single CBK)"
+  ],
+  "timestamp": "2026-08-08T08:00:00Z",
+  "actor": "NEXARA Sovereign Runtime — Architecture Freeze Mission",
+  "evidence_root": ".nexara/freeze/",
+  "evidence_artifacts": [
+    ".nexara/freeze/CURRENT_TRUTH.json",
+    ".nexara/freeze/REPOSITORY_INVENTORY.md",
+    ".nexara/freeze/ARCHITECTURE_INVENTORY.md",
+    ".nexara/freeze/DEPENDENCY_AUDIT.md",
+    ".nexara/freeze/ARCHITECTURE_AUDIT.md",
+    ".nexara/freeze/FREEZE_PROPOSAL.md",
+    ".nexara/freeze/FREEZE_GATES_REPORT.md",
+    ".nexara/freeze/CORE_CONTRACTS.md",
+    ".nexara/freeze/CORE_V1_SEAL.json",
+    ".nexara/freeze/FREEZE_EVIDENCE.json"
+  ],
+  "frozen_zone": [
+    "src/nexara_prime/models.py",
+    "src/nexara_prime/state_machine.py",
+    "src/nexara_prime/governance.py",
+    "src/nexara_prime/evidence.py",
+    "src/nexara_prime/memory.py",
+    "src/nexara_prime/evaluation.py",
+    "src/nexara_prime/tools.py",
+    "src/nexara_prime/capabilities.py",
+    "src/nexara_prime/recovery.py",
+    "src/nexara_prime/runtime.py",
+    "src/nexara_prime/db.py",
+    "src/nexara_prime/events.py",
+    "src/nexara_prime/config.py",
+    "src/nexara_prime/soul.py",
+    "src/nexara_prime/cli.py",
+    "src/nexara_prime/api.py"
+  ],
+  "flexible_zone": [
+    "LivingInterface/",
+    "ui/",
+    "src/nexara_prime/brain/",
+    "src/nexara_prime/council/",
+    "src/nexara_prime/connectors/",
+    "src/nexara_prime/secrets/",
+    "src/nexara_prime/product_reality/",
+    "skills/",
+    "extensions/"
+  ],
+  "core_objects": [
+    "Mission",
+    "MissionSpec",
+    "WorkContract",
+    "MissionState",
+    "NexaraRuntime",
+    "Capability",
+    "EvidenceArtifact",
+    "MemoryRecord",
+    "KnowledgeObject",
+    "ApprovalRequest",
+    "Checkpoint"
+  ],
+  "test_baseline": {
+    "total": 2044,
+    "passed": 2044,
+    "failed": 0
+  },
+  "governance": {
+    "constitution": "NSEC V2.1",
+    "canonical_file": "governance/NEXARA_SOVEREIGN_ENGINEERING_CONSTITUTION_V2_1.md",
+    "chapters": 19,
+    "articles": 55
+  },
+  "next_phase": "RUNTIME_PRODUCTIZATION_READY",
+  "declaration": "NEXARA Core v1.0 Architecture is FROZEN at HEAD 8a75910. The 16 files in the frozen zone are immutable. All changes must follow NSEC Art.18-19 (Contract First, Contract Modification Procedure)."
+}

@@ -33,6 +33,7 @@ Thumbs.db
 *.db-shm
 *.sqlite3
 runtime/
+!src/nexara_prime/brain/runtime/
 
 # ── Test & coverage ──
 coverage.xml
@@ -45,6 +46,9 @@ runtime-data/
 workspace/tmp/
 workspace/cache/
 evidence/raw/
+
+# ── Auto-generated per-mission build receipts (tests generate these) ──
+evidence/receipts/BUILD_RECEIPT_mis-*
 
 # ── Reports tmp / draft ──
 reports/tmp/
@@ -79,6 +83,15 @@ dist/
 .build/
 *.xcuserdata/
 DerivedData/
+.derivedData/
+LivingInterface/.derivedData/
+LivingInterface/build/
+LivingInterface/.build/
+xcuserdata/
+*.xcuserstate
+.venv-fresh/
+.venv-gate/
+.venv-final-gate-*/
 platform/sdk/typescript/platform/
 platform/sdk/typescript/node_modules/
 

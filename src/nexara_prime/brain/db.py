@@ -1,40 +1,146 @@
 """BrainDB — isolated SQLite database for brain memory persistence.
 
-Separate from runtime .nexara/store.db. Uses same SQLiteStore patterns
-but manages its own connection to .nexara/brain_state.db.
+DEPRECATED as standalone DB manager (v1.0.0 F1 consolidation).
+Connection/threading/schema management delegated to canonical SQLiteStore
+(src/nexara_prime/db.py) — the single DB authority.
+
+BrainDB retains brain-specific table schema and semantic CRUD methods.
+
+Migration path: prefer MemoryController public API; for direct DB access
+use SQLiteStore from nexara_prime.db.
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
-import threading
 from pathlib import Path
 from typing import Any
 
+from ..db import SQLiteStore
 from ..models import now_iso, new_id
 
 
 BRAIN_STATE_PATH = Path(".nexara/brain_state.db")
 
+# Brain-specific DDL — previously loaded from schemas/brain_state_schema.sql.
+# Inlined here so BrainDB only adds brain tables on top of SQLiteStore's base.
+_BRAIN_DDL = """
+CREATE TABLE IF NOT EXISTS brain_memories (
+    memory_id TEXT PRIMARY KEY,
+    mission_id TEXT NOT NULL DEFAULT 'global',
+    key TEXT NOT NULL,
+    content TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    layer TEXT NOT NULL DEFAULT 'semantic',
+    confidence REAL NOT NULL DEFAULT 1.0,
+    decay_rate REAL NOT NULL DEFAULT 0.0,
+    half_life_seconds INTEGER,
+    evidence_id TEXT,
+    provenance_chain TEXT,
+    access_count INTEGER NOT NULL DEFAULT 0,
+    last_accessed TEXT,
+    consolidated_from TEXT,
+    superseded_by TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_brain_memories_mission ON brain_memories(mission_id);
+CREATE INDEX IF NOT EXISTS idx_brain_memories_kind ON brain_memories(kind);
+CREATE INDEX IF NOT EXISTS idx_brain_memories_layer ON brain_memories(layer);
+CREATE INDEX IF NOT EXISTS idx_brain_memories_key ON brain_memories(key);
+CREATE INDEX IF NOT EXISTS idx_brain_memories_status ON brain_memories(status);
+CREATE TABLE IF NOT EXISTS memory_decay_state (
+    kind TEXT PRIMARY KEY,
+    half_life_seconds INTEGER NOT NULL,
+    min_confidence REAL NOT NULL DEFAULT 0.1,
+    decay_function TEXT NOT NULL DEFAULT 'exponential',
+    last_tick TEXT,
+    updated_at TEXT NOT NULL
+);
+INSERT OR IGNORE INTO memory_decay_state(kind, half_life_seconds, min_confidence) VALUES
+    ('short_term', 3600, 0.1),
+    ('temporary_context', 86400, 0.1),
+    ('unverified_inference', 1800, 0.05),
+    ('fact', 7776000, 0.3),
+    ('user_fact', 15552000, 0.5),
+    ('project_fact', 31536000, 0.5),
+    ('preference', 7776000, 0.3),
+    ('decision', 0, 0.9),
+    ('failure', 0, 0.9),
+    ('failure_experience', 15552000, 0.3),
+    ('patch', 0, 0.9),
+    ('skill_improvement', 0, 0.9),
+    ('system_rule', 0, 0.9);
+CREATE TABLE IF NOT EXISTS memory_consolidation_log (
+    log_id TEXT PRIMARY KEY,
+    source_memory_id TEXT NOT NULL,
+    target_memory_id TEXT NOT NULL,
+    from_layer TEXT NOT NULL,
+    to_layer TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    reason TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_access_log (
+    log_id TEXT PRIMARY KEY,
+    memory_id TEXT NOT NULL,
+    accessed_at TEXT NOT NULL,
+    query TEXT,
+    access_type TEXT NOT NULL DEFAULT 'recall'
+);
+CREATE INDEX IF NOT EXISTS idx_access_log_memory ON memory_access_log(memory_id);
+CREATE TABLE IF NOT EXISTS memory_health_snapshots (
+    snapshot_id TEXT PRIMARY KEY,
+    total_memories INTEGER NOT NULL DEFAULT 0,
+    active_count INTEGER NOT NULL DEFAULT 0,
+    stale_count INTEGER NOT NULL DEFAULT 0,
+    archived_count INTEGER NOT NULL DEFAULT 0,
+    coverage_score REAL NOT NULL DEFAULT 0.0,
+    freshness_score REAL NOT NULL DEFAULT 0.0,
+    consistency_score REAL NOT NULL DEFAULT 0.0,
+    layer_distribution TEXT NOT NULL DEFAULT '{}',
+    kind_distribution TEXT NOT NULL DEFAULT '{}',
+    taken_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_provenance_chain (
+    provenance_id TEXT PRIMARY KEY,
+    memory_id TEXT NOT NULL,
+    evidence_id TEXT NOT NULL,
+    source_file TEXT,
+    commit_sha TEXT,
+    trace_id TEXT,
+    recorded_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_provenance_memory ON memory_provenance_chain(memory_id);
+CREATE INDEX IF NOT EXISTS idx_provenance_evidence ON memory_provenance_chain(evidence_id);
+"""
+
 
 class BrainDB:
-    """Manages brain_state.db — completely separate from runtime store.db."""
+    """Manages brain_state.db — connection mgmt delegated to SQLiteStore.
+
+    DEPRECATED: This is a compatibility wrapper. SQLiteStore (nexara_prime.db)
+    is the single DB authority for ALL SQLite initialization, connection
+    management, threading, and schema creation.
+
+    BrainDB retains brain-specific table schema and semantic methods
+    (recall, consolidation, decay, provenance, health).
+    """
 
     def __init__(self, path: Path | None = None) -> None:
         self.path = Path(path) if path else BRAIN_STATE_PATH
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.RLock()
-        self._conn = sqlite3.connect(str(self.path), check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._init_schema()
-
-    def _init_schema(self) -> None:
-        schema_path = Path("schemas/brain_state_schema.sql")
-        if schema_path.exists():
-            with open(schema_path) as f:
-                self._conn.executescript(f.read())
-            self._conn.commit()
+        # Delegate ALL connection/threading/schema management to canonical
+        # SQLiteStore — the single DB authority for the project.
+        self._store = SQLiteStore(self.path)
+        # Add brain-specific tables on top of SQLiteStore's base schema.
+        # SQLiteStore._init_schema() already created records + events tables;
+        # brain tables are additive and use separate namespace.
+        self._store._conn.executescript(_BRAIN_DDL)
+        self._store._conn.commit()
+        # Convenience refs so existing method bodies remain unchanged.
+        self._conn = self._store._conn
+        self._lock = self._store._lock
 
     # ── Memory CRUD ──
 

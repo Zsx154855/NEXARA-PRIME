@@ -16,7 +16,7 @@ tags: [operations-index, knowledge-fabric]
 
 运行手册、灾难恢复、升级、发布、备份和安全事件流程集中在这里。
 
-当前验收：[[Knowledge Fabric Acceptance Report]]。
+当前验收：[[Knowledge Fabric  Acceptance Repo]]。
 
 现有实现文档审查：[[Existing Docs Review]]。
 

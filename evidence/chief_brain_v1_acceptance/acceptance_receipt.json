@@ -1,0 +1,17 @@
+{
+  "receipt_id": "cr_chief_brain_v1_acceptance",
+  "timestamp": "2026-07-25T10:24:47.025497+00:00",
+  "head_sha": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "branch": "feat/brand-baihan",
+  "verdict": "PASS",
+  "phases_completed": 10,
+  "evidence_files": [
+    "evidence/chief_brain_v1_acceptance/environment_snapshot.json",
+    "evidence/chief_brain_v1_acceptance/static_architecture_evidence.json",
+    "evidence/chief_brain_v1_acceptance/phase2_decision_semantics.json",
+    "evidence/chief_brain_v1_acceptance/router_truth_matrix.json",
+    "evidence/chief_brain_v1_acceptance/regression_comparison.json",
+    "evidence/chief_brain_v1_acceptance/acceptance_evidence.json"
+  ],
+  "content_hash": "215e72a23b99a934d3eccdfb03454a7c9f8517a4da6703bdc395a1a968a91b32"
+}

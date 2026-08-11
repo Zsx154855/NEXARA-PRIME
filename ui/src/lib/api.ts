@@ -21,6 +21,7 @@ import type {
   SafeModeBody,
   ApiResult,
   ToolInvocation,
+  RuntimeStats,
 } from "../types";
 
 // ── Configuration ──
@@ -153,6 +154,15 @@ export function fetchHealth(): Promise<HealthResponse> {
 
 export function fetchHealthSafe(): Promise<ApiResult<HealthResponse>> {
   return apiResult(fetchHealth());
+}
+
+/** GET /api/runtime/stats — aggregated runtime statistics (lightweight). */
+export function fetchStats(): Promise<RuntimeStats> {
+  return request<RuntimeStats>("GET", "/api/runtime/stats");
+}
+
+export function fetchStatsSafe(): Promise<ApiResult<RuntimeStats>> {
+  return apiResult(fetchStats());
 }
 
 // ── Missions ──
@@ -513,6 +523,7 @@ export function fetchTools(missionId: string): Promise<ToolInvocation[]> {
 export class NexaraAPI {
   getOverview() { return fetchOverview(); }
   getHealth() { return fetchHealth(); }
+  getStats() { return fetchStats(); }
   getMissions() { return fetchMissions(); }
   getMission(id: string) { return fetchMission(id); }
   createMission(body: MissionCreateRequest) { return createMission(body); }

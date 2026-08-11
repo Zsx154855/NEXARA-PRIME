@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from "react";
 import type { NexaraAPI } from "@/lib/api";
-import type { MissionCreateRequest } from "@/types";
-import { cn } from "@/lib/utils";
+import type { MissionCreateRequest, RuntimeOverview } from "@/types";
+import { cn, formatDate } from "@/lib/utils";
 import {
   Rocket,
   Loader2,
@@ -17,6 +17,8 @@ import {
   ChevronRight,
   Sparkles,
   Info,
+  Search,
+  Filter,
 } from "lucide-react";
 
 // ─── Props ───
@@ -24,6 +26,8 @@ import {
 interface MissionCreatorProps {
   api: NexaraAPI;
   onCreated: () => void;
+  overview?: RuntimeOverview | null;
+  onMissionSelect?: (missionId: string) => void;
 }
 
 // ─── Chinese Labels ───
@@ -141,7 +145,7 @@ function StepIndicator({
 
 // ─── Main Component ───
 
-export function MissionCreator({ api, onCreated }: MissionCreatorProps) {
+export function MissionCreator({ api, onCreated, overview, onMissionSelect }: MissionCreatorProps) {
   const [step, setStep] = useState(0); // 0: form, 1: creating, 2: success
   const [objective, setObjective] = useState("");
   const [sourceDir, setSourceDir] = useState("");
@@ -150,6 +154,9 @@ export function MissionCreator({ api, onCreated }: MissionCreatorProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [phaseLabel, setPhaseLabel] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // ── Estimate risk level from objective text (simple heuristic) ──
   const estimateRisk = useCallback((text: string): string | null => {
@@ -227,7 +234,85 @@ export function MissionCreator({ api, onCreated }: MissionCreatorProps) {
     onCreated();
   };
 
+  // ── Mission list filtering ──
+  const missions = overview?.missions ?? [];
+  const filtered = missions.filter(m => {
+    const matchesSearch = !searchTerm ||
+      (m.title ?? m.objective ?? m.mission_id).toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || m.state === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+  const sorted = [...filtered].reverse();
+
+  const STATE_BADGE: Record<string, string> = {
+    Completed: "bg-moss-green/10 text-moss-green",
+    Failed: "bg-warm-red/10 text-warm-red",
+    Blocked: "bg-amber/10 text-amber",
+    Execution: "bg-champagne/10 text-champagne",
+    Approval: "bg-amber/10 text-amber",
+  };
+
   // ── Render ──
+
+  // Show creating/success flow
+  if (step > 0) {
+    return (
+      <div className="mx-auto max-w-2xl animate-fade-in space-y-6">
+        <button onClick={() => { setStep(0); setShowForm(false); }} className="flex items-center gap-1.5 text-xs text-stone transition-colors hover:text-graphite">
+          <ArrowLeft className="h-3.5 w-3.5" />
+          {LABELS.back}
+        </button>
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-champagne/10">
+              <Rocket className="h-5 w-5 text-champagne" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-graphite">{LABELS.title}</h1>
+              <p className="mt-0.5 text-sm text-stone">{LABELS.subtitle}</p>
+            </div>
+          </div>
+        </div>
+        {step === 1 && (
+          <div className="flex flex-col items-center gap-4 py-16">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-champagne/10">
+              <Loader2 className="h-8 w-8 animate-spin text-champagne" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-graphite">{phaseLabel}</p>
+              <p className="mt-1 text-xs text-stone">任务 ID：{missionId ? missionId.slice(0, 16) + "…" : "—"}</p>
+            </div>
+            <div className="mt-2 h-1 w-64 overflow-hidden rounded-full bg-taupe">
+              <div className="h-full animate-pulse rounded-full bg-champagne" style={{ width: "60%" }} />
+            </div>
+          </div>
+        )}
+        {step === 2 && (
+          <div className="flex flex-col items-center gap-4 py-12">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-moss-green/10">
+              <CheckCircle2 className="h-8 w-8 text-moss-green" />
+            </div>
+            <div className="text-center">
+              <p className="text-base font-medium text-graphite">{LABELS.success}</p>
+              <p className="mt-1 text-xs text-stone">任务 ID：<code className="ml-1 rounded bg-mist-gray px-1.5 py-0.5 font-mono text-xs text-graphite">{missionId}</code></p>
+            </div>
+            <div className="mt-2 flex items-start gap-2 rounded-lg border border-taupe bg-mist-gray p-3 text-xs text-stone">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" />
+              任务已进入审批队列。请在"治理"中查看并处理。
+            </div>
+            <div className="mt-4 flex gap-3">
+              <button onClick={() => { setStep(0); setShowForm(false); onCreated(); }} className="rounded-lg border border-taupe bg-ivory px-4 py-2 text-sm font-medium text-graphite transition-colors hover:bg-mist-gray">
+                {LABELS.back}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Show creation form
+  if (showForm) {
 
   return (
     <div className="mx-auto max-w-2xl animate-fade-in space-y-6">
@@ -451,6 +536,92 @@ export function MissionCreator({ api, onCreated }: MissionCreatorProps) {
               查看审批队列
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+  }
+
+  // ── Default: Mission List ──
+  return (
+    <div className="animate-fade-in space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-graphite">任务</h1>
+          <p className="mt-0.5 text-sm text-stone">
+            {missions.length > 0 ? `${missions.length} 个任务` : "创建你的第一个任务"}
+          </p>
+        </div>
+        <button
+          onClick={() => setShowForm(true)}
+          className="flex items-center gap-2 rounded-lg bg-champagne px-4 py-2.5 text-sm font-medium text-ivory transition-colors hover:bg-champagne/90"
+        >
+          <Rocket className="h-4 w-4" />
+          创建任务
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone/50" />
+          <input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="搜索任务…"
+            className="w-full rounded-lg border border-taupe bg-ivory py-2 pl-10 pr-4 text-sm text-graphite placeholder:text-stone/50 focus:border-champagne focus:outline-none focus:ring-1 focus:ring-champagne/30"
+          />
+        </div>
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone/50" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="appearance-none rounded-lg border border-taupe bg-ivory py-2 pl-10 pr-8 text-sm text-graphite focus:border-champagne focus:outline-none focus:ring-1 focus:ring-champagne/30"
+          >
+            <option value="all">全部状态</option>
+            <option value="Intent">Intent</option>
+            <option value="Approval">Approval</option>
+            <option value="Execution">Execution</option>
+            <option value="Completed">Completed</option>
+            <option value="Failed">Failed</option>
+            <option value="Blocked">Blocked</option>
+          </select>
+        </div>
+      </div>
+      {sorted.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <Rocket className="h-10 w-10 text-stone/30" />
+          <p className="text-sm text-stone">
+            {missions.length === 0 ? "还没有任务。创建第一个吧。" : "没有匹配的任务。"}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {sorted.map((m) => (
+            <button
+              key={m.mission_id}
+              onClick={() => onMissionSelect?.(m.mission_id)}
+              className="flex w-full items-center gap-4 rounded-xl border border-taupe bg-ivory p-4 text-left transition-all hover:border-champagne/40 hover:shadow-sm"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-graphite truncate">
+                    {m.title ?? m.objective ?? m.mission_id}
+                  </span>
+                  {m.state && (
+                    <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium", STATE_BADGE[m.state] ?? "bg-taupe/30 text-stone")}>
+                      {m.state}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 flex items-center gap-3 text-xs text-stone">
+                  <span>{m.mission_id?.slice(0, 14)}…</span>
+                  {m.created_at && <span>{formatDate(m.created_at)}</span>}
+                  {m.risk_level && <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", m.risk_level === "R0" || m.risk_level === "R1" ? "bg-moss-green/10 text-moss-green" : m.risk_level === "R2" ? "bg-amber/10 text-amber" : "bg-warm-red/10 text-warm-red")}>{m.risk_level}</span>}
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-stone/40" />
+            </button>
+          ))}
         </div>
       )}
     </div>

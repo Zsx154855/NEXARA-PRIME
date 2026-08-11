@@ -1,0 +1,98 @@
+{
+  "product": "NEXARA V1",
+  "seal_type": "FINAL_TRUTH",
+  "generated_at": "2026-08-09T06:30:00+00:00",
+  "mission": "NEXARA_PRODUCT_V1_FINAL_ACCEPTANCE",
+  "repository": "NEXARA-PRIME",
+  "branch": "feat/brand-baihan",
+  "head": "cb37509ca35dcf0abe4f5cede71abd8cd4a6ce03",
+  "head_short": "cb37509",
+  "core_seal": "8a75910c5f7e7d9c3c8d769307decbef4c74433b",
+  "core_seal_short": "8a75910",
+  "runtime_seal": "ceae37fe33820c6e39354bc1f74ed7ea3254f74b",
+  "runtime_seal_short": "ceae37f",
+  "product_seal": "CONTROL_PLANE_V1_SEAL",
+  "product_commit": "9a6536356f9801848d895109332a2cac39fa32cc",
+  "product_commit_short": "9a65363",
+  "seal_chain": [
+    "8a75910 (CORE FROZEN)",
+    "ceae37f (RUNTIME SEALED)",
+    "9a65363 (CONTROL_PLANE IMPLEMENTED)",
+    "3c9124a (SEAL UPDATE — regression + worktree)",
+    "cb37509 (EVIDENCE — screenshots + E2E report)"
+  ],
+  "seal_chain_valid": true,
+  "test_count": 2044,
+  "test_passed": 2044,
+  "test_failed": 0,
+  "test_duration_seconds": 60.18,
+  "worktree": "CLEAN",
+  "runtime_status": "HEALTHY",
+  "runtime_api_responding": true,
+  "ui_status": "BUILT_AND_SERVING",
+  "ui_stack": {
+    "framework": "Next.js 16",
+    "react": "React 19",
+    "language": "TypeScript strict",
+    "styling": "Tailwind v4",
+    "icons": "Lucide React",
+    "output": "static export",
+    "base_path": "/console"
+  },
+  "mission_id": "mission_3e74d828e73c",
+  "mission_title": "NEXARA V1 Final Acceptance E2E Mission — verify complete lifecycle for release candidate validation",
+  "mission_state": "Completed",
+  "mission_evidence_count": 16,
+  "mission_event_count": 25,
+  "mission_approval_status": "consumed",
+  "mission_memory_patched": true,
+  "mission_evaluation_passed": true,
+  "evidence_count_total": 256,
+  "security_status": "PASS",
+  "security_findings": [
+    {
+      "id": "SEC-001",
+      "finding": "Hardcoded TOKEN = \"H-TOKEN\" in council/runtime/mission_router.py:29",
+      "severity": "LOW",
+      "classification": "FALSE_POSITIVE",
+      "detail": "Enum value, not a real credential"
+    }
+  ],
+  "governance_status": "PASS",
+  "governance_framework": "NSEC V2.1 (19 chapters, 55 articles)",
+  "nsec_drift": "NO_DRIFT",
+  "runtime_invariants_preserved": 10,
+  "core_frozen_zone": 16,
+  "core_objects": 11,
+  "freeze_gates": "7/7 PASS",
+  "runtime_gates": "10/10 PASS (R1-R10)",
+  "f1_db_authority": "SQLiteStore (single authority)",
+  "f2_kernel_authority": "brain/kernel.py:ChiefBrainKernel (single authority)",
+  "findings": [
+    {
+      "id": "F-001",
+      "finding": "/api/knowledge-universe returns 503 — optional brain module import failure",
+      "severity": "LOW",
+      "classification": "PRE-EXISTING",
+      "release_blocking": false
+    },
+    {
+      "id": "F-002",
+      "finding": "Secret scan false-positive: TOKEN = \"H-TOKEN\" enum value",
+      "severity": "LOW",
+      "classification": "FALSE_POSITIVE",
+      "release_blocking": false
+    },
+    {
+      "id": "F-003",
+      "finding": "CONTROL_PLANE_V1_SEAL current_head field shows ceae37f; actual HEAD is cb37509",
+      "severity": "LOW",
+      "classification": "DOCUMENTATION",
+      "release_blocking": false
+    }
+  ],
+  "release_blockers": 0,
+  "final_status": "RELEASE_CANDIDATE_ACCEPTED",
+  "human_approval_required": true,
+  "governed_by": "NSEC Article 37 — High-Impact Approval"
+}

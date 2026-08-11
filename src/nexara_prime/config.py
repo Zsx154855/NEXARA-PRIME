@@ -15,6 +15,7 @@ class Settings:
     api_host: str
     api_port: int
     ui_root: Path | None = None
+    max_execution_seconds: int = 0  # 0 = no limit (Runtime Productization v1)
 
     @classmethod
     def from_env(cls, root: Path | None = None) -> "Settings":

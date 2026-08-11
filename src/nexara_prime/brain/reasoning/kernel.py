@@ -35,8 +35,7 @@ class ThoughtProcessEngine:
     ) -> list[ReasoningStep]:
         """Execute reasoning chain. Returns ordered list of reasoning steps."""
         steps: list[ReasoningStep] = []
-        def sid(_name: str) -> str:
-            return f"step_{len(steps) + 1:02d}"
+        sid = lambda n: f"step_{len(steps) + 1:02d}"
 
         # OBSERVE — gather facts from context
         observe = ReasoningStep(

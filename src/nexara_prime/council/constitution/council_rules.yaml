@@ -1,0 +1,114 @@
+# NEXARA Sovereign Council — Rules of Procedure
+# Version 2.0.0
+
+council:
+  name: "NEXARA Sovereign Council"
+  version: "2.0.0"
+  constitution: "CONSTITUTION_V2.md"
+  governed_by: "NSEC V2.1"
+
+quorum:
+  minimum_seats: 5
+  total_seats: 9
+  urgent_minimum: 3
+
+voting:
+  majority_threshold: 5
+  supermajority_threshold: 7
+  chairman_tiebreaker: true
+  veto_seats: ["H-RED", "H-JUDGE"]
+
+execution:
+  default_mode: "MULTI_AGENT"
+  token_mode: "AGGRESSIVE"
+  evidence_mode: "EVIDENCE_FIRST"
+  max_parallel_agents: 4
+  max_delegation_depth: 2
+
+pipeline:
+  stages:
+    - name: "REQUIREMENT_INPUT"
+      actor: "H-CHAIRMAN"
+      output: "raw_requirement"
+
+    - name: "MISSION_DNA_GENERATION"
+      actor: "H-STAFF"
+      output: "mission_dna"
+      required_fields: ["mission_id", "objective", "constraints", "agents", "tools", "permissions", "expected_output", "verification", "rollback"]
+
+    - name: "COUNCIL_DELIBERATION"
+      actor: "ALL_SEATS"
+      output: "deliberation_record"
+      min_rounds: 1
+      max_rounds: 3
+
+    - name: "RED_TEAM_ATTACK"
+      actor: "H-RED"
+      output: "risk_report"
+      must_challenge: true
+
+    - name: "JUDGE_ADJUDICATION"
+      actor: "H-JUDGE"
+      output: "adjudication"
+      binding: true
+
+    - name: "EXECUTION_PLAN"
+      actor: "H-STAFF"
+      output: "execution_plan"
+
+    - name: "HERMES_RUNNER"
+      actor: "H-EXEC"
+      output: "execution_artifacts"
+
+    - name: "EVIDENCE_COLLECTION"
+      actor: "H-MEM"
+      output: "evidence_package"
+
+    - name: "VERIFICATION"
+      actor: "H-JUDGE"
+      output: "verification_report"
+
+    - name: "MEMORY_COMMIT"
+      actor: "H-MEM"
+      output: "memory_entry"
+
+token_policy:
+  mode: "AGGRESSIVE"
+  rules:
+    - "禁止重复解释"
+    - "禁止重复读取无关文件"
+    - "优先摘要上下文"
+    - "优先增量分析"
+    - "大任务拆 Evidence Chunk"
+    - "每阶段生成状态快照"
+  max_context_per_agent: 8000
+  summary_threshold: 0.4
+
+prohibitions:
+  - "未授权修改生产数据库"
+  - "未验证直接merge"
+  - "无Evidence宣布完成"
+  - "删除历史记录"
+  - "覆盖旧项目状态"
+  - "curl|python3"
+  - "rm -rf 项目文件"
+  - "git add ."
+  - "force push"
+
+evidence:
+  receipt_required: true
+  receipt_fields:
+    - "创建文件列表"
+    - "Agent状态"
+    - "Skill状态"
+    - "Token策略"
+    - "测试结果"
+    - "风险列表"
+    - "下一阶段建议"
+  storage_path: "evidence/receipts/"
+
+memory:
+  ledger_path: "memory/decisions/"
+  failure_log_path: "memory/failures/"
+  evidence_path: "memory/evidence/"
+  retention: "permanent"

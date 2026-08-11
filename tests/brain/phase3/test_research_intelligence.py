@@ -18,8 +18,6 @@ class MockMC:
     def recall(s,mid,layer=None,**kw):
         res=[]
         for m,recs in s.store.items():
-            if mid!='global' and m!=mid:
-                continue
             for r in recs:
                 if r['status']!='active':
                     continue
@@ -74,7 +72,7 @@ class TestResearch:
         t = research.create_task("Q")
         claims = research.extract_claims([{"source":"s","content":"answer"}])
         synth = research.synthesize(claims)
-        cid = research.emit_brief(t, claims, synth)
+        cid = research.emit_brief(t, claims, synth, evidence_id="test")
         assert cid is not None
     def test_budget_constrained(self, research):
         t = research.create_task("Big question",budget=0)
@@ -85,6 +83,6 @@ class TestSummary:
         t = research.create_task("Q")
         claims = research.extract_claims([{"source":"s","content":"a"}])
         synth = research.synthesize(claims)
-        research.emit_brief(t, claims, synth)
+        research.emit_brief(t, claims, synth, evidence_id="test")
         s = research.summarize()
         assert s["total_research_tasks"] >= 1

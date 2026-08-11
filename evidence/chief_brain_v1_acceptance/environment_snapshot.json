@@ -1,0 +1,28 @@
+{
+  "repository_root": "/Users/agentos/NEXARA-PRIME",
+  "branch": "feat/brand-baihan",
+  "head_sha": "e38aae49dc545162e3cc652e554ea26c0b8278e5",
+  "base_sha": "dd0505ac53721d8e2e6150e47936119fe16734d6",
+  "python_executable": "/usr/bin/python3",
+  "python_version": "Python 3.9.6",
+  "virtual_env": "",
+  "pythonpath": "/var/folders/f2/4t74_j890z77bg1bntw_90d40000gn/T/hermes_sandbox_uf08_pbd:/Users/agentos/.hermes/releases/hermes-agent-candidate-v0.18.0-20260711_030038",
+  "nexara_model_provider": "unset",
+  "nexara_mock_model": "unset",
+  "git_status_short": "M src/nexara_prime/runtime.py\n?? .hermes-setup-done\n?? NEXARA-PRIME/\n?? reports/mission_0565a33c78d5/\n?? reports/mission_21b0c71b98c9/\n?? reports/mission_6cbafe76dd39/\n?? reports/mission_b2ca11541d59/\n?? src/nexara_prime/brain/",
+  "git_diff_files": "src/nexara_prime/runtime.py",
+  "brain_files": [
+    "src/nexara_prime/brain/brain_receipt.py",
+    "src/nexara_prime/brain/planner.py",
+    "src/nexara_prime/brain/kernel.py",
+    "src/nexara_prime/brain/goal_manager.py",
+    "src/nexara_prime/brain/__init__.py",
+    "src/nexara_prime/brain/decision_engine.py",
+    "src/nexara_prime/brain/model_policy.py",
+    "src/nexara_prime/brain/memory_controller.py",
+    "src/nexara_prime/brain/evolution_engine.py",
+    "src/nexara_prime/brain/context_engine.py",
+    "src/nexara_prime/brain/reasoning_budget.py"
+  ],
+  "test_command": "PYTHONPATH=src python3 -m pytest tests/ -q --tb=line --ignore=tests/test_sdk_contract.py"
+}

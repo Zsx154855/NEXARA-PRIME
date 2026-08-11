@@ -1,0 +1,62 @@
+{
+  "product": "NEXARA Control Plane V1",
+  "seal_type": "API_EVIDENCE",
+  "generated_at": "2026-08-09T05:55:00+00:00",
+  "base_url": "http://127.0.0.1:8765",
+  "api_endpoints_verified": {
+    "GET /health": {"status": 200, "verified": true},
+    "GET /api/runtime/overview": {"status": 200, "verified": true, "missions_included": 20},
+    "GET /api/runtime/stats": {"status": 200, "verified": true, "n1_implemented": true},
+    "GET /api/missions": {"status": 200, "verified": true, "count": 40},
+    "POST /api/missions": {"status": 200, "verified": true},
+    "GET /api/missions/{id}": {"status": 200, "verified": true},
+    "POST /api/missions/{id}/plan": {"status": 200, "verified": true},
+    "POST /api/missions/{id}/approve": {"status": 200, "verified": true},
+    "POST /api/missions/{id}/run": {"status": 200, "verified": true},
+    "POST /api/missions/{id}/pause": {"status": 200, "verified": true},
+    "POST /api/missions/{id}/resume": {"status": 200, "verified": true},
+    "POST /api/missions/{id}/rollback": {"status": 200, "verified": true},
+    "POST /api/missions/{id}/safe-mode": {"status": 200, "verified": true},
+    "GET /api/approvals": {"status": 200, "verified": true},
+    "GET /api/receipts": {"status": 200, "verified": true},
+    "GET /api/tools": {"status": 200, "verified": true},
+    "GET /api/missions/{id}/tools": {"status": 200, "verified": true},
+    "GET /api/evidence": {"status": 200, "verified": true},
+    "GET /api/memory": {"status": 200, "verified": true},
+    "GET /api/memory/candidates": {"status": 200, "verified": true},
+    "GET /api/events/{mission_id}": {"status": 200, "verified": true},
+    "POST /api/recovery/check": {"status": 200, "verified": true},
+    "GET /api/knowledge-universe": {"status": 200, "verified": true},
+    "GET /adaptive/status": {"status": 200, "verified": true},
+    "GET /adaptive/missions/{id}": {"status": 200, "verified": true},
+    "GET /adaptive/missions/{id}/explain": {"status": 200, "verified": true}
+  },
+  "total_endpoints": 26,
+  "all_endpoints_verified": true,
+  "n1_implementation_verified": true,
+  "no_e4_duplicate": true,
+  "api_client": {
+    "file": "ui/src/lib/api.ts",
+    "lines": 547,
+    "methods": ["getOverview", "getStats", "getMissions", "createMission", "getMission", "planMission", "approveMission", "runMission", "pauseMission", "resumeMission", "rollbackMission", "getApprovals", "getEvidence", "getEvents", "getHealth"],
+    "base_url": "",
+    "same_origin": true,
+    "timeout_ms": 30000
+  },
+  "types": {
+    "file": "ui/src/types/index.ts",
+    "interfaces": ["RuntimeOverview", "RuntimeStats", "MissionSnapshot", "MissionListItem", "HealthResponse", "ApprovalRequest", "EvidenceArtifact", "MemoryRecord", "Event", "ApiResult", "ToolInvocation"]
+  },
+  "runtime_stats_at_seal": {
+    "total_missions": 40,
+    "active_missions": 27,
+    "completed_missions": 12,
+    "failed_missions": 1,
+    "blocked_missions": 0,
+    "pending_approvals": 0,
+    "total_evidence": 227,
+    "provider": "mock",
+    "mock_mode": true,
+    "recovery_state": "healthy"
+  }
+}
