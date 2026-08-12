@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @theme {
+  /* ── Palette ── */
   --color-ivory: #FDFAF5;
   --color-graphite: #38352F;
   --color-mist-gray: #F5F2EE;
@@ -10,6 +11,36 @@
   --color-taupe: #E8E3DA;
   --color-stone: #8B8679;
   --color-warm-red: #C96D6D;
+
+  /* ── Semantic Surface Tokens ── */
+  --color-surface-base: #FDFAF5;
+  --color-surface-subtle: #F5F2EE;
+  --color-surface-elevated: #FFFFFF;
+  --color-surface-hover: #F5F2EE;
+  --color-surface-active: #E8E3DA;
+
+  /* ── Semantic Text Tokens ── */
+  --color-text-primary: #38352F;
+  --color-text-secondary: #6B6558;
+  --color-text-tertiary: #8B8579;
+  --color-text-disabled: #C8C4BB;
+
+  /* ── Semantic Border Tokens ── */
+  --color-border-subtle: #E8E3DA;
+  --color-border-default: #D5D0C6;
+  --color-border-focus: #C4A45A;
+
+  /* ── Semantic Accent Tokens ── */
+  --color-accent-primary: #C4A45A;
+  --color-accent-soft: #D4C08A;
+
+  /* ── Semantic State Tokens ── */
+  --color-success: #6B8B6F;
+  --color-warning: #C38D4A;
+  --color-danger: #C96D6D;
+
+  /* ── Focus Ring ── */
+  --color-focus-ring: #C4A45A;
 }
 
 :root {
@@ -22,6 +53,29 @@
   --color-taupe: #E8E3DA;
   --color-stone: #8B8679;
   --color-warm-red: #C96D6D;
+
+  /* ── Semantic Tokens ── */
+  --surface-base: #FDFAF5;
+  --surface-subtle: #F5F2EE;
+  --surface-elevated: #FFFFFF;
+  --surface-hover: #F5F2EE;
+  --surface-active: #E8E3DA;
+
+  --text-primary: #38352F;
+  --text-secondary: #6B6558;
+  --text-tertiary: #8B8579;
+  --text-disabled: #C8C4BB;
+
+  --border-subtle: #E8E3DA;
+  --border-default: #D5D0C6;
+  --border-focus: #C4A45A;
+
+  --accent-primary: #C4A45A;
+  --accent-soft: #D4C08A;
+
+  --success: #6B8B6F;
+  --warning: #C38D4A;
+  --danger: #C96D6D;
 }
 
 body {

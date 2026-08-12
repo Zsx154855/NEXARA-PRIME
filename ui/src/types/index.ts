@@ -493,6 +493,19 @@ export interface ReceiptsResponse {
   total: number;
 }
 
+// ── Memory Stats ──
+
+export interface MemoryStats {
+  total: number;
+  layers: {
+    working: number;
+    episodic: number;
+    semantic: number;
+    procedural: number;
+  };
+  pending_reviews: number;
+}
+
 // ── Generic API wrappers ──
 
 export interface ApiResult<T> {

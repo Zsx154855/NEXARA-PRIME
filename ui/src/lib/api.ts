@@ -12,6 +12,7 @@ import type {
   ApprovalRequest,
   EvidenceArtifact,
   MemoryRecord,
+  MemoryStats,
   Event,
   RecoveryStateResponse,
   ReceiptChainResponse,
@@ -354,6 +355,15 @@ export function fetchMemorySafe(
   return apiResult(fetchMemory(missionId));
 }
 
+/** GET /api/memory/stats — aggregated memory statistics grouped by layer. */
+export function fetchMemoryStats(): Promise<MemoryStats> {
+  return request<MemoryStats>("GET", "/api/memory/stats");
+}
+
+export function fetchMemoryStatsSafe(): Promise<ApiResult<MemoryStats>> {
+  return apiResult(fetchMemoryStats());
+}
+
 /** GET /api/memory/candidates — list uncommitted memory candidates. */
 export function fetchMemoryCandidates(
   missionId?: string,
@@ -537,6 +547,7 @@ export class NexaraAPI {
   getApprovals(id?: string) { return fetchApprovals(id); }
   getEvidence(id?: string) { return fetchEvidence(id); }
   getMemory(id?: string) { return fetchMemory(id); }
+  getMemoryStats() { return fetchMemoryStats(); }
   getEvents(id: string) { return fetchEvents(id); }
   fetchEvents(id: string) { return fetchEvents(id); }
   fetchTools(id: string) { return fetchTools(id); }

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -36,6 +37,12 @@ class SafeModeBody(BaseModel):
 def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     runtime = runtime or NexaraRuntime(Settings.from_env(Path.cwd()))
     app = FastAPI(title="NEXARA PRIME", version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.state.runtime = runtime
     default_vault = Path(__file__).resolve().parents[2] / "docs"
     app.state.knowledge_vault = Path(os.environ.get("NEXARA_VAULT_PATH", default_vault))
@@ -171,6 +178,23 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     @app.get("/api/memory/candidates")
     def memory_candidates(mission_id: str | None = None) -> list[dict[str, Any]]:
         return runtime.memory.candidates(mission_id)
+
+    @app.get("/api/memory/stats")
+    def memory_stats() -> dict[str, Any]:
+        """Aggregated memory statistics grouped by MemoryLayer.
+
+        Response:
+            {
+              "total": int,
+              "layers": {
+                "working": int,      # short_term + temporary_context
+                "episodic": int,     # decision + failure + experience
+                "semantic": int,     # fact + user_fact + project_fact + preference
+                "procedural": int    # patch + skill_improvement + system_rule
+              }
+            }
+        """
+        return runtime.memory_layers.stats()
 
     @app.get("/api/events/{mission_id}")
     def events(mission_id: str) -> list[dict[str, Any]]:
