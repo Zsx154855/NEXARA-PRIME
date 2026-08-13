@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Status } from "@/components/ui/Status";
 import { Badge } from "@/components/ui/Badge";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -128,9 +129,9 @@ export default function SettingsPage() {
         </h2>
         <p className="text-sm text-text-secondary">
           想重新走一遍七步引导？
-          <a href="/onboarding" className="mx-1 text-gold-text underline underline-offset-2">
+          <Link href="/onboarding" className="mx-1 text-gold-text underline underline-offset-2">
             认识 NEXARA
-          </a>
+          </Link>
         </p>
       </section>
     </div>

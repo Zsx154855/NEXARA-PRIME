@@ -106,7 +106,7 @@ export function NavSidebar() {
                 {item.label}
                 {item.id === "trust" && pendingApprovals > 0 && (
                   <span
-                    className="ml-auto inline-flex size-4 items-center justify-center rounded-full bg-warning text-[10px] font-semibold text-ivory"
+                    className="ml-auto inline-flex size-4 items-center justify-center rounded-full bg-warning text-xs font-semibold text-ivory"
                     aria-label={`${pendingApprovals} 项待审批`}
                   >
                     {pendingApprovals}

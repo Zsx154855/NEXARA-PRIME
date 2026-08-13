@@ -1,6 +1,8 @@
 // 使命控制动作（暂停 / 恢复 / 回滚 / 安全模式）确认弹窗
+import { useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { useDialogA11y } from "@/components/ui/dialog-a11y";
 
 interface MissionConfirmDialogProps {
   open: boolean;
@@ -25,10 +27,13 @@ export function MissionConfirmDialog({
   onConfirm,
   onCancel,
 }: MissionConfirmDialogProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(open, onCancel, panelRef);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-graphite/30 px-4 backdrop-blur-sm">
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}

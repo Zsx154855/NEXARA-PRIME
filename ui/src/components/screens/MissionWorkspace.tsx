@@ -5,7 +5,7 @@
 // 数据源：api.getMission 权威快照 + getApprovals / fetchTools / getEvidence /
 // getMemory / getEvents（Promise.allSettled，单源失败不拖垮整体，阶梯如实红）。
 // props 与 ui/src/app/(shell)/missions/page.tsx 的既有调用保持兼容。
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import type { NexaraAPI } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
@@ -92,28 +92,39 @@ export function MissionWorkspace({ api, missionId, onBack }: MissionWorkspacePro
   const [isPlanning, setIsPlanning] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
 
+  // 竞态守卫：?id= 切换时组件复用，旧 mission 的在途结果不得覆盖新 mission
+  const activeMissionIdRef = useRef(missionId);
+  useEffect(() => {
+    activeMissionIdRef.current = missionId;
+  }, [missionId]);
+
   const loadAll = useCallback(async () => {
+    const requestedId = missionId;
     setIsLoading(true);
     setLoadError(null);
     let snapshot: MissionSnapshot;
     try {
-      snapshot = await api.getMission(missionId);
-      setMission(snapshot);
+      snapshot = await api.getMission(requestedId);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : String(err));
-      setIsLoading(false);
+      if (activeMissionIdRef.current === requestedId) {
+        setLoadError(err instanceof Error ? err.message : String(err));
+        setIsLoading(false);
+      }
       return;
     }
+    if (activeMissionIdRef.current !== requestedId) return;
+    setMission(snapshot);
 
     // 侧路数据 best-effort：单源失败如实记入阶梯，不拖垮整体视图
     const [approvalsR, toolsR, evidenceR, memoryR, eventsR] =
       await Promise.allSettled([
-        api.getApprovals(missionId),
-        api.fetchTools(missionId),
-        api.getEvidence(missionId),
-        api.getMemory(missionId),
-        api.getEvents(missionId),
+        api.getApprovals(requestedId),
+        api.fetchTools(requestedId),
+        api.getEvidence(requestedId),
+        api.getMemory(requestedId),
+        api.getEvents(requestedId),
       ]);
+    if (activeMissionIdRef.current !== requestedId) return;
 
     setApprovals(approvalsR.status === "fulfilled" ? approvalsR.value : []);
     setTools(toolsR.status === "fulfilled" ? toolsR.value : []);

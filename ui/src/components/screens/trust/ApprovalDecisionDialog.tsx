@@ -4,7 +4,7 @@
 // 做什么 / 为什么 / 访问什么 / 风险 / 将改变什么 + 可选备注。
 // 提交走 POST /api/missions/:id/approve（decision + actor="human" + note）。
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ApprovalRequest } from "@/types";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -48,6 +48,17 @@ export function DecisionDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [isBusy, onCancel]);
 
+  // 初始聚焦：审批弹窗打开时聚焦首个可聚焦元素（关闭按钮）
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (panelRef.current) {
+      const first = panelRef.current.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled])',
+      );
+      first?.focus();
+    }
+  }, []);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-graphite/30 p-4 backdrop-blur-sm"
@@ -57,6 +68,7 @@ export function DecisionDialog({
       }}
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="decision-dialog-title"

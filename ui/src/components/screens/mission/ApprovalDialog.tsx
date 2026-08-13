@@ -1,6 +1,6 @@
 // 审批决策弹窗：WHAT / WHY / 访问 / 风险 / 改变 + 批准 / 拒绝 / 要求修改。
 // 决策真实写入 POST /api/missions/{id}/approve（decision 字段）。
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { useDialogA11y } from "@/components/ui/dialog-a11y";
 import { cn } from "@/lib/utils";
 import type { ApprovalRequest } from "@/types";
 import { RISK_LABELS, formatTimestamp } from "./constants";
@@ -58,6 +59,8 @@ export function ApprovalDialog({
   onClose,
 }: ApprovalDialogProps) {
   const [note, setNote] = useState("");
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(approval !== null, onClose, panelRef);
   if (!approval) return null;
 
   const hasRollbackPlan =
@@ -66,6 +69,7 @@ export function ApprovalDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-graphite/30 px-4 backdrop-blur-sm">
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={`审批：${approval.action}`}

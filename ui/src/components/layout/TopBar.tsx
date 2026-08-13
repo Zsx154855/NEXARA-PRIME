@@ -58,7 +58,7 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
         >
           <Search className="size-3.5" aria-hidden="true" />
           <span className="hidden md:inline">搜索与操作</span>
-          <kbd className="ml-1 rounded border border-border-subtle bg-surface-elevated px-1 py-0.5 text-[11px] text-text-tertiary">
+          <kbd className="ml-1 rounded border border-border-subtle bg-surface-elevated px-1 py-0.5 text-xs text-text-tertiary">
             ⌘K
           </kbd>
         </button>
