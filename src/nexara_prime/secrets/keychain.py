@@ -152,9 +152,6 @@ class MacOSKeychainSecretStore:
             ) from None
 
         if check and result.returncode != 0:
-            raise RuntimeError(
-                f"keychain command failed: {' '.join(args)}\n"
-                f"stderr: {result.stderr.strip()}"
-            )
+            raise RuntimeError("keychain command failed; secret-bearing arguments were redacted")
 
         return result

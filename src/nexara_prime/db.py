@@ -77,6 +77,7 @@ class SQLiteStore:
 
     def _init_schema(self) -> None:
         with self._lock, self._conn:
+            self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS records (
@@ -102,6 +103,15 @@ class SQLiteStore:
                     payload TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_events_aggregate ON events(aggregate_id);
+                CREATE TABLE IF NOT EXISTS conversation_message_index (
+                    message_id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(message_id) REFERENCES records(record_id) ON DELETE CASCADE,
+                    FOREIGN KEY(conversation_id) REFERENCES records(record_id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_conversation_message_index_conversation
+                    ON conversation_message_index(conversation_id, created_at, message_id);
                 """
             )
             record_columns = {
@@ -340,6 +350,20 @@ class SQLiteStore:
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_idempotency "
                 "ON events(idempotency_key) WHERE idempotency_key IS NOT NULL"
             )
+            self._conn.execute(
+                """INSERT OR IGNORE INTO conversation_message_index(
+                       message_id, conversation_id, created_at
+                   )
+                   SELECT record_id, json_extract(payload, '$.conversation_id'), created_at
+                   FROM records
+                   WHERE record_type='conversation_message'
+                     AND json_extract(payload, '$.conversation_id') IS NOT NULL
+                     AND EXISTS (
+                         SELECT 1 FROM records parent
+                         WHERE parent.record_id=json_extract(records.payload, '$.conversation_id')
+                           AND parent.record_type='conversation'
+                     )"""
+            )
 
     def save_record(
         self,
@@ -413,6 +437,75 @@ class SQLiteStore:
                 ),
             )
             return cursor.rowcount == 1
+
+    def save_conversation_message_index(
+        self, message_id: str, conversation_id: str, created_at: str
+    ) -> None:
+        """Persist the FK-backed conversation/message relationship idempotently."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                """INSERT INTO conversation_message_index(
+                       message_id, conversation_id, created_at
+                   ) VALUES (?, ?, ?)
+                   ON CONFLICT(message_id) DO UPDATE SET
+                       conversation_id=excluded.conversation_id,
+                       created_at=excluded.created_at""",
+                (message_id, conversation_id, created_at),
+            )
+
+    def save_conversation_bundle(
+        self,
+        message: dict[str, Any],
+        conversation: dict[str, Any],
+        event: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Atomically persist a conversation message, projection, index, and event."""
+        message_payload = self._canonical_payload(message)
+        conversation_payload = self._canonical_payload(conversation)
+        message_integrity = self._record_integrity(
+            message["message_id"], "conversation_message", message["conversation_id"], message["created_at"], message
+        )
+        conversation_integrity = self._record_integrity(
+            conversation["conversation_id"], "conversation", conversation["conversation_id"], conversation["created_at"], conversation
+        )
+        event_payload = self._canonical_payload(event.get("payload", {}))
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                self._conn.execute(
+                    """INSERT INTO records(record_id, record_type, mission_id, payload, created_at, integrity_sha256, origin_sha256)
+                       VALUES (?, 'conversation_message', ?, ?, ?, ?, ?)
+                       ON CONFLICT(record_id) DO UPDATE SET payload=excluded.payload, integrity_sha256=excluded.integrity_sha256""",
+                    (message["message_id"], message["conversation_id"], message_payload, message["created_at"], message_integrity, message_integrity),
+                )
+                self._conn.execute(
+                    """INSERT INTO records(record_id, record_type, mission_id, payload, created_at, integrity_sha256, origin_sha256)
+                       VALUES (?, 'conversation', ?, ?, ?, ?, ?)
+                       ON CONFLICT(record_id) DO UPDATE SET payload=excluded.payload, integrity_sha256=excluded.integrity_sha256""",
+                    (conversation["conversation_id"], conversation["conversation_id"], conversation_payload, conversation["created_at"], conversation_integrity, conversation_integrity),
+                )
+                self._conn.execute(
+                    """INSERT INTO conversation_message_index(message_id, conversation_id, created_at)
+                       VALUES (?, ?, ?) ON CONFLICT(message_id) DO UPDATE SET conversation_id=excluded.conversation_id, created_at=excluded.created_at""",
+                    (message["message_id"], message["conversation_id"], message["created_at"]),
+                )
+                self._conn.execute(
+                    """INSERT OR IGNORE INTO events(event_id, event_type, aggregate_id, aggregate_type, actor, trace_id, timestamp, idempotency_key, payload)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (event["event_id"], event["event_type"], event["aggregate_id"], event["aggregate_type"], event["actor"], event["trace_id"], event["timestamp"], event.get("idempotency_key"), event_payload),
+                )
+                row = self._conn.execute(
+                    "SELECT * FROM events WHERE idempotency_key=?", (event.get("idempotency_key"),)
+                ).fetchone()
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+        if row is None:
+            raise RuntimeError("conversation_event_persistence_failed")
+        persisted = dict(row)
+        persisted["payload"] = json.loads(persisted["payload"])
+        return persisted
 
     def save_records_atomically(self, records: list[dict[str, Any]]) -> None:
         """Persist a related set of records in one transaction.

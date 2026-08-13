@@ -24,6 +24,9 @@ class EventBus:
                 # A telemetry subscriber must never break the mission path.
                 continue
 
+    def notify_persisted_dict(self, event: dict[str, Any]) -> None:
+        self.notify_persisted(Event.model_validate(event))
+
     def publish(
         self,
         event_type: str,
