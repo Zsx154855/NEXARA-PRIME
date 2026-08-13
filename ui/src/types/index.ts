@@ -521,3 +521,60 @@ export interface RecoveryStateResponse extends Record<string, unknown> {
   state?: string;
   root_cause?: string | null;
 }
+
+// ── Conversation ──
+
+export type ConversationStatus = "open" | "closed";
+
+export type ConversationExecutionMode = "chat" | "auto" | "mission";
+
+export type ConversationMessageRole = "user" | "assistant" | "system";
+
+export interface ConversationRecord {
+  conversation_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  status: ConversationStatus;
+  message_ids: string[];
+}
+
+export interface ConversationMessageMetadata {
+  intent?: string;
+  execution_mode?: string;
+  provider?: string;
+  mission_id?: string;
+  approval_required?: boolean;
+  response_to?: string;
+}
+
+export interface ConversationMessage {
+  message_id: string;
+  conversation_id?: string;
+  role: ConversationMessageRole;
+  content: string;
+  created_at: string;
+  metadata: ConversationMessageMetadata | null;
+}
+
+export interface ConversationDetail extends ConversationRecord {
+  messages: ConversationMessage[];
+}
+
+export interface ConversationSendRequest {
+  content: string;
+  execution_mode: ConversationExecutionMode;
+  idempotency_key: string;
+}
+
+export interface ConversationSendResponse {
+  conversation: ConversationRecord;
+  user_message: ConversationMessage;
+  assistant_message: ConversationMessage;
+  mission_id: string | null;
+  approval_required: boolean;
+  provider: string | null;
+  execution_mode: string;
+  intent: string;
+  idempotent_replay?: boolean;
+}

@@ -23,6 +23,9 @@ import type {
   ApiResult,
   ToolInvocation,
   RuntimeStats,
+  ConversationDetail,
+  ConversationSendRequest,
+  ConversationSendResponse,
 } from "../types";
 
 // ── Configuration ──
@@ -528,6 +531,97 @@ export function fetchTools(missionId: string): Promise<ToolInvocation[]> {
   );
 }
 
+// ── Conversation ──
+
+/** POST /api/conversations — create a durable conversation. */
+export function createConversation(title?: string): Promise<ConversationDetail> {
+  return request<ConversationDetail>("POST", "/api/conversations", {
+    title: title ?? null,
+  });
+}
+
+export function createConversationSafe(
+  title?: string,
+): Promise<ApiResult<ConversationDetail>> {
+  return apiResult(createConversation(title));
+}
+
+/** GET /api/conversations — list conversations with messages. */
+export function fetchConversations(): Promise<ConversationDetail[]> {
+  return request<ConversationDetail[]>("GET", "/api/conversations");
+}
+
+export function fetchConversationsSafe(): Promise<ApiResult<ConversationDetail[]>> {
+  return apiResult(fetchConversations());
+}
+
+/** GET /api/conversations/:id — one conversation with messages. */
+export function fetchConversation(
+  conversationId: string,
+): Promise<ConversationDetail> {
+  return request<ConversationDetail>(
+    "GET",
+    `/api/conversations/${encodeURIComponent(conversationId)}`,
+  );
+}
+
+export function fetchConversationSafe(
+  conversationId: string,
+): Promise<ApiResult<ConversationDetail>> {
+  return apiResult(fetchConversation(conversationId));
+}
+
+/** POST /api/conversations/:id/messages — send one user turn, await assistant reply. */
+export function sendConversationMessage(
+  conversationId: string,
+  body: ConversationSendRequest,
+): Promise<ConversationSendResponse> {
+  return request<ConversationSendResponse>(
+    "POST",
+    `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+    body,
+  );
+}
+
+export function sendConversationMessageSafe(
+  conversationId: string,
+  body: ConversationSendRequest,
+): Promise<ApiResult<ConversationSendResponse>> {
+  return apiResult(sendConversationMessage(conversationId, body));
+}
+
+/** POST /api/conversations/:id/close — close (read-only until reopened). */
+export function closeConversation(
+  conversationId: string,
+): Promise<ConversationDetail> {
+  return request<ConversationDetail>(
+    "POST",
+    `/api/conversations/${encodeURIComponent(conversationId)}/close`,
+  );
+}
+
+export function closeConversationSafe(
+  conversationId: string,
+): Promise<ApiResult<ConversationDetail>> {
+  return apiResult(closeConversation(conversationId));
+}
+
+/** POST /api/conversations/:id/reopen — reopen a closed conversation. */
+export function reopenConversation(
+  conversationId: string,
+): Promise<ConversationDetail> {
+  return request<ConversationDetail>(
+    "POST",
+    `/api/conversations/${encodeURIComponent(conversationId)}/reopen`,
+  );
+}
+
+export function reopenConversationSafe(
+  conversationId: string,
+): Promise<ApiResult<ConversationDetail>> {
+  return apiResult(reopenConversation(conversationId));
+}
+
 // ── Class wrapper (convenience for React components) ──
 
 export class NexaraAPI {
@@ -554,4 +648,10 @@ export class NexaraAPI {
   getReceipts(id?: string) { return fetchReceipts(id); }
   checkRecovery() { return checkRecovery(); }
   getAdaptiveStatus() { return fetchAdaptiveStatus(); }
+  createConversation(title?: string) { return createConversation(title); }
+  getConversations() { return fetchConversations(); }
+  getConversation(id: string) { return fetchConversation(id); }
+  sendMessage(id: string, body: ConversationSendRequest) { return sendConversationMessage(id, body); }
+  closeConversation(id: string) { return closeConversation(id); }
+  reopenConversation(id: string) { return reopenConversation(id); }
 }

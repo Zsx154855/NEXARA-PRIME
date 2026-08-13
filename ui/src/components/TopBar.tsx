@@ -18,6 +18,7 @@ const SCREEN_LABELS: Record<Screen, string> = {
   dashboard: "控制台",
   missions: "使命",
   "mission-workspace": "使命详情",
+  conversation: "对话",
   evidence: "证据",
   governance: "治理",
   "runtime-health": "运行时健康",
