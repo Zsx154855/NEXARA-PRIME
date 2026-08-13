@@ -121,6 +121,18 @@ export default function SettingsPage() {
         </p>
         <Badge tone="warning">AUTH BACKEND REQUIRED</Badge>
       </section>
+
+      <section aria-labelledby="settings-guide">
+        <h2 id="settings-guide" className="mb-1 text-sm font-semibold text-text-primary">
+          引导
+        </h2>
+        <p className="text-sm text-text-secondary">
+          想重新走一遍七步引导？
+          <a href="/onboarding" className="mx-1 text-gold-text underline underline-offset-2">
+            认识 NEXARA
+          </a>
+        </p>
+      </section>
     </div>
   );
 }

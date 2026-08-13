@@ -25,7 +25,13 @@ export function ApprovalCard({ approval, isBusy, onDecide }: ApprovalCardProps) 
   const canDecide = approval.status === "pending" && Boolean(approval.mission_id);
 
   return (
-    <article className="rounded-md border border-border-default bg-surface-elevated px-5 py-4">
+    <article
+      className={
+        approval.status === "pending"
+          ? "animate-gate-open rounded-md border border-border-default bg-surface-elevated px-5 py-4"
+          : "rounded-md border border-border-default bg-surface-elevated px-5 py-4"
+      }
+    >
       {/* 做什么 + 风险 */}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
