@@ -40,7 +40,7 @@ export function ErrorState({
         <p className="text-sm leading-relaxed text-text-secondary">{details}</p>
       )}
       {actionLabel && onAction && (
-        <Button variant="danger" size="sm" onClick={onAction} className="mt-1 self-start">
+        <Button variant="primary" size="sm" onClick={onAction} className="mt-1 self-start">
           {actionLabel}
         </Button>
       )}

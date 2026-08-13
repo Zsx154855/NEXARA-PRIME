@@ -194,3 +194,20 @@ body {
     transition-duration: 0.15s !important;
   }
 }
+
+/* 高对比度模式（Windows forced-colors）基础适配 */
+@media (prefers-contrast: more) {
+  :root {
+    --color-text-primary: #1A1814;
+    --color-text-secondary: #4A4438;
+    --color-border-default: #6A6355;
+  }
+}
+@media (forced-colors: active) {
+  .animate-gate-open,
+  .animate-completion,
+  .animate-dot-form,
+  .animate-fade-in {
+    animation: none !important;
+  }
+}

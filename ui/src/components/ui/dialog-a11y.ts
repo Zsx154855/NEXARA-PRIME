@@ -26,6 +26,23 @@ export function useDialogA11y(
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
+        return;
+      }
+      // 焦点圈禁：Tab 在面板内循环
+      if (event.key === "Tab" && panel) {
+        const focusables = Array.from(
+          panel.querySelectorAll<HTMLElement>(focusableSelector),
+        ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (first === undefined || last === undefined) return;
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
     document.addEventListener("keydown", handleKeyDown);
