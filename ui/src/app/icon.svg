@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- NEXARA App Icon — 门 + 金点（ADR-UI-001）
+       外方=秩序容器；右上断口=门（治理不是牢笼，人类随时接管）；
+       金点=完成/批准时刻，只亮一次。
+       Light/Dark 通用：石墨底 + 象牙门框 + 香槟金点。 -->
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="#322F2A"/>
+  <!-- 门框：左竖、底横、顶横（右端留断口）、右竖（顶端留断口） -->
+  <path d="M20 20h14" stroke="#FDFAF5" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M44 26v18" stroke="#FDFAF5" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M20 44v-24" stroke="#FDFAF5" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M20 44h24" stroke="#FDFAF5" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <!-- 金点：完成时刻 -->
+  <circle cx="32" cy="33" r="5" fill="#C4A45A"/>
+</svg>

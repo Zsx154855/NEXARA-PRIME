@@ -1,89 +1,129 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────
+   NEXARA Design Tokens — Quiet Editorial Spatial
+   基线：12_design_synthesis.md（PHASE 6 冻结）
+   对比度：WCAG 2.x 相对亮度实测（Hermes 视觉批评）
+   ───────────────────────────────────────────── */
+
 @theme {
   /* ── Palette ── */
   --color-ivory: #FDFAF5;
-  --color-graphite: #38352F;
   --color-mist-gray: #F5F2EE;
-  --color-champagne: #C4A45A;
-  --color-moss-green: #6B8B6F;
-  --color-amber: #C38D4A;
   --color-taupe: #E8E3DA;
   --color-stone: #8B8679;
-  --color-warm-red: #C96D6D;
+  --color-graphite: #322F2A;          /* 12.48:1 on ivory */
+  --color-champagne: #C4A45A;          /* 仅实底/内芯/焦点，永不承载文字 */
+  --color-gold-text: #6B5220;          /* 文字金 6.89:1 */
+  --color-gold-soft: #F0E6CF;          /* 金软底（上放石墨字） */
+  --color-moss-green: #6B8B6F;         /* 装饰绿（不承载状态语义） */
+  --color-amber: #C38D4A;              /* 装饰琥珀（不承载状态语义） */
+  --color-warm-red: #C96D6D;           /* 装饰红（不承载状态语义） */
 
-  /* ── Semantic Surface Tokens ── */
+  /* ── Semantic Surface ── */
   --color-surface-base: #FDFAF5;
   --color-surface-subtle: #F5F2EE;
   --color-surface-elevated: #FFFFFF;
   --color-surface-hover: #F5F2EE;
   --color-surface-active: #E8E3DA;
 
-  /* ── Semantic Text Tokens ── */
-  --color-text-primary: #38352F;
-  --color-text-secondary: #6B6558;
-  --color-text-tertiary: #8B8579;
+  /* ── Semantic Text ── */
+  --color-text-primary: #322F2A;       /* 12.48:1 */
+  --color-text-secondary: #6A6355;     /* 5.57:1 */
+  --color-text-tertiary: #8B8579;      /* 仅装饰，不承载信息 */
   --color-text-disabled: #C8C4BB;
 
-  /* ── Semantic Border Tokens ── */
+  /* ── Semantic Border ── */
   --color-border-subtle: #E8E3DA;
   --color-border-default: #D5D0C6;
-  --color-border-focus: #C4A45A;
+  --color-border-focus: #6B5220;       /* 4.65:1，focus ring 用金棕 */
 
-  /* ── Semantic Accent Tokens ── */
-  --color-accent-primary: #C4A45A;
+  /* ── Semantic Accent ── */
+  --color-accent-primary: #C4A45A;     /* 金实底：上方必须放石墨文字 */
   --color-accent-soft: #D4C08A;
 
-  /* ── Semantic State Tokens ── */
-  --color-success: #6B8B6F;
-  --color-warning: #C38D4A;
-  --color-danger: #C96D6D;
+  /* ── Semantic State（加深达标值）── */
+  --color-success: #4E7A55;            /* 4.64:1 */
+  --color-warning: #8F5F2A;            /* 5.12:1 */
+  --color-danger: #B34A4A;             /* 4.92:1 */
+  --color-info: #5B6B78;               /* 5.15:1 */
 
-  /* ── Focus Ring ── */
-  --color-focus-ring: #C4A45A;
+  /* ── Focus ── */
+  --color-focus-ring: #6B5220;
+
+  /* ── Motion ── */
+  --duration-micro: 80ms;
+  --duration-small: 140ms;
+  --duration-medium: 240ms;
+  --duration-large: 360ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 :root {
   --color-ivory: #FDFAF5;
-  --color-graphite: #38352F;
   --color-mist-gray: #F5F2EE;
-  --color-champagne: #C4A45A;
-  --color-moss-green: #6B8B6F;
-  --color-amber: #C38D4A;
   --color-taupe: #E8E3DA;
   --color-stone: #8B8679;
+  --color-graphite: #322F2A;
+  --color-champagne: #C4A45A;
+  --color-gold-text: #6B5220;
+  --color-gold-soft: #F0E6CF;
+  --color-moss-green: #6B8B6F;
+  --color-amber: #C38D4A;
   --color-warm-red: #C96D6D;
 
-  /* ── Semantic Tokens ── */
   --surface-base: #FDFAF5;
   --surface-subtle: #F5F2EE;
   --surface-elevated: #FFFFFF;
   --surface-hover: #F5F2EE;
   --surface-active: #E8E3DA;
 
-  --text-primary: #38352F;
-  --text-secondary: #6B6558;
+  --text-primary: #322F2A;
+  --text-secondary: #6A6355;
   --text-tertiary: #8B8579;
   --text-disabled: #C8C4BB;
 
   --border-subtle: #E8E3DA;
   --border-default: #D5D0C6;
-  --border-focus: #C4A45A;
+  --border-focus: #6B5220;
 
   --accent-primary: #C4A45A;
   --accent-soft: #D4C08A;
 
-  --success: #6B8B6F;
-  --warning: #C38D4A;
-  --danger: #C96D6D;
+  --success: #4E7A55;
+  --warning: #8F5F2A;
+  --danger: #B34A4A;
+  --info: #5B6B78;
+
+  --duration-micro: 80ms;
+  --duration-small: 140ms;
+  --duration-medium: 240ms;
+  --duration-large: 360ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 body {
   background-color: var(--color-ivory);
   color: var(--color-graphite);
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Inter',
+    ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: 14px;          /* 全局最小 12px 纪律的正文基线 */
+  line-height: 1.7;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* 编辑式标题：仪式屏 h1/display 用宋体系 */
+.font-editorial {
+  font-family: 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC',
+    STSong, SimSun, serif;
+  letter-spacing: 0.06em;
+}
+
+/* 数据原貌：sha256/收据链等宽呈现（品牌签名） */
+.font-data {
+  font-family: 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Scrollbar styling */
@@ -102,20 +142,55 @@ body {
   background: var(--color-stone);
 }
 
-/* Pulse animation for loading states */
-@keyframes pulse-soft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-.animate-pulse-soft {
-  animation: pulse-soft 2s ease-in-out infinite;
-}
-
-/* Fade in animation for content */
+/* 内容淡入：small 级，仅入场（退场只做 opacity，由组件处理） */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-fade-in {
-  animation: fade-in 0.3s ease-out;
+  animation: fade-in var(--duration-small) var(--ease-standard);
+}
+
+/* 琥珀门亮起（审批到达）：clip-path 门缝展开 + 金点一次成形 */
+@keyframes gate-open {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+.animate-gate-open {
+  animation: gate-open var(--duration-medium) var(--ease-standard);
+}
+
+/* 完成时刻：石墨切金（仪式金，一屏至多一处） */
+@keyframes graphite-to-gold {
+  from { color: var(--color-graphite); }
+  to { color: var(--color-champagne); }
+}
+.animate-completion {
+  animation: graphite-to-gold 120ms ease-out;
+}
+
+/* 状态点一次成形 */
+@keyframes dot-form {
+  from { transform: scale(0.5); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.animate-dot-form {
+  animation: dot-form 120ms var(--ease-standard);
+}
+
+/* 无总量进度：细线平移（LoadingState 专用） */
+@keyframes slide-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+/* Reduced motion：全链路 opacity-only ≤150ms */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.15s !important;
+  }
 }

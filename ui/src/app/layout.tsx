@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "柏韩 — 主脑控制台",
-  description: "柏韩 · 人类中心的自主智能体核心 · 主权工程宪章 NSEC V2.1",
+  title: "柏韩 · NEXARA",
+  description:
+    "把你想做的事说给 NEXARA。它把它变成一份你看得懂的计划、一道道你说了算的门、一条条能查证的结果，以及它记住的东西。",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
