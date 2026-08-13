@@ -1,13 +1,10 @@
 "use client";
 
-import { EmptyState } from "@/components/ui/EmptyState";
+import { MemoryStatsScreen } from "@/components/screens/memory/MemoryStatsScreen";
+import { useRuntimeData } from "@/lib/runtime-context";
 
-/** 记忆 — 分层统计（批次 4 接入 /api/memory/stats 四层） */
+/** 记忆 — 分层统计（/api/memory/stats 四层真实计数，无象限隐喻） */
 export default function MemoryStatsPage() {
-  return (
-    <EmptyState
-      title="记忆分层统计"
-      description="working / episodic / semantic / procedural 四层统计，此视图将在后续批次接入 /api/memory/stats。当前状态：尚未接入。"
-    />
-  );
+  const { api } = useRuntimeData();
+  return <MemoryStatsScreen api={api} />;
 }

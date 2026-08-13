@@ -1,10 +1,10 @@
 "use client";
 
-import { EvidenceViewer } from "@/components/screens/EvidenceViewer";
+import { EvidenceChainScreen } from "@/components/screens/trust/EvidenceChainScreen";
 import { useRuntimeData } from "@/lib/runtime-context";
 
-/** 治理 — 证据链 */
+/** 治理 — 证据链（getEvidence 投影 + EvidenceChain 组件） */
 export default function TrustEvidencePage() {
   const { api, overview } = useRuntimeData();
-  return <EvidenceViewer api={api} overview={overview} />;
+  return <EvidenceChainScreen api={api} overview={overview} />;
 }

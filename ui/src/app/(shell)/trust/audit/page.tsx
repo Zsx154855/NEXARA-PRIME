@@ -1,13 +1,10 @@
 "use client";
 
-import { EmptyState } from "@/components/ui/EmptyState";
+import { AuditTrailScreen } from "@/components/screens/trust/AuditTrailScreen";
+import { useRuntimeData } from "@/lib/runtime-context";
 
-/** 治理 — 审计（批次 4 接入 /api/events 按对象重放） */
+/** 治理 — 审计（getEvents 按对象重放事件流） */
 export default function TrustAuditPage() {
-  return (
-    <EmptyState
-      title="审计日志"
-      description="审计事件按对象重放查看，此视图将在后续批次接入运行时数据源。当前状态：尚未接入。"
-    />
-  );
+  const { api, overview } = useRuntimeData();
+  return <AuditTrailScreen api={api} overview={overview} />;
 }
