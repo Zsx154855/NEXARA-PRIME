@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Activity,
   Brain,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +32,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "dashboard", label: "控制台", icon: LayoutDashboard },
       { id: "missions", label: "使命", icon: Rocket },
+    ],
+  },
+  {
+    label: "协作",
+    items: [
+      { id: "conversation", label: "对话", icon: MessageSquare },
     ],
   },
   {
