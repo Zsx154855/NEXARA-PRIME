@@ -11,12 +11,14 @@ import { MissionWorkspace } from "@/components/screens/MissionWorkspace";
 import { ApprovalCenter } from "@/components/screens/ApprovalCenter";
 import { EvidenceViewer } from "@/components/screens/EvidenceViewer";
 import { RuntimeHealth } from "@/components/screens/RuntimeHealth";
+import { ConversationScreen } from "@/components/screens/ConversationScreen";
 import { CommandPalette } from "@/components/CommandPalette";
 
 export type Screen =
   | "dashboard"
   | "missions"
   | "mission-workspace"
+  | "conversation"
   | "evidence"
   | "governance"
   | "runtime-health"
@@ -160,6 +162,13 @@ export default function DashboardShell() {
               api={api}
               missionId={selectedMissionId}
               onBack={() => setScreen("missions")}
+            />
+          )}
+          {screen === "conversation" && (
+            <ConversationScreen
+              api={api}
+              onMissionSelect={handleMissionSelect}
+              onViewApprovals={() => setScreen("governance")}
             />
           )}
           {screen === "evidence" && (
