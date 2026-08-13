@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +21,9 @@ from .governance import ApprovalEngine, PolicyEngine, WriterLeaseManager
 from .independent_review import IndependentReview
 from .memory import MemoryKernel
 from .mission_compiler import MissionCompiler
-from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider, ProviderUnavailable, UnavailableProvider
+from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider, ProviderUnavailable, UnavailableProvider, redact_secrets
+from .conversations import ConversationStore
+from .conversation_intent import IntentDecision, RuntimeIntentClassifier
 from .models import (
     Mission, MissionState, RiskLevel, AdaptiveMissionProfile,
     now_iso, new_id,
@@ -31,6 +35,7 @@ from .security_audit import SecurityAuditLedger
 from .state_machine import MissionStateMachine
 from .token_compiler import TokenCompiler
 from .tools import ToolRuntime
+from .telemetry import TelemetryService
 from .brain.kernel import ChiefBrainKernel
 from .mission_triage import MissionTriageEngine
 from .orchestration import RuntimeOrchestrator
@@ -250,6 +255,15 @@ class NexaraRuntime:
         self.state_machine = MissionStateMachine(self.events, self.evidence)
         self.recovery = DurableRecovery(self.store, self.events)
         self.repository_context = RealRepositoryContext()
+        self.telemetry = TelemetryService(self.events)
+        self.telemetry.start()
+        self.conversations = ConversationStore(self.store, self.events, self.audit)
+        self._mission_threads: dict[str, threading.Thread] = {}
+        self._mission_threads_lock = threading.RLock()
+        # Opt-in only: main's crash-recovery semantics assume the caller owns
+        # resumption. Enabling auto-resume is a conversation-product choice.
+        if os.getenv("NEXARA_RESUME_BACKGROUND_MISSIONS", "false").lower() in {"1", "true", "yes", "on"}:
+            self._resume_background_missions()
 
     # ── Adapter accessors ──
 
@@ -342,7 +356,13 @@ class NexaraRuntime:
             self._provider_unavailable = True
             return ModelGateway(UnavailableProvider())
         self._provider_unavailable = False
-        return ModelGateway(provider, fallback=None, breaker=_shared_breaker)
+        return ModelGateway(
+            provider,
+            fallback=None,
+            max_attempts=int(os.getenv("NEXARA_PROVIDER_MAX_ATTEMPTS", "2")),
+            retry_delay_seconds=float(os.getenv("NEXARA_PROVIDER_RETRY_DELAY_SECONDS", "0.25")),
+            breaker=_shared_breaker,
+        )
 
     @staticmethod
     def _resolve_api_key(secret_name: str, env_var: str) -> str | None:
@@ -387,6 +407,295 @@ class NexaraRuntime:
 
     def list_missions(self) -> list[dict]:
         return self.store.list_records("mission")
+
+    @staticmethod
+    def _normalize_objective(value: str) -> str:
+        return " ".join(value.strip().lower().split())
+
+    def _find_resumable_mission(self, objective: str) -> Mission | None:
+        normalized = self._normalize_objective(objective)
+        terminal = {
+            MissionState.COMPLETED.value,
+            MissionState.FAILED.value,
+            MissionState.BLOCKED.value,
+            MissionState.ROLLED_BACK.value,
+        }
+        for raw in reversed(self.list_missions()):
+            if self._normalize_objective(raw.get("spec", {}).get("objective", "")) != normalized:
+                continue
+            if raw.get("state") in terminal:
+                continue
+            return self._load_mission(raw["mission_id"])
+        return None
+
+    def _start_background_execution(self, mission_id: str) -> None:
+        """Run an approved local Mission independently of the UI process."""
+        with self._mission_threads_lock:
+            current = self._mission_threads.get(mission_id)
+            if current and current.is_alive():
+                return
+            worker = threading.Thread(
+                target=self._background_execute,
+                args=(mission_id,),
+                name=f"nexara-mission-{mission_id}",
+                daemon=True,
+            )
+            self._mission_threads[mission_id] = worker
+            worker.start()
+
+    def _resume_background_missions(self) -> None:
+        resumable = {
+            MissionState.EXECUTION.value,
+            MissionState.VERIFICATION.value,
+            MissionState.EVIDENCE.value,
+            MissionState.MEMORY_PATCH.value,
+            MissionState.EVALUATION.value,
+        }
+        for raw in self.list_missions():
+            if raw.get("state") in resumable and not raw.get("paused", False):
+                self._start_background_execution(raw["mission_id"])
+
+    def _background_execute(self, mission_id: str) -> None:
+        self.telemetry.record_health("mission", "background_execution_started", f"mission_id={mission_id}")
+        try:
+            mission = self.run_mission(mission_id)
+            if mission.state == MissionState.COMPLETED.value:
+                self._notify_mission_completed(mission)
+                self.telemetry.record_health("mission", "background_execution_completed", f"mission_id={mission_id}")
+            else:
+                self.telemetry.record_health("mission", "background_execution_stopped", f"mission_id={mission_id};state={mission.state}")
+        except Exception as exc:
+            self.telemetry.record_health("mission", "background_execution_failed", f"mission_id={mission_id};error={redact_secrets(str(exc))[:160]}")
+        finally:
+            with self._mission_threads_lock:
+                self._mission_threads.pop(mission_id, None)
+
+    def _notify_mission_completed(self, mission: Mission) -> None:
+        notification_id = f"notification_{mission.mission_id}_completed"
+        timestamp = now_iso()
+        payload = {
+            "notification_id": notification_id,
+            "mission_id": mission.mission_id,
+            "kind": "mission_completed",
+            "title": "NEXARA Canary",
+            "body": "Mission 已完成，Evidence 与 Memory 已保存。",
+            "created_at": timestamp,
+        }
+        if self.store.save_record_if_absent(notification_id, "notification", payload, timestamp, mission.mission_id):
+            self.events.publish(
+                "notification.mission_completed",
+                mission.mission_id,
+                "notification",
+                "nexara.runtime",
+                mission.trace_id,
+                {"notification_id": notification_id},
+                idempotency_key=notification_id,
+            )
+            if shutil.which("osascript"):
+                try:
+                    subprocess.run(
+                        ["osascript", "-e", 'display notification "Mission 已完成，Evidence 与 Memory 已保存。" with title "NEXARA Canary"'],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=3,
+                    )
+                except (OSError, subprocess.SubprocessError):
+                    self.telemetry.record_health("notification", "local_notification_failed", "osascript_failed")
+
+    def _resolve_execution_mode(self, content: str, execution_mode: str) -> tuple[str, IntentDecision]:
+        if execution_mode not in {"chat", "auto", "mission"}:
+            raise ValueError("execution_mode_invalid")
+        if execution_mode == "auto":
+            decision = RuntimeIntentClassifier.classify(content)
+            return decision.intent, decision
+        if execution_mode == "mission":
+            return "mission", IntentDecision("mission", 1.0, ("explicit_mission_mode",))
+        return "chat", IntentDecision("chat", 1.0, ("explicit_chat_mode",))
+
+    def answer_conversation(
+        self,
+        conversation_id: str,
+        content: str,
+        *,
+        execution_mode: str = "chat",
+        execute_mission: bool | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist one user turn, route it through the configured provider, and persist the reply."""
+        self.conversations.get(conversation_id)
+        if execute_mission is True:
+            execution_mode = "mission"
+        intent, intent_decision = self._resolve_execution_mode(content, execution_mode)
+        existing_user = None
+        if idempotency_key:
+            existing = self.conversations.find_message_by_idempotency(
+                conversation_id, idempotency_key
+            )
+            if existing is not None:
+                if existing.get("content") != content.strip() or existing.get("role") != "user":
+                    raise ValueError("conversation_idempotency_conflict")
+                assistant = self.conversations.find_assistant_response(
+                    conversation_id, existing["message_id"]
+                )
+                if assistant is not None:
+                    return {
+                        "conversation": self.conversations.get(conversation_id),
+                        "user_message": existing,
+                        "assistant_message": assistant,
+                        "mission_id": assistant.get("metadata", {}).get("mission_id"),
+                        "approval_required": bool(
+                            assistant.get("metadata", {}).get("approval_required", False)
+                        ),
+                        "provider": assistant.get("metadata", {}).get("provider"),
+                        "execution_mode": assistant.get("metadata", {}).get("execution_mode", execution_mode),
+                        "intent": assistant.get("metadata", {}).get("intent", intent),
+                        "idempotent_replay": True,
+                    }
+                existing_user = existing
+
+        if existing_user is not None:
+            user_message = existing_user
+            trace_id = str(existing_user.get("trace_id") or new_id("trace"))
+            existing_mode = (existing_user.get("metadata") or {}).get("execution_mode")
+            if existing_mode in {"chat", "auto", "mission"}:
+                execution_mode = existing_mode
+                intent, intent_decision = self._resolve_execution_mode(content, execution_mode)
+        else:
+            trace_id = new_id("trace")
+            user_message = self.conversations.append_message(
+                conversation_id,
+                "user",
+                content,
+                trace_id=trace_id,
+                idempotency_key=idempotency_key,
+                metadata={
+                    "execution_mode": execution_mode,
+                    "intent": intent,
+                    "intent_confidence": intent_decision.confidence,
+                    "intent_reasons": list(intent_decision.reasons),
+                },
+            )
+        mission_id: str | None = None
+        approval_required = False
+        if intent == "mission":
+            previous_attempts = self.conversations.provider_attempts(conversation_id, user_message["message_id"])
+            mission_id = next((item.get("mission_id") for item in reversed(previous_attempts) if item.get("mission_id")), None)
+            if mission_id is None:
+                mission = self._find_resumable_mission(content) or self.create_mission(content)
+                if mission.state == MissionState.INTENT.value:
+                    self.plan_mission(mission.mission_id)
+                mission_id = mission.mission_id
+            current_mission = self._load_mission(mission_id)
+            approval_required = bool(current_mission.pending_approval_id)
+            current_mission.result["execution_mode"] = execution_mode
+            current_mission.result["background_execution"] = True
+            self._save_mission(current_mission)
+            if current_mission.state == MissionState.EXECUTION.value and not approval_required:
+                self._start_background_execution(mission_id)
+
+        transcript = self.conversations.messages(conversation_id)[-12:]
+        transcript_text = "\n".join(
+            f"{item['role']}: {item['content']}" for item in transcript
+        )
+        system = (
+            "You are NEXARA PRIME, the user's first-party governed runtime. "
+            "Answer directly and honestly. Never claim an action completed "
+            "unless the runtime has evidence for it."
+        )
+        task = (
+            "Respond to the latest user message in this durable conversation.\n"
+            f"Conversation transcript:\n{transcript_text}\n"
+            f"Execution mode: {execution_mode}\n"
+            f"Runtime intent: {intent}\n"
+            f"Intent confidence: {intent_decision.confidence:.2f}\n"
+            f"Mission admitted: {mission_id or 'no'}\n"
+            f"Approval required: {'yes' if approval_required else 'no'}"
+        )
+        attempt_number = len(self.conversations.provider_attempts(conversation_id, user_message["message_id"])) + 1
+        attempt = {
+            "attempt_id": f"provider_attempt_{user_message['message_id']}_{attempt_number}",
+            "conversation_id": conversation_id,
+            "message_id": user_message["message_id"],
+            "mission_id": mission_id,
+            "provider": self.models.provider.name,
+            "model": getattr(self.models.provider, "model", ""),
+            "status": "started",
+            "attempt_number": attempt_number,
+            "created_at": now_iso(),
+            "request_id": "",
+            "latency_ms": 0.0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "finish_reason": "",
+            "retry_count": 0,
+            "error_code": None,
+        }
+        self.conversations.save_provider_attempt(attempt)
+        self.telemetry.record_health("provider", "starting", f"provider={self.models.provider.name}")
+        try:
+            response = self.models.complete(
+                system,
+                task,
+                {"conversation_id": conversation_id, "trace_id": trace_id},
+                trace_id=trace_id,
+            )
+        except Exception as exc:
+            attempt.update({"status": "failed", "error_code": getattr(exc, "code", "provider_failed"), "error": redact_secrets(str(exc))})
+            self.conversations.save_provider_attempt(attempt)
+            self.telemetry.record_health("provider", "degraded", str(attempt["error_code"]))
+            raise
+        attempt.update({
+            "status": "succeeded",
+            "provider": response.provider,
+            "model": response.model,
+            "request_id": response.request_id,
+            "latency_ms": response.latency_ms,
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+            "total_tokens": response.total_tokens,
+            "finish_reason": response.finish_reason,
+            "retry_count": response.retry_count,
+        })
+        self.conversations.save_provider_attempt(attempt)
+        self.telemetry.record_health("provider", "healthy", f"provider={response.provider}")
+        assistant_message = self.conversations.append_message(
+            conversation_id,
+            "assistant",
+            response.text,
+            trace_id=trace_id,
+            metadata={
+                "provider": response.provider,
+                "model": response.model,
+                "mission_id": mission_id,
+                "execution_mode": execution_mode,
+                "intent": intent,
+                "intent_confidence": intent_decision.confidence,
+                "approval_required": approval_required,
+                "response_to": user_message["message_id"],
+                "request_id": response.request_id,
+                "latency_ms": response.latency_ms,
+                "input_tokens": response.input_tokens,
+                "output_tokens": response.output_tokens,
+                "total_tokens": response.total_tokens,
+                "finish_reason": response.finish_reason,
+                "retry_count": response.retry_count,
+                "provider_attempt_id": attempt["attempt_id"],
+            },
+        )
+        return {
+            "conversation": self.conversations.get(conversation_id),
+            "user_message": user_message,
+            "assistant_message": assistant_message,
+            "mission_id": mission_id,
+            "approval_required": approval_required,
+            "provider": response.provider,
+            "execution_mode": execution_mode,
+            "intent": intent,
+            "intent_confidence": intent_decision.confidence,
+            "idempotent_replay": False,
+        }
 
     def _advance(self, mission: Mission, target: MissionState, actor: str) -> None:
         previous = mission.state
@@ -523,6 +832,8 @@ class NexaraRuntime:
         if decision_record.status.value == "approved":
             mission.contract = self.contracts.approve(mission.contract) if mission.contract else None
             self._advance(mission, MissionState.EXECUTION, actor)
+            if mission.result.get("background_execution"):
+                self._start_background_execution(mission.mission_id)
         elif decision_record.status.value == "paused":
             mission.paused = True
             self._save_mission(mission)
@@ -680,8 +991,19 @@ class NexaraRuntime:
             model_text, provider, mt, ot, c = self._checkpointed_model(mission, compiled, context)
             mission.result[model_key] = {"input_tokens": mt, "output_tokens": ot, "cost_usd": c, "provider": provider}
             mission.result["model_text"] = model_text
-        code = self.tools.invoke(mission.mission_id, "code_exec", {"code": "print('nexara-prime local execution check')"}, mission.trace_id, safe_mode=mission.safe_mode, actor_id="runtime", task_id=mission.mission_id, idempotency_key=f"{mission.mission_id}:code-check")
-        self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"invocation_id": code.invocation_id})
+        try:
+            code = self.tools.invoke(mission.mission_id, "code_exec", {"code": "print('nexara-prime local execution check')"}, mission.trace_id, safe_mode=mission.safe_mode, actor_id="runtime", task_id=mission.mission_id, idempotency_key=f"{mission.mission_id}:code-check")
+            self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"invocation_id": code.invocation_id, "status": "completed"})
+        except PermissionError as exc:
+            # The local health mission can still produce a truthful report when
+            # the optional code probe is unavailable. The failed tool Receipt is
+            # already durable; preserve the limitation instead of fabricating a
+            # successful probe or bypassing the sandbox.
+            if not str(exc).startswith("os_sandbox_denied"):
+                raise
+            mission.result["environment_limitation"] = "code_exec_probe_unavailable: sandbox enforcement unavailable"
+            self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"status": "environment_limited", "reason": "sandbox_enforcement_unavailable"})
+            self._save_mission(mission)
         report = self._render_report(mission, mission.spec.objective, model_text, provider)
         lease = self.leases.acquire(f"report:{mission.mission_id}", "vertex", mission.trace_id)
         try:
@@ -841,6 +1163,7 @@ class NexaraRuntime:
             f"- Repository Dirty: `{manifest.get('dirty', False)}`",
             f"- Repository Files: `{manifest.get('file_count', 0)}`",
             f"- Context Hash: `{context_hash}`",
+            f"- Environment Limitation: `{mission.result.get('environment_limitation', 'none')}`",
         ])
         return f"# NEXARA PRIME Mission Report\n\n- Mission: `{mission.mission_id}`\n- Title: {mission.spec.title}\n- Risk: {mission.spec.risk_level.value}\n- Provider: {provider}\n\n## Verified repository facts\n\n{facts}\n\n## Compiled task\n\n{task}\n\n## Result\n\n{model_text}\n\n## Governance\n\nThis report was written only after human approval, under a Writer Lease, with an execution receipt and verification evidence.\n"
 

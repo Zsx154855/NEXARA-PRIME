@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -32,6 +32,19 @@ class ApprovalRequestBody(BaseModel):
 
 class SafeModeBody(BaseModel):
     enabled: bool = True
+
+
+class ConversationCreateRequest(BaseModel):
+    title: str | None = None
+
+
+class ConversationMessageRequest(BaseModel):
+    content: str
+    execution_mode: Literal["chat", "auto", "mission"] = "chat"
+    # Backward-compatible bridge for older clients. New clients must use the
+    # explicit execution_mode contract.
+    execute_mission: bool | None = None
+    idempotency_key: str | None = None
 
 
 def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
@@ -87,6 +100,87 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
             return runtime.inspect_mission(mission.mission_id)
         except (ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/conversations")
+    def create_conversation(body: ConversationCreateRequest) -> dict[str, Any]:
+        try:
+            conversation = runtime.conversations.create(body.title)
+            return {**conversation, "messages": []}
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/conversations")
+    def list_conversations() -> list[dict[str, Any]]:
+        return [
+            {
+                **conversation,
+                "messages": runtime.conversations.messages(
+                    conversation["conversation_id"]
+                ),
+            }
+            for conversation in runtime.conversations.list()
+        ]
+
+    @app.get("/api/conversations/{conversation_id}")
+    def get_conversation(conversation_id: str) -> dict[str, Any]:
+        try:
+            conversation = runtime.conversations.get(conversation_id)
+            return {
+                **conversation,
+                "messages": runtime.conversations.messages(conversation_id),
+            }
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/conversations/{conversation_id}/messages")
+    def list_conversation_messages(conversation_id: str) -> list[dict[str, Any]]:
+        try:
+            return runtime.conversations.messages(conversation_id)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/conversations/{conversation_id}/messages")
+    def send_conversation_message(
+        conversation_id: str,
+        body: ConversationMessageRequest,
+        idempotency_header: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, Any]:
+        try:
+            return runtime.answer_conversation(
+                conversation_id,
+                body.content,
+                execution_mode=("mission" if body.execute_mission is True else body.execution_mode),
+                idempotency_key=body.idempotency_key or idempotency_header,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            status = 409 if "idempotency" in str(exc) else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.post("/api/conversations/{conversation_id}/close")
+    def close_conversation(conversation_id: str) -> dict[str, Any]:
+        try:
+            conversation = runtime.conversations.close(conversation_id)
+            return {
+                **conversation,
+                "messages": runtime.conversations.messages(conversation_id),
+            }
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/conversations/{conversation_id}/reopen")
+    def reopen_conversation(conversation_id: str) -> dict[str, Any]:
+        try:
+            conversation = runtime.conversations.reopen(conversation_id)
+            return {
+                **conversation,
+                "messages": runtime.conversations.messages(conversation_id),
+            }
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/missions/{mission_id}")
     def status(mission_id: str) -> dict[str, Any]:
