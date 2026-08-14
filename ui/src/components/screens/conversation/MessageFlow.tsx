@@ -1,5 +1,6 @@
 import type { ConversationMessage } from "@/types";
 import { cn } from "@/lib/utils";
+import { sanitizeAssistantContent } from "@/lib/presentation";
 import { ConversationMeta } from "./ConversationMeta";
 import { extractMeta, formatTime } from "./utils";
 
@@ -49,7 +50,7 @@ export function MessageFlow({
         </time>
       </header>
       <p className="whitespace-pre-wrap text-sm leading-[1.7] text-text-primary">
-        {message.content}
+        {isUser ? message.content : sanitizeAssistantContent(message.content)}
       </p>
       {!isUser && (
         <ConversationMeta

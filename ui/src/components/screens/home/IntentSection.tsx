@@ -8,6 +8,7 @@ import type { ConversationDetail, MissionSnapshot } from "@/types";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Status } from "@/components/ui/Status";
+import { sanitizeAssistantContent } from "@/lib/presentation";
 import { Section } from "./Section";
 import { stateLabel, stateTone } from "./missionState";
 import { formatShortTime } from "./time";
@@ -89,7 +90,9 @@ function ConversationBlock({
       </h3>
       {lastMessage && (
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-secondary line-clamp-2">
-          {lastMessage.content}
+          {lastMessage.role === "assistant"
+            ? sanitizeAssistantContent(lastMessage.content)
+            : lastMessage.content}
         </p>
       )}
       <div className="mt-6">

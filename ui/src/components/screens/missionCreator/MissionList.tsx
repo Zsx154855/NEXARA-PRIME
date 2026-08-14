@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Status } from "@/components/ui/Status";
 import { formatDate } from "@/lib/utils";
+import { filterProductMissions } from "@/lib/presentation";
 import { riskLabel, riskTone, stateLabel, stateTone } from "./constants";
 
 const STATUS_OPTIONS = [
@@ -32,7 +33,10 @@ export function MissionList({ missions, onSelect, onCreate }: MissionListProps) 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const filtered = missions.filter((m) => {
+  // P1-DATA-BOUNDARY-001：默认产品视图排除 QA/测试使命（数据不删除，仅视图过滤）
+  const productMissions = filterProductMissions(missions);
+
+  const filtered = productMissions.filter((m) => {
     const matchesSearch =
       !searchTerm ||
       (m.title ?? m.objective ?? m.mission_id)

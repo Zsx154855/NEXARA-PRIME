@@ -16,6 +16,7 @@ import type {
 } from "@/types";
 import { useRuntimeData } from "@/lib/runtime-context";
 import { conversationDetailPath } from "@/lib/navigation";
+import { filterProductMissions } from "@/lib/presentation";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Status } from "@/components/ui/Status";
@@ -93,7 +94,8 @@ export function Overview({
   }, [api]);
 
   // ── 派生 ──
-  const missions = overview?.missions ?? [];
+  // P1-DATA-BOUNDARY-001：产品视图派生仅基于非 QA 使命（数据不删除）
+  const missions = filterProductMissions(overview?.missions ?? []);
   const activeMission =
     missions
       .filter((m) => !TERMINAL_STATES.has(m.state))
