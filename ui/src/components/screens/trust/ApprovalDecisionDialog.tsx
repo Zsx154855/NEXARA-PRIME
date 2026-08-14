@@ -216,7 +216,7 @@ export function DecisionDialog({
             取消
           </Button>
           <Button
-            variant={decision === "rejected" ? "danger" : "primary"}
+            variant={decision === "rejected" ? "dangerSolid" : "primary"}
             isBusy={isBusy}
             onClick={() => onConfirm(note)}
           >
