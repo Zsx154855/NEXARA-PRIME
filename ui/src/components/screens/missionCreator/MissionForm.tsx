@@ -96,9 +96,9 @@ export function MissionForm({
               <RiskIcon className={cn("mt-0.5 h-4 w-4 shrink-0", TONE_ACCENT[risk.tone])} />
             )}
             <div className="text-xs leading-relaxed text-text-secondary">
-              <span className="font-medium text-text-primary">风险等级：</span>
+              <span className="font-medium text-text-primary">预估风险：</span>
               <span className={cn("font-medium", TONE_ACCENT[risk.tone])}>{risk.label}</span>
-              <span className="ml-1.5">— {risk.desc}</span>
+              <span className="ml-1.5">— {risk.desc}（客户端预估，以运行时判定为准）</span>
             </div>
           </div>
         </div>

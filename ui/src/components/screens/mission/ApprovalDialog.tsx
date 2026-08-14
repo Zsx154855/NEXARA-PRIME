@@ -218,7 +218,7 @@ export function ApprovalDialog({
             要求修改
           </Button>
           <Button
-            variant="danger"
+            variant="dangerSolid"
             size="sm"
             disabled={isBusy}
             onClick={() => onDecide("rejected", note)}

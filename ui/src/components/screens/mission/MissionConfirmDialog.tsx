@@ -56,7 +56,7 @@ export function MissionConfirmDialog({
             取消
           </Button>
           <Button
-            variant={isDanger ? "danger" : "primary"}
+            variant={isDanger ? "dangerSolid" : "primary"}
             onClick={onConfirm}
             isBusy={isBusy}
           >

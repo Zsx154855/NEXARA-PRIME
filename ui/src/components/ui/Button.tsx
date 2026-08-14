@@ -14,7 +14,9 @@ const buttonVariants = cva(
         gold: "bg-champagne text-graphite hover:bg-[#CDB06E] active:bg-[#B89548]",
         ghost:
           "bg-transparent text-graphite border border-border-default hover:bg-surface-hover active:bg-surface-active",
-        danger: "bg-danger text-ivory hover:bg-[#9C3D3D] active:bg-[#823232]",
+        danger:
+          "bg-transparent text-danger border border-danger hover:bg-danger/10 active:bg-danger/15",
+        dangerSolid: "bg-danger text-ivory hover:bg-[#9C3D3D] active:bg-[#823232]",
         quiet: "bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary",
       },
       size: {

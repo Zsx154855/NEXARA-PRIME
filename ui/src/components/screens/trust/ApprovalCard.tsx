@@ -106,7 +106,7 @@ export function ApprovalCard({ approval, isBusy, onDecide }: ApprovalCardProps) 
             要求修改
           </Button>
           <Button
-            variant="danger"
+            variant="dangerSolid"
             size="sm"
             disabled={isBusy}
             onClick={() => onDecide(approval, "rejected")}
