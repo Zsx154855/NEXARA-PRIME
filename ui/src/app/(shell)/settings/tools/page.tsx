@@ -3,6 +3,7 @@
 import { Status } from "@/components/ui/Status";
 import { Badge } from "@/components/ui/Badge";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { PermissionState } from "@/components/ui/PermissionState";
 import { useRuntimeData } from "@/lib/runtime-context";
 
 /**
@@ -43,6 +44,12 @@ export default function SettingsToolsPage() {
         <p className="mb-3 text-xs text-text-secondary">
           连接器状态为只读投影；连接与配置动作标 CONNECTOR_REQUIRED（后端无对应端点）。
         </p>
+        <PermissionState
+          requirement="连接器配置"
+          reason="连接/启停连接器需要 connector.configure 权限，该权限列入 Agent 永久禁用清单且后端无对应端点。"
+          marker="CONNECTOR_REQUIRED"
+          className="mb-4"
+        />
         {adapterEntries === null ? (
           <p className="text-sm text-text-secondary">未提供连接器状态（运行时未报告）。</p>
         ) : (

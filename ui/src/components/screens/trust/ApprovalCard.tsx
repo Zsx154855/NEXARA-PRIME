@@ -9,6 +9,7 @@
 import type { ApprovalRequest } from "@/types";
 import { Button } from "@/components/ui/Button";
 import { Status } from "@/components/ui/Status";
+import { PermissionState } from "@/components/ui/PermissionState";
 import { CheckCircle2, Clock, Undo2, XCircle } from "lucide-react";
 import { formatDateTime, riskMeta, type DecisionKind } from "./approvalMeta";
 
@@ -126,9 +127,11 @@ export function ApprovalCard({ approval, isBusy, onDecide }: ApprovalCardProps) 
         </div>
       ) : (
         approval.status === "pending" && (
-          <p className="mt-3 text-xs text-text-tertiary">
-            该审批未绑定使命，无法在此决定。
-          </p>
+          <PermissionState
+            requirement="审批决策"
+            reason="该审批未绑定使命，决策必须经由使命审批触发面执行；用户级审批权限为 PLANNED 能力。"
+            className="mt-3"
+          />
         )
       )}
     </article>

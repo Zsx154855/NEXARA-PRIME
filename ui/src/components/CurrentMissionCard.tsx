@@ -66,7 +66,7 @@ export function CurrentMissionCard({
         </div>
         <button
           onClick={onCreateMission}
-          className="mt-2 rounded-lg bg-accent-primary px-5 py-2.5 text-sm font-medium text-ivory transition-colors hover:bg-accent-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
+          className="mt-2 rounded-lg bg-graphite px-5 py-2.5 text-sm font-medium text-ivory transition-colors hover:bg-graphite/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
           aria-label="创建新使命"
         >
           创建使命
