@@ -10,9 +10,9 @@
 
 ### 验证
 - Web：tsc strict / eslint / build 19-19 静态导出全绿；node:test 8/8（presentation boundary）
-- 后端：pytest 2059 passed（5 环境失败=脏工作树 receipt 校验）；API smoke 13/13
-- 双端：xcodebuild macOS + iOS（iPhone 15 Pro Max 模拟器）BUILD SUCCEEDED
-- 审查：Hermes 产品/视觉/像素/终审/Re-audit 多轮，P0/P1/P2=0
+- 后端：pytest 2059 passed（5 环境失败=脏工作树 receipt 校验，未独立复现）；API smoke 13/13
+- 双端：xcodebuild macOS + iOS（iPhone 15 Pro Max 模拟器）BUILD SUCCEEDED（本地构建证据）
+- 审查：Hermes V1.1 终审 NEEDS_FIX（2 P0：双端图标未接线、CI 未构建真实工程）→ 本版本修复后待 re-audit；NOT_VERIFIED 项见 V11_GATE_EVIDENCE.md
 
 ### 已知限制
 - AUTH = SHELL_ONLY（判定书 V11_AUTH_DECISION.md；PROHIBIT-03 禁多用户）

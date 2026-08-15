@@ -50,19 +50,12 @@ jobs:
     runs-on: [self-hosted, macOS, ARM64]
     steps:
       - uses: actions/checkout@v4
-      - name: Build NexaraCore (if present)
-        run: |
-          if [ -d "experience/NexaraCore" ]; then
-            cd experience/NexaraCore && CODE_SIGNING_ALLOWED=NO swift build
-          else
-            echo "[SKIP] experience/NexaraCore not present in repo"
-          fi
       - name: Build macOS App (if present)
         run: |
-          if [ -d "experience/macos" ]; then
-            cd experience/macos && CODE_SIGNING_ALLOWED=NO swift build
+          if [ -d "LivingInterface" ]; then
+            cd LivingInterface && CODE_SIGNING_ALLOWED=NO xcodebuild -project LivingInterface.xcodeproj -scheme LivingInterface-macOS -configuration Debug build
           else
-            echo "[SKIP] experience/macos not present in repo"
+            echo "[SKIP] LivingInterface not present in repo"
           fi
 
   swift-ios:
@@ -72,9 +65,7 @@ jobs:
       - name: Detect iOS target
         id: ios-detect
         run: |
-          if [ -d "experience/ios" ]; then
-            echo "ios_present=true" >> "$GITHUB_OUTPUT"
-          elif ls experience/*/Package.swift 2>/dev/null | xargs grep -l "iOSApplication\|.iOS(" 2>/dev/null; then
+          if [ -d "LivingInterface/LivingInterface.xcodeproj" ]; then
             echo "ios_present=true" >> "$GITHUB_OUTPUT"
           else
             echo "ios_present=false" >> "$GITHUB_OUTPUT"
@@ -84,10 +75,10 @@ jobs:
         run: |
           set -euo pipefail
           IOS_DIR=""
-          if [ -d "experience/ios" ]; then
-            IOS_DIR="experience/ios"
+          if [ -d "LivingInterface" ]; then
+            IOS_DIR="LivingInterface"
           else
-            IOS_DIR="$(ls -d experience/*/Package.swift 2>/dev/null | head -1 | xargs dirname 2>/dev/null || true)"
+            IOS_DIR=""
           fi
           if [ -z "${IOS_DIR}" ] || [ ! -d "${IOS_DIR}" ]; then
             echo "[G7_NOT_APPLICABLE] iOS target detected but no buildable directory found — producing evidence"
@@ -99,13 +90,9 @@ jobs:
             echo "[G7_NOT_APPLICABLE] No .xcodeproj found in ${IOS_DIR} — producing evidence"
             exit 0
           fi
-          SCHEME="$(echo "${PROJECT}" | sed 's/.xcodeproj//')"
-          if [ -z "${SCHEME}" ]; then
-            echo "[G7_NOT_APPLICABLE] Could not determine scheme — producing evidence"
-            exit 0
-          fi
+          SCHEME="LivingInterface-iOS"
           echo "Building iOS: project=${PROJECT} scheme=${SCHEME} sdk=iphonesimulator"
-          xcodebuild -scheme "${SCHEME}" \
+          xcodebuild -project "${PROJECT}" -scheme "${SCHEME}" \
             -sdk iphonesimulator \
             -destination 'platform=iOS Simulator,name=iPhone 16' \
             CODE_SIGNING_ALLOWED=NO \
