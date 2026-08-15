@@ -9,9 +9,8 @@ import SwiftUI
 // View logic is reused from V3 (four-layer glass language); only
 // navigation chrome and zone titles changed.
 //
-// TODO(phase-12, brand): 主图标待「门+金点」品牌资产替换。
-// 当前 CFBundlePrimaryIcon 仍使用 d01_product_liquid 占位（见 iOS/Info.plist 注释）。
-// 不生成 PNG —— 等正式资产到位后替换。
+// 主图标已替换为「门+金点」品牌资产（brand_gate_1_0/icon_1024，ADR-UI-001）。
+// 旧液体图标保留为 d01_product_liquid_legacy.png。
 
 enum NEXARAZone: String, CaseIterable, Identifiable {
     case home, conversation, mission, governance, memory, settings
