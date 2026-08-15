@@ -46,6 +46,12 @@ struct LivingCore: View {
             centerNucleus
         }
         .frame(width: coreSize * 1.35, height: coreSize * 1.35)
+        .drawingGroup()  // GPU rasterize — single texture for all 6 layers
+        .rotation3DEffect(  // subtle 3D tilt for genuine depth perception
+            .degrees(engine.isReducedMotion ? 0 : 3 + engine.breathPhase * 2),
+            axis: (x: 0.3, y: 0.7, z: 0),
+            perspective: 0.3
+        )
         .accessibilityLabel("NEXARA 主脑，当前状态：\(engine.state.label)")
         .accessibilityIdentifier("living.brain")
     }

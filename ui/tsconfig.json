@@ -28,6 +28,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "plugins": [
       {
         "name": "next"

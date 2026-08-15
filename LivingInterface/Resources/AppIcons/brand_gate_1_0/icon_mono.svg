@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- NEXARA monochrome graphite variant: door frame + dot all #322F2A on transparent -->
+  <path d="M20 20h14" stroke="#322F2A" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M44 26v18" stroke="#322F2A" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M20 44v-24" stroke="#322F2A" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M20 44h24" stroke="#322F2A" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <circle cx="32" cy="33" r="5" fill="#322F2A"/>
+</svg>

@@ -37,6 +37,9 @@
 	</array>
 	<key>CFBundleIcons</key>
 	<dict>
+		<!-- 主图标已替换为「门+金点」资产（brand_gate_1_0，ADR-UI-001）。
+		     旧液体图标保留为 d01_product_liquid_legacy.png；
+		     CFBundlePrimaryIcon 引用名不变。 -->
 		<key>CFBundlePrimaryIcon</key>
 		<dict>
 			<key>CFBundleIconFiles</key>

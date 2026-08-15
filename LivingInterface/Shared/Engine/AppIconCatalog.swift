@@ -1,16 +1,27 @@
 import Foundation
 
-// ── App Icon Catalog: single source of truth for all 24 icons ──
+// ── App Icon Catalog: single source of truth for all 25 icons ──
 struct AppIconCatalog {
     static let allIcons: [AppIconOption] = [
+        // 主图标已替换为「门+金点」（brand_gate_1_0/icon_1024，ADR-UI-001）；
+        // 旧晶体占位保留为 nexara_sovereign_core_legacy.png。
+        // ── 柏韩 Sovereign Core (Primary) ──
+        AppIconOption(
+            id: "nexara_sovereign_core", displayName: "柏韩·主权核心", family: .lifeCore,
+            assetName: "nexara_sovereign_core", alternateIconName: "nexara_sovereign_core",
+            previewAssetName: "nexara_sovereign_core_preview",
+            platformAvailability: .init(macOS: true, iOS: true),
+            isPrimary: true, sourceBoard: "N", sourceIndex: 0,
+            accessibilityLabel: "默认应用图标：柏韩主权核心 — 深色背景上的发光六边形晶体", tone: "sovereignCore", sortOrder: 0
+        ),
         // ── Board B: 6 icons ──
         AppIconOption(
             id: "b01_liquid_life_core", displayName: "液态生命核心", family: .lifeCore,
             assetName: "b01_liquid_life_core", alternateIconName: "b01_liquid_life_core",
             previewAssetName: "b01_liquid_life_core_preview",
             platformAvailability: .init(macOS: true, iOS: true),
-            isPrimary: true, sourceBoard: "B", sourceIndex: 1,
-            accessibilityLabel: "默认应用图标：液态生命核心", tone: "warmSage", sortOrder: 1
+            isPrimary: false, sourceBoard: "B", sourceIndex: 1,
+            accessibilityLabel: "应用图标：液态生命核心", tone: "warmSage", sortOrder: 1
         ),
         AppIconOption(
             id: "b02_spatial_brain", displayName: "空间化主脑", family: .spatialBrain,

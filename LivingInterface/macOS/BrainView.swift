@@ -4,53 +4,57 @@ import Foundation
 // ── NEXARA First Contact: macOS Brain View ──
 // "个人主权智能体第一次接触界面" — the sovereign agent's primary surface.
 // Layout: NavigationSplitView sidebar + detail. Warm Ivory palette.
-// Pages: FirstContact, SoulIdentity, MissionComposer, Timeline, Approval,
-//         ToolRuntime, Evidence, Receipt, Memory, Restart, Health, Settings.
+// PHASE 11 (V1.1) 六区 IA (per V11_PRODUCT_GAP_MATRIX):
+//   HOME (首页)        — FirstContact + RuntimeHealth 合并为 HomePage；SoulIdentity 并入
+//   CONVERSATION (对话) — 新页：本地对话视图壳，数据来自运行时 8765 /api/conversations
+//   MISSIONS (使命)     — MissionComposer + MissionTimeline + ToolRuntime
+//   TRUST (信任)        — ApprovalCenter + EvidenceInspector + ReceiptInspector
+//   MEMORY (记忆)       — MemoryInspector
+//   SETTINGS (设置)     — Settings + RestartContinuity 并入
 
 // MARK: - Page Enum
 
 enum NXPage: String, CaseIterable, Identifiable {
-    case firstContact = "初次接触"
-    case soulIdentity = "灵魂身份"
-    case missionComposer = "使命创作"
-    case missionTimeline = "使命时间线"
-    case approvalCenter = "审批中心"
-    case toolRuntime = "工具运行时"
-    case evidenceInspector = "证据查看器"
-    case receiptInspector = "回执查看器"
-    case memoryInspector = "记忆查看器"
-    case restartContinuity = "重启连续性"
-    case runtimeHealth = "运行时健康"
-    case settings = "设置"
+    case home = "首页"                    // HOME: FirstContact + RuntimeHealth 合并
+    case soulIdentity = "灵魂身份"         // 并入 HOME 区
+    case conversation = "对话"            // CONVERSATION: 新页 — 本地对话视图壳（数据来自运行时）
+    case missionComposer = "使命创作"      // MISSIONS 区
+    case missionTimeline = "使命时间线"    // MISSIONS 区
+    case toolRuntime = "工具运行时"        // 并入 MISSIONS 区（使命执行工具）
+    case approvalCenter = "审批中心"       // TRUST 区
+    case evidenceInspector = "证据查看器"  // TRUST 区
+    case receiptInspector = "回执查看器"   // TRUST 区
+    case memoryInspector = "记忆查看器"    // MEMORY 区
+    case settings = "设置"                // SETTINGS: Settings + RestartContinuity 并入
     var id: String { rawValue }
     var icon: String {
         switch self {
-        case .firstContact: "house.fill"
+        case .home: "house.fill"
         case .soulIdentity: "person.text.rectangle.fill"
+        case .conversation: "bubble.left.and.bubble.right.fill"
         case .missionComposer: "plus.circle.fill"
         case .missionTimeline: "clock.fill"
-        case .approvalCenter: "hand.raised.fill"
         case .toolRuntime: "wrench.and.screwdriver.fill"
+        case .approvalCenter: "hand.raised.fill"
         case .evidenceInspector: "doc.text.magnifyingglass"
         case .receiptInspector: "checklist"
         case .memoryInspector: "brain.head.profile"
-        case .restartContinuity: "arrow.triangle.2.circlepath"
-        case .runtimeHealth: "heart.text.square.fill"
         case .settings: "gearshape.fill"
         }
     }
 }
 
-enum NXSection: String, CaseIterable { case core = "核心"; case identity = "身份"; case mission = "使命"; case tools = "工具"; case system = "系统" }
+enum NXSection: String, CaseIterable { case home = "首页"; case conversation = "对话"; case missions = "使命"; case trust = "信任"; case memory = "记忆"; case settings = "设置" }
 
 extension NXPage {
     var section: NXSection {
         switch self {
-        case .firstContact: .core
-        case .soulIdentity: .identity
-        case .missionComposer, .missionTimeline, .approvalCenter: .mission
-        case .toolRuntime, .evidenceInspector, .receiptInspector, .memoryInspector: .tools
-        case .restartContinuity, .runtimeHealth, .settings: .system
+        case .home, .soulIdentity: .home
+        case .conversation: .conversation
+        case .missionComposer, .missionTimeline, .toolRuntime: .missions
+        case .approvalCenter, .evidenceInspector, .receiptInspector: .trust
+        case .memoryInspector: .memory
+        case .settings: .settings
         }
     }
 }
@@ -66,9 +70,16 @@ struct NXRuntime: Codable {
 
 struct BrainView: View {
     @StateObject private var engine = LivingEngine()
-    @State private var page: NXPage = .firstContact
+    @State private var page: NXPage = .home
+    @State private var previousPage: NXPage = .home
     @State private var runtime = NXRuntime()
     @State private var sidebarVis: NavigationSplitViewVisibility = .all
+
+    private var navigationEdge: Edge {
+        let cur = NXPage.allCases.firstIndex(of: page) ?? 0
+        let prev = NXPage.allCases.firstIndex(of: previousPage) ?? 0
+        return cur >= prev ? .trailing : .leading
+    }
 
     var body: some View {
         NavigationSplitView(columnVisibility: $sidebarVis) {
@@ -76,11 +87,19 @@ struct BrainView: View {
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 240)
         } detail: {
             detailView
-                .background(NXColor.warmIvory.ignoresSafeArea())
+                .id(page.id)
+                .transition(.asymmetric(
+                    insertion: .move(edge: navigationEdge).combined(with: .opacity),
+                    removal: .move(edge: navigationEdge == .trailing ? .leading : .trailing).combined(with: .opacity)
+                ))
         }
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: page)
         .navigationSplitViewStyle(.prominentDetail)
         .preferredColorScheme(.light)
         .onAppear { checkRuntime() }
+        .onChange(of: page) { oldValue, _ in previousPage = oldValue }
+        .onCommand(#selector(NSResponder.selectAll(_:))) { /* absorb */ }
+        .background(KeyboardShortcutView(page: $page))
         .frame(minWidth: 900, idealWidth: 1200, minHeight: 650, idealHeight: 800)
     }
 
@@ -90,7 +109,7 @@ struct BrainView: View {
         VStack(spacing: 0) {
             VStack(spacing: 4) {
                 Text("NEXARA").font(.system(size: 14, weight: .bold)).foregroundColor(NXColor.champagneGold).tracking(3)
-                Text("主权智能体").font(.system(size: 10)).foregroundColor(NXColor.graphiteTertiary)
+                Text("主权智能体").font(NXTypography.captionFont).foregroundColor(NXColor.graphiteTertiary)
             }
             .padding(.vertical, 20).frame(maxWidth: .infinity).background(NXColor.warmIvory)
             Divider().opacity(0.3)
@@ -99,19 +118,9 @@ struct BrainView: View {
                     ForEach(NXSection.allCases, id: \.self) { sec in
                         let items = NXPage.allCases.filter { $0.section == sec }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(sec.rawValue).font(.system(size: 9, weight: .semibold)).foregroundColor(NXColor.graphiteTertiary).tracking(1).padding(.leading, NXSpacing.sm).padding(.top, 16).padding(.bottom, 4)
+                            Text(sec.rawValue).font(NXTypography.navigationLabelFont).foregroundColor(NXColor.graphiteSecondary).tracking(1).padding(.leading, NXSpacing.sm).padding(.top, 16).padding(.bottom, 4)
                             ForEach(items) { item in
-                                Button { page = item } label: {
-                                    HStack(spacing: 10) {
-                                        Image(systemName: item.icon).font(.system(size: 13)).frame(width: 18)
-                                        Text(item.rawValue).font(.system(size: 12))
-                                        Spacer()
-                                    }
-                                    .foregroundColor(page == item ? NXColor.graphite : NXColor.graphiteSecondary)
-                                    .padding(.horizontal, 12).padding(.vertical, 7)
-                                    .background(RoundedRectangle(cornerRadius: 8).fill(page == item ? NXColor.champagneGold.opacity(0.12) : .clear))
-                                }
-                                .buttonStyle(.plain)
+                                SidebarItemView(item: item, page: $page)
                             }
                         }
                     }
@@ -122,17 +131,18 @@ struct BrainView: View {
             VStack(spacing: 4) {
                 HStack(spacing: 4) {
                     Circle().fill(runtime.connected ? NXColor.mossGreen : NXColor.dustRose).frame(width: 7, height: 7)
-                    Text(runtime.connected ? "运行时在线" : "运行时离线").font(.system(size: 10)).foregroundColor(NXColor.graphiteTertiary)
+                    Text(runtime.connected ? "运行时在线" : "运行时离线").font(NXTypography.labelFont).foregroundColor(NXColor.graphiteTertiary)
                 }
                 .accessibilityIdentifier("sidebar_runtime_status")
                 if runtime.connected {
-                    Text("\(runtime.missionCount) 使命 · \(runtime.eventCount) 事件").font(.system(size: 9)).foregroundColor(NXColor.graphiteTertiary.opacity(0.6))
+                    Text("\(runtime.missionCount) 使命 · \(runtime.eventCount) 事件").font(NXTypography.captionFont).foregroundColor(NXColor.graphiteTertiary.opacity(0.6))
                 }
             }
             .accessibilityIdentifier("sidebar_footer")
             .padding(.vertical, 16)
         }
-        .background(NXColor.mistGrayLight.ignoresSafeArea(edges: .bottom))
+        .background(NXColor.sidebarBase.ignoresSafeArea(edges: .bottom))
+        .background(.regularMaterial)
     }
 
     // MARK: Detail Router
@@ -140,25 +150,24 @@ struct BrainView: View {
     @ViewBuilder
     private var detailView: some View {
         switch page {
-        case .firstContact: FirstContactPage(engine: engine, runtime: $runtime)
+        case .home: HomePage(engine: engine, runtime: $runtime)   // FirstContact + RuntimeHealth 合并
         case .soulIdentity: SoulIdentityPage(engine: engine, runtime: $runtime)
+        case .conversation: ConversationPage(engine: engine, runtime: $runtime)  // 新页：本地对话视图壳
         case .missionComposer: MissionComposerPage(engine: engine, runtime: $runtime)
         case .missionTimeline: MissionTimelinePage(engine: engine, runtime: $runtime)
-        case .approvalCenter: ApprovalCenterPage(engine: engine, runtime: $runtime)
         case .toolRuntime: ToolRuntimePage(engine: engine, runtime: $runtime)
+        case .approvalCenter: ApprovalCenterPage(engine: engine, runtime: $runtime)
         case .evidenceInspector: EvidenceInspectorPage(engine: engine, runtime: $runtime)
         case .receiptInspector: ReceiptInspectorPage(engine: engine, runtime: $runtime)
         case .memoryInspector: MemoryInspectorPage(engine: engine, runtime: $runtime)
-        case .restartContinuity: RestartContinuityPage(engine: engine, runtime: $runtime)
-        case .runtimeHealth: RuntimeHealthPage(engine: engine, runtime: $runtime)
-        case .settings: SettingsPage(engine: engine, runtime: $runtime)
+        case .settings: SettingsPage(engine: engine, runtime: $runtime)  // RestartContinuity 并入
         }
     }
 
     private func checkRuntime() {
         Task {
             // Try health check first — runtime may already be alive
-            if await healthAt8770() { return }
+            if await healthAtPort() { return }
 
             // Auto-start via nexara-node with explicit command override
             // Bypasses resolve_command() which fails without PYTHONPATH in GUI context
@@ -169,7 +178,7 @@ struct BrainView: View {
                 "PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/agentos/.local/bin",
                 "HOME": "/Users/agentos",
                 "PYTHONPATH": "/Users/agentos/NEXARA-PRIME/src",
-                "NEXARA_LOCAL_NODE_COMMAND": "/Users/agentos/NEXARA-PRIME/.venv/bin/python3 -m uvicorn nexara_prime.api:app --host 127.0.0.1 --port 8770"
+                "NEXARA_LOCAL_NODE_COMMAND": "/Users/agentos/NEXARA-PRIME/.venv/bin/python3 -m uvicorn nexara_prime.api:app --host 127.0.0.1 --port \(RuntimeConfiguration.shared.port)"
             ]
             task.standardOutput = FileHandle.nullDevice
             task.standardError = FileHandle.nullDevice
@@ -178,13 +187,13 @@ struct BrainView: View {
             // Bounded wait for health
             for attempt in 1...30 {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
-                if await healthAt8770() { return }
+                if await healthAtPort() { return }
                 _ = attempt
             }
         }
     }
 
-    private func healthAt8770() async -> Bool {
+    private func healthAtPort() async -> Bool {
         guard let url = URL(string: "\(RuntimeConfiguration.shared.baseURLString)/health") else { return false }
         do {
             var req = URLRequest(url: url)
@@ -208,28 +217,108 @@ struct BrainView: View {
     }
 }
 
+// MARK: - Sidebar Item with Hover
+
+struct SidebarItemView: View {
+    let item: NXPage
+    @Binding var page: NXPage
+    @State private var isHovered = false
+
+    private var isActive: Bool { page == item }
+
+    var body: some View {
+        Button { page = item } label: {
+            HStack(spacing: 10) {
+                Image(systemName: item.icon)
+                    .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                    .frame(width: 18)
+                Text(item.rawValue)
+                    .font(isActive ? NXTypography.secondaryFont.weight(.semibold) : NXTypography.secondaryFont)
+                Spacer()
+            }
+            .foregroundColor(isActive ? NXColor.graphite : NXColor.graphiteSecondary)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(backgroundFill)
+            )
+            .overlay(alignment: .leading) {
+                if isActive {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(NXColor.champagneGold)
+                        .frame(width: 3)
+                        .padding(.vertical, 4)
+                }
+            }
+            .scaleEffect(isHovered && !isActive ? 1.02 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.18)) { isHovered = hovering }
+        }
+        .animation(.easeOut(duration: 0.18), value: isHovered)
+    }
+
+    private var backgroundFill: Color {
+        if isActive { return NXColor.champagneGold.opacity(0.12) }
+        if isHovered  { return NXColor.champagneGold.opacity(0.06) }
+        return .clear
+    }
+}
+
 // MARK: ── Page 1: First Contact ──
 
 struct FirstContactPage: View {
     @ObservedObject var engine: LivingEngine; @Binding var runtime: NXRuntime
     @State private var appear: Double = 0
+    @State private var searchText = ""
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 8) {
                 Text("NEXARA").font(.system(size: 32, weight: .thin)).foregroundColor(NXColor.champagneGold).tracking(6)
                 Text("你好，主人").font(.system(size: 20, weight: .regular)).foregroundColor(NXColor.graphite).opacity(appear)
-                HStack(spacing: 6) {
-                    Image(systemName: runtime.soulIntegrity == "已验证" ? "checkmark.shield.fill" : "shield.slash.fill").font(.system(size: 11))
-                    Text("Soul 完整性：\(runtime.soulIntegrity)").font(.system(size: 11))
+                HStack(spacing: 12) {
+                    HStack(spacing: 6) {
+                        Image(systemName: runtime.soulIntegrity == "已验证" ? "checkmark.shield.fill" : "shield.slash.fill").font(.system(size: 11))
+                        Text("Soul 完整性：\(runtime.soulIntegrity)").font(.system(size: 11))
+                    }
+                    .foregroundColor(runtime.soulIntegrity == "已验证" ? NXColor.mossGreen : NXColor.dustRose)
+                    .padding(.horizontal, 14).padding(.vertical, 6)
+                    .background(Capsule().fill(.ultraThinMaterial).environment(\.colorScheme, .light))
+                    // ── Audio Resonance Toggle ──
+                    Button {
+                        if engine.microphoneEnabled {
+                            engine.audioResonance.stopMicrophone()
+                            engine.microphoneEnabled = false
+                        } else {
+                            engine.audioResonance.grantConsent()
+                            Task { await engine.audioResonance.startMicrophone() }
+                            engine.microphoneEnabled = true
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: engine.microphoneEnabled ? "mic.fill" : "mic.slash.fill")
+                                .font(.system(size: 10))
+                            if engine.microphoneEnabled, engine.audioResonance.currentBPM > 0 {
+                                Text("\(Int(engine.audioResonance.currentBPM)) BPM")
+                                    .font(.system(size: 9, design: .monospaced))
+                            }
+                        }
+                        .foregroundColor(engine.microphoneEnabled ? NXColor.dustRose : NXColor.graphiteTertiary)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Capsule().fill(.ultraThinMaterial).environment(\.colorScheme, .light))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(engine.microphoneEnabled ? "关闭麦克风共振" : "开启音频共振")
                 }
-                .foregroundColor(runtime.soulIntegrity == "已验证" ? NXColor.mossGreen : NXColor.dustRose)
-                .padding(.horizontal, 14).padding(.vertical, 6)
-                .background(Capsule().fill(.ultraThinMaterial).environment(\.colorScheme, .light))
             }
-            .padding(.top, 40).padding(.bottom, 20)
-            Spacer()
-            livingCore.frame(width: 360, height: 360)
-            Spacer()
+            .padding(.top, 40).padding(.bottom, 16)
+            Spacer().frame(height: 8)
+            livingCore.frame(width: 420, height: 420)
+            Spacer().frame(height: 12)
+            // ── ⌘K Search + Stats ──
+            searchAndStatsRow
+                .padding(.horizontal, 60)
             VStack(spacing: 16) {
                 Text("当前使命").font(.system(size: 10, weight: .semibold)).foregroundColor(NXColor.graphiteTertiary).tracking(2)
                 if let t = engine.currentTask {
@@ -239,44 +328,224 @@ struct FirstContactPage: View {
                 }
                 HStack(spacing: 16) {
                     qButton("创建使命", "plus.circle.fill", NXColor.champagneGold) { engine.setTask("新使命") }
-                    qButton("继续任务", "forward.fill", NXColor.mossGreen) { engine.transition(to: .executing) }
-                    qButton("查看记忆", "brain.head.profile", NXColor.dustRose) { engine.transition(to: .learning) }
+                    qButton("继续任务", "forward.fill", NXColor.mossGreen, style: .primary) { engine.transition(to: .executing) }
+                    qButton("查看记忆", "brain.head.profile", NXColor.graphiteTertiary, style: .tertiary) { engine.transition(to: .learning) }
                 }
             }
             .padding(.vertical, 24).padding(.horizontal, 20)
             .background(RoundedRectangle(cornerRadius: 24).fill(.ultraThinMaterial).environment(\.colorScheme, .light))
             .padding(.horizontal, 60).padding(.bottom, 30)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity).background(NXColor.warmIvory.ignoresSafeArea())
-        .onAppear { withAnimation(.easeOut(duration: 1.0)) { appear = 1 } }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            AmbientParticleView(engine: engine)
+                .allowsHitTesting(false)
+        )
+        .sectionBackground(.home)
     }
 
     private var livingCore: some View {
-        ZStack {
-            Circle().fill(RadialGradient(colors: [engine.state == .silent ? NXColor.mistGray.opacity(0.15) : engine.state.color.opacity(0.12), .clear], center: .center, startRadius: 60, endRadius: 200)).frame(width: 360, height: 360).blur(radius: 20)
-            ForEach(0..<3, id: \.self) { i in
-                Circle().stroke(engine.state.color.opacity(0.08 + Double(i)*0.04), lineWidth: 0.5).frame(width: (120+Double(i)*40)*2, height: (120+Double(i)*40)*2)
-            }
+        GeometryReader { geo in
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+            let coreRadius: CGFloat = 180
             ZStack {
-                Circle().fill(RadialGradient(colors: [Color.white.opacity(0.6), engine.state.color.opacity(0.25), engine.state.color.opacity(0.08)], center: .topLeading, startRadius: 0, endRadius: 80)).frame(width: 150, height: 150)
-                Circle().fill(.ultraThinMaterial).environment(\.colorScheme, .light).frame(width: 150, height: 150)
-                VStack(spacing: 4) {
-                    Image(systemName: engine.state.icon).font(.system(size: 24)).foregroundColor(NXColor.graphiteSecondary)
-                    Text(engine.state.label).font(.system(size: 16, weight: .medium)).foregroundColor(NXColor.graphite)
+                // ── Spatial Memory Galaxy + Mission Orbit (behind core) ──
+                if !engine.isReducedMotion {
+                    MemoryGalaxyView(engine: engine, center: center, coreRadius: coreRadius)
+                        .opacity(0.6)
+                    MissionOrbitView(engine: engine, center: center, coreRadius: coreRadius)
+                        .opacity(0.5)
                 }
+                // ── Orbit guide rings ──
+                ForEach(0..<3, id: \.self) { i in
+                    Circle()
+                        .stroke(engine.state.color.opacity(0.06 + Double(i)*0.03), lineWidth: 0.5)
+                        .frame(width: (120+Double(i)*40)*2, height: (120+Double(i)*40)*2)
+                        .rotation3DEffect(  // real 3D perspective tilt
+                            .degrees(engine.isReducedMotion ? 0 : 12 + engine.breathPhase * 4),
+                            axis: (x: 0.5, y: 0.5, z: 0),
+                            perspective: 0.4
+                        )
+                }
+                // ── Liquid Core: organic deformable glass body ──
+                LiquidCoreView(engine: engine, size: 150)
+                // ── State icon + label overlay ──
+                VStack(spacing: 4) {
+                    Image(systemName: engine.state.icon)
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundColor(NXColor.graphiteSecondary)
+                    Text(engine.state.label)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(NXColor.graphite)
+                }
+                // ── Breath-animated stroke ring ──
+                Circle()
+                    .stroke(engine.state.color.opacity(0.18), lineWidth: 1.5)
+                    .frame(width: 148, height: 148)
+                    .scaleEffect(1.0 + abs(engine.breathPhase)*0.05)
+                    .animation(engine.isReducedMotion ? .none : .easeInOut(duration: 3.0), value: engine.breathPhase)
             }
-            Circle().stroke(engine.state.color.opacity(0.18), lineWidth: 1.5).frame(width: 148, height: 148).scaleEffect(1.0 + abs(engine.breathPhase)*0.05).animation(engine.isReducedMotion ? .none : .easeInOut(duration: 3.0), value: engine.breathPhase)
-            Circle().trim(from: 0.55, to: 0.72).stroke(AngularGradient(colors: [.white.opacity(0), .white.opacity(0.5), .white.opacity(0.7), .white.opacity(0.2), .white.opacity(0)], center: .center, startAngle: .degrees(160), endAngle: .degrees(290)), style: StrokeStyle(lineWidth: 2, lineCap: .round)).frame(width: 140, height: 140).blur(radius: 3).opacity(0.5 + abs(engine.breathPhase)*0.15)
+            .drawingGroup()  // GPU rasterize — single texture for entire core assembly
+        }
+        .frame(width: 400, height: 400)
+    }
+
+    private func qButton(_ t: String, _ i: String, _ c: Color, style: QButtonStyle = .secondary, action: @escaping () -> Void) -> some View {
+        QButtonView(title: t, icon: i, color: c, style: style, action: action)
+    }
+
+    // MARK: - Search & Stats Row
+
+    private var searchAndStatsRow: some View {
+        HStack(spacing: 12) {
+            // ── ⌘K Search ──
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12))
+                    .foregroundColor(NXColor.graphiteTertiary)
+                TextField("搜索使命、记忆、事件…", text: $searchText)
+                    .font(.system(size: 13))
+                    .foregroundColor(NXColor.graphite)
+                    .textFieldStyle(.plain)
+                Spacer()
+                Text("⌘K")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(NXColor.graphiteTertiary.opacity(0.6))
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(NXColor.graphiteTertiary.opacity(0.1)))
+            }
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial).environment(\.colorScheme, .light))
+            .accessibilityLabel("全局搜索")
+
+            // ── Stat Cards ──
+            statCard(value: "\(runtime.missionCount)", label: "使命", icon: "target", color: NXColor.champagneGold)
+            statCard(value: "\(runtime.eventCount)", label: "事件", icon: "bolt.fill", color: NXColor.mossGreen)
+            statCard(value: "0", label: "待审批", icon: "bell.fill", color: NXColor.dustRose)
         }
     }
 
-    private func qButton(_ t: String, _ i: String, _ c: Color, action: @escaping () -> Void) -> some View {
+    private func statCard(value: String, label: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 10))
+                .foregroundColor(color.opacity(0.7))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(NXColor.graphite)
+                Text(label)
+                    .font(.system(size: 9))
+                    .foregroundColor(NXColor.graphiteTertiary)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial).environment(\.colorScheme, .light))
+    }
+}
+
+// MARK: ── HOME: FirstContact + RuntimeHealth 合并 ──
+// PHASE 11 (V1.1): 原 FirstContactPage 为主内容，原 RuntimeHealthPage 指标压缩为顶部健康条。
+// 视图逻辑复用既有组件，未重写。
+
+struct HomePage: View {
+    @ObservedObject var engine: LivingEngine
+    @Binding var runtime: NXRuntime
+
+    var body: some View {
+        VStack(spacing: 0) {
+            healthStrip
+                .padding(.horizontal, 60).padding(.top, 12).padding(.bottom, 2)
+            FirstContactPage(engine: engine, runtime: $runtime)
+        }
+    }
+
+    /// RuntimeHealth 并入 HOME：五项指标压缩为一行胶囊。
+    private var healthStrip: some View {
+        HStack(spacing: 16) {
+            healthChip("连接", runtime.connected ? "在线" : "离线", runtime.connected ? NXColor.mossGreen : NXColor.dustRose)
+            healthChip("Provider", "deepseek-v4-pro", NXColor.champagneGold)
+            healthChip("数据库", "SQLite · \(runtime.eventCount) events", NXColor.mossGreen)
+            healthChip("Soul", runtime.soulIntegrity, runtime.soulIntegrity == "已验证" ? NXColor.mossGreen : NXColor.dustRose)
+            healthChip("UI 状态", engine.state.label, engine.state.color)
+            Spacer()
+        }
+        .padding(.horizontal, 16).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial).environment(\.colorScheme, .light))
+        .accessibilityIdentifier("home_health_strip")
+    }
+
+    private func healthChip(_ label: String, _ value: String, _ color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label).font(.system(size: 9)).foregroundColor(NXColor.graphiteTertiary)
+                Text(value).font(.system(size: 10, weight: .medium, design: .monospaced)).foregroundColor(NXColor.graphite)
+            }
+        }
+        .frame(maxWidth: 180, alignment: .leading)
+    }
+}
+
+// MARK: - Quick Action Button Style
+
+enum QButtonStyle { case primary, secondary, tertiary }
+
+// MARK: - Quick Action Button with Hover
+
+struct QButtonView: View {
+    let title: String; let icon: String; let color: Color; let style: QButtonStyle; let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) { Image(systemName: i).font(.system(size: 20)); Text(t).font(.system(size: 11, weight: .medium)) }
-                .foregroundColor(c).frame(width: 90, height: 80)
-                .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial).environment(\.colorScheme, .light))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(c.opacity(0.2), lineWidth: 0.5))
-        }.buttonStyle(.plain)
+            VStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: style == .primary ? 22 : 20, weight: style == .primary ? .semibold : .regular))
+                Text(title)
+                    .font(.system(size: 11, weight: style == .primary ? .semibold : .medium))
+            }
+            .foregroundColor(style == .primary ? .white : color)
+            .frame(width: 90, height: 80)
+            .background(buttonBackground)
+            .overlay(buttonBorder)
+            .scaleEffect(isHovered ? 1.04 : 1.0)
+            .shadow(color: buttonShadow, radius: style == .primary ? 8 : 4, x: 0, y: style == .primary ? 3 : 1)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) { isHovered = hovering }
+        }
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
+    }
+
+    @ViewBuilder
+    private var buttonBackground: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(style == .primary
+                ? (isHovered ? color.opacity(0.85) : color)
+                : style == .secondary
+                    ? (isHovered ? NXColor.champagneGoldLight.opacity(0.15) : Color.white.opacity(0.65))
+                    : (isHovered ? color.opacity(0.08) : .clear)
+            )
+    }
+
+    @ViewBuilder
+    private var buttonBorder: some View {
+        if style == .secondary {
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(isHovered ? color.opacity(0.4) : color.opacity(0.25), lineWidth: 0.5)
+        } else if style == .tertiary && isHovered {
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(color.opacity(0.18), lineWidth: 0.5)
+        }
+    }
+
+    private var buttonShadow: Color {
+        if style == .primary {
+            return isHovered ? color.opacity(0.35) : color.opacity(0.18)
+        }
+        return isHovered ? color.opacity(0.1) : .clear
     }
 }
 
@@ -307,7 +576,7 @@ struct SoulIdentityPage: View {
                     }
                 }.padding(24).glassCard()
             }.padding(32)
-        }.background(NXColor.warmIvory.ignoresSafeArea())
+        }.sectionBackground(.home)
     }
     private func cItem(_ a: String, _ t: String) -> some View {
         HStack(alignment: .top, spacing: 8) { Text(a).font(.system(size: 10, weight: .bold)).foregroundColor(NXColor.champagneGold).frame(width: 42, alignment: .leading); Text(t).font(.system(size: 11)).foregroundColor(NXColor.graphiteSecondary) }
@@ -349,7 +618,7 @@ struct MissionComposerPage: View {
                 }
             }.padding(32).glassCard().padding(.horizontal, 40)
             Spacer()
-        }.padding(.top, 30).background(NXColor.warmIvory.ignoresSafeArea())
+        }.padding(.top, 30).sectionBackground(.missions)
     }
 
     private func createMission() {
@@ -385,7 +654,184 @@ struct MissionComposerPage: View {
     }
 }
 
-// MARK: ── Pages 4-12: Timeline, Detail, Approval, ToolRuntime, Evidence, Receipt, Memory, Restart, Health, Settings ──
+// MARK: ── CONVERSATION: 本地对话视图壳 ──
+// PHASE 11 (V1.1) 新页：数据来自本地运行时 GET/POST /api/conversations（端口见 RuntimeConfiguration.port）。
+// V1.1 为最小视图壳 — 真实对话流由后端运行时提供（nexara_prime.conversations），
+// 本地侧如实标注「数据来自运行时」，不伪造本地消息能力。
+
+struct RuntimeConversation: Codable, Identifiable {
+    var conversationId: String?
+    var title: String?
+    var createdAt: String?
+    var updatedAt: String?
+    var status: String?
+    var messages: [RuntimeConversationMessage]?
+
+    var id: String { conversationId ?? UUID().uuidString }
+
+    enum CodingKeys: String, CodingKey {
+        case conversationId = "conversation_id"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case title, status, messages
+    }
+}
+
+struct RuntimeConversationMessage: Codable, Identifiable {
+    var messageId: String?
+    var role: String?
+    var content: String?
+    var createdAt: String?
+
+    var id: String { messageId ?? "\(role ?? "")-\(createdAt ?? "")" }
+
+    enum CodingKeys: String, CodingKey {
+        case messageId = "message_id"
+        case createdAt = "created_at"
+        case role, content
+    }
+}
+
+struct ConversationPage: View {
+    @ObservedObject var engine: LivingEngine
+    @Binding var runtime: NXRuntime
+    @State private var conversations: [RuntimeConversation] = []
+    @State private var newTitle = ""
+    @State private var loading = false
+    @State private var creating = false
+    @State private var errorMsg: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                pageHeader("对话", "bubble.left.and.bubble.right.fill", NXColor.champagneGold)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("新建对话").font(.system(size: 12, weight: .medium)).foregroundColor(NXColor.graphiteSecondary)
+                    HStack(spacing: 10) {
+                        TextField("对话标题（留空使用默认：NEXARA 对话）", text: $newTitle)
+                            .font(.system(size: 13))
+                            .textFieldStyle(.plain)
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(NXColor.warmIvory))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(NXColor.mistGray.opacity(0.5), lineWidth: 0.5))
+                        Button(creating ? "创建中..." : "创建") { createConversation() }
+                            .buttonStyle(NXGlassButton(color: NXColor.champagneGold))
+                            .disabled(creating)
+                    }
+                    Text("数据来自运行时：\(RuntimeConfiguration.shared.baseURLString)/api/conversations")
+                        .font(.system(size: 9, design: .monospaced)).foregroundColor(NXColor.graphiteTertiary)
+                }
+                .padding(24).glassCard().padding(.horizontal, 40)
+                .accessibilityIdentifier("conversation_composer")
+
+                if loading && conversations.isEmpty {
+                    ProgressView("加载中...").padding(40)
+                } else if let err = errorMsg {
+                    VStack(spacing: 8) {
+                        Image(systemName: "wifi.slash").font(.system(size: 28)).foregroundColor(NXColor.dustRose)
+                        Text("无法连接运行时").font(.system(size: 14, weight: .medium)).foregroundColor(NXColor.graphite)
+                        Text(err).font(.system(size: 11, design: .monospaced)).foregroundColor(NXColor.graphiteTertiary)
+                    }.padding(40).glassCard().padding(.horizontal, 40)
+                } else if conversations.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "bubble.left").font(.system(size: 28)).foregroundColor(NXColor.graphiteTertiary)
+                        Text("暂无对话 — 在上方创建一个").font(.system(size: 14, weight: .medium)).foregroundColor(NXColor.graphite)
+                    }.padding(40).glassCard().padding(.horizontal, 40)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(conversations) { c in
+                            conversationRow(c)
+                        }
+                    }
+                    .padding(24).glassCard().padding(.horizontal, 40)
+                    .accessibilityIdentifier("conversation_list")
+                }
+            }.padding(.vertical, 32)
+        }
+        .sectionBackground(.conversation)
+        .onAppear { fetchConversations() }
+    }
+
+    private func conversationRow(_ c: RuntimeConversation) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(c.title ?? "NEXARA 对话")
+                    .font(.system(size: 13, weight: .medium)).foregroundColor(NXColor.graphite)
+                Spacer()
+                Text("\(c.messages?.count ?? 0) 条消息")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundColor(NXColor.champagneGold)
+            }
+            HStack(spacing: 8) {
+                Text(c.conversationId ?? "?").font(.system(size: 9, design: .monospaced)).foregroundColor(NXColor.graphiteTertiary)
+                Text(c.createdAt?.prefix(19).description ?? "").font(.system(size: 9, design: .monospaced)).foregroundColor(NXColor.graphiteTertiary)
+                Text(c.status ?? "").font(.system(size: 9)).foregroundColor(NXColor.mossGreen)
+                Spacer()
+            }
+            if let last = c.messages?.last, let content = last.content {
+                Text(content.prefix(60) + (content.count > 60 ? "…" : ""))
+                    .font(.system(size: 10)).foregroundColor(NXColor.graphiteSecondary).lineLimit(1)
+            }
+        }
+        .padding(.vertical, 10).padding(.horizontal, 12)
+        .background(RoundedRectangle(cornerRadius: 8).fill(NXColor.warmIvory.opacity(0.5)))
+        .accessibilityIdentifier("conversation_row_\(c.conversationId ?? "unknown")")
+    }
+
+    private func fetchConversations() {
+        loading = true; errorMsg = nil
+        guard let url = URL(string: "\(RuntimeConfiguration.shared.baseURLString)/api/conversations") else {
+            loading = false; errorMsg = "无效 URL"; return
+        }
+        Task {
+            do {
+                var req = URLRequest(url: url); req.timeoutInterval = 8
+                let (data, resp) = try await URLSession.shared.data(for: req)
+                guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+                    await MainActor.run { loading = false; errorMsg = "HTTP \((resp as? HTTPURLResponse)?.statusCode ?? 0)" }; return
+                }
+                let list = try JSONDecoder().decode([RuntimeConversation].self, from: data)
+                await MainActor.run { conversations = list; loading = false }
+            } catch {
+                await MainActor.run { loading = false; errorMsg = error.localizedDescription }
+            }
+        }
+    }
+
+    private func createConversation() {
+        creating = true; errorMsg = nil
+        guard let url = URL(string: "\(RuntimeConfiguration.shared.baseURLString)/api/conversations") else {
+            creating = false; errorMsg = "无效 URL"; return
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? [:]
+            : ["title": newTitle.trimmingCharacters(in: .whitespacesAndNewlines)]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        Task {
+            do {
+                let (data, resp) = try await URLSession.shared.data(for: req)
+                let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+                guard code == 200 else {
+                    let msg = String(data: data, encoding: .utf8) ?? "HTTP \(code)"
+                    await MainActor.run { errorMsg = msg; creating = false }
+                    return
+                }
+                let created = try JSONDecoder().decode(RuntimeConversation.self, from: data)
+                await MainActor.run {
+                    conversations.insert(created, at: 0)
+                    newTitle = ""
+                    creating = false
+                }
+            } catch {
+                await MainActor.run { errorMsg = error.localizedDescription; creating = false }
+            }
+        }
+    }
+}
+
+// MARK: ── MISSIONS / TRUST / MEMORY: Timeline, Detail, Approval, ToolRuntime, Evidence, Receipt, Memory ──
 
 struct MissionTimelinePage: View {
     @ObservedObject var engine: LivingEngine; @Binding var runtime: NXRuntime
@@ -416,31 +862,10 @@ struct MissionTimelinePage: View {
                         }.padding(40).glassCard().padding(.horizontal, 40)
                     } else {
                         VStack(spacing: 8) {
-                            ForEach(missions) { m in
-                                Button {
+                            ForEach(Array(missions.enumerated()), id: \.element.id) { idx, m in
+                                MissionRowView(mission: m, delay: Double(idx) * 0.04) {
                                     selectedMission = m
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        Circle()
-                                            .fill(m.state == "Completed" ? NXColor.mossGreen : (m.state == "Failed" ? NXColor.dustRose : NXColor.champagneGold))
-                                            .frame(width: 10, height: 10)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(m.title ?? m.objective ?? m.missionId ?? "?")
-                                                .font(.system(size: 12, weight: .medium))
-                                                .foregroundColor(NXColor.graphite)
-                                                .lineLimit(1)
-                                            Text("\(m.state ?? "?") · \(m.missionId ?? "")")
-                                                .font(.system(size: 9, design: .monospaced))
-                                                .foregroundColor(NXColor.graphiteTertiary)
-                                        }
-                                        Spacer()
-                                        Image(systemName: "chevron.right").font(.system(size: 10)).foregroundColor(NXColor.graphiteTertiary)
-                                    }
-                                    .padding(.vertical, 10).padding(.horizontal, 12)
-                                    .background(RoundedRectangle(cornerRadius: 8).fill(NXColor.warmIvory.opacity(0.5)))
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("mission_row_\(m.missionId ?? "unknown")")
                             }
                         }
                         .padding(24).glassCard().padding(.horizontal, 40)
@@ -448,7 +873,7 @@ struct MissionTimelinePage: View {
                     }
                 }.padding(.vertical, 32)
             }
-            .background(NXColor.warmIvory.ignoresSafeArea())
+            .sectionBackground(.missions)
             .onAppear { fetchRealMissions() }
         }
     }
@@ -541,7 +966,7 @@ struct MissionDetailPage: View {
                 }
             }.padding(.bottom, 32)
         }
-        .background(NXColor.warmIvory.ignoresSafeArea())
+        .sectionBackground(.missions)
         .onAppear { fetchDetail() }
     }
 
@@ -603,7 +1028,7 @@ struct ApprovalCenterPage: View {
             }.padding(32).glassCard().padding(.horizontal, 40)
             if engine.pendingApprovalCount > 0 { HStack { Image(systemName: "bell.badge.fill").foregroundColor(NXColor.dustRose); Text("\(engine.pendingApprovalCount) 项待审批").font(.system(size: 12)).foregroundColor(NXColor.graphiteSecondary) } }
             Spacer()
-        }.padding(.top, 30).background(NXColor.warmIvory.ignoresSafeArea())
+        }.padding(.top, 30).sectionBackground(.trust)
     }
 }
 
@@ -612,9 +1037,9 @@ struct ToolRuntimePage: View {
     let tools: [(String, String, String)] = [("terminal","终端","执行 shell 命令"),("file.read","文件读取","读取文件"),("file.write","文件写入","写入文件"),("web.search","网络搜索","搜索互联网"),("web.extract","网页提取","提取网页"),("python.exec","Python","运行代码"),("memory.write","记忆写入","持久记忆"),("evidence.write","证据写入","证据记录")]
     var body: some View {
         ScrollView { VStack(spacing: 24) { pageHeader("工具运行时", "wrench.and.screwdriver.fill", NXColor.champagneGold)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) { ForEach(tools, id: \.0) { t in VStack(alignment: .leading, spacing: 4) { HStack { Text(t.0).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundColor(NXColor.champagneGold); Spacer(); Circle().fill(NXColor.mossGreen).frame(width: 6, height: 6) }; Text(t.1).font(.system(size: 13, weight: .medium)).foregroundColor(NXColor.graphite); Text(t.2).font(.system(size: 10)).foregroundColor(NXColor.graphiteTertiary) }.padding(16).glassCard() }
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) { ForEach(tools, id: \.0) { t in VStack(alignment: .leading, spacing: 4) { HStack { Text(t.0).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundColor(NXColor.champagneGold); Spacer(); Circle().fill(NXColor.mossGreen).frame(width: 6, height: 6) }; Text(t.1).font(.system(size: 13, weight: .medium)).foregroundColor(NXColor.graphite); Text(t.2).font(.system(size: 10)).foregroundColor(NXColor.graphiteTertiary) }.padding(16).glassCard(depth: .subtle) }
             }.padding(.horizontal, 40)
-        }.padding(.vertical, 32) }.background(NXColor.warmIvory.ignoresSafeArea())
+        }.padding(.vertical, 32) }.sectionBackground(.missions)
     }
 }
 
@@ -628,7 +1053,7 @@ struct EvidenceInspectorPage: View {
                 eItem("恢复检查", "27 checked · 9 completed", NXColor.mossGreen)
                 eItem("数据库", "SQLite · nexara.db", NXColor.mistGray)
             }.padding(24).glassCard().padding(.horizontal, 40)
-        }.padding(.vertical, 32) }.background(NXColor.warmIvory.ignoresSafeArea())
+        }.padding(.vertical, 32) }.sectionBackground(.trust)
     }
     private func eItem(_ l: String, _ v: String, _ c: Color) -> some View {
         HStack { Circle().fill(c).frame(width: 8, height: 8); VStack(alignment: .leading, spacing: 2) { Text(l).font(.system(size: 12, weight: .medium)).foregroundColor(NXColor.graphite); Text(v).font(.system(size: 11, design: .monospaced)).foregroundColor(NXColor.graphiteSecondary) }; Spacer() }
@@ -641,11 +1066,11 @@ struct ReceiptInspectorPage: View {
         ScrollView { VStack(spacing: 24) { pageHeader("回执查看器", "checklist", NXColor.champagneGold)
             VStack(spacing: 12) {
                 rItem("构建回执", "xcodebuild · macOS", "通过")
-                rItem("运行时回执", "8770/health · status: ok", "通过")
+                rItem("运行时回执", "\(RuntimeConfiguration.shared.port)/health · status: ok", "通过")
                 rItem("事件回执", "\(runtime.eventCount) events", "已记录")
                 rItem("Soul 回执", runtime.soulIntegrity, runtime.soulIntegrity == "已验证" ? "通过" : "待验证")
             }.padding(24).glassCard().padding(.horizontal, 40)
-        }.padding(.vertical, 32) }.background(NXColor.warmIvory.ignoresSafeArea())
+        }.padding(.vertical, 32) }.sectionBackground(.trust)
     }
     private func rItem(_ l: String, _ d: String, _ s: String) -> some View {
         HStack { VStack(alignment: .leading, spacing: 2) { Text(l).font(.system(size: 12, weight: .medium)).foregroundColor(NXColor.graphite); Text(d).font(.system(size: 10, design: .monospaced)).foregroundColor(NXColor.graphiteSecondary) }; Spacer(); Text(s).font(.system(size: 10, weight: .semibold)).foregroundColor(s == "通过" ? NXColor.mossGreen : NXColor.dustRose) }.padding(.vertical, 4)
@@ -661,45 +1086,15 @@ struct MemoryInspectorPage: View {
                 ForEach(engine.recentLearnings, id: \.self) { l in HStack { Image(systemName: "sparkle").font(.system(size: 10)).foregroundColor(NXColor.dustRose); Text(l).font(.system(size: 12)).foregroundColor(NXColor.graphiteSecondary); Spacer() }.padding(.horizontal, 12) }
                 if engine.recentLearnings.isEmpty { Text("暂无记忆条目").font(.system(size: 12)).foregroundColor(NXColor.graphiteTertiary) }
             }.padding(24).glassCard().padding(.horizontal, 40)
-        }.padding(.vertical, 32) }.background(NXColor.warmIvory.ignoresSafeArea())
+        }.padding(.vertical, 32) }.sectionBackground(.memory)
     }
 }
 
-struct RestartContinuityPage: View {
-    @ObservedObject var engine: LivingEngine; @Binding var runtime: NXRuntime
-    var body: some View {
-        ScrollView { VStack(spacing: 24) { pageHeader("重启连续性", "arrow.triangle.2.circlepath", NXColor.champagneGold)
-            VStack(spacing: 16) {
-                cItem("恢复检查", "27 已检查", runtime.connected ? NXColor.mossGreen : NXColor.dustRose)
-                cItem("可恢复使命", "0 项", NXColor.mistGray)
-                cItem("已完成使命", "9 项", NXColor.mossGreen)
-                cItem("重复步骤跳过", "0", NXColor.mistGray)
-                if runtime.connected { Text("系统支持重启后从检查点恢复。所有已完成使命的副作用通过幂等键保护。").font(.system(size: 11)).foregroundColor(NXColor.graphiteTertiary).multilineTextAlignment(.center).padding(.top, 12) }
-            }.padding(24).glassCard().padding(.horizontal, 40)
-        }.padding(.vertical, 32) }.background(NXColor.warmIvory.ignoresSafeArea())
-    }
-    private func cItem(_ l: String, _ v: String, _ c: Color) -> some View {
-        HStack { Circle().fill(c).frame(width: 8, height: 8); Text(l).font(.system(size: 12)).foregroundColor(NXColor.graphiteSecondary); Spacer(); Text(v).font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundColor(NXColor.graphite) }
-    }
-}
+// RestartContinuityPage 已并入 SettingsPage（PHASE 11）：重启连续性指标并入「设置 → 重启连续性」分区。
+// 若矩阵要求独立重启页，可从 SettingsPage.continuitySection 还原此视图。
 
-struct RuntimeHealthPage: View {
-    @ObservedObject var engine: LivingEngine; @Binding var runtime: NXRuntime
-    var body: some View {
-        ScrollView { VStack(spacing: 24) { pageHeader("运行时健康", "heart.text.square.fill", NXColor.mossGreen)
-            VStack(spacing: 16) {
-                hm("连接状态", runtime.connected ? "在线 · ONLINE" : "离线 · OFFLINE", runtime.connected ? 1.0 : 0.0, runtime.connected ? NXColor.mossGreen : NXColor.dustRose)
-                hm("Provider", "deepseek-v4-pro", 0.8, NXColor.champagneGold)
-                hm("数据库", "SQLite · \(runtime.eventCount) events", 1.0, NXColor.mossGreen)
-                hm("Soul 完整性", runtime.soulIntegrity, runtime.soulIntegrity == "已验证" ? 1.0 : 0.5, runtime.soulIntegrity == "已验证" ? NXColor.mossGreen : NXColor.dustRose)
-                hm("UI 状态", engine.state.label, 1.0, engine.state.color)
-            }.padding(24).glassCard().padding(.horizontal, 40)
-        }.padding(.vertical, 32) }.background(NXColor.warmIvory.ignoresSafeArea())
-    }
-    private func hm(_ l: String, _ d: String, _ v: Double, _ c: Color) -> some View {
-        VStack(spacing: 6) { HStack { Text(l).font(.system(size: 12, weight: .medium)).foregroundColor(NXColor.graphite); Spacer(); Text(d).font(.system(size: 10, design: .monospaced)).foregroundColor(NXColor.graphiteSecondary) }; GeometryReader { g in ZStack(alignment: .leading) { RoundedRectangle(cornerRadius: 3).fill(NXColor.mistGray.opacity(0.3)).frame(height: 6); RoundedRectangle(cornerRadius: 3).fill(c).frame(width: g.size.width * v, height: 6) } }.frame(height: 6) }
-    }
-}
+// RuntimeHealthPage 已并入 HomePage（PHASE 11）：原五项指标压缩为首页顶部健康条 healthStrip。
+// 若矩阵要求独立健康页，可从 HomePage.healthStrip 还原此视图。
 
 struct SettingsPage: View {
     @ObservedObject var engine: LivingEngine; @Binding var runtime: NXRuntime
@@ -707,36 +1102,295 @@ struct SettingsPage: View {
         ScrollView { VStack(spacing: 24) { pageHeader("设置", "gearshape.fill", NXColor.graphiteSecondary)
             VStack(spacing: 16) {
                 sSection("外观") { HStack { Text("主题").font(.system(size: 12)).foregroundColor(NXColor.graphiteSecondary); Spacer(); Picker("", selection: Binding(get: { engine.currentSkin }, set: { engine.switchSkin(to: $0) })) { ForEach(LifeSkin.allCases, id: \.self) { s in Text(s.rawValue).tag(s) } }.pickerStyle(.segmented).frame(width: 250) }; Toggle("减弱动态效果", isOn: $engine.isReducedMotion).font(.system(size: 12)).foregroundColor(NXColor.graphiteSecondary).toggleStyle(.switch) }
-                sSection("运行时") { HStack { Text("后端地址").font(.system(size: 12)).foregroundColor(NXColor.graphiteSecondary); Spacer(); Text("http://127.0.0.1:8770").font(.system(size: 11, design: .monospaced)).foregroundColor(NXColor.champagneGold) } }
-                sSection("关于") { VStack(alignment: .leading, spacing: 4) { Text("NEXARA Living Interface V2").font(.system(size: 12, weight: .medium)).foregroundColor(NXColor.graphite); Text("个人主权智能体第一次接触界面").font(.system(size: 10)).foregroundColor(NXColor.graphiteTertiary); Text("构建: 2026-07-31 · macOS 26+").font(.system(size: 9, design: .monospaced)).foregroundColor(NXColor.graphiteTertiary.opacity(0.6)) } }
+                sSection("运行时") { HStack { Text("后端地址").font(.system(size: 12)).foregroundColor(NXColor.graphiteSecondary); Spacer(); Text(RuntimeConfiguration.shared.baseURLString).font(.system(size: 11, design: .monospaced)).foregroundColor(NXColor.champagneGold) } }
+                continuitySection
+                sSection("关于") { VStack(alignment: .leading, spacing: 4) { Text("NEXARA Living Interface").font(.system(size: 12, weight: .medium)).foregroundColor(NXColor.graphite); Text("个人主权智能体第一次接触界面").font(.system(size: 10)).foregroundColor(NXColor.graphiteTertiary); Text("版本 \(appVersion) · macOS 15+").font(.system(size: 9, design: .monospaced)).foregroundColor(NXColor.graphiteTertiary.opacity(0.6)) } }
             }.padding(24).glassCard().padding(.horizontal, 40)
-        }.padding(.vertical, 32) }.background(NXColor.warmIvory.ignoresSafeArea())
+        }.padding(.vertical, 32) }.sectionBackground(.settings)
     }
     private func sSection<C: View>(_ t: String, @ViewBuilder c: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 12) { Text(t).font(.system(size: 10, weight: .semibold)).foregroundColor(NXColor.graphiteTertiary).tracking(1); c() }
     }
+
+    /// PHASE 11: RestartContinuityPage 并入 — 重启连续性指标分区。
+    @ViewBuilder
+    private var continuitySection: some View {
+        sSection("重启连续性") {
+            VStack(spacing: 10) {
+                contRow("恢复检查", "27 已检查", runtime.connected ? NXColor.mossGreen : NXColor.dustRose)
+                contRow("可恢复使命", "0 项", NXColor.mistGray)
+                contRow("已完成使命", "9 项", NXColor.mossGreen)
+                contRow("重复步骤跳过", "0", NXColor.mistGray)
+                if runtime.connected { Text("系统支持重启后从检查点恢复。所有已完成使命的副作用通过幂等键保护。").font(.system(size: 11)).foregroundColor(NXColor.graphiteTertiary).multilineTextAlignment(.leading) }
+            }
+        }
+    }
+    private func contRow(_ l: String, _ v: String, _ c: Color) -> some View {
+        HStack { Circle().fill(c).frame(width: 8, height: 8); Text(l).font(.system(size: 12)).foregroundColor(NXColor.graphiteSecondary); Spacer(); Text(v).font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundColor(NXColor.graphite) }
+    }
+    /// 版本号来自构建设置 MARKETING_VERSION / CURRENT_PROJECT_VERSION（GENERATE_INFOPLIST_FILE）。
+    private var appVersion: String {
+        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "\(short) (\(build))"
+    }
 }
 
-// MARK: - Shared Helpers
+// MARK: - Mission Row with Hover & Stagger
+
+struct MissionRowView: View {
+    let mission: RuntimeMission
+    let delay: Double
+    let action: () -> Void
+    @State private var isHovered = false
+    @State private var appeared = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(mission.state == "Completed" ? NXColor.mossGreen : (mission.state == "Failed" ? NXColor.dustRose : NXColor.champagneGold))
+                    .frame(width: 10, height: 10)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mission.title ?? mission.objective ?? mission.missionId ?? "?")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(NXColor.graphite)
+                        .lineLimit(1)
+                    Text("\(mission.state ?? "?") · \(mission.missionId ?? "")")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(NXColor.graphiteTertiary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10))
+                    .foregroundColor(NXColor.graphiteTertiary)
+                    .offset(x: isHovered ? 2 : 0)
+                    .animation(.easeOut(duration: 0.2), value: isHovered)
+            }
+            .padding(.vertical, 10).padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isHovered ? NXColor.champagneGold.opacity(0.08) : NXColor.warmIvory.opacity(0.5))
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) { isHovered = hovering }
+        }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 8)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.3).delay(delay)) {
+                appeared = true
+            }
+        }
+        .accessibilityIdentifier("mission_row_\(mission.missionId ?? "unknown")")
+    }
+}
+
+// MARK: - Keyboard Shortcuts
+
+struct KeyboardShortcutView: NSViewRepresentable {
+    @Binding var page: NXPage
+
+    func makeNSView(context: Context) -> NSView {
+        let view = KeyHandlerView()
+        view.onNavigate = { index in
+            let all = NXPage.allCases
+            guard index >= 0, index < all.count else { return }
+            DispatchQueue.main.async { page = all[index] }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class KeyHandlerView: NSView {
+        var onNavigate: ((Int) -> Void)?
+
+        override var acceptsFirstResponder: Bool { true }
+
+        override func keyDown(with event: NSEvent) {
+            if event.modifierFlags.contains(.command) {
+                let chars = event.charactersIgnoringModifiers ?? ""
+                if let num = Int(chars), num >= 1, num <= 9 {
+                    onNavigate?(num - 1)
+                    return
+                }
+            }
+            super.keyDown(with: event)
+        }
+    }
+}
+
+// MARK: - NEXARA Page Background System
+// Four-layer color depth hierarchy:
+//   L0 Window Canvas  → warmIvory solid base
+//   L1 Page Atmosphere → visible radial "light-from-above" gradient
+//   L2 Section Surface → per-section tint (ΔE 8–12 from warmIvory)
+//   L3 Glass Cards     → system materials with edge-light highlights
+//   L4 Interactive      → buttons, rows, chips with hover states
+
+extension View {
+    /// L0+L1: Global page background — warmIvory base with visible atmospheric depth.
+    /// A concentrated radial gradient creates a "light-from-above" spatial cue
+    /// that transforms the page from a flat void into a physical surface.
+    func nexaraBackground() -> some View {
+        self.background(
+            ZStack {
+                NXColor.warmIvory
+                RadialGradient(
+                    stops: [
+                        .init(color: NXColor.atmoCenter, location: 0.0),
+                        .init(color: NXColor.atmoEdge, location: 1.0),
+                    ],
+                    center: .top,
+                    startRadius: 0,
+                    endRadius: 350
+                )
+            }
+            .ignoresSafeArea()
+        )
+    }
+
+    /// L0+L1+L2: Section-tinted page background with atmospheric depth.
+    /// Each NXSection applies a visible hue shift to warmIvory,
+    /// creating clear visual distinction between Core/Identity/Mission/Tools/System.
+    func sectionBackground(_ section: NXSection) -> some View {
+        self.background(
+            ZStack {
+                surfaceColor(for: section)
+                RadialGradient(
+                    stops: [
+                        .init(color: NXColor.atmoCenter, location: 0.0),
+                        .init(color: NXColor.atmoEdge, location: 1.0),
+                    ],
+                    center: .top,
+                    startRadius: 0,
+                    endRadius: 350
+                )
+            }
+            .ignoresSafeArea()
+        )
+    }
+
+    /// L0+L1 Dark: Warm charcoal page background preserving ivory undertones.
+    /// Uses darkBase (#26231E) — deep but never sterile black.
+    func nexaraDarkBackground() -> some View {
+        self.background(NXColor.darkBase.ignoresSafeArea())
+    }
+}
+
+/// Maps NXSection to its visible surface tint color.
+/// PHASE 11 (V1.1): 六区 IA 色映射 — HOME/CONVERSATION/MISSIONS/TRUST/MEMORY/SETTINGS。
+private func surfaceColor(for section: NXSection) -> Color {
+    switch section {
+    case .home:         return NXColor.coreSurface
+    case .conversation: return NXColor.identitySurface
+    case .missions:     return NXColor.missionSurface
+    case .trust:        return NXColor.toolsSurface
+    case .memory:       return NXColor.memorySurface
+    case .settings:     return NXColor.systemSurface
+    }
+}
 
 private func pageHeader(_ t: String, _ i: String, _ c: Color) -> some View {
-    HStack(spacing: 12) { Image(systemName: i).font(.system(size: 22)).foregroundColor(c); Text(t).font(.system(size: 24, weight: .thin)).foregroundColor(NXColor.graphite).tracking(2); Spacer() }
+    HStack(spacing: 12) {
+        Image(systemName: i).font(.system(size: 22)).foregroundColor(c)
+        Text(t).font(NXTypography.pageTitleFont).foregroundColor(NXColor.graphite).tracking(2)
+        Spacer()
+    }
+}
+
+// MARK: - NEXARA Glass Depth Hierarchy
+
+/// Material depth levels for spatial hierarchy through translucency.
+/// subtle (ultraThinMaterial) → standard (regularMaterial) → prominent (thickMaterial)
+enum NXGlassDepth {
+    case subtle     // ultraThinMaterial — light floating surfaces: tool cards, info rows
+    case standard   // regularMaterial — content cards: mission, forms, detail panels
+    case prominent  // thickMaterial — primary action surfaces: composer, modal
+
+    var material: Material {
+        switch self {
+        case .subtle: .ultraThinMaterial
+        case .standard: .regularMaterial
+        case .prominent: .thickMaterial
+        }
+    }
+    var highlightOpacity: Double {
+        switch self {
+        case .subtle: 0.12; case .standard: 0.25; case .prominent: 0.4
+        }
+    }
+    var shadowRadius: CGFloat {
+        switch self {
+        case .subtle: 6; case .standard: 14; case .prominent: 22
+        }
+    }
+    var shadowY: CGFloat {
+        switch self {
+        case .subtle: 1; case .standard: 2; case .prominent: 4
+        }
+    }
 }
 
 extension View {
-    func glassCard() -> some View {
-        self.background(RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial).environment(\.colorScheme, .light))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(NXColor.glassBorder, lineWidth: 0.5))
-            .shadow(color: NXColor.glassShadow, radius: 12, x: 0, y: 2)
+    /// NEXARA Glass Card — hierarchical glassmorphism for spatial depth.
+    /// Applies system material background with highlight edge and shadow.
+    /// Depth signals: subtle (distant/info) → standard (content) → prominent (action).
+    func glassCard(depth: NXGlassDepth = .standard) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(depth.material)
+                    .environment(\.colorScheme, .light)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(NXColor.glassBorder, lineWidth: 0.5)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(NXColor.glassHighlight.opacity(depth.highlightOpacity), lineWidth: 0.5)
+                    .padding(1)
+            )
+            .overlay(
+                // Glass edge light — subtle top-left catch gradient
+                LinearGradient(
+                    stops: [
+                        .init(color: NXGradient.glassEdgeLight, location: 0),
+                        .init(color: NXGradient.glassEdgeFade, location: 0.4),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .mask(RoundedRectangle(cornerRadius: 20).stroke(lineWidth: 0.5))
+                .padding(1)
+            )
+            .shadow(color: NXColor.glassShadow, radius: depth.shadowRadius, x: 0, y: depth.shadowY)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 }
 
 struct NXGlassButton: ButtonStyle {
     let color: Color
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.system(size: 12, weight: .medium)).foregroundColor(color).padding(.horizontal, 20).padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial).environment(\.colorScheme, .light))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.3), lineWidth: 0.5))
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0).animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(color)
+            .padding(.horizontal, 20).padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(.ultraThinMaterial)
+                    .environment(\.colorScheme, .light)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(color.opacity(0.3), lineWidth: 0.5)
+            )
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.8), value: configuration.isPressed)
     }
 }
