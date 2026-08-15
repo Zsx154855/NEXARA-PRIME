@@ -481,7 +481,7 @@ struct EntryView: View {
                         if engine.pendingApprovalCount > 0 {
                             Text("\(engine.pendingApprovalCount) 项等待中")
                                 .font(NXTypography.labelFont)
-                                .foregroundColor(NXColor.amberAttention)
+                                .foregroundColor(NXColor.pauseAmber)
                         }
                     }
                 }
