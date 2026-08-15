@@ -160,3 +160,75 @@ struct GlassButton: View {
         }.buttonStyle(.plain)
     }
 }
+
+// MARK: - Ambient Particle View
+
+struct AmbientParticleView: View {
+    @ObservedObject var engine: LivingEngine
+
+    private let particleCount: Int = 20  // reduced from 30 — fewer particles, smoother frame rate
+    @State private var particles: [AmbientParticleData] = []
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.067)) { timeline in  // ~15fps instead of ~20fps
+            Canvas { context, size in
+                let now = timeline.date.timeIntervalSince1970
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                let profile = engine.skinProfile
+                let baseColor = profile.colors.primary
+                let accentColor = profile.colors.accent
+                let bpmFactor = engine.audioResonance.currentBPM > 0
+                    ? min(2.0, engine.audioResonance.currentBPM / 60.0) : 1.0
+                let beatBoost = engine.audioResonance.latestSnapshot.isBeat ? 1.5 : 1.0
+
+                for p in particles {
+                    let drift = VisualPhysicsEngine.noiseFieldFast(
+                        at: p.position, time: now * p.speed, scale: 0.003, strength: 0.5)
+                    let gravity = VisualPhysicsEngine.gravityWell(
+                        position: p.position, center: center, mass: 0.3, deltaTime: 0.067)
+                    let pos = CGPoint(
+                        x: p.position.x + drift.x * 0.3 + (gravity.x - p.position.x) * 0.002,
+                        y: p.position.y + drift.y * 0.3 + (gravity.y - p.position.y) * 0.002)
+                    let wrappedX = ((pos.x.truncatingRemainder(dividingBy: size.width)) + size.width)
+                        .truncatingRemainder(dividingBy: size.width)
+                    let wrappedY = ((pos.y.truncatingRemainder(dividingBy: size.height)) + size.height)
+                        .truncatingRemainder(dividingBy: size.height)
+                    let pulseSize = p.size * (0.8 + abs(sin(now * p.frequency + p.phase)) * 0.4)
+                        * bpmFactor * beatBoost
+                    context.fill(
+                        Path(ellipseIn: CGRect(x: wrappedX - pulseSize * 2, y: wrappedY - pulseSize * 2,
+                                               width: pulseSize * 4, height: pulseSize * 4)),
+                        with: .color(accentColor.opacity(p.opacity * 0.08)))
+                    context.fill(
+                        Path(ellipseIn: CGRect(x: wrappedX - pulseSize / 2, y: wrappedY - pulseSize / 2,
+                                               width: pulseSize, height: pulseSize)),
+                        with: .color(baseColor.opacity(p.opacity * 0.4)))
+                    context.fill(
+                        Path(ellipseIn: CGRect(x: wrappedX - pulseSize / 4, y: wrappedY - pulseSize / 4,
+                                               width: pulseSize / 2, height: pulseSize / 2)),
+                        with: .color(.white.opacity(p.opacity * 0.3)))
+                }
+            }
+        }
+        .drawingGroup()  // GPU rasterize — single texture for particle field
+        .opacity(engine.isReducedMotion ? 0 : 0.6)
+        .onAppear { initializeParticles() }
+    }
+
+    private func initializeParticles() {
+        particles = (0..<particleCount).map { i in
+            let seed = Double(i) * 0.618033988749895
+            return AmbientParticleData(
+                id: i,
+                position: CGPoint(x: Double.random(in: 0...1200), y: Double.random(in: 0...800)),
+                size: Double.random(in: 1.5...4.0),
+                opacity: Double.random(in: 0.15...0.45),
+                speed: 0.3 + seed * 0.7, frequency: 0.5 + seed * 1.5, phase: seed * .pi * 2)
+        }
+    }
+}
+
+private struct AmbientParticleData {
+    let id: Int; var position: CGPoint; let size: Double
+    let opacity: Double; let speed: Double; let frequency: Double; let phase: Double
+}

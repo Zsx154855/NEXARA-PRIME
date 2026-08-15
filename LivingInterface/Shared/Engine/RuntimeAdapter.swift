@@ -3,12 +3,14 @@ import Foundation
 // MARK: - Runtime Configuration
 // Single source of truth for Runtime API connectivity.
 // All pages and adapters must read from this; no hardcoded ports anywhere.
+// PHASE 11 (V1.1): 单端口常量 — 8765 与 Web/后端一致 (src/nexara_prime/config.py, NEXARA_API_PORT)。
+// RuntimeAdapter（经 baseURL）与 BrainView（health 检查 / 启动命令 / 状态文案）均引用此常量。
 
 struct RuntimeConfiguration {
     static let shared = RuntimeConfiguration()
 
     let host: String = "127.0.0.1"
-    let port: Int = 8770
+    let port: Int = 8765
 
     var baseURL: URL {
         URL(string: "http://\(host):\(port)")!
@@ -295,11 +297,24 @@ struct RuntimeSoulStatus: Codable {
     }
 }
 
+struct MissionSpec: Codable {
+    var title: String?
+    var objective: String?
+    var riskLevel: String?
+    var missionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title, objective
+        case riskLevel = "risk_level"
+        case missionId = "mission_id"
+    }
+}
+
 struct RuntimeMission: Codable, Identifiable {
     var missionId: String?
     var objective: String?
     var title: String?
-    var spec: String?
+    var spec: MissionSpec?
     var state: String?
     var currentState: String?
     var createdAt: String?
@@ -310,11 +325,26 @@ struct RuntimeMission: Codable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case missionId = "mission_id"
-        case objective, title, spec, state
+        case spec, state
         case currentState = "current_state"
         case createdAt = "created_at"
         case approvalStatus = "approval_status"
         case riskLevel = "risk_level"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        missionId = try container.decodeIfPresent(String.self, forKey: .missionId)
+        spec = try container.decodeIfPresent(MissionSpec.self, forKey: .spec)
+        state = try container.decodeIfPresent(String.self, forKey: .state)
+        currentState = try container.decodeIfPresent(String.self, forKey: .currentState)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        approvalStatus = try container.decodeIfPresent(String.self, forKey: .approvalStatus)
+        riskLevel = try container.decodeIfPresent(String.self, forKey: .riskLevel)
+        // Extract title and objective from nested spec
+        title = spec?.title
+        objective = spec?.objective
+        if riskLevel == nil { riskLevel = spec?.riskLevel }
     }
 }
 

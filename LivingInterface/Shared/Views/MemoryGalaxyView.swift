@@ -60,12 +60,13 @@ struct MemoryGalaxyView: View {
                         .stroke(theme.galaxyAccent.opacity(0.5), lineWidth: 1)
                 )
 
-            // Label
+            // Label — high contrast + text shadow for legibility over any background
             Text(node.label)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundColor(engine.skinProfile.colors.textSecondary)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(NXColor.graphite)
+                .shadow(color: NXColor.warmIvory.opacity(0.7), radius: 2, x: 0, y: 0)
                 .offset(y: node.size / 2 + 10)
-                .opacity(engine.isReducedMotion ? 0.3 : node.opacity * 0.7)
+                .opacity(engine.isReducedMotion ? 0.35 : node.opacity * 0.85)
         }
         .scaleEffect(engine.isReducedMotion ? 1.0 : 0.95 + abs(engine.breathPhase) * 0.08)
         .animation(engine.isReducedMotion ? .none : .easeInOut(duration: 3.0), value: engine.breathPhase)

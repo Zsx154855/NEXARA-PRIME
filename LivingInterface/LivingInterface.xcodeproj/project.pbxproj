@@ -42,7 +42,9 @@
 		69DC8A30635843B496212F8F /* LivingInterfaceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC6EF32E0F3C41578A91DE65 /* LivingInterfaceUITests.swift */; };
 		26A30B1B23E843A6BD5F3A65 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF541F13C976403A8DF4526E /* iOSApp.swift */; };
 		87E6B82842F548F0A4F25450 /* EntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908CF36D2B13415196E88FDD /* EntryView.swift */; };
+		B6C7D8E9F0A1B2C3D4E5F6A7 /* ConversationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D5E6F7A8B9C0D1E2F3A4B5 /* ConversationListView.swift */; };
 		866BB4F18E86476F9829D370 /* d01_product_liquid.png in Resources */ = {isa = PBXBuildFile; fileRef = 8CD99997C5234F96B551B160 /* d01_product_liquid.png */; };
+		4CC33D8071E640DEA967986E /* nexara_sovereign_core.png in Resources */ = {isa = PBXBuildFile; fileRef = CC2D9391097748299F785270 /* nexara_sovereign_core.png */; };
 		A1B2C3D4E5F6A7B8C9D0E1F2 /* LivingInterfaceMacUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E2D3C4B5A6070809A0B1C2 /* LivingInterfaceMacUITests.swift */; };
 
 /* End PBXBuildFile section */
@@ -84,7 +86,9 @@
 		DC6EF32E0F3C41578A91DE65 /* LivingInterfaceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivingInterfaceUITests.swift; sourceTree = "<group>"; };
 		AF541F13C976403A8DF4526E /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
 		908CF36D2B13415196E88FDD /* EntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryView.swift; sourceTree = "<group>"; };
+		C4D5E6F7A8B9C0D1E2F3A4B5 /* ConversationListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListView.swift; sourceTree = "<group>"; };
 		8CD99997C5234F96B551B160 /* d01_product_liquid.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Resources/AppIcons/d01_product_liquid.png; sourceTree = SOURCE_ROOT; };
+		CC2D9391097748299F785270 /* nexara_sovereign_core.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Resources/AppIcons/nexara_sovereign_core.png; sourceTree = SOURCE_ROOT; };
 		693EC965AFFD45E4883D3F57 /* LivingInterface-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "LivingInterface-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBFEB6EC504D41FBBA1DA26C /* LivingInterface-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "LivingInterface-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		00C39C0410FB4C42AD303951 /* LivingInterfaceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LivingInterfaceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -141,6 +145,7 @@
 		3F77AD92FD5F4E6C8DC2816C /* iOS */ = {isa = PBXGroup; children = (
 				AF541F13C976403A8DF4526E,
 				908CF36D2B13415196E88FDD,
+				C4D5E6F7A8B9C0D1E2F3A4B5,
 				); path = iOS; sourceTree = "<group>"; };
 		DCBC22F9CBBA49118B31EABF /* Sources */ = {isa = PBXGroup; children = (
 				23772DB5C4FE44ABACDF5D24,
@@ -163,6 +168,7 @@
 				); sourceTree = "<group>"; };
 		348F4AD18D3D4DBA95B72BE0 /*  */ = {isa = PBXGroup; children = (
 				8CD99997C5234F96B551B160,
+				CC2D9391097748299F785270,
 				527A6E6AB5A54ED1868DDB18,
 				7A413973D3724107AA23F36D,
 				3F77AD92FD5F4E6C8DC2816C,
@@ -318,6 +324,7 @@
 		EBEB1B929F8A4EA39B338552 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
 				26A30B1B23E843A6BD5F3A65 /* iOSApp.swift in Sources */,
 				87E6B82842F548F0A4F25450 /* EntryView.swift in Sources */,
+				B6C7D8E9F0A1B2C3D4E5F6A7 /* ConversationListView.swift in Sources */,
 				05B4BF2F828E4AAFA96BE9F2 /* LivingModels.swift in Sources */,
 				871CE0D17E8F420A872A0E65 /* LifeState.swift in Sources */,
 				F0A673476229434E99BA86DA /* LiquidProfile.swift in Sources */,
@@ -391,7 +398,7 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		F826BE94288746A1B32FC783 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
-
+				4CC33D8071E640DEA967986E /* nexara_sovereign_core.png in Resources */,
 				); runOnlyForDeploymentPostprocessing = 0; };
 		0B625BFD90264EF492E0C385 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
 				866BB4F18E86476F9829D370 /* d01_product_liquid.png in Resources */,
@@ -409,13 +416,22 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		/* PHASE 11 (V1.1) 记录:
+		   1) macOS 产品目标 MARKETING_VERSION = 0.1.0 / CURRENT_PROJECT_VERSION = 1
+		      （经 GENERATE_INFOPLIST_FILE 写入 CFBundleShortVersionString / CFBundleVersion）。
+		   2) 部署目标统一：MACOSX_DEPLOYMENT_TARGET 26.0 → 15.0，与 SwiftPM Package.swift (.macOS(.v15)) 对齐。
+		      V1.1 代码经查无 macOS 26 专属 API（最高需求为双参 onChange，macOS 14+）。 */
 		9D62AB22BFA946EE8F0FA2B5 = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				INFOPLIST_KEY_CFBundleDisplayName = "柏韩";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "柏韩需要访问麦克风以感知音频环境，用于音频共振可视化效果。";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nexara.livinginterface.macos;
 				PRODUCT_NAME = "LivingInterface-macOS";
 				PRODUCT_MODULE_NAME = LivingInterface;
@@ -428,8 +444,12 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				INFOPLIST_KEY_CFBundleDisplayName = "柏韩";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "柏韩需要访问麦克风以感知音频环境，用于音频共振可视化效果。";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nexara.livinginterface.macos;
 				PRODUCT_NAME = "LivingInterface-macOS";
 				PRODUCT_MODULE_NAME = LivingInterface;
@@ -442,10 +462,12 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 19.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nexara.livinginterface.ios;
 				PRODUCT_NAME = "LivingInterface-iOS";
 				SDKROOT = iphoneos;
@@ -459,9 +481,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 19.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nexara.livinginterface.ios;
 				PRODUCT_NAME = "LivingInterface-iOS";
 				SDKROOT = iphoneos;
@@ -476,7 +500,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nexara.livinginterface.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PRODUCT_MODULE_NAME = LivingInterfaceTests;
@@ -489,7 +513,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nexara.livinginterface.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PRODUCT_MODULE_NAME = LivingInterfaceTests;
@@ -535,7 +559,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nexara.livinginterface.macuitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -551,7 +575,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nexara.livinginterface.macuitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -569,7 +593,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				IPHONEOS_DEPLOYMENT_TARGET = 19.0;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -582,7 +606,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_OPTIMIZATION_LEVEL = s;
 				IPHONEOS_DEPLOYMENT_TARGET = 19.0;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 			};
 			name = Release;
 		};

@@ -37,6 +37,9 @@
 	</array>
 	<key>CFBundleIcons</key>
 	<dict>
+		<!-- TODO(phase-12, brand): 主图标待「门+金点」品牌资产替换。
+		     当前沿用 d01_product_liquid 占位，不生成 PNG；
+		     正式资产到位后替换 CFBundlePrimaryIcon 的 CFBundleIconFiles。 -->
 		<key>CFBundlePrimaryIcon</key>
 		<dict>
 			<key>CFBundleIconFiles</key>
