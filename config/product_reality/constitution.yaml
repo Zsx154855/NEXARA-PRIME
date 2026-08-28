@@ -79,3 +79,9 @@ promotion_policy:
     stored_approval_required: true
     approval_must_bind_mission_and_proposal: true
     manual_release_authorization_required: true
+
+runtime_features:
+  # Operator directive (2026-08-28): conversation recaps / summarization
+  # must stay OFF. No automatic context summarization in any runtime layer.
+  recaps_enabled: false
+  context_summarization_enabled: false
