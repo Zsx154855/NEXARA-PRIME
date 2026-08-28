@@ -36,41 +36,28 @@ final class SpatialBrainEngine: ObservableObject {
         initializeMemoryNodes()
         initializeMissionOrbits()
         initializeLearningNodes()
-        startSpatialLoop()
+        // Spatial updates now driven by LivingEngine.tick() — no separate timer.
     }
 
     // MARK: - Layout Update
 
-    func applyLayout(_ layout: SpatialLayout) {
-        withAnimation(.easeInOut(duration: 1.0)) {
-            spatialLayout = layout
-            isHumanControlProminent = layout.controlPlanePosition > 0.8
-        }
-    }
-
-    // MARK: - Spatial Loop
-
-    private func startSpatialLoop() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.updateSpatialFrame()
-            }
-        }
-    }
-
-    private func updateSpatialFrame() {
+    /// Lightweight per-frame tick — only updates orbital angles (no animation transaction).
+    /// Called at ~20fps from LivingEngine's master breath cycle.
+    func tick() {
         time += 0.05
 
-        // Subtle camera drift
-        let driftX = sin(time * 0.15) * 6.0
-        let driftY = cos(time * 0.2) * 4.0
-        camera = SpatialCamera(
-            offsetX: driftX, offsetY: driftY,
-            zoom: 1.0 + sin(time * 0.08) * 0.03,
-            rotation: sin(time * 0.05) * 0.02
-        )
+        // Subtle camera drift — reduced frequency, only recompute every 4th tick (~5Hz)
+        if Int(time * 100) % 4 == 0 {
+            let driftX = sin(time * 0.15) * 6.0
+            let driftY = cos(time * 0.2) * 4.0
+            camera = SpatialCamera(
+                offsetX: driftX, offsetY: driftY,
+                zoom: 1.0 + sin(time * 0.08) * 0.03,
+                rotation: sin(time * 0.05) * 0.02
+            )
+        }
 
-        // Orbit memory nodes
+        // Orbit memory nodes — direct mutation, no animation
         for i in 0..<memoryNodes.count {
             memoryNodes[i].angle += memoryNodes[i].orbitSpeed * 0.05 * spatialLayout.memoryVisibility
             memoryNodes[i].opacity = spatialLayout.memoryVisibility * memoryNodes[i].baseOpacity
@@ -90,6 +77,28 @@ final class SpatialBrainEngine: ObservableObject {
 
         // Control plane prominence
         controlPlane.scale = 0.9 + spatialLayout.controlPlanePosition * 0.3
+    }
+
+    /// Full layout transition — only called on state changes (uses animation).
+    func applyLayout(_ layout: SpatialLayout) {
+        withAnimation(.easeInOut(duration: 1.0)) {
+            spatialLayout = layout
+            isHumanControlProminent = layout.controlPlanePosition > 0.8
+        }
+    }
+
+    // MARK: - Spatial Loop
+
+    // Spatial updates are now driven by LivingEngine's master breath cycle via tick().
+    // This method is kept for backward compatibility but is no longer called from init.
+    private func startSpatialLoop() {
+        // No-op: spatial updates driven by LivingEngine.tick()
+    }
+
+    // updateSpatialFrame() — replaced by tick() for per-frame updates.
+    // Kept for reference; all orbital/camera logic now lives in tick().
+    private func updateSpatialFrame() {
+        // No-op: logic moved to tick()
     }
 
     // MARK: - Initialization

@@ -41,6 +41,7 @@ struct LiquidCoreView: View {
             fresnelHighlightLayer
         }
         .frame(width: size * 1.4, height: size * 1.4)
+        .drawingGroup()  // GPU rasterize — single texture for all 5 layers
         .accessibilityLabel("NEXARA 液态生命核心，当前状态：\(engine.state.label)")
     }
 
@@ -215,7 +216,7 @@ struct LiquidCoreView: View {
                 style: StrokeStyle(lineWidth: 3, lineCap: .round)
             )
             .frame(width: size * 0.9, height: size * 0.9)
-            .blur(radius: 4)
+            .blur(radius: 2)  // reduced from 4 — GPU rasterization handles smoothness
             .opacity(engine.isReducedMotion ? 0.3 : 0.6 + abs(engine.breathPhase) * 0.15)
             .animation(engine.isReducedMotion ? .none : .easeInOut(duration: profile.dynamics.breathPeriod),
                        value: engine.breathPhase)

@@ -137,7 +137,8 @@ enum NXTypography {
 }
 
 enum NXColor {
-    // V2 Warm Ivory Palette
+    // ── V2 Warm Ivory Palette (Light Mode) ──
+    // Canonical base: warmIvory #F5F0E8 — the single source of truth.
     static let warmIvory = Color(hex: "F5F0E8")
     static let warmIvoryDark = Color(hex: "ECE4D8")
     static let mistGray = Color(hex: "D8D2CA")
@@ -151,19 +152,66 @@ enum NXColor {
     static let champagneGoldLight = Color(hex: "D8B878")
     static let mossGreen = Color(hex: "72865D")
     static let mossGreenLight = Color(hex: "95A885")
-    
-    // Glass
+
+    // ── Page Atmosphere Gradient Stops ──
+    // Visible "light-from-above" radial depth.
+    // atmoCenter creates a concentrated warm light pool at page top;
+    // atmoEdge provides a perceptible shadowed depth at page bottom.
+    static let atmoCenter = Color(hex: "FFFCF5")   // bright warm glow — light pool
+    static let atmoEdge   = Color(hex: "E8DFD0")   // shadowed edge — visible depth
+
+    // ── Section Surface Tints (ΔE 8–12 from warmIvory) ──
+    // Each NXSection applies a clearly perceptible hue shift.
+    // Visible as distinct "atmosphere" when switching between sections.
+    // PHASE 11 (V1.1): 六区 IA — 新增 memorySurface 供 MEMORY 区独立氛围。
+    static let coreSurface     = Color(hex: "FDF6E4")  // HOME — champagne warmth — gold undertone
+    static let identitySurface = Color(hex: "FDF2ED")  // CONVERSATION — soft rose — pink undertone
+    static let missionSurface  = Color(hex: "EDF2E7")  // MISSIONS — sage clarity — green-gray undertone
+    static let toolsSurface    = Color(hex: "F1EEF3")  // TRUST — lavender precision — violet undertone
+    static let memorySurface   = Color(hex: "F0EAE0")  // MEMORY — warm parchment — contemplative
+    static let systemSurface   = Color(hex: "E7E2D6")  // SETTINGS — stone calm — deeper muted tone
+
+    // ── Sidebar ──
+    static let sidebarBase = Color(hex: "EDE8E0")    // slightly recessed from page
+
+    // ── Glass Surface ──
     static let glassBorder = Color.white.opacity(0.35)
     static let glassTint = Color.white.opacity(0.18)
     static let glassHighlight = Color.white.opacity(0.65)
     static let glassShadow = Color.black.opacity(0.04)
     static let surfaceElevated = Color.white.opacity(0.75)
     static let surfaceBase = Color.white.opacity(0.55)
-    
-    // Status
+
+    // ── Status ──
     static let approveGreen = Color(hex: "6BA87A")
     static let rejectRed = Color(hex: "D48888")
     static let pauseAmber = Color(hex: "E0C8B0")
+
+    // ── Dark Mode Palette ──
+    // All dark colors preserve warmIvory's hue (40°) at deep luminance.
+    // The warm undertone prevents the sterile "pure black" feel.
+    static let darkBase      = Color(hex: "26231E")  // page background — warm charcoal
+    static let darkSurface   = Color(hex: "2D2A24")  // cards / elevated surfaces
+    static let darkElevated  = Color(hex: "33302A")  // prominent cards / modals
+    static let darkSidebar   = Color(hex: "1F1D19")  // recessed sidebar — deepest
+    static let darkText       = Color(hex: "E8E4DE")  // primary text — warm off-white
+    static let darkTextSecondary = Color(hex: "A8A29C")  // secondary text
+    static let darkTextTertiary = Color(hex: "78726C")   // tertiary / captions
+    static let darkBorder     = Color.white.opacity(0.08)  // subtle separators
+    static let darkShadow     = Color.black.opacity(0.3)   // deeper shadow for dark
+    static let darkChampagne  = Color(hex: "D4B06A")  // brighter gold — visible on dark
+    static let darkDustRose   = Color(hex: "E0A5AC")  // lighter rose
+    static let darkMossGreen  = Color(hex: "8DA878")  // lighter green
+}
+
+// MARK: - NEXARA Glass Enhancement Tokens
+// Minimal gradient tokens used exclusively by glassCard() for edge-light effect.
+// Page backgrounds use solid NXColor.warmIvory — no gradient system needed.
+
+enum NXGradient {
+    // ── Glass Surface Enhancement ──
+    static let glassEdgeLight = Color.white.opacity(0.25)
+    static let glassEdgeFade  = Color.white.opacity(0.04)
 }
 
 enum NXMotion {
