@@ -53,7 +53,9 @@ jobs:
       - name: Build macOS App (if present)
         run: |
           if [ -d "LivingInterface" ]; then
-            cd LivingInterface && CODE_SIGNING_ALLOWED=NO xcodebuild -project LivingInterface.xcodeproj -scheme LivingInterface-macOS -configuration Debug build
+            cd LivingInterface
+            SCHEME="LivingInterface-macOS"
+            CODE_SIGNING_ALLOWED=NO xcodebuild -project LivingInterface.xcodeproj -scheme "${SCHEME}" -configuration Debug build
           else
             echo "[SKIP] LivingInterface not present in repo"
           fi
