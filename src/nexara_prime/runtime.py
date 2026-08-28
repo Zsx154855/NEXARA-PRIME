@@ -22,6 +22,7 @@ from .independent_review import IndependentReview
 from .memory import MemoryKernel
 from .mission_compiler import MissionCompiler
 from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider, ProviderUnavailable, UnavailableProvider, redact_secrets
+from .provider_pool import ProviderPool
 from .conversations import ConversationStore
 from .conversation_intent import IntentDecision, RuntimeIntentClassifier
 from .models import (
@@ -352,6 +353,19 @@ class NexaraRuntime:
                 self._provider_unavailable = True
                 return ModelGateway(UnavailableProvider())
             provider = LocalModelProvider(endpoint, os.getenv("NEXARA_MODEL_NAME", "local-model"))
+        elif provider_name == "pool":
+            pool = ProviderPool.from_env()
+            if pool is None:
+                self._provider_unavailable = True
+                return ModelGateway(UnavailableProvider())
+            self._provider_unavailable = False
+            return ModelGateway(
+                pool,
+                fallback=None,
+                max_attempts=int(os.getenv("NEXARA_PROVIDER_MAX_ATTEMPTS", "2")),
+                retry_delay_seconds=float(os.getenv("NEXARA_PROVIDER_RETRY_DELAY_SECONDS", "0.25")),
+                breaker=_shared_breaker,
+            )
         else:
             self._provider_unavailable = True
             return ModelGateway(UnavailableProvider())

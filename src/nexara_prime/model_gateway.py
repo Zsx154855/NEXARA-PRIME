@@ -77,7 +77,7 @@ ProviderResult = ModelResponse
 class ModelProvider(Protocol):
     name: str
 
-    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None) -> ModelResponse:
+    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None, images: list[str] | None = None) -> ModelResponse:
         ...
 
 
@@ -85,8 +85,8 @@ class ModelProvider(Protocol):
 class MockProvider:
     name = "mock"
 
-    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None) -> ModelResponse:
-        del timeout_seconds
+    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None, images: list[str] | None = None) -> ModelResponse:
+        del timeout_seconds, images
         context = context or {}
         summary = redact_secrets(task.strip().replace("\n", " ")[:240])
         text = (
@@ -106,7 +106,8 @@ class UnavailableProvider:
 
     name = "unavailable"
 
-    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None) -> ModelResponse:
+    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None, images: list[str] | None = None) -> ModelResponse:
+        del images
         raise ProviderUnavailable("no_provider_configured: set NEXARA_MODEL_PROVIDER or enable mock_model for testing")
 
 
@@ -114,17 +115,28 @@ class _HTTPProvider:
     name = "http"
     requires_request_id = True
 
-    def __init__(self, endpoint: str, model: str, api_key: str | None = None, timeout_seconds: float = 20.0, max_output_tokens: int = 512):
+    def __init__(self, endpoint: str, model: str, api_key: str | None = None, timeout_seconds: float = 20.0, max_output_tokens: int = 512, anonymous: bool = False):
         self.endpoint = endpoint.rstrip("/")
         self.model = model
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
         self.max_output_tokens = max(1, max_output_tokens)
+        self.anonymous = anonymous
 
-    def _complete_http(self, system: str, task: str, context: dict[str, Any] | None, trace_id: str, timeout_seconds: float | None) -> ModelResponse:
+    def _complete_http(self, system: str, task: str, context: dict[str, Any] | None, trace_id: str, timeout_seconds: float | None, images: list[str] | None = None) -> ModelResponse:
         if not self.endpoint:
             raise ProviderUnavailable(f"{self.name}_endpoint_not_configured")
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": task}]
+        # Empty system messages break strict gateways (e.g. Kilo rejects
+        # {"role":"system","content":""} with 400) — omit when blank.
+        messages: list[dict[str, Any]] = []
+        if system.strip():
+            messages.append({"role": "system", "content": system})
+        if images:
+            user_content: Any = [{"type": "text", "text": task}]
+            user_content.extend({"type": "image_url", "image_url": {"url": image}} for image in images)
+            messages.append({"role": "user", "content": user_content})
+        else:
+            messages.append({"role": "user", "content": task})
         context_hash = str((context or {}).get("context_hash", ""))
         if context:
             model_visible_context = {
@@ -148,7 +160,7 @@ class _HTTPProvider:
         headers = {"Content-Type": "application/json", "X-NEXARA-Trace-ID": trace_id}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        elif self.name != "local":
+        elif self.name != "local" and not self.anonymous:
             raise ProviderUnavailable(f"{self.name}_api_key_not_configured")
         request = Request(f"{self.endpoint}/chat/completions", data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
         started = time.perf_counter()
@@ -171,7 +183,15 @@ class _HTTPProvider:
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderError(f"{self.name}_invalid_response_shape", code="invalid_response", retryable=False) from exc
         if not isinstance(text, str) or not text.strip():
-            raise ProviderError(f"{self.name}_empty_response", code="empty_response", retryable=False)
+            # Reasoning-first models (e.g. Kilo stepfun) can burn the whole
+            # max_tokens budget on internal reasoning and return an empty
+            # content; fall back to the reasoning text instead of failing.
+            message = body["choices"][0]["message"]
+            reasoning = message.get("reasoning_content") or message.get("reasoning")
+            if isinstance(reasoning, str) and reasoning.strip():
+                text = reasoning
+            else:
+                raise ProviderError(f"{self.name}_empty_response", code="empty_response", retryable=False)
         usage = body.get("usage", {})
         input_tokens = int(usage.get("prompt_tokens", estimate_tokens(system + task + json.dumps(context or {}, sort_keys=True))))
         output_tokens = int(usage.get("completion_tokens", estimate_tokens(str(text))))
@@ -199,12 +219,12 @@ class _HTTPProvider:
 class OpenAICompatibleProvider(_HTTPProvider):
     name = "openai_compatible"
 
-    def __init__(self, endpoint: str, model: str = "gpt-4o-mini", api_key: str | None = None, timeout_seconds: float = 20.0, provider_name: str = "openai_compatible", max_output_tokens: int = 512):
-        super().__init__(endpoint, model, api_key, timeout_seconds, max_output_tokens)
+    def __init__(self, endpoint: str, model: str = "gpt-4o-mini", api_key: str | None = None, timeout_seconds: float = 20.0, provider_name: str = "openai_compatible", max_output_tokens: int = 512, anonymous: bool = False):
+        super().__init__(endpoint, model, api_key, timeout_seconds, max_output_tokens, anonymous)
         self.name = provider_name
 
-    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None) -> ModelResponse:
-        return self._complete_http(system, task, context, trace_id, timeout_seconds)
+    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None, images: list[str] | None = None) -> ModelResponse:
+        return self._complete_http(system, task, context, trace_id, timeout_seconds, images)
 
 
 class LocalModelProvider(_HTTPProvider):
@@ -213,8 +233,8 @@ class LocalModelProvider(_HTTPProvider):
     def __init__(self, endpoint: str | None = None, model: str = "local-model", timeout_seconds: float = 30.0):
         super().__init__(endpoint or "", model, None, timeout_seconds)
 
-    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None) -> ModelResponse:
-        return self._complete_http(system, task, context, trace_id, timeout_seconds)
+    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None, images: list[str] | None = None) -> ModelResponse:
+        return self._complete_http(system, task, context, trace_id, timeout_seconds, images)
 
 
 class FallbackProvider:
@@ -226,13 +246,13 @@ class FallbackProvider:
         self.providers = providers
         self.last_attempts: list[str] = []
 
-    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None) -> ModelResponse:
+    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", timeout_seconds: float | None = None, images: list[str] | None = None) -> ModelResponse:
         self.last_attempts = []
         errors: list[str] = []
         for provider in self.providers:
             self.last_attempts.append(provider.name)
             try:
-                return provider.complete(system, task, context, trace_id=trace_id, timeout_seconds=timeout_seconds)
+                return provider.complete(system, task, context, trace_id=trace_id, timeout_seconds=timeout_seconds, images=images)
             except (ProviderError, TimeoutError) as exc:
                 errors.append(f"{provider.name}:{exc}")
         raise ProviderUnavailable("all_providers_failed:" + "|".join(errors))
@@ -251,7 +271,7 @@ class ModelGateway:
         self.breaker = breaker if breaker is not None else CircuitBreaker()
         self.last_usage: dict[str, Any] = {}
 
-    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", budget_remaining: float | None = None) -> ModelResponse:
+    def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", budget_remaining: float | None = None, images: list[str] | None = None) -> ModelResponse:
         last_error: Exception | None = None
         provider_name = getattr(self.provider, 'name', 'unknown')
         # ── Quota enforcement (Runtime Productization v1) ──
@@ -261,7 +281,7 @@ class ModelGateway:
             try:
                 if self.breaker.is_open(provider_name):
                     raise ProviderUnavailable("provider_circuit_open")
-                response = self.provider.complete(system, task, context, trace_id=trace_id)
+                response = self.provider.complete(system, task, context, trace_id=trace_id, images=images)
                 if getattr(self.provider, "requires_request_id", False) and not response.request_id:
                     raise ProviderError("provider_missing_request_id", code="invalid_response", retryable=False)
                 response = ModelResponse(
@@ -279,7 +299,7 @@ class ModelGateway:
                 if attempt < self.max_attempts:
                     time.sleep(self.retry_delay_seconds * attempt)
         if self.fallback:
-            response = self.fallback.complete(system, task, context, trace_id=trace_id)
+            response = self.fallback.complete(system, task, context, trace_id=trace_id, images=images)
             self.last_usage = {"provider": response.provider, "model": response.model, "input_tokens": response.input_tokens, "output_tokens": response.output_tokens, "total_tokens": response.total_tokens, "cost_usd": response.cost_usd, "trace_id": trace_id, "request_id": response.request_id, "latency_ms": response.latency_ms, "finish_reason": response.finish_reason, "retry_count": response.retry_count, "fallback": True}
             return response
         raise ProviderUnavailable(str(last_error or "provider_failed"))

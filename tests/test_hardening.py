@@ -38,7 +38,7 @@ class FlakyProvider:
     def __init__(self):
         self.calls = 0
 
-    def complete(self, system, task, context=None, *, trace_id="", timeout_seconds=None):
+    def complete(self, system, task, context=None, *, trace_id="", timeout_seconds=None, images=None):
         self.calls += 1
         if self.calls == 1:
             raise ProviderError("transient")
@@ -51,7 +51,7 @@ class JsonProvider:
     def __init__(self, text):
         self.text = text
 
-    def complete(self, system, task, context=None, *, trace_id="", timeout_seconds=None):
+    def complete(self, system, task, context=None, *, trace_id="", timeout_seconds=None, images=None):
         return ModelResponse(self.name, "json-v1", self.text, 2, 2, trace_id)
 
 
