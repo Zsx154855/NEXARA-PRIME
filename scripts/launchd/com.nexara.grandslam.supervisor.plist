@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.nexara.grandslam.supervisor</string>
+<key>ProgramArguments</key><array>
+<string>/opt/homebrew/bin/python3.12</string>
+<string>-m</string><string>nexara_grand_slam.supervisor_daemon</string>
+<string>--daemon</string></array>
+<key>EnvironmentVariables</key><dict>
+<key>PYTHONPATH</key>
+<string>/Volumes/NEXARA/.nexara/grand-slam-continuous-runner-v1/current/src</string>
+<key>NEXARA_RUNNER_ROOT</key>
+<string>/Volumes/NEXARA/.nexara/grand-slam-continuous-runner-v1</string></dict>
+<key>WorkingDirectory</key><string>/Volumes/NEXARA/.nexara/grand-slam-continuous-runner-v1/current</string>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><dict>
+<key>SuccessfulExit</key><true/>
+<key>Crashed</key><true/>
+<key>AfterInitialDemand</key><true/></dict>
+<key>ThrottleInterval</key><integer>5</integer>
+<key>ExitTimeOut</key><integer>10</integer>
+<key>StandardOutPath</key><string>/Users/agentos/Library/Logs/nexara/grandslam.stdout.log</string>
+<key>StandardErrorPath</key><string>/Users/agentos/Library/Logs/nexara/grandslam.stderr.log</string>
+<key>ProcessType</key><string>Background</string>
+<key>Nice</key><integer>10</integer>
+</dict></plist>

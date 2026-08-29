@@ -1,0 +1,80 @@
+{
+  "evidence_id": "launchd_autostart_20260828",
+  "date": "2026-08-28",
+  "mission": "为 NEXARA 服务添加 launchd 开机自启",
+  "repository": "/Users/agentos/NEXARA-PRIME",
+  "branch": "main",
+  "head": "ce3fffbe2613b6aca7de300694c305f737a4ba05",
+  "summary": "NEXARA 四个服务全部由 launchd 管理并验证健康；修复网关 launchd 实例被 nohup 旧进程占端口、隧道双实例竞争两个根因；plist 版本化入仓。",
+  "root_causes": [
+    {
+      "id": "RC1",
+      "issue": "com.nexara.moyan-gateway launchd 实例持续 exit 1",
+      "cause": "nohup 旧网关进程(PID 67777, 22:51 启动)占用 127.0.0.1:8788，launchd 实例 bind 失败 OSError 48 (Address already in use)",
+      "fix": "kill 67777 → launchctl kickstart -k com.nexara.moyan-gateway → launchd 实例接管(PID 88561)"
+    },
+    {
+      "id": "RC2",
+      "issue": "cloudflared 隧道双进程竞争",
+      "cause": "AgentOS 遗留 job com.agentos.cloudflare.named-tunnel(2026-06-12 创建)与新增 com.nexara.moyan-tunnel 指向同一隧道配置 agentoscloud-agentos-bridge.yml，KeepAlive 双实例注册",
+      "fix": "launchctl bootout com.agentos.cloudflare.named-tunnel + plist 重命名为 .disabled-20260828（可逆禁用，与既有 .disabled-20260614 模式一致）"
+    }
+  ],
+  "files_changed": [
+    {
+      "path": "scripts/launchd/com.nexara.moyan-gateway.plist",
+      "action": "added",
+      "sha256": "1d8c729615a64825afb9bd18e3e5acf17f96ce78c5e558e9054e41f0d5cecf6d",
+      "note": "从 ~/Library/LaunchAgents 版本化入仓；ProgramArguments=/opt/homebrew/bin/python3 workspace/ai-novel-app/server.py；MOYAN_ACCESS_TOKEN 环境变量；KeepAlive+RunAtLoad"
+    },
+    {
+      "path": "scripts/launchd/com.nexara.moyan-tunnel.plist",
+      "action": "added",
+      "sha256": "b8806cc881ec93f727447bb1a088dd1e62b52e4156811111138ed89450ce5f09",
+      "note": "cloudflared tunnel run agentoscloud-agentos-bridge；KeepAlive+RunAtLoad"
+    },
+    {
+      "path": "scripts/launchd/com.nexara.runtime.plist",
+      "action": "added",
+      "sha256": "d92fafbfbed668fb9e5425365bbf364e71e17fa952022d48218395b3cf9f3b5f",
+      "note": "uvicorn nexara_prime.api:app 127.0.0.1:8765；工作目录 /Volumes/NEXARA/NEXARA-PRIME（外置卷，未挂载时启动失败但 KeepAlive 自动恢复）"
+    },
+    {
+      "path": "scripts/launchd/com.nexara.grandslam.supervisor.plist",
+      "action": "added",
+      "sha256": "a01e9c5369c78e771c626ea2e262783cd2d3a3ee79f96df303dd8faaa0037703",
+      "note": "grand-slam supervisor daemon"
+    }
+  ],
+  "system_changes": [
+    "kill 67777（nohup 旧网关）",
+    "kill 76329（旧隧道实例，实为 com.agentos.cloudflare.named-tunnel 的 launchd 实例，KeepAlive 曾重启为 88203）",
+    "launchctl kickstart -k gui/501/com.nexara.moyan-gateway",
+    "launchctl bootout gui/501/com.agentos.cloudflare.named-tunnel",
+    "mv ~/Library/LaunchAgents/com.agentos.cloudflare.named-tunnel.plist → com.agentos.cloudflare.named-tunnel.plist.disabled-20260828"
+  ],
+  "verification": {
+    "launchctl_list": {
+      "com.nexara.moyan-gateway": "PID 88561 running, 127.0.0.1:8788 LISTEN",
+      "com.nexara.runtime": "PID 1008 running, 127.0.0.1:8765 LISTEN",
+      "com.nexara.grandslam.supervisor": "PID 723 running",
+      "com.nexara.moyan-tunnel": "PID 84355 running"
+    },
+    "http_checks": {
+      "GET http://127.0.0.1:8788/": 200,
+      "GET http://127.0.0.1:8788/api/library/books (no token)": 401,
+      "GET http://127.0.0.1:8788/api/library/books (with token)": 200,
+      "GET https://novel.agentoscloud.com/": 200,
+      "GET http://127.0.0.1:8765/docs": 200
+    },
+    "cloudflared_instance_count": 1
+  },
+  "notes": [
+    "com.nexara.runtime 的 exit 78 为历史退出码（/Volumes/NEXARA 未挂载期间），KeepAlive + ThrottleInterval=5 保证卷挂载后自动恢复；当前健康",
+    "launchctl list 中 -15/78 列为 last exit status 历史值，PID 列非 '-' 表示当前运行中",
+    "plist 为 macOS 用户级 LaunchAgent，登录后自动加载；如需系统级常驻可迁移 /Library/LaunchDaemons（需 sudo，未执行）"
+  ],
+  "state_change": "launchd 管理收敛：4 服务全健康；重复隧道 job 禁用",
+  "local_commit": "none（未提交，等待用户确认）",
+  "external_actions": "none"
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>com.nexara.moyan-tunnel</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/cloudflared</string>
+		<string>tunnel</string>
+		<string>--config</string>
+		<string>/Users/agentos/.cloudflared/agentoscloud-agentos-bridge.yml</string>
+		<string>run</string>
+		<string>agentoscloud-agentos-bridge</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/tmp/cloudflared.log</string>
+	<key>StandardOutPath</key>
+	<string>/tmp/cloudflared.log</string>
+</dict>
+</plist>
