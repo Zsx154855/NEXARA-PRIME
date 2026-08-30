@@ -177,6 +177,25 @@ def _clock_text(iso_timestamp: str) -> str:
     return moment.strftime("%H:%M")
 
 
+TOKEN_DAILY_LIMIT = 50000
+
+
+def _token_stats(runtime: Any) -> dict[str, Any]:
+    # PRIME 暂无 token 计量，V1.3 接入；先返回确定性占位值。
+    return {"todayUsed": 0, "todayLimit": TOKEN_DAILY_LIMIT}
+
+
+def _uptime_text(seconds: float) -> str:
+    total = int(seconds)
+    days, remainder = divmod(total, 86400)
+    hours = remainder // 3600
+    if days > 0:
+        return f"已稳定运行 {days} 天 {hours} 小时"
+    if hours > 0:
+        return f"已稳定运行 {hours} 小时"
+    return f"已稳定运行 {max(1, total // 60)} 分钟"
+
+
 def build_experience_router(runtime: Any) -> APIRouter:
     router = APIRouter(prefix="/v1", tags=["experience"])
 
@@ -278,5 +297,76 @@ def build_experience_router(runtime: Any) -> APIRouter:
         items.reverse()
         page_items, page_meta = paginate(items, page, limit)
         return envelope(page_items, **page_meta)
+
+    @router.get("/token/usage")
+    def token_usage() -> dict[str, Any]:
+        return envelope(_token_stats(runtime))
+
+    @router.get("/system/status")
+    def system_status() -> dict[str, Any]:
+        health = runtime.health()
+        core_ok = health["database_health"] == "ok"
+        provider_ok = health["provider_health"] == "healthy"
+        memory_total = len(runtime.memory.inspect(None))
+        active_mission = next((m for m in runtime.list_missions() if m.get("state") in _EXECUTING_STATES), None)
+        components = [
+            {
+                "id": "comp-1",
+                "name": "Runtime 核心",
+                "state": "normal" if core_ok else "warning",
+                "detail": "运行正常" if core_ok else "数据库不可用",
+            },
+            {
+                "id": "comp-2",
+                "name": "智能层",
+                "state": "normal" if provider_ok else "warning",
+                "detail": f"模型通道：{health['provider']}" if provider_ok else "模型通道不可用",
+            },
+            {
+                "id": "comp-3",
+                "name": "任务引擎",
+                "state": "busy" if active_mission else "normal",
+                "detail": (
+                    "执行中：" + (active_mission.get("spec", {}).get("title") or active_mission["mission_id"])
+                    if active_mission
+                    else "待命"
+                ),
+            },
+            {
+                "id": "comp-4",
+                "name": "恢复引擎",
+                "state": "normal",
+                "detail": "待命",
+            },
+            {
+                "id": "comp-5",
+                "name": "记忆系统",
+                "state": "normal",
+                "detail": f"已同步 {memory_total} 条",
+            },
+            {
+                "id": "comp-6",
+                "name": "治理层",
+                "state": "normal",
+                "detail": "宪章规则生效中",
+            },
+        ]
+        return envelope(
+            {
+                "runtimeVersion": f"V{health['version']}",
+                "mode": "本地主权运行",
+                "uptimeText": _uptime_text(health["uptime_seconds"]),
+                "components": components,
+                "token": _token_stats(runtime),
+            }
+        )
+
+    @router.get("/agents")
+    def agents_reserved() -> dict[str, Any]:
+        return envelope(None)
+
+    @router.get("/evaluations")
+    def evaluations_reserved() -> dict[str, Any]:
+        return envelope(None)
 
     return router

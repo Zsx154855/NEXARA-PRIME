@@ -164,3 +164,34 @@ def test_conversations_role_mapping(tmp_path: Path) -> None:
     assert roles == ["user", "nexara"]
     for message in conversation["messages"]:
         assert set(message) == {"id", "role", "text", "timeText"}
+
+
+def test_token_usage_shape(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    body = client.get("/v1/token/usage").json()
+    assert_envelope(body)
+    token = body["data"]
+    assert set(token) == {"todayUsed", "todayLimit"}
+    assert token["todayLimit"] == 50000 and token["todayUsed"] >= 0
+
+
+def test_system_status_shape(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    body = client.get("/v1/system/status").json()
+    assert_envelope(body)
+    status = body["data"]
+    assert set(status) == {"runtimeVersion", "mode", "uptimeText", "components", "token"}
+    assert status["runtimeVersion"].startswith("V")
+    assert [c["id"] for c in status["components"]] == ["comp-1", "comp-2", "comp-3", "comp-4", "comp-5", "comp-6"]
+    for component in status["components"]:
+        assert set(component) == {"id", "name", "state", "detail"}
+        assert component["state"] in {"normal", "busy", "paused", "warning"}
+    assert set(status["token"]) == {"todayUsed", "todayLimit"}
+
+
+def test_reserved_endpoints_return_null_data(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    for path in ("/v1/agents", "/v1/evaluations"):
+        body = client.get(path).json()
+        assert_envelope(body)
+        assert body["data"] is None
