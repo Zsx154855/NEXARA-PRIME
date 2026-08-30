@@ -82,3 +82,28 @@ def test_mission_state_mapping_table() -> None:
     assert map_mission_state("Completed") == "completed"
     assert map_mission_state("Failed") == "completed"
     assert map_mission_state("某个未知状态") == "planning"
+
+
+def test_user_envelope_and_fields(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    create_mission(client, "用户面板演示任务")
+    body = client.get("/v1/user").json()
+    assert_envelope(body)
+    user = body["data"]
+    assert set(user) == {"name", "level", "daysCount", "goalsCompleted", "missionsActive", "quote"}
+    assert user["missionsActive"] == 1
+    assert user["goalsCompleted"] == 0
+    assert user["daysCount"] >= 1
+
+
+def test_session_envelope_and_fields(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    body = client.get("/v1/session").json()
+    assert_envelope(body)
+    session = body["data"]
+    assert set(session) == {"id", "dateText", "greeting", "energyLevel", "suggestion", "highlights"}
+    assert 0.0 <= session["energyLevel"] <= 1.0
+    assert isinstance(session["highlights"], list) and session["highlights"]
+    assert "月" in session["dateText"] and "星期" in session["dateText"]
+    assert session["greeting"]
+    assert session["suggestion"]

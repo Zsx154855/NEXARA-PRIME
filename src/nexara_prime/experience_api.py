@@ -5,10 +5,14 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
+
+_WEEKDAY_CN = "一二三四五六日"
 
 _PLANNING_STATES = {
     "Intent",
@@ -129,5 +133,73 @@ def build_experience_router(runtime: Any) -> APIRouter:
         items.reverse()
         page_items, page_meta = paginate(items, page, limit)
         return envelope(page_items, **page_meta)
+
+    @router.get("/user")
+    def user() -> dict[str, Any]:
+        stats = runtime.stats()
+        records = runtime.list_missions()
+        created_dates = [r.get("spec", {}).get("created_at", "") for r in records]
+        created_dates = [d for d in created_dates if d]
+        days_count = 1
+        if created_dates:
+            first = sorted(created_dates)[0]
+            try:
+                days_count = max(1, (datetime.now(timezone.utc) - datetime.fromisoformat(first)).days + 1)
+            except ValueError:
+                days_count = 1
+        return envelope(
+            {
+                "name": os.environ.get("NEXARA_USER_NAME", "展星"),
+                "level": "观察者 · Lv.3",
+                "daysCount": days_count,
+                "goalsCompleted": stats["completed_missions"],
+                "missionsActive": stats["active_missions"],
+                "quote": "理解世界，也理解自己。",
+            }
+        )
+
+    @router.get("/session")
+    def session() -> dict[str, Any]:
+        health = runtime.health()
+        stats = runtime.stats()
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        hour = now.hour
+        if hour < 6:
+            greeting = "夜深了，也别忘了照顾自己。"
+        elif hour < 12:
+            greeting = "早上好，今天也从理解开始。"
+        elif hour < 14:
+            greeting = "中午好，先安顿好节奏。"
+        elif hour < 18:
+            greeting = "下午好，保持专注。"
+        else:
+            greeting = "晚上好，把今天稳稳收尾。"
+        healthy = health["database_health"] == "ok" and health["provider_health"] == "healthy"
+        energy = 0.85 if healthy else 0.40
+        missions = [_experience_mission(r) for r in runtime.list_missions()]
+        active = next((m for m in missions if m["status"] == "executing"), None)
+        planned = next((m for m in missions if m["status"] == "planning"), None)
+        focus = active or planned
+        if focus:
+            suggestion = f"建议推进「{focus['title']}」：{focus['nextStep']}"
+        else:
+            suggestion = "当前没有进行中的任务，可以从一个小目标开始。"
+        engine = "执行中：" + active["title"] if active else "待命"
+        memory_total = len(runtime.memory.inspect(None))
+        highlights = [
+            f"已完成 {stats['completed_missions']} 个任务",
+            f"记忆累计 {memory_total} 条",
+            f"任务引擎{('：' + engine) if active else '待命'}",
+        ]
+        return envelope(
+            {
+                "id": f"d-{now.strftime('%Y-%m-%d')}",
+                "dateText": f"{now.month}月{now.day}日 星期{_WEEKDAY_CN[now.weekday()]}",
+                "greeting": greeting,
+                "energyLevel": energy,
+                "suggestion": suggestion,
+                "highlights": highlights,
+            }
+        )
 
     return router
