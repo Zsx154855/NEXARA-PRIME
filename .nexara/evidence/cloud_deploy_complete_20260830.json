@@ -1,0 +1,74 @@
+{
+  "incident_id": "cloud_deploy_complete_20260830",
+  "title": "墨衍完整版云部署完成（Hermes 执行 + NEXARA 独立验证）",
+  "date": "2026-08-30",
+  "executor": "Hermes Agent v0.20.6（deepseek-v4-pro）+ NEXARA 第一方主权智能体（独立验证）",
+  "handover_doc": "reports/ai_novel_app_program/06_hermes_cloud_deploy_handover.md",
+  "target_server": {
+    "ssh": "ssh -p 51194 root@connect.bjb2.seetacloud.com",
+    "platform": "矩池云 AutoDL 容器（Ubuntu 22.04.1 x86_64，Python 3.10.12）",
+    "hostname": "autodl-container-c0lvq7fw2w-fa03db60"
+  },
+  "architecture_final": {
+    "public_url": "https://novel.agentoscloud.com",
+    "path": "用户 → Cloudflare → cloudflared 隧道（服务器，QUIC/http2）→ 127.0.0.1:8788（server.py + writer.py + library.db）",
+    "cloud_draft": "https://agentoscloud.com/api/chat（生产链路）",
+    "supervisor": "miniconda supervisord（novel-gateway + cloudflared-tunnel，autorestart）",
+    "autostart": "/etc/autodl.sh → supervisord（AutoDL customer.cmd.sh 钩子）"
+  },
+  "execution_phases": {
+    "phase1_files": "7 应用文件 + .env + token 文件上传至 /root/novel/（Hermes v2，2026-08-29 21:15）",
+    "phase2_token_rotation": "访问码轮换：Eii8cGvB → A1gqDWXr（.env 与 moyan_gateway_token.txt 同步）",
+    "phase3_services": "cloudflared 2026.8.2 安装（AutoDL 学术加速下载）；start-gateway.sh / start-tunnel.sh；supervisord 集成",
+    "phase4_switchover": "云端隧道注册 → 公网 200 → 本机 launchd 隧道停用（com.nexara.moyan-tunnel.plist.disabled-20260829）"
+  },
+  "deviations_from_handover": [
+    {
+      "item": "systemd → supervisord",
+      "reason": "容器无 systemd（PID 1 = bash /init/boot/boot.sh），改用容器内 miniconda supervisord 4.3.0 守护"
+    },
+    {
+      "item": "GitHub 被墙 → AutoDL 学术加速",
+      "reason": "服务器直连 GitHub HTTP 000；经 /etc/network_turbo 代理下载 cloudflared 官方二进制（16.8s）"
+    },
+    {
+      "item": "隧道配置用 TunnelID（UUID）",
+      "reason": "服务器无 cert.pem，config.yml 用 tunnel: d206a897-619d-499d-ae16-9d60a93efbe6 免 origin cert"
+    },
+    {
+      "item": "writer.py Python 3.10 兼容修复",
+      "reason": "服务器 Python 3.10.12 禁止 f-string 内反斜杠（本机 3.14 允许），264/265 行 {\\n.join} → {chr(10).join}；本机与服务器已同步（md5 一致）"
+    }
+  ],
+  "verification": {
+    "gateway_local": "curl 127.0.0.1:8788/ → 200（带 X-Access-Token: A1gqDWXr）",
+    "auth_gate": "无 token → 401（API）；带 token → 200",
+    "library": "42 章 = 32 done + 10 pending；卷四·轮回/卷五·归途 planned",
+    "real_write_test": "task 试写一章（cloud 档真实模型）→ done，写入 seq=32《第二章》3942 字（真实玄幻正文）",
+    "public_url": "https://novel.agentoscloud.com/ → 200（1.6-4.6s，NEXARA 独立复验 3 次全 200）",
+    "kill_selfheal": "kill server.py（PID 2930）→ supervisord 自动重启（PID 3031）→ 8788 恢复 200",
+    "autostart_sim": "杀 supervisord → bash /etc/autodl.sh → 双 program 恢复 → 8788 200（软模拟；真实 reboot 待用户在矩池云控制台执行）"
+  },
+  "independent_recheck_by_nexara": {
+    "public_no_token": "200（首页静态页不鉴权，API 才鉴权；与 Hermes 报告的 401 针对 API 不冲突）",
+    "public_with_token": "200",
+    "file_consistency": "server.py/writer.py/library.py/index.html/app.js/styles.css 六文件 md5 与本机完全一致",
+    "library_db_diff": "本地与云端 md5 不同属预期（云端已写入试写章节 seq=32）"
+  },
+  "new_access_code": "A1gqDWXr",
+  "pending_items": [
+    "真实 reboot 验证：需用户在矩池云控制台执行「重启实例」确认 /etc/autodl.sh 自动拉起",
+    "矩池云实例关机/释放后 SSH 端口 51194 可能变化，需重新提供",
+    "library.db 每日备份 cron 未配置（建议按交接文档 §6）"
+  ],
+  "state_changes": {
+    "local_tunnel": "已停用（launchd bootout + plist 重命名 .disabled-20260829，经用户批准）",
+    "local_gateway": "保留 127.0.0.1:8788 供本地开发",
+    "access_code": "已轮换为 A1gqDWXr"
+  },
+  "security": {
+    "password_handling": "root 密码仅用于一次性公钥安装（SSH_ASKPASS，用后即删），未写入任何文件",
+    "ssh_key_auth": "本机 ed25519 公钥已安装，Hermes 全程免密",
+    "untouched": "未触碰 /root/autodl-* 未知归属文件；无 DNS/Cloudflare 面板变更；无矩池云防火墙变更"
+  }
+}

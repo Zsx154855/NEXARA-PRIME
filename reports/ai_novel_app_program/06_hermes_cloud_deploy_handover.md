@@ -3,7 +3,19 @@
 - 交接人：NEXARA 第一方主权智能体（本会话）
 - 交接对象：Hermes（执行云服务器部署）
 - 日期：2026-08-29
-- 状态：**决策完备，凭本文档可独立执行**
+- 状态：**✅ 已完成（2026-08-30 部署成功并独立验证）** — 执行详情见 `.nexara/evidence/cloud_deploy_complete_20260830.json`
+
+## 0. 执行结果摘要（2026-08-30 更新）
+
+- 公网 `https://novel.agentoscloud.com` → HTTP 200（云端隧道已接管）
+- 新访问码：**A1gqDWXr**（旧码 Eii8cGvB 已失效）
+- 本机 launchd 隧道已停用（`com.nexara.moyan-tunnel.plist.disabled-20260829`），本机网关 127.0.0.1:8788 保留供本地开发
+- **4 处环境偏差及处置**（详见 Evidence）：
+  1. 容器无 systemd → 改用 miniconda supervisord 守护（novel-gateway + cloudflared-tunnel，autorestart）
+  2. GitHub 被墙 → 经 `/etc/network_turbo` 学术加速下载 cloudflared
+  3. 隧道配置用 TunnelID（`d206a897-619d-499d-ae16-9d60a93efbe6`）免 origin cert
+  4. writer.py 264/265 行 f-string 反斜杠 → `chr(10)` 修复（本机与服务器已同步，md5 一致）
+- **剩余待办**：① 矩池云控制台「重启实例」做真实 reboot 验证；② SSH 端口 51194 在实例重开机后可能变化；③ library.db 每日备份 cron 未配置
 
 ---
 
