@@ -143,6 +143,40 @@ def days_since_first_record(records: list[dict], now: datetime | None = None) ->
     return max(1, (now - first).days + 1)
 
 
+_EXPERIENCE_KINDS = {"experience", "failure_experience"}
+_RELATION_KINDS = {"preference", "short_term", "temporary_context"}
+
+
+def map_memory_kind(kind: str) -> str:
+    if kind in _EXPERIENCE_KINDS:
+        return "experience"
+    if kind in _RELATION_KINDS:
+        return "relation"
+    return "knowledge"
+
+
+def _experience_memory(record: dict[str, Any]) -> dict[str, Any]:
+    content = record.get("content", "")
+    summary = content if len(content) <= 80 else content[:79] + "…"
+    return {
+        "id": record.get("memory_id", ""),
+        "kind": map_memory_kind(record.get("kind", "")),
+        "title": record.get("key", ""),
+        "summary": summary,
+        "updatedText": relative_time_text(record.get("created_at", "")),
+    }
+
+
+def _clock_text(iso_timestamp: str) -> str:
+    try:
+        moment = datetime.fromisoformat(iso_timestamp)
+    except (ValueError, TypeError):
+        return ""
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(ZoneInfo("Asia/Shanghai"))
+    return moment.strftime("%H:%M")
+
+
 def build_experience_router(runtime: Any) -> APIRouter:
     router = APIRouter(prefix="/v1", tags=["experience"])
 
@@ -211,5 +245,38 @@ def build_experience_router(runtime: Any) -> APIRouter:
                 "highlights": highlights,
             }
         )
+
+    @router.get("/memories")
+    def memories(page: int = 1, limit: int = 20) -> dict[str, Any]:
+        items = [_experience_memory(r) for r in runtime.memory.inspect(None)]
+        items.reverse()
+        page_items, page_meta = paginate(items, page, limit)
+        return envelope(page_items, **page_meta)
+
+    @router.get("/conversations")
+    def conversations(page: int = 1, limit: int = 20) -> dict[str, Any]:
+        items = []
+        for conversation in runtime.conversations.list():
+            messages = []
+            for message in runtime.conversations.messages(conversation["conversation_id"]):
+                role = "nexara" if message.get("role") == "assistant" else "user"
+                messages.append(
+                    {
+                        "id": message.get("message_id", ""),
+                        "role": role,
+                        "text": message.get("content", ""),
+                        "timeText": _clock_text(message.get("created_at", "")),
+                    }
+                )
+            items.append(
+                {
+                    "id": conversation["conversation_id"],
+                    "title": conversation.get("title") or "对话",
+                    "messages": messages,
+                }
+            )
+        items.reverse()
+        page_items, page_meta = paginate(items, page, limit)
+        return envelope(page_items, **page_meta)
 
     return router

@@ -121,3 +121,46 @@ def test_days_since_first_record_handles_naive_and_bad_input() -> None:
     assert days_since_first_record(naive, now=now) == 2  # naive 被当作 UTC，不抛 TypeError
     aware = [{"spec": {"created_at": "2026-08-29T12:00:00+08:00"}}]
     assert days_since_first_record(aware, now=now) == 3
+
+
+def test_memory_kind_mapping_table() -> None:
+    from nexara_prime.experience_api import map_memory_kind
+
+    assert map_memory_kind("experience") == "experience"
+    assert map_memory_kind("failure_experience") == "experience"
+    assert map_memory_kind("fact") == "knowledge"
+    assert map_memory_kind("user_fact") == "knowledge"
+    assert map_memory_kind("project_fact") == "knowledge"
+    assert map_memory_kind("decision") == "knowledge"
+    assert map_memory_kind("patch") == "knowledge"
+    assert map_memory_kind("system_rule") == "knowledge"
+    assert map_memory_kind("preference") == "relation"
+    assert map_memory_kind("short_term") == "relation"
+    assert map_memory_kind("temporary_context") == "relation"
+    assert map_memory_kind("未知类别") == "knowledge"
+
+
+def test_memories_envelope_and_fields(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    body = client.get("/v1/memories").json()
+    assert_envelope(body)
+    assert body["data"] == []
+    assert body["meta"]["total"] == 0
+
+
+def test_conversations_role_mapping(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    created = client.post("/api/conversations", json={"title": "对接联调"}).json()
+    client.post(
+        f"/api/conversations/{created['conversation_id']}/messages",
+        json={"content": "你好", "idempotency_key": "exp-1"},
+    )
+    body = client.get("/v1/conversations").json()
+    assert_envelope(body)
+    conversation = body["data"][0]
+    assert set(conversation) == {"id", "title", "messages"}
+    assert conversation["title"] == "对接联调"
+    roles = [m["role"] for m in conversation["messages"]]
+    assert roles == ["user", "nexara"]
+    for message in conversation["messages"]:
+        assert set(message) == {"id", "role", "text", "timeText"}
