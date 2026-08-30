@@ -5,7 +5,7 @@
 
 ## 1. 交付内容
 
-**NEXARA-PRIME（3e07318 → 24781e5，7 个提交）**
+**NEXARA-PRIME（3e07318 → 2a6799a，8 个提交；本报告修订提交为最终封存）**
 - `src/nexara_prime/experience_api.py`：V1.0 契约适配层。九个端点
   （/v1/user、/v1/session、/v1/conversations、/v1/agents*、/v1/missions、
   /v1/memories、/v1/evaluations*、/v1/token/usage、/v1/system/status，*为预留，
@@ -15,7 +15,7 @@
   角色映射、时间戳健壮性、运行时长分支）。
 - `scripts/seed_experience_demo.py`：端到端演示种子脚本（HTTP 注入）。
 
-**NEXARA-PRODUCT（45bb5b2 → d94d1ad，8 个提交）**
+**NEXARA-PRODUCT（45bb5b2 → 0ff2afd，10 个提交）**
 - Shared 包：`NexaraExperienceAPI` 协议、`NexaraEnvelope` 信封、
   `NexaraMockExperienceAPI`、`NexaraLiveAPI`（URLSession）、
   `NexaraExperienceStore`（@Observable，失败可重试）、`NexaraExperienceProvider`
