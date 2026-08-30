@@ -327,7 +327,7 @@ def build_experience_router(runtime: Any) -> APIRouter:
                 "name": "任务引擎",
                 "state": "busy" if active_mission else "normal",
                 "detail": (
-                    "执行中：" + (active_mission.get("spec", {}).get("title") or active_mission["mission_id"])
+                    "执行中：" + (active_mission.get("spec", {}).get("title") or active_mission.get("mission_id", ""))
                     if active_mission
                     else "待命"
                 ),

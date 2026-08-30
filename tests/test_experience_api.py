@@ -195,3 +195,12 @@ def test_reserved_endpoints_return_null_data(tmp_path: Path) -> None:
         body = client.get(path).json()
         assert_envelope(body)
         assert body["data"] is None
+
+
+def test_uptime_text_branches() -> None:
+    from nexara_prime.experience_api import _uptime_text
+
+    assert _uptime_text(90) == "已稳定运行 1 分钟"
+    assert _uptime_text(30) == "已稳定运行 1 分钟"
+    assert _uptime_text(3600 * 5 + 61) == "已稳定运行 5 小时"
+    assert _uptime_text(86400 * 12 + 3600 * 6 + 300) == "已稳定运行 12 天 6 小时"
