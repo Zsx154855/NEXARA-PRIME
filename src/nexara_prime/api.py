@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .config import Settings
+from .experience_api import build_experience_router
 try:
     from .knowledge_universe import scan_vault
 except ImportError:
@@ -59,6 +60,8 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     app.state.runtime = runtime
     default_vault = Path(__file__).resolve().parents[2] / "docs"
     app.state.knowledge_vault = Path(os.environ.get("NEXARA_VAULT_PATH", default_vault))
+
+    app.include_router(build_experience_router(runtime))
 
     def get_mission(mission_id: str):
         try:
