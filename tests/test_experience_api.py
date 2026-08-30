@@ -107,3 +107,17 @@ def test_session_envelope_and_fields(tmp_path: Path) -> None:
     assert "月" in session["dateText"] and "星期" in session["dateText"]
     assert session["greeting"]
     assert session["suggestion"]
+
+
+def test_days_since_first_record_handles_naive_and_bad_input() -> None:
+    from datetime import datetime, timezone
+
+    from nexara_prime.experience_api import days_since_first_record
+
+    now = datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc)
+    assert days_since_first_record([], now=now) == 1
+    assert days_since_first_record([{"spec": {"created_at": "not-a-date"}}], now=now) == 1
+    naive = [{"spec": {"created_at": "2026-08-30T12:00:00"}}]
+    assert days_since_first_record(naive, now=now) == 2  # naive 被当作 UTC，不抛 TypeError
+    aware = [{"spec": {"created_at": "2026-08-29T12:00:00+08:00"}}]
+    assert days_since_first_record(aware, now=now) == 3

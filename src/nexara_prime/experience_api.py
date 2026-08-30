@@ -42,6 +42,10 @@ _EXECUTING_STATES = {
 _PAUSED_STATES = {"Paused", "Blocked"}
 _COMPLETED_STATES = {"Completed", "Failed", "RolledBack", "Cancelled"}
 
+# 精力值为 V1.0 确定性推导：健康=高精力，降级=低精力（契约无真实来源，见 SEAL 已知限制）。
+_ENERGY_HEALTHY = 0.85
+_ENERGY_DEGRADED = 0.40
+
 
 def map_mission_state(state: str) -> str:
     if state in _EXECUTING_STATES:
@@ -124,6 +128,21 @@ def relative_time_text(iso_timestamp: str, now: datetime | None = None) -> str:
     return f"{days} 天前"
 
 
+def days_since_first_record(records: list[dict], now: datetime | None = None) -> int:
+    created_dates = [r.get("spec", {}).get("created_at", "") for r in records]
+    created_dates = [d for d in created_dates if d]
+    if not created_dates:
+        return 1
+    try:
+        first = datetime.fromisoformat(sorted(created_dates)[0])
+    except ValueError:
+        return 1
+    if first.tzinfo is None:
+        first = first.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    return max(1, (now - first).days + 1)
+
+
 def build_experience_router(runtime: Any) -> APIRouter:
     router = APIRouter(prefix="/v1", tags=["experience"])
 
@@ -138,20 +157,11 @@ def build_experience_router(runtime: Any) -> APIRouter:
     def user() -> dict[str, Any]:
         stats = runtime.stats()
         records = runtime.list_missions()
-        created_dates = [r.get("spec", {}).get("created_at", "") for r in records]
-        created_dates = [d for d in created_dates if d]
-        days_count = 1
-        if created_dates:
-            first = sorted(created_dates)[0]
-            try:
-                days_count = max(1, (datetime.now(timezone.utc) - datetime.fromisoformat(first)).days + 1)
-            except ValueError:
-                days_count = 1
         return envelope(
             {
                 "name": os.environ.get("NEXARA_USER_NAME", "展星"),
                 "level": "观察者 · Lv.3",
-                "daysCount": days_count,
+                "daysCount": days_since_first_record(records),
                 "goalsCompleted": stats["completed_missions"],
                 "missionsActive": stats["active_missions"],
                 "quote": "理解世界，也理解自己。",
@@ -175,7 +185,7 @@ def build_experience_router(runtime: Any) -> APIRouter:
         else:
             greeting = "晚上好，把今天稳稳收尾。"
         healthy = health["database_health"] == "ok" and health["provider_health"] == "healthy"
-        energy = 0.85 if healthy else 0.40
+        energy = _ENERGY_HEALTHY if healthy else _ENERGY_DEGRADED
         missions = [_experience_mission(r) for r in runtime.list_missions()]
         active = next((m for m in missions if m["status"] == "executing"), None)
         planned = next((m for m in missions if m["status"] == "planning"), None)
