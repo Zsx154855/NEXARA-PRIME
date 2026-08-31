@@ -87,6 +87,7 @@ DerivedData/
 LivingInterface/.derivedData/
 LivingInterface/build/
 LivingInterface/.build/
+release/
 xcuserdata/
 *.xcuserstate
 .venv-fresh/
