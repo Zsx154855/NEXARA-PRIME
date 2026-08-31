@@ -252,7 +252,7 @@ class FallbackProvider:
 
 
 class ModelGateway:
-    def __init__(self, provider: ModelProvider | None = None, fallback: ModelProvider | None = None, *, max_attempts: int = 2, retry_delay_seconds: float = 0.02, breaker: "CircuitBreaker | None" = None):
+    def __init__(self, provider: ModelProvider | None = None, fallback: ModelProvider | None = None, *, max_attempts: int = 2, retry_delay_seconds: float = 0.02, breaker: "CircuitBreaker | None" = None, cost_governor: "TokenGovernor | None" = None):
         if provider is None:
             raise ValueError("ModelGateway requires a concrete provider; use UnavailableProvider instead of None")
         self.provider = provider
@@ -260,6 +260,7 @@ class ModelGateway:
         self.max_attempts = max(1, max_attempts)
         self.retry_delay_seconds = retry_delay_seconds
         self.breaker = breaker if breaker is not None else CircuitBreaker()
+        self.cost_governor = cost_governor
         self.last_usage: dict[str, Any] = {}
 
     def complete(self, system: str, task: str, context: dict[str, Any] | None = None, *, trace_id: str = "", budget_remaining: float | None = None) -> ModelResponse:
@@ -281,6 +282,7 @@ class ModelGateway:
                 )
                 self.breaker.record_success(provider_name)
                 self.last_usage = {"provider": response.provider, "model": response.model, "input_tokens": response.input_tokens, "output_tokens": response.output_tokens, "total_tokens": response.total_tokens, "cost_usd": response.cost_usd, "trace_id": trace_id, "request_id": response.request_id, "latency_ms": response.latency_ms, "finish_reason": response.finish_reason, "retry_count": response.retry_count}
+                self._record_to_governor(response)
                 return response
             except (ProviderError, TimeoutError) as exc:
                 last_error = exc
@@ -292,8 +294,17 @@ class ModelGateway:
         if self.fallback:
             response = self.fallback.complete(system, task, context, trace_id=trace_id)
             self.last_usage = {"provider": response.provider, "model": response.model, "input_tokens": response.input_tokens, "output_tokens": response.output_tokens, "total_tokens": response.total_tokens, "cost_usd": response.cost_usd, "trace_id": trace_id, "request_id": response.request_id, "latency_ms": response.latency_ms, "finish_reason": response.finish_reason, "retry_count": response.retry_count, "fallback": True}
+            self._record_to_governor(response)
             return response
         raise ProviderUnavailable(str(last_error or "provider_failed"))
+
+    def _record_to_governor(self, response: ModelResponse) -> None:
+        if self.cost_governor is None:
+            return
+        total = response.total_tokens or response.input_tokens + response.output_tokens
+        self.cost_governor.record_usage("provider", response.provider, total, response.cost_usd)
+        self.cost_governor.record_usage("model", response.model, total, response.cost_usd)
+        self.cost_governor.record_usage("daily", "daily", total, response.cost_usd)
 
     def generate_reply(self, conversation_id: str, messages: list[dict[str, Any]], system_context: str, runtime_context: dict[str, Any] | None = None, provider_policy: dict[str, Any] | None = None) -> ProviderResult:
         """Unified provider contract used by conversation callers."""

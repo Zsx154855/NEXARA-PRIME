@@ -20,8 +20,10 @@ from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine, WriterLeaseManager
 from .independent_review import IndependentReview
 from .memory import MemoryKernel
+from .memory_os import MemoryOS, MemoryType
 from .mission_compiler import MissionCompiler
 from .model_gateway import LocalModelProvider, ModelGateway, MockProvider, OpenAICompatibleProvider, ProviderUnavailable, UnavailableProvider, redact_secrets
+from .cost_governor import TokenGovernor
 from .conversations import ConversationStore
 from .conversation_intent import IntentDecision, RuntimeIntentClassifier
 from .models import (
@@ -29,6 +31,7 @@ from .models import (
     now_iso, new_id,
 )
 from .recovery import DurableRecovery
+from .recovery_runtime import RecoveryExecutor
 from .real_context import ContextCollectionError, RealRepositoryContext, RepositoryContext
 from .scheduler import AdaptiveScheduler
 from .security_audit import SecurityAuditLedger
@@ -180,6 +183,8 @@ _adaptive_escalation = None
 _adaptive_tokens_v2 = None
 # Shared CircuitBreaker — single authority for ModelGateway + ModelRouter
 _shared_breaker = None
+# Shared TokenGovernor — five-scope budget ledger for all gateway paths
+_shared_governor = TokenGovernor()
 
 def _ensure_adaptive_imports():
     global _ADAPTIVE_IMPORTS_DONE, _adaptive_triage, _adaptive_scheduler_v2
@@ -244,6 +249,7 @@ class NexaraRuntime:
         self.audit = SecurityAuditLedger(self.store)
         self.evidence = EvidenceStore(self.store, self.events)
         self.memory = MemoryKernel(self.store, self.events, self.evidence)
+        self.memory_os = MemoryOS(self.store)
         self.policy = PolicyEngine()
         self.approvals = ApprovalEngine(self.store, self.events)
         self.leases = WriterLeaseManager(self.store, self.events)
@@ -324,7 +330,7 @@ class NexaraRuntime:
     def _build_model_gateway(self) -> ModelGateway:
         provider_name = self.settings.model_provider.lower()
         if self.settings.mock_model:
-            return ModelGateway(MockProvider(), fallback=None)
+            return ModelGateway(MockProvider(), fallback=None, cost_governor=_shared_governor)
         if provider_name == "mock" and not self.settings.mock_model:
             self._provider_unavailable = True
             return ModelGateway(UnavailableProvider())
@@ -367,6 +373,7 @@ class NexaraRuntime:
             max_attempts=int(os.getenv("NEXARA_PROVIDER_MAX_ATTEMPTS", "2")),
             retry_delay_seconds=float(os.getenv("NEXARA_PROVIDER_RETRY_DELAY_SECONDS", "0.25")),
             breaker=_shared_breaker,
+            cost_governor=_shared_governor,
         )
 
     @staticmethod
@@ -963,6 +970,13 @@ class NexaraRuntime:
             raise
         except Exception as exc:
             mission.result["error"] = str(exc)
+            policy = RecoveryExecutor().classify(type(exc).__name__, str(exc))
+            mission.result["recovery"] = {
+                "error_code": policy["error_code"],
+                "retryable": policy["retryable"],
+                "recovery_strategy": policy["recovery_strategy"],
+                "terminal_state": policy["terminal_state"],
+            }
             self._save_mission(mission)
             current = MissionState(mission.state)
             if current not in {MissionState.COMPLETED, MissionState.ROLLED_BACK, MissionState.FAILED}:
@@ -1115,6 +1129,13 @@ class NexaraRuntime:
                     break
         mem = self.memory.patch(mission.mission_id, "mission.completed_report", "A bounded local report was generated and verified.", mission.trace_id, re_id or "", idempotency_key=mkey)
         mission.result["memory_patch_id"] = mem.memory_id
+        lifecycle_entry = self.memory_os.create_entry(
+            type=MemoryType.EPISODIC,
+            content="mission.completed_report",
+            source=mission.mission_id,
+            provenance={"trace_id": mission.trace_id, "evidence_id": re_id or "", "kernel_patch_id": mem.memory_id},
+        )
+        mission.result["memory_lifecycle_id"] = lifecycle_entry.memory_id
         self._save_mission(mission)
         self._advance(mission, MissionState.EVALUATION, "kairos")
         return self._evaluate_stage(mission)
