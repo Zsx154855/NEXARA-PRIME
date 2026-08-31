@@ -177,8 +177,8 @@ struct BrainView: View {
             task.environment = [
                 "PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/agentos/.local/bin",
                 "HOME": "/Users/agentos",
-                "PYTHONPATH": "/Users/agentos/NEXARA-PRIME/src",
-                "NEXARA_LOCAL_NODE_COMMAND": "/Users/agentos/NEXARA-PRIME/.venv/bin/python3 -m uvicorn nexara_prime.api:app --host 127.0.0.1 --port \(RuntimeConfiguration.shared.port)"
+                "PYTHONPATH": "/Volumes/NEXARA/NEXARA-PRIME/src",
+                "NEXARA_LOCAL_NODE_COMMAND": "/Volumes/NEXARA/NEXARA-PRIME/.venv/bin/python3 -m uvicorn nexara_prime.api:app --host 127.0.0.1 --port \(RuntimeConfiguration.shared.port)"
             ]
             task.standardOutput = FileHandle.nullDevice
             task.standardError = FileHandle.nullDevice

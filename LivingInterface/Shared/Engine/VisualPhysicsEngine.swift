@@ -86,6 +86,7 @@ struct VisualPhysicsEngine {
 
     // MARK: - Organic Noise Field
 
+    /// Full 4-octave noise — high quality, more trig calls.
     static func noiseField(
         at point: CGPoint,
         time: Double,
@@ -103,6 +104,30 @@ struct VisualPhysicsEngine {
         let n4 = sin(x * 8.3 + y * 5.9 - t * 0.7) * 0.125
 
         let total = (n1 + n2 + n3 + n4) * strength
+        let angle = total * .pi
+        let magnitude = abs(total)
+
+        return CGPoint(
+            x: cos(angle) * magnitude * 20,
+            y: sin(angle) * magnitude * 20
+        )
+    }
+
+    /// Fast 2-octave noise — ~50% fewer trig calls, visually similar for ambient use.
+    static func noiseFieldFast(
+        at point: CGPoint,
+        time: Double,
+        scale: Double = 0.01,
+        strength: Double = 1.0
+    ) -> CGPoint {
+        let x = point.x * scale
+        let y = point.y * scale
+        let t = time
+
+        let n1 = sin(x * 1.7 + t * 0.3) * cos(y * 2.1 + t * 0.4)
+        let n2 = sin(x * 3.4 + y * 1.3 + t * 0.5) * 0.5
+
+        let total = (n1 + n2) * strength
         let angle = total * .pi
         let magnitude = abs(total)
 

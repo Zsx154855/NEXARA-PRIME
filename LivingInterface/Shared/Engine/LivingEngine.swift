@@ -125,7 +125,8 @@ final class LivingEngine: ObservableObject {
                 let elapsed = Date().timeIntervalSince1970.truncatingRemainder(dividingBy: period)
                 let phase = elapsed / period
                 self.breathPhase = sin(phase * 2 * .pi)
-                self.spatialBrain.applyLayout(self.stateMapper.spatialLayout)
+                // spatialBrain tick — only update orbit angles, NOT layout animation
+                self.spatialBrain.tick()
             }
         }
     }
