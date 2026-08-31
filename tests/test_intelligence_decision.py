@@ -140,3 +140,82 @@ class TestDecisionEngine:
         d = engine.decide(available_actions=["x", "y"])
         assert d.selected_action == "x"
         assert d.available_actions == ["x", "y"]
+
+    def test_constructor_goal_inherited(self):
+        engine = DecisionEngine(goal="deploy", available_actions=["a"])
+        d = engine.decide()
+        assert d.input == "deploy"
+
+    def test_none_goal_produces_none_string(self):
+        engine = DecisionEngine(available_actions=["a"])
+        d = engine.decide(goal=None)
+        assert d.input == "None"
+
+    def test_policy_key_with_none_value_skipped(self):
+        engine = DecisionEngine(
+            available_actions=["a"],
+            policy={"mandatory_action": None, "forced_action": "fallback"},
+        )
+        d = engine.decide()
+        assert d.selected_action == "fallback"
+
+    def test_all_policy_keys_none_falls_to_first_available(self):
+        engine = DecisionEngine(
+            available_actions=["a"],
+            policy={"mandatory_action": None, "forced_action": None, "action": None},
+        )
+        d = engine.decide()
+        assert d.selected_action == "a"
+        assert d.reason_code == "first_available"
+
+    def test_unknown_mode_falls_back_to_normal_confidence(self):
+        engine = DecisionEngine(available_actions=["a"], reasoning_mode="unknown_mode")
+        d = engine.decide()
+        assert d.confidence == 0.8
+
+    def test_objective_plain_string(self):
+        engine = DecisionEngine(available_actions=["a"])
+        d = engine.decide(goal="just a string")
+        assert d.input == "just a string"
+
+    def test_objective_dict_without_objective_or_intent(self):
+        engine = DecisionEngine(available_actions=["a"])
+        d = engine.decide(goal={"key": "val"})
+        assert d.input == str({"key": "val"})
+
+    def test_objective_object_without_objective_attr_falls_back_to_str(self):
+        class G:
+            intent = "analyze"
+        engine = DecisionEngine(available_actions=["a"])
+        g = G()
+        d = engine.decide(goal=g)
+        assert d.input == str(g)
+
+    def test_policy_mandated_with_empty_actions(self):
+        engine = DecisionEngine(
+            available_actions=[],
+            policy={"mandatory_action": "forced"},
+        )
+        d = engine.decide()
+        assert d.selected_action == "forced"
+        assert d.reason_code == "policy_mandated"
+
+    def test_available_actions_copy_isolation(self):
+        original = ["a", "b"]
+        engine = DecisionEngine(available_actions=original)
+        d = engine.decide()
+        d.available_actions.append("c")
+        assert engine.available_actions == ["a", "b"]
+
+    def test_decide_overrides_context(self):
+        engine = DecisionEngine(context={"a": 1})
+        d = engine.decide(context={"b": 2}, available_actions=["x"])
+        assert d.context == {"b": 2}
+
+    def test_decide_overrides_policy(self):
+        engine = DecisionEngine(
+            available_actions=["a"],
+            policy={"mandatory_action": "old"},
+        )
+        d = engine.decide(policy={"mandatory_action": "new"})
+        assert d.selected_action == "new"

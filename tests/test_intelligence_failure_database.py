@@ -95,3 +95,38 @@ class TestFailureDatabase:
         rec = FailureRecord(category=FailureCategory.GOVERNANCE)
         returned = db.record(rec)
         assert returned is rec
+
+    def test_invalid_category_raises(self):
+        with pytest.raises(ValueError):
+            FailureCategory("nonexistent")
+
+    def test_unique_failure_ids(self):
+        ids = {FailureRecord(category=FailureCategory.TOOL).failure_id for _ in range(50)}
+        assert len(ids) == 50
+
+    def test_by_category_returns_detached_list(self):
+        db = FailureDatabase()
+        rec = FailureRecord(category=FailureCategory.PLANNING)
+        db.record(rec)
+        result = db.by_category(FailureCategory.PLANNING)
+        result.clear()
+        assert db.by_category(FailureCategory.PLANNING) == [rec]
+
+    def test_insertion_order_preserved_in_to_dicts(self):
+        db = FailureDatabase()
+        db.record(FailureRecord(category=FailureCategory.COST, trigger="first"))
+        db.record(FailureRecord(category=FailureCategory.TOOL, trigger="second"))
+        db.record(FailureRecord(category=FailureCategory.COST, trigger="third"))
+        triggers = [d["trigger"] for d in db.to_dicts()]
+        assert triggers == ["first", "second", "third"]
+
+    def test_as_dict_all_defaults(self):
+        rec = FailureRecord(category=FailureCategory.DECISION)
+        d = rec.as_dict()
+        assert d["context"] == ""
+        assert d["trigger"] == ""
+        assert d["root_cause"] == ""
+        assert d["recovery_action"] == ""
+        assert d["final_result"] == ""
+        assert d["lesson"] == ""
+        assert d["category"] == "decision"

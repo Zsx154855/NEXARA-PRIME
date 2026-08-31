@@ -79,3 +79,45 @@ class TestEvaluationEngine:
     def test_evidence_boundary_at_4(self):
         e = self.engine.evaluate({"evidence_count": 4, "current_state": "Completed"})
         assert e.quality_score == 0.4
+
+    def test_running_state_treated_as_failure(self):
+        e = self.engine.evaluate({"current_state": "Running", "evidence_count": 10})
+        assert e.success_score == 0.0
+        assert e.failure_count == 1
+        assert e.recommendation == "retry"
+
+    def test_pending_state_treated_as_failure(self):
+        e = self.engine.evaluate({"current_state": "Pending"})
+        assert e.success_score == 0.0
+
+    def test_case_sensitive_state(self):
+        e = self.engine.evaluate({"current_state": "completed", "evidence_count": 10})
+        assert e.success_score == 0.0
+
+    def test_evidence_string_coercion(self):
+        e = self.engine.evaluate({"current_state": "Completed", "evidence_count": "12"})
+        assert e.quality_score == 0.9
+
+    def test_evidence_boundary_at_9(self):
+        e = self.engine.evaluate({"current_state": "Completed", "evidence_count": 9})
+        assert e.quality_score == 0.7
+
+    def test_negative_evidence_treated_as_low(self):
+        e = self.engine.evaluate({"current_state": "Completed", "evidence_count": -1})
+        assert e.quality_score == 0.4
+
+    def test_cost_score_string_coercion(self):
+        e = self.engine.evaluate({"current_state": "Completed", "cost_score": "0.5"})
+        assert e.cost_score == 0.5
+
+    def test_mission_id_non_str_coerced(self):
+        e = self.engine.evaluate({"mission_id": 42})
+        assert e.mission_id == "42"
+
+    def test_mission_id_none_becomes_empty_string(self):
+        e = self.engine.evaluate({})
+        assert e.mission_id == ""
+
+    def test_recovery_count_default_zero(self):
+        e = self.engine.evaluate({"current_state": "Completed"})
+        assert e.recovery_count == 0

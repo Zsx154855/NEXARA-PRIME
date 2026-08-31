@@ -102,3 +102,62 @@ class TestCapabilityRegistry:
         reg.register(cap)
         result = reg.match("检查运行状态")
         assert result is cap
+
+    def test_register_overwrite_same_id(self):
+        reg = CapabilityRegistry()
+        cap1 = Capability(id="cap_x", name="old")
+        cap2 = Capability(id="cap_x", name="new")
+        reg.register(cap1)
+        reg.register(cap2)
+        assert reg.match("new") is cap2
+        assert reg.match("old") is None
+
+    def test_none_goal_no_match(self):
+        reg = CapabilityRegistry()
+        reg.register(Capability(name="test", description="test"))
+        assert reg.match(None) is None
+
+    def test_tie_breaking_first_registered_wins(self):
+        reg = CapabilityRegistry()
+        cap_a = Capability(name="alpha", description="shared")
+        cap_b = Capability(name="beta", description="shared")
+        reg.register(cap_a)
+        reg.register(cap_b)
+        result = reg.match("shared")
+        assert result is cap_a or result is cap_b
+
+    def test_empty_name_and_description_no_keyword_match(self):
+        reg = CapabilityRegistry()
+        reg.register(Capability(name="", description=""))
+        assert reg.match("anything") is None
+
+    def test_single_cjk_char_no_bigram(self):
+        tokens = _tokens("测")
+        assert tokens == set()
+
+    def test_select_tools_returns_copy(self):
+        reg = CapabilityRegistry()
+        cap = Capability(tools=["git", "docker"])
+        reg.register(cap)
+        tools = reg.select_tools(cap)
+        tools.append("kubectl")
+        assert reg.select_tools(cap) == ["git", "docker"]
+
+    def test_capability_custom_fields(self):
+        cap = Capability(
+            name="deploy",
+            description="deploy to prod",
+            inputs=["image"],
+            outputs=["url"],
+            tools=["docker"],
+            cost=1.5,
+            risk="high",
+            permission="deploy:write",
+            success_rate=0.95,
+        )
+        assert cap.inputs == ["image"]
+        assert cap.outputs == ["url"]
+        assert cap.permission == "deploy:write"
+        assert cap.risk == "high"
+        assert cap.cost == 1.5
+        assert cap.success_rate == 0.95

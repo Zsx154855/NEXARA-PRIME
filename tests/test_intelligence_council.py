@@ -83,3 +83,35 @@ class TestAgentCouncil:
         c.add_agent(CouncilAgent(name="first", role=CouncilRole.EXECUTOR))
         c.add_agent(CouncilAgent(name="second", role=CouncilRole.EXECUTOR))
         assert c.assign(CouncilRole.EXECUTOR).name == "second"
+
+    def test_assign_triggers_default_overwrite(self):
+        c = AgentCouncil()
+        custom = CouncilAgent(name="my_reviewer", role=CouncilRole.REVIEWER)
+        c.add_agent(custom)
+        c.assign(CouncilRole.PLANNER)
+        assert c.assign(CouncilRole.REVIEWER).name == "reviewer"
+
+    def test_double_add_default_agents_overwrites(self):
+        c = AgentCouncil()
+        c.add_default_agents()
+        first_planner = c.assign(CouncilRole.PLANNER)
+        c.add_default_agents()
+        second_planner = c.assign(CouncilRole.PLANNER)
+        assert first_planner is not second_planner
+        assert second_planner.name == "planner"
+
+    def test_assign_after_partial_seeding(self):
+        c = AgentCouncil()
+        c.add_agent(CouncilAgent(name="custom_exec", role=CouncilRole.EXECUTOR))
+        exec_agent = c.assign(CouncilRole.EXECUTOR)
+        assert exec_agent.name == "custom_exec"
+        cost_agent = c.assign(CouncilRole.COST)
+        assert cost_agent.name == "cost"
+
+    def test_council_agent_responsibility(self):
+        a = CouncilAgent(name="test", responsibility="handle X")
+        assert a.responsibility == "handle X"
+
+    def test_pipeline_is_fixed_order(self):
+        c = AgentCouncil()
+        assert c.pipeline() == ["PLANNER", "EXECUTOR", "REVIEWER", "SECURITY", "COST"]

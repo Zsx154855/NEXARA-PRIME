@@ -44,3 +44,29 @@ class TestReflectionLoop:
         r1 = self.loop.reflect(ev)
         r2 = self.loop.reflect(ev)
         assert r1.experience_id != r2.experience_id
+
+    def test_threshold_edge_just_below_one(self):
+        ev = Evaluation(success_score=0.999)
+        r = self.loop.reflect(ev)
+        assert r.memory_update_policy == "update_memory"
+
+    def test_above_one_retains(self):
+        ev = Evaluation(success_score=1.5)
+        r = self.loop.reflect(ev)
+        assert r.memory_update_policy == "retain"
+
+    def test_negative_score_adjusts(self):
+        ev = Evaluation(success_score=-1.0)
+        r = self.loop.reflect(ev)
+        assert r.memory_update_policy == "update_memory"
+
+    def test_reflection_with_explicit_fields(self):
+        ev = Evaluation(success_score=0.5, mission_id="m1")
+        r = Reflection(
+            evaluation=ev,
+            insight="custom insight",
+            memory_update_policy="custom_policy",
+        )
+        assert r.insight == "custom insight"
+        assert r.memory_update_policy == "custom_policy"
+        assert r.evaluation is ev
