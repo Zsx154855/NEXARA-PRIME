@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { NexaraAPI, configureApi } from "@/lib/api";
+import { resolveApiBaseUrl } from "@/lib/platform";
 import type { MemoryRecord, MemoryStats, RuntimeOverview, RuntimeStats } from "@/types";
 
 /**
@@ -34,10 +35,7 @@ export function RuntimeDataProvider({ children }: { children: React.ReactNode })
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    configureApi({
-      baseUrl:
-        window.location.hostname === "localhost" ? "http://127.0.0.1:8765" : "",
-    });
+    configureApi({ baseUrl: resolveApiBaseUrl() });
   }, []);
 
   const load = useCallback(async () => {

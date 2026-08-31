@@ -53,7 +53,13 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     app = FastAPI(title="NEXARA PRIME", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ],
         allow_methods=["*"],
         allow_headers=["*"],
     )
