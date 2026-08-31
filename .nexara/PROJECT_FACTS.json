@@ -3,14 +3,14 @@
   "program": "NEXARA_FIRST_PARTY_SOVEREIGN_AGENT",
   "positioning": "Human-Centered Sovereign Agent Kernel on NEXARA PRIME",
   "repo": {
-    "path": "/Users/agentos/NEXARA-PRIME",
+    "path": "/Volumes/NEXARA/NEXARA-PRIME",
     "remote": "https://github.com/Zsx154855/NEXARA-PRIME.git",
     "branch": "feat/brand-baihan",
     "head": "ca1ee5799276b00bd7c0ec0fae04164fc2b0fd54"
   },
   "runtime": {
     "python": "3.12.13",
-    "venv": "/Users/agentos/NEXARA-PRIME/.venv",
+    "venv": "/Volumes/NEXARA/NEXARA-PRIME/.venv",
     "pip_installable": true,
     "package": "nexara-prime==0.1.0",
     "entry_point": "nexara"
