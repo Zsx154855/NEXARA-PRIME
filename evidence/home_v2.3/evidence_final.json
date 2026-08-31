@@ -1,0 +1,338 @@
+{
+  "started_at": "2026-08-12T12:40:04+08:00",
+  "base_url": "http://localhost:3000/console",
+  "api_base_url": "http://127.0.0.1:8766",
+  "console_errors": [],
+  "console_warnings": [],
+  "page_errors": [],
+  "api_requests": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/overview",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/stats",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory/stats",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory/stats",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/overview",
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/stats",
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory",
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory/stats",
+      "session": "mobile"
+    }
+  ],
+  "api_responses": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory",
+      "status": 200,
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory/stats",
+      "status": 200,
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/stats",
+      "status": 200,
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/overview",
+      "status": 200,
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory/stats",
+      "status": 200,
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory",
+      "status": 200,
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory/stats",
+      "status": 200,
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/stats",
+      "status": 200,
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/overview",
+      "status": 200,
+      "session": "mobile"
+    }
+  ],
+  "api_failures": [],
+  "memory_stats": {
+    "status": 200,
+    "body": {
+      "total": 13,
+      "layers": {
+        "procedural": 13
+      },
+      "statuses": {
+        "committed": 13
+      },
+      "pending_reviews": 0,
+      "rag_synced": true,
+      "rag_stats": {
+        "total_documents": 0,
+        "total_chunks": 0,
+        "layers": {},
+        "index_size": 0
+      }
+    }
+  },
+  "checks": {
+    "sidebar_brand": {
+      "expected": "Nexara-柏韩",
+      "present": true,
+      "visible": true,
+      "text": "Nexara-柏韩"
+    },
+    "wheel": {
+      "present": true,
+      "aria_label": "柏韩 记忆系统",
+      "quadrant_count": 4,
+      "expected_quadrant_count": 4,
+      "quadrants": [
+        {
+          "aria_label": "感知记忆",
+          "text": "感知记忆"
+        },
+        {
+          "aria_label": "程序记忆 · 13 条记录",
+          "text": "程序记忆13"
+        },
+        {
+          "aria_label": "世界记忆",
+          "text": "世界记忆"
+        },
+        {
+          "aria_label": "关系记忆",
+          "text": "关系记忆"
+        }
+      ],
+      "center_visible_texts": [
+        "柏韩",
+        "活跃",
+        "感知记忆",
+        "程序记忆",
+        "13",
+        "世界记忆",
+        "关系记忆"
+      ],
+      "center_contains_柏韩": true
+    },
+    "mission_card": {
+      "present": true,
+      "aria_label": "当前使命: Browser E2E Test",
+      "visible": true
+    },
+    "continue_task": {
+      "dom_count_palette_closed": 1,
+      "expected_max_1_on_home": 1,
+      "verdict": "no duplicate"
+    },
+    "command_palette": {
+      "palette_button": {
+        "present": true,
+        "visible": true
+      },
+      "opened": true,
+      "continue_task_in_palette_count": 1,
+      "palette_groups": [],
+      "option_count": 10,
+      "options": [
+        [
+          "true",
+          "Browser E2E TestApproval"
+        ],
+        [
+          "false",
+          "NEXARA V1 Final Acceptance E2E Mission — verify complete lifecycle for release candidate vCompleted"
+        ],
+        [
+          "false",
+          "API Audit Test MissionApproval"
+        ],
+        [
+          "false",
+          "API audit testIntent"
+        ],
+        [
+          "false",
+          "E2E Control Plane Verification MissionCompleted"
+        ],
+        [
+          "false",
+          "创建使命开始新的自主任务"
+        ],
+        [
+          "false",
+          "继续任务恢复当前活跃使命"
+        ],
+        [
+          "false",
+          "查看记忆浏览所有记忆记录"
+        ],
+        [
+          "false",
+          "运行时状态查看系统健康与性能"
+        ],
+        [
+          "false",
+          "查看证据浏览证据链与收据"
+        ]
+      ],
+      "closed_on_escape": true
+    },
+    "wheel_quadrant_counts": [
+      {
+        "quadrant": "感知记忆",
+        "count": null
+      },
+      {
+        "quadrant": "程序记忆",
+        "count": 13
+      },
+      {
+        "quadrant": "世界记忆",
+        "count": null
+      },
+      {
+        "quadrant": "关系记忆",
+        "count": null
+      }
+    ],
+    "api_base_url_target": {
+      "all_api_requests_target_127_0_0_1_8766": true,
+      "count_127_0_0_1_8766": 4,
+      "count_other": 0,
+      "other_urls": [],
+      "observed_api_urls": [
+        "http://127.0.0.1:8766/api/memory",
+        "http://127.0.0.1:8766/api/memory/stats",
+        "http://127.0.0.1:8766/api/runtime/overview",
+        "http://127.0.0.1:8766/api/runtime/stats"
+      ]
+    },
+    "memory_stats_endpoint": {
+      "last_status": 200,
+      "requested": true
+    },
+    "mobile": {
+      "wheel_present": true,
+      "mobile_bottom_nav_present": true,
+      "brand_present": true
+    },
+    "quadrant_counts_match_api": {
+      "match": true,
+      "api_layers": {
+        "working": null,
+        "procedural": 13,
+        "semantic": null,
+        "episodic": null
+      },
+      "dom_quadrants": [
+        {
+          "quadrant": "感知记忆",
+          "count": null
+        },
+        {
+          "quadrant": "程序记忆",
+          "count": 13
+        },
+        {
+          "quadrant": "世界记忆",
+          "count": null
+        },
+        {
+          "quadrant": "关系记忆",
+          "count": null
+        }
+      ]
+    }
+  },
+  "screenshots": {
+    "01_home_desktop": {
+      "path": "/Users/agentos/NEXARA-PRIME/evidence/home_v2.3/FINAL_01_home_desktop.png",
+      "taken": true
+    },
+    "02_palette": {
+      "path": "/Users/agentos/NEXARA-PRIME/evidence/home_v2.3/FINAL_02_palette.png",
+      "taken": true
+    },
+    "03_memory_wheel": {
+      "path": "/Users/agentos/NEXARA-PRIME/evidence/home_v2.3/FINAL_03_memory_wheel.png",
+      "taken": true,
+      "clip": {
+        "x": 680,
+        "y": 154.5,
+        "width": 320,
+        "height": 360.5
+      }
+    },
+    "04_mission": {
+      "path": "/Users/agentos/NEXARA-PRIME/evidence/home_v2.3/FINAL_04_mission.png",
+      "taken": true,
+      "clip": {
+        "x": 504,
+        "y": 547,
+        "width": 672,
+        "height": 121
+      }
+    },
+    "05_mobile": {
+      "path": "/Users/agentos/NEXARA-PRIME/evidence/home_v2.3/FINAL_05_mobile.png",
+      "taken": true
+    }
+  },
+  "finished_at": "2026-08-12T12:40:11+08:00"
+}

@@ -1,0 +1,244 @@
+{
+  "started_at": "2026-08-12T02:41:38+08:00",
+  "finished_at": "2026-08-12T02:41:54+08:00",
+  "base_url": "http://localhost:3000/console",
+  "api_base_url": "http://127.0.0.1:8766",
+  "console_errors": [
+    {
+      "text": "Access to fetch at 'http://127.0.0.1:8766/api/memory/stats' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "http://localhost:3000/console/"
+    },
+    {
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "http://127.0.0.1:8766/api/memory/stats"
+    },
+    {
+      "text": "Access to fetch at 'http://127.0.0.1:8766/api/memory/stats' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "http://localhost:3000/console/"
+    },
+    {
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "http://127.0.0.1:8766/api/memory/stats"
+    }
+  ],
+  "console_warnings": [],
+  "page_errors": [],
+  "api_requests": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/overview",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/stats",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory/stats",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/overview",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/stats",
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/overview",
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/stats",
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory",
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory/stats",
+      "session": "mobile"
+    }
+  ],
+  "api_responses": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory",
+      "status": 200,
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/stats",
+      "status": 200,
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/overview",
+      "status": 200,
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/stats",
+      "status": 200,
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/overview",
+      "status": 200,
+      "session": "desktop"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/memory",
+      "status": 200,
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/stats",
+      "status": 200,
+      "session": "mobile"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8766/api/runtime/overview",
+      "status": 200,
+      "session": "mobile"
+    }
+  ],
+  "failed_requests": [
+    {
+      "url": "http://127.0.0.1:8766/api/memory/stats",
+      "method": "GET",
+      "failure": "net::ERR_FAILED",
+      "session": "desktop"
+    },
+    {
+      "url": "http://127.0.0.1:8766/api/memory/stats",
+      "method": "GET",
+      "failure": "net::ERR_FAILED",
+      "session": "mobile"
+    }
+  ],
+  "checks": {
+    "wheel_present": true,
+    "error_shown": false,
+    "error_message": null,
+    "goto_error": null,
+    "wait_error": null,
+    "sidebar_brand_visible": true,
+    "topbar_cmdk_button_visible": true,
+    "topbar_status_texts": [
+      "在线",
+      "系统在线"
+    ],
+    "memory_wheel_present": true,
+    "memory_wheel_quadrant_count": 4,
+    "memory_wheel_quadrant_labels": [
+      "感知记忆",
+      "程序记忆",
+      "世界记忆",
+      "关系记忆"
+    ],
+    "memory_wheel_center_text": [
+      "柏韩\n活跃"
+    ],
+    "memory_wheel_region_box": {
+      "x": 680,
+      "y": 154.5,
+      "width": 320,
+      "height": 360.5
+    },
+    "current_mission_present": true,
+    "current_mission_aria_label": "当前使命: Browser E2E Test",
+    "current_mission_text": "审批\nBrowser E2E Test\nmission_5b7282…\n证据 6\n继续任务",
+    "current_mission_region_box": {
+      "x": 504,
+      "y": 547,
+      "width": 672,
+      "height": 121
+    },
+    "continue_button_count": 1,
+    "continue_button_accessible_names": [
+      "继续当前使命"
+    ],
+    "continue_task_duplicate_detected": false,
+    "command_palette_opened": true,
+    "command_palette_options": [
+      "Browser E2E Test\nApproval",
+      "NEXARA V1 Final Acceptance E2E Mission — verify complete lifecycle for release candidate v\nCompleted",
+      "API Audit Test Mission\nApproval",
+      "API audit test\nIntent",
+      "E2E Control Plane Verification Mission\nCompleted",
+      "创建使命\n开始新的自主任务",
+      "继续任务\n恢复当前活跃使命",
+      "查看记忆\n浏览所有记忆记录",
+      "运行时状态\n查看系统健康与性能",
+      "查看证据\n浏览证据链与收据"
+    ],
+    "mobile_bottom_nav_visible": true,
+    "mobile_topbar_status_texts": [
+      "在线",
+      "系统在线"
+    ],
+    "mobile_wheel_present": true,
+    "api_request_count": 10,
+    "api_failed_count": 2,
+    "failed_api_request_urls": {
+      "http://127.0.0.1:8766/api/memory/stats": [
+        "net::ERR_FAILED",
+        "net::ERR_FAILED"
+      ]
+    },
+    "non_api_failed_requests": [],
+    "backend_probe": [
+      {
+        "path": "/api/runtime/overview",
+        "status": 200,
+        "access_control_allow_origin": "http://localhost:3000"
+      },
+      {
+        "path": "/api/runtime/stats",
+        "status": 200,
+        "access_control_allow_origin": "http://localhost:3000"
+      },
+      {
+        "path": "/api/memory",
+        "status": 200,
+        "access_control_allow_origin": "http://localhost:3000"
+      },
+      {
+        "path": "/api/memory/stats",
+        "status": 500,
+        "access_control_allow_origin": null,
+        "error": "HTTPError"
+      }
+    ]
+  },
+  "screenshots": [
+    "/Users/agentos/NEXARA-PRIME/evidence/home_v2.3/01_home_desktop_1440x900.png",
+    "/Users/agentos/NEXARA-PRIME/evidence/home_v2.3/02_command_palette_cmdk.png",
+    "/Users/agentos/NEXARA-PRIME/evidence/home_v2.3/03_memory_wheel.png",
+    "/Users/agentos/NEXARA-PRIME/evidence/home_v2.3/04_current_mission.png",
+    "/Users/agentos/NEXARA-PRIME/evidence/home_v2.3/05_mobile_390x844.png"
+  ]
+}
