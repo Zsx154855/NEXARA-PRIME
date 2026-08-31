@@ -65,9 +65,9 @@ class ReasoningBudgetManager:
         output_cost = (tokens * 0.25 / 1000) * costs["output"]
         return round(input_cost + output_cost, 8)
 
-    def record_usage(self, tokens: int, cost: float, provider: str) -> None:
-        """Record actual token usage and cost."""
-        self._used += cost
+    def record_usage(self, tokens: int, cost: float | None, provider: str) -> None:
+        """Record actual token usage and cost. cost=None means provider did not report cost."""
+        self._used += cost if cost is not None else 0.0
         self._total_tokens += tokens
 
     def record_call(

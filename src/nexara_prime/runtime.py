@@ -236,6 +236,9 @@ class NexaraRuntime:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or Settings.from_env()
         self.settings.ensure_dirs()
+        self._started_at = datetime.now(timezone.utc)
+        self._last_success_at: str = ""
+        self._last_failure_at: str = ""
         self.store = SQLiteStore(self.settings.db_path)
         self.events = EventBus(self.store)
         self.audit = SecurityAuditLedger(self.store)
@@ -345,6 +348,8 @@ class NexaraRuntime:
                 model=os.getenv("NEXARA_MODEL_NAME", "deepseek-chat"),
                 api_key=api_key,
                 provider_name="deepseek",
+                max_output_tokens=int(os.getenv("NEXARA_MAX_OUTPUT_TOKENS", "4096")),
+                timeout_seconds=float(os.getenv("NEXARA_MODEL_TIMEOUT", "120")),
             )
         elif provider_name == "local":
             endpoint = os.getenv("NEXARA_LOCAL_MODEL_ENDPOINT")
@@ -631,6 +636,8 @@ class NexaraRuntime:
             "finish_reason": "",
             "retry_count": 0,
             "error_code": None,
+            "reasoning_tokens": None,
+            "cost_usd": None,
         }
         self.conversations.save_provider_attempt(attempt)
         self.telemetry.record_health("provider", "starting", f"provider={self.models.provider.name}")
@@ -657,6 +664,8 @@ class NexaraRuntime:
             "total_tokens": response.total_tokens,
             "finish_reason": response.finish_reason,
             "retry_count": response.retry_count,
+            "reasoning_tokens": response.reasoning_tokens,
+            "cost_usd": response.cost_usd,
         })
         self.conversations.save_provider_attempt(attempt)
         self.telemetry.record_health("provider", "healthy", f"provider={response.provider}")
@@ -844,11 +853,11 @@ class NexaraRuntime:
             self._advance(mission, MissionState.BLOCKED, actor)
         return mission
 
-    def _checkpointed_model(self, mission: Mission, compiled, context: dict) -> tuple[str, str, int, int, float]:
+    def _checkpointed_model(self, mission: Mission, compiled, context: dict) -> tuple[str, str, int, int, float | None]:
         tk = f"{mission.mission_id}:model_tokens"
         p = mission.result.get(tk)
         if p and isinstance(p, dict) and int(p.get("input_tokens", 0)) > 0:
-            return mission.result.get("model_text", ""), p.get("provider", "unknown"), int(p["input_tokens"]), int(p["output_tokens"]), float(p.get("cost_usd", 0.0))
+            return mission.result.get("model_text", ""), p.get("provider", "unknown"), int(p["input_tokens"]), int(p["output_tokens"]), p.get("cost_usd")
         # Migrate the durable response written by the pre-convergence runtime.
         # This check must precede the provider call or a restart can duplicate
         # an already completed and billed model request.
@@ -983,7 +992,7 @@ class NexaraRuntime:
         if persisted and isinstance(persisted, dict):
             mt = int(persisted.get("input_tokens", 0))
             ot = int(persisted.get("output_tokens", 0))
-            c = float(persisted.get("cost_usd", 0.0))
+            c = persisted.get("cost_usd")
             model_text = mission.result.get("model_text", "")
             provider = persisted.get("provider", "unknown")
         else:
@@ -1315,7 +1324,42 @@ class NexaraRuntime:
         return {"system": {"name": "NEXARA PRIME", "mode": self.models.provider.name, "healthy": True, "human_control": True, "mock_default": self.settings.mock_model, "adapters": adapter_status}, "missions": self.list_missions()[-20:], "approvals": self.approvals.list()[-20:], "evidence": self.evidence.list()[-20:], "tools": self.tools.list_invocations()[-20:], "capabilities": self.capabilities.list(), "recovery": self.recover().__dict__}
 
     def health(self) -> dict:
-        return {"status": "ok", "provider": self.models.provider.name, "db_path": str(self.settings.db_path), "event_count": len(self.store.list_events()), "recovery": self.recover().__dict__}
+        from . import __version__
+        now = datetime.now(timezone.utc)
+        uptime = round((now - self._started_at).total_seconds(), 2)
+        provider_available = self.models.provider.name != "UnavailableProvider"
+        database_health = "ok"
+        try:
+            self.store.count("records")
+        except Exception:
+            database_health = "unavailable"
+        last_success = ""
+        last_failure = ""
+        try:
+            for a in self.store.list_records("provider_attempt"):
+                ts = a.get("created_at", "")
+                if a.get("status") == "succeeded":
+                    last_success = ts
+                elif a.get("status") == "failed":
+                    last_failure = ts
+        except Exception:
+            pass
+        return {
+            "status": "ok",
+            "version": __version__,
+            "pid": os.getpid(),
+            "port": self.settings.api_port,
+            "provider": self.models.provider.name,
+            "provider_health": "healthy" if provider_available else "unavailable",
+            "runtime_state": "healthy",
+            "database_health": database_health,
+            "uptime_seconds": uptime,
+            "last_success_at": last_success,
+            "last_failure_at": last_failure,
+            "db_path": str(self.settings.db_path),
+            "event_count": len(self.store.list_events()),
+            "recovery": self.recover().__dict__,
+        }
 
     def stats(self) -> dict:
         """Aggregated runtime statistics — lightweight polling endpoint."""
@@ -1412,12 +1456,49 @@ class NexaraRuntime:
         except KeyError:
             return {"error": "mission_not_found", "mission_id": mission_id}
 
+    def _aggregate_provider_usage(self, mission_id: str) -> dict[str, Any]:
+        """Aggregate real provider token/cost usage for a mission from provider_attempt records."""
+        from .brain.reasoning_budget import COST_TABLE
+        attempts = self.store.list_records("provider_attempt", mission_id)
+        total_input = total_output = total_reasoning = total_tokens = 0
+        cost_usd = 0.0
+        retry_count = 0
+        for a in attempts:
+            if a.get("status") != "succeeded":
+                continue
+            it = int(a.get("input_tokens", 0))
+            ot = int(a.get("output_tokens", 0))
+            rt = int(a.get("reasoning_tokens") or 0)
+            total_input += it
+            total_output += ot
+            total_reasoning += rt
+            total_tokens += int(a.get("total_tokens", it + ot))
+            retry_count += int(a.get("retry_count", 0))
+            c = a.get("cost_usd")
+            if c is not None:
+                cost_usd += float(c)
+            else:
+                model = a.get("model", "mock")
+                costs = COST_TABLE.get(model, COST_TABLE["mock"])
+                cost_usd += (it / 1000) * costs["input"] + (ot / 1000) * costs["output"]
+        return {
+            "tokens_used": total_tokens,
+            "input_tokens": total_input,
+            "output_tokens": total_output,
+            "reasoning_tokens": total_reasoning,
+            "cost_used": round(cost_usd, 8),
+            "retries": retry_count,
+        }
+
     def adaptive_budget(self, mission_id: str) -> dict:
-        """Get budget status for a mission."""
+        """Get budget status for a mission, with real token/cost aggregation."""
         try:
             mission = self._load_mission(mission_id)
             budget = mission.resource_budget or {}
             usage = mission.budget_usage or {}
+            real = self._aggregate_provider_usage(mission_id)
+            if real:
+                usage = {**usage, **real}
             return {
                 "mission_id": mission_id,
                 "budget": budget,

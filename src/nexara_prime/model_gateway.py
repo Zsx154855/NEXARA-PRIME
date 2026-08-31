@@ -56,12 +56,13 @@ class ModelResponse:
     input_tokens: int
     output_tokens: int
     trace_id: str = ""
-    cost_usd: float = 0.0
+    cost_usd: float | None = None
     finish_reason: str = "stop"
     metadata: dict[str, Any] = field(default_factory=dict)
     request_id: str = ""
     latency_ms: float = 0.0
     total_tokens: int = 0
+    reasoning_tokens: int | None = None
     error_code: str | None = None
     retry_count: int = 0
     created_at: str = ""
@@ -175,6 +176,15 @@ class _HTTPProvider:
         usage = body.get("usage", {})
         input_tokens = int(usage.get("prompt_tokens", estimate_tokens(system + task + json.dumps(context or {}, sort_keys=True))))
         output_tokens = int(usage.get("completion_tokens", estimate_tokens(str(text))))
+        # Reasoning tokens: deepseek-reasoner style (completion_tokens_details),
+        # or flat "reasoning_tokens" from other providers. None = provider did not report.
+        reasoning_tokens = usage.get("completion_tokens_details", {}).get("reasoning_tokens")
+        if reasoning_tokens is None:
+            reasoning_tokens = usage.get("reasoning_tokens")
+        reasoning_tokens = int(reasoning_tokens) if reasoning_tokens is not None else None
+        # Cost: only when the provider explicitly reports it. None = unavailable (do NOT fake 0.0).
+        raw_cost = body.get("cost_usd")
+        cost_usd = float(raw_cost) if raw_cost is not None else None
         request_id = str(
             body.get("id")
             or response_headers.get("x-request-id", "")
@@ -187,11 +197,12 @@ class _HTTPProvider:
             request_id_source = "client_generated"
         return ModelResponse(
             self.name, self.model, str(text), input_tokens, output_tokens, trace_id,
-            float(body.get("cost_usd", 0.0)), str(body.get("choices", [{}])[0].get("finish_reason", "stop")),
+            cost_usd, str(body.get("choices", [{}])[0].get("finish_reason", "stop")),
             redact_secrets({"usage": usage, "context_hash": context_hash, "request_id_source": request_id_source}),
             request_id=request_id,
             latency_ms=round((time.perf_counter() - started) * 1000, 3),
             total_tokens=int(usage.get("total_tokens", input_tokens + output_tokens)),
+            reasoning_tokens=reasoning_tokens,
             created_at=datetime.now(timezone.utc).isoformat(),
         )
 

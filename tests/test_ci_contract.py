@@ -68,8 +68,8 @@ class TestCiWorkflowStructure:
     def test_xcodebuild_has_explicit_scheme(self) -> None:
         """xcodebuild must use explicit scheme, not glob fallback."""
         content = CI_FILE.read_text()
-        # The SCHEME variable must be set before xcodebuild
-        if "xcodebuild" in content:
-            idx = content.index("xcodebuild")
-            preceding = content[max(0,idx-500):idx]
-            assert "SCHEME" in preceding, "xcodebuild must use explicit SCHEME variable"
+        for line in content.split("\n"):
+            if "xcodebuild" in line:
+                assert "-scheme" in line, (
+                    f"xcodebuild must use explicit -scheme: {line.strip()[:120]}"
+                )

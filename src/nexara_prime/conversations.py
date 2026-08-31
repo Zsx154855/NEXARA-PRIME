@@ -132,7 +132,8 @@ class ConversationStore:
     def save_provider_attempt(self, attempt: dict[str, Any]) -> None:
         self.store.save_record(
             attempt["attempt_id"], "provider_attempt", attempt,
-            attempt["created_at"], attempt.get("conversation_id"),
+            attempt["created_at"],
+            attempt.get("mission_id") or attempt.get("conversation_id"),
         )
 
     def append_message(
