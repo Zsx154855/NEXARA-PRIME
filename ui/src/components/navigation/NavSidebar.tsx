@@ -6,7 +6,7 @@ import { House, MessageSquare, Rocket, ShieldCheck, Database, Settings } from "l
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, type NavSectionId } from "@/lib/navigation";
 import { useRuntimeData } from "@/lib/runtime-context";
-import { BrandMark } from "@/components/brand/BrandMark";
+import { AnimatedMark } from "@/components/brand/AnimatedMark";
 
 const SECTION_ICONS: Record<NavSectionId, typeof House> = {
   home: House,
@@ -49,7 +49,7 @@ export function NavSidebar() {
         href="/"
         className="flex h-16 items-center gap-3 border-b border-border-subtle px-5"
       >
-        <BrandMark className="rounded-[7px]" />
+        <AnimatedMark className="rounded-[7px]" />
         <div>
           <div className="text-sm font-semibold tracking-wide text-text-primary">
             柏韩 · NEXARA
