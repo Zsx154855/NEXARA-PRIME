@@ -45,7 +45,9 @@
     "**/*.js",
     ".next/dev/types/**/*.ts",
     "out/types/**/*.ts",
-    "out/dev/types/**/*.ts"
+    "out/dev/types/**/*.ts",
+    "out-tauri/types/**/*.ts",
+    "out-tauri/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

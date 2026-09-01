@@ -10,7 +10,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf .next out out-tauri",
-    "dev:tauri": "NEXT_PUBLIC_PLATFORM=tauri next dev --port 3000 --strict-port",
+    "dev:tauri": "NEXT_PUBLIC_PLATFORM=tauri next dev --port 3000",
     "build:tauri": "NEXT_PUBLIC_PLATFORM=tauri next build",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build"
