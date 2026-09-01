@@ -1,4 +1,6 @@
-import type { ConversationMessage } from "@/types";
+import type { ConversationAttachment, ConversationMessage } from "@/types";
+import { Cable, FileText, Puzzle } from "lucide-react";
+import { attachmentContentUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { sanitizeAssistantContent } from "@/lib/presentation";
 import { ConversationMeta } from "./ConversationMeta";
@@ -9,6 +11,87 @@ type MessageFlowProps = {
   onMissionSelect: (missionId: string) => void;
   onViewApprovals: () => void;
 };
+
+function AttachmentChips({
+  attachments,
+  conversationId,
+  isUser,
+}: {
+  attachments: ConversationAttachment[];
+  conversationId?: string;
+  isUser: boolean;
+}) {
+  const chipClass = cn(
+    "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
+    isUser
+      ? "border-ivory/30 bg-ivory/10 text-ivory"
+      : "border-border-subtle bg-surface-base text-text-secondary",
+  );
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {attachments.map((attachment) => {
+        const contentUrl =
+          conversationId && attachment.kind !== "plugin" && attachment.kind !== "connection"
+            ? attachmentContentUrl(conversationId, attachment.attachment_id)
+            : null;
+        if (attachment.kind === "image" && contentUrl) {
+          return (
+            <a key={attachment.attachment_id} href={contentUrl} target="_blank" rel="noreferrer" title={attachment.name}>
+              <img
+                src={contentUrl}
+                alt={attachment.name}
+                className="block max-h-48 max-w-[16rem] rounded-lg object-cover"
+              />
+            </a>
+          );
+        }
+        if (attachment.kind === "video" && contentUrl) {
+          return (
+            <video
+              key={attachment.attachment_id}
+              src={contentUrl}
+              controls
+              className="block max-h-48 max-w-[16rem] rounded-lg"
+              aria-label={attachment.name}
+            />
+          );
+        }
+        const icon =
+          attachment.kind === "plugin" ? (
+            <Puzzle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          ) : attachment.kind === "connection" ? (
+            <Cable className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          ) : (
+            <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          );
+        const label =
+          attachment.kind === "plugin"
+            ? `插件 · ${attachment.name}`
+            : attachment.kind === "connection"
+              ? `连接 · ${attachment.name}`
+              : attachment.name;
+        return contentUrl ? (
+          <a
+            key={attachment.attachment_id}
+            href={contentUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(chipClass, "hover:opacity-80")}
+            title={attachment.name}
+          >
+            {icon}
+            <span className="max-w-[12rem] truncate">{label}</span>
+          </a>
+        ) : (
+          <span key={attachment.attachment_id} className={chipClass} title={attachment.ref_id ?? attachment.name}>
+            {icon}
+            <span className="max-w-[12rem] truncate">{label}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 /**
  * 即时通讯式气泡流（微信风格）：
@@ -23,6 +106,7 @@ export function MessageFlow({
 }: MessageFlowProps) {
   const isUser = message.role === "user";
   const meta = extractMeta(message);
+  const attachments = message.metadata?.attachments ?? [];
 
   return (
     <article
@@ -70,6 +154,13 @@ export function MessageFlow({
           )}
         >
           {isUser ? message.content : sanitizeAssistantContent(message.content)}
+          {attachments.length > 0 && (
+            <AttachmentChips
+              attachments={attachments}
+              conversationId={message.conversation_id}
+              isUser={isUser}
+            />
+          )}
         </div>
 
         {!isUser && (

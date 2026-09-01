@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .adaptive_runtime import AdaptiveRuntime as AdaptiveOrchestrator
+from .attachments import ConversationAttachmentStore
 from .capabilities import CapabilityRegistry
 from .config import Settings
 from .contract_engine import ContractEngine
@@ -267,12 +268,31 @@ class NexaraRuntime:
         self.telemetry = TelemetryService(self.events)
         self.telemetry.start()
         self.conversations = ConversationStore(self.store, self.events, self.audit)
+        self.attachments = ConversationAttachmentStore(
+            self.store, self.audit, self.settings.db_path.parent / "uploads"
+        )
+        self.connectors = self._build_connector_registry()
         self._mission_threads: dict[str, threading.Thread] = {}
         self._mission_threads_lock = threading.RLock()
         # Opt-in only: main's crash-recovery semantics assume the caller owns
         # resumption. Enabling auto-resume is a conversation-product choice.
         if os.getenv("NEXARA_RESUME_BACKGROUND_MISSIONS", "false").lower() in {"1", "true", "yes", "on"}:
             self._resume_background_missions()
+
+    @staticmethod
+    def _build_connector_registry():
+        from .connectors.registry import ConnectorRegistry
+        from .connectors.browser_readonly import BrowserReadOnlyConnector
+        from .connectors.http_readonly import HTTPReadOnlyConnector
+        from .connectors.provider_connector import ProviderConnector
+
+        registry = ConnectorRegistry()
+        for connector_cls in (BrowserReadOnlyConnector, HTTPReadOnlyConnector, ProviderConnector):
+            try:
+                registry.register(connector_cls())
+            except Exception:
+                pass
+        return registry
 
     # ── Adapter accessors ──
 
@@ -525,6 +545,49 @@ class NexaraRuntime:
             return "mission", IntentDecision("mission", 1.0, ("explicit_mission_mode",))
         return "chat", IntentDecision("chat", 1.0, ("explicit_chat_mode",))
 
+    def _resolve_conversation_attachments(
+        self,
+        conversation_id: str,
+        attachment_ids: list[str] | None,
+        attachment_refs: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
+        summary: list[dict[str, Any]] = []
+        for attachment_id in attachment_ids or []:
+            try:
+                record = self.attachments.get(conversation_id, attachment_id)
+            except KeyError as exc:
+                raise ValueError(f"attachment_not_found:{attachment_id}") from exc
+            summary.append(
+                {
+                    "attachment_id": record["attachment_id"],
+                    "name": record["name"],
+                    "kind": record["kind"],
+                    "media_type": record["media_type"],
+                    "size": record["size"],
+                }
+            )
+        for ref in attachment_refs or []:
+            kind = ref.get("kind")
+            ref_id = str(ref.get("ref_id") or "").strip()
+            if kind == "plugin":
+                known = {cap.get("capability_id") for cap in self.capabilities.list()}
+            elif kind == "connection":
+                known = {conn.get("connector_id") for conn in self.connectors.list_connectors()}
+            else:
+                raise ValueError("attachment_ref_kind_invalid")
+            if not ref_id or ref_id not in known:
+                raise ValueError(f"attachment_ref_unknown:{kind}:{ref_id}")
+            name = str(ref.get("name") or ref_id).strip()[:120]
+            summary.append(
+                {
+                    "attachment_id": new_id("ref"),
+                    "name": name or ref_id,
+                    "kind": kind,
+                    "ref_id": ref_id,
+                }
+            )
+        return summary
+
     def answer_conversation(
         self,
         conversation_id: str,
@@ -533,9 +596,14 @@ class NexaraRuntime:
         execution_mode: str = "chat",
         execute_mission: bool | None = None,
         idempotency_key: str | None = None,
+        attachment_ids: list[str] | None = None,
+        attachment_refs: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Persist one user turn, route it through the configured provider, and persist the reply."""
         self.conversations.get(conversation_id)
+        attachment_summary = self._resolve_conversation_attachments(
+            conversation_id, attachment_ids, attachment_refs
+        )
         if execute_mission is True:
             execution_mode = "mission"
         intent, intent_decision = self._resolve_execution_mode(content, execution_mode)
@@ -575,18 +643,21 @@ class NexaraRuntime:
                 intent, intent_decision = self._resolve_execution_mode(content, execution_mode)
         else:
             trace_id = new_id("trace")
+            user_metadata: dict[str, Any] = {
+                "execution_mode": execution_mode,
+                "intent": intent,
+                "intent_confidence": intent_decision.confidence,
+                "intent_reasons": list(intent_decision.reasons),
+            }
+            if attachment_summary:
+                user_metadata["attachments"] = attachment_summary
             user_message = self.conversations.append_message(
                 conversation_id,
                 "user",
                 content,
                 trace_id=trace_id,
                 idempotency_key=idempotency_key,
-                metadata={
-                    "execution_mode": execution_mode,
-                    "intent": intent,
-                    "intent_confidence": intent_decision.confidence,
-                    "intent_reasons": list(intent_decision.reasons),
-                },
+                metadata=user_metadata,
             )
         mission_id: str | None = None
         approval_required = False
@@ -624,6 +695,11 @@ class NexaraRuntime:
             f"Mission admitted: {mission_id or 'no'}\n"
             f"Approval required: {'yes' if approval_required else 'no'}"
         )
+        if attachment_summary:
+            described = "; ".join(
+                f"{item['kind']}:{item['name']}" for item in attachment_summary
+            )
+            task += f"\nAttachments provided on this turn: {described}"
         attempt_number = len(self.conversations.provider_attempts(conversation_id, user_message["message_id"])) + 1
         attempt = {
             "attempt_id": f"provider_attempt_{user_message['message_id']}_{attempt_number}",

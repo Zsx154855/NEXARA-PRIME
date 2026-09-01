@@ -4,8 +4,9 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -39,6 +40,12 @@ class ConversationCreateRequest(BaseModel):
     title: str | None = None
 
 
+class ConversationAttachmentRef(BaseModel):
+    kind: Literal["plugin", "connection"]
+    ref_id: str
+    name: str | None = None
+
+
 class ConversationMessageRequest(BaseModel):
     content: str
     execution_mode: Literal["chat", "auto", "mission"] = "chat"
@@ -46,6 +53,8 @@ class ConversationMessageRequest(BaseModel):
     # explicit execution_mode contract.
     execute_mission: bool | None = None
     idempotency_key: str | None = None
+    attachment_ids: list[str] | None = None
+    attachment_refs: list[ConversationAttachmentRef] | None = None
 
 
 def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
@@ -161,6 +170,12 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
                 body.content,
                 execution_mode=("mission" if body.execute_mission is True else body.execution_mode),
                 idempotency_key=body.idempotency_key or idempotency_header,
+                attachment_ids=body.attachment_ids,
+                attachment_refs=(
+                    [ref.model_dump(exclude_none=True) for ref in body.attachment_refs]
+                    if body.attachment_refs
+                    else None
+                ),
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -191,6 +206,59 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
             }
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/attachables")
+    def list_attachables() -> dict[str, Any]:
+        plugins = [
+            {
+                "ref_id": capability.get("capability_id"),
+                "name": capability.get("name") or capability.get("capability_id"),
+                "description": capability.get("description", ""),
+                "capability_type": capability.get("capability_type", ""),
+            }
+            for capability in runtime.capabilities.list()
+        ]
+        return {"plugins": plugins, "connections": runtime.connectors.list_connectors()}
+
+    @app.post("/api/conversations/{conversation_id}/attachments")
+    async def upload_conversation_attachment(
+        conversation_id: str,
+        file: UploadFile = File(...),
+    ) -> dict[str, Any]:
+        try:
+            runtime.conversations.get(conversation_id)
+            data = await file.read()
+            return runtime.attachments.upload(
+                conversation_id,
+                name=file.filename or "attachment.bin",
+                media_type=file.content_type or "application/octet-stream",
+                data=data,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/conversations/{conversation_id}/attachments")
+    def list_conversation_attachments(conversation_id: str) -> list[dict[str, Any]]:
+        try:
+            runtime.conversations.get(conversation_id)
+            return runtime.attachments.list(conversation_id)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/conversations/{conversation_id}/attachments/{attachment_id}/content")
+    def download_conversation_attachment(conversation_id: str, attachment_id: str):
+        try:
+            record = runtime.attachments.get(conversation_id, attachment_id)
+            path = runtime.attachments.content_path(record)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=410, detail=str(exc)) from exc
+        return FileResponse(path, media_type=record["media_type"], filename=record["name"])
 
     @app.get("/api/missions/{mission_id}")
     def status(mission_id: str) -> dict[str, Any]:

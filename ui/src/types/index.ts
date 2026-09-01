@@ -546,6 +546,53 @@ export interface ConversationMessageMetadata {
   mission_id?: string;
   approval_required?: boolean;
   response_to?: string;
+  attachments?: ConversationAttachment[];
+}
+
+export type ConversationAttachmentKind =
+  | "image"
+  | "video"
+  | "file"
+  | "plugin"
+  | "connection";
+
+export interface ConversationAttachment {
+  attachment_id: string;
+  conversation_id?: string;
+  name: string;
+  kind: ConversationAttachmentKind;
+  media_type?: string;
+  size?: number;
+  ref_id?: string;
+  content_hash?: string;
+  created_at?: string;
+}
+
+export interface ConversationAttachmentRef {
+  kind: "plugin" | "connection";
+  ref_id: string;
+  name?: string;
+}
+
+export interface AttachablePlugin {
+  ref_id: string;
+  name: string;
+  description: string;
+  capability_type: string;
+}
+
+export interface AttachableConnection {
+  connector_id: string;
+  version?: string;
+  state?: string;
+  healthy?: boolean;
+  risk_level?: string;
+  capabilities?: string[];
+}
+
+export interface AttachablesResponse {
+  plugins: AttachablePlugin[];
+  connections: AttachableConnection[];
 }
 
 export interface ConversationMessage {
@@ -565,6 +612,8 @@ export interface ConversationSendRequest {
   content: string;
   execution_mode: ConversationExecutionMode;
   idempotency_key: string;
+  attachment_ids?: string[];
+  attachment_refs?: ConversationAttachmentRef[];
 }
 
 export interface ConversationSendResponse {
