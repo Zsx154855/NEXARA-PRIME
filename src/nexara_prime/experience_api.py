@@ -1,0 +1,372 @@
+"""Experience API V1.0 适配层：把 NexaraRuntime 真实状态映射为产品体验层契约。
+
+契约权威：NEXARA-PRODUCT/MockAPI/NEXARA-Experience-API-契约.md（MP-01，V1.0）。
+"""
+
+from __future__ import annotations
+
+import os
+from datetime import datetime, timezone
+from typing import Any
+from zoneinfo import ZoneInfo
+
+from fastapi import APIRouter
+
+_WEEKDAY_CN = "一二三四五六日"
+
+_PLANNING_STATES = {
+    "Intent",
+    "Context",
+    "Contract",
+    "Plan",
+    "Simulation",
+    "Approval",
+    "Created",
+    "Triaged",
+    "Contracted",
+    "Planned",
+    "Scheduled",
+    "AwaitingApproval",
+}
+_EXECUTING_STATES = {
+    "Execution",
+    "Verification",
+    "Evidence",
+    "MemoryPatch",
+    "Evaluation",
+    "Running",
+    "Verifying",
+    "Degraded",
+    "RollingBack",
+}
+_PAUSED_STATES = {"Paused", "Blocked"}
+_COMPLETED_STATES = {"Completed", "Failed", "RolledBack", "Cancelled"}
+
+# 精力值为 V1.0 确定性推导：健康=高精力，降级=低精力（契约无真实来源，见 SEAL 已知限制）。
+_ENERGY_HEALTHY = 0.85
+_ENERGY_DEGRADED = 0.40
+
+
+def map_mission_state(state: str) -> str:
+    if state in _EXECUTING_STATES:
+        return "executing"
+    if state in _PAUSED_STATES:
+        return "paused"
+    if state in _COMPLETED_STATES:
+        return "completed"
+    return "planning"
+
+
+def envelope(data: Any, **meta_extra: Any) -> dict[str, Any]:
+    meta: dict[str, Any] = {"timestamp": datetime.now(timezone.utc).isoformat()}
+    meta.update(meta_extra)
+    return {"success": True, "data": data, "error": None, "meta": meta}
+
+
+def paginate(items: list[Any], page: int, limit: int) -> tuple[list[Any], dict[str, int]]:
+    page = max(page, 1)
+    limit = max(limit, 1)
+    start = (page - 1) * limit
+    return items[start : start + limit], {"total": len(items), "page": page, "limit": limit}
+
+
+def _experience_mission(record: dict[str, Any]) -> dict[str, Any]:
+    spec = record.get("spec", {})
+    state = record.get("state", "Intent")
+    steps = (record.get("plan") or {}).get("steps", [])
+    subtasks = [
+        {
+            "id": step.get("step_id", f"step-{index}"),
+            "title": step.get("title", ""),
+            "done": step.get("status") == "completed",
+        }
+        for index, step in enumerate(steps)
+    ]
+    if steps:
+        progress = round(sum(1 for s in subtasks if s["done"]) / len(steps), 2)
+    else:
+        progress = {"planning": 0.1, "executing": 0.5, "paused": 0.5, "completed": 1.0}[map_mission_state(state)]
+    next_pending = next((s["title"] for s in subtasks if not s["done"]), "")
+    if map_mission_state(state) == "completed":
+        next_step = "已归档"
+    else:
+        next_step = next_pending or "等待下一步指令"
+    return {
+        "id": record.get("mission_id", ""),
+        "title": spec.get("title") or spec.get("objective", ""),
+        "goal": spec.get("objective", ""),
+        "status": map_mission_state(state),
+        "progress": progress,
+        "nextStep": next_step,
+        "subtasks": subtasks,
+        "updatedText": relative_time_text(spec.get("created_at", "")),
+    }
+
+
+def relative_time_text(iso_timestamp: str, now: datetime | None = None) -> str:
+    if not iso_timestamp:
+        return "刚刚"
+    now = now or datetime.now(timezone.utc)
+    try:
+        moment = datetime.fromisoformat(iso_timestamp)
+    except ValueError:
+        return "刚刚"
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    seconds = max(0, int((now - moment).total_seconds()))
+    if seconds < 60:
+        return "刚刚"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} 分钟前"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours} 小时前"
+    days = hours // 24
+    if days == 1:
+        return "昨天"
+    return f"{days} 天前"
+
+
+def days_since_first_record(records: list[dict], now: datetime | None = None) -> int:
+    created_dates = [r.get("spec", {}).get("created_at", "") for r in records]
+    created_dates = [d for d in created_dates if d]
+    if not created_dates:
+        return 1
+    try:
+        first = datetime.fromisoformat(sorted(created_dates)[0])
+    except ValueError:
+        return 1
+    if first.tzinfo is None:
+        first = first.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    return max(1, (now - first).days + 1)
+
+
+_EXPERIENCE_KINDS = {"experience", "failure_experience"}
+_RELATION_KINDS = {"preference", "short_term", "temporary_context"}
+
+
+def map_memory_kind(kind: str) -> str:
+    if kind in _EXPERIENCE_KINDS:
+        return "experience"
+    if kind in _RELATION_KINDS:
+        return "relation"
+    return "knowledge"
+
+
+def _experience_memory(record: dict[str, Any]) -> dict[str, Any]:
+    content = record.get("content", "")
+    summary = content if len(content) <= 80 else content[:79] + "…"
+    return {
+        "id": record.get("memory_id", ""),
+        "kind": map_memory_kind(record.get("kind", "")),
+        "title": record.get("key", ""),
+        "summary": summary,
+        "updatedText": relative_time_text(record.get("created_at", "")),
+    }
+
+
+def _clock_text(iso_timestamp: str) -> str:
+    try:
+        moment = datetime.fromisoformat(iso_timestamp)
+    except (ValueError, TypeError):
+        return ""
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(ZoneInfo("Asia/Shanghai"))
+    return moment.strftime("%H:%M")
+
+
+TOKEN_DAILY_LIMIT = 50000
+
+
+def _token_stats(runtime: Any) -> dict[str, Any]:
+    # PRIME 暂无 token 计量，V1.3 接入；先返回确定性占位值。
+    return {"todayUsed": 0, "todayLimit": TOKEN_DAILY_LIMIT}
+
+
+def _uptime_text(seconds: float) -> str:
+    total = int(seconds)
+    days, remainder = divmod(total, 86400)
+    hours = remainder // 3600
+    if days > 0:
+        return f"已稳定运行 {days} 天 {hours} 小时"
+    if hours > 0:
+        return f"已稳定运行 {hours} 小时"
+    return f"已稳定运行 {max(1, total // 60)} 分钟"
+
+
+def build_experience_router(runtime: Any) -> APIRouter:
+    router = APIRouter(prefix="/v1", tags=["experience"])
+
+    @router.get("/missions")
+    def missions(page: int = 1, limit: int = 20) -> dict[str, Any]:
+        items = [_experience_mission(record) for record in runtime.list_missions()]
+        items.reverse()
+        page_items, page_meta = paginate(items, page, limit)
+        return envelope(page_items, **page_meta)
+
+    @router.get("/user")
+    def user() -> dict[str, Any]:
+        stats = runtime.stats()
+        records = runtime.list_missions()
+        return envelope(
+            {
+                "name": os.environ.get("NEXARA_USER_NAME", "展星"),
+                "level": "观察者 · Lv.3",
+                "daysCount": days_since_first_record(records),
+                "goalsCompleted": stats["completed_missions"],
+                "missionsActive": stats["active_missions"],
+                "quote": "理解世界，也理解自己。",
+            }
+        )
+
+    @router.get("/session")
+    def session() -> dict[str, Any]:
+        health = runtime.health()
+        stats = runtime.stats()
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        hour = now.hour
+        if hour < 6:
+            greeting = "夜深了，也别忘了照顾自己。"
+        elif hour < 12:
+            greeting = "早上好，今天也从理解开始。"
+        elif hour < 14:
+            greeting = "中午好，先安顿好节奏。"
+        elif hour < 18:
+            greeting = "下午好，保持专注。"
+        else:
+            greeting = "晚上好，把今天稳稳收尾。"
+        healthy = health["database_health"] == "ok" and health["provider_health"] == "healthy"
+        energy = _ENERGY_HEALTHY if healthy else _ENERGY_DEGRADED
+        missions = [_experience_mission(r) for r in runtime.list_missions()]
+        active = next((m for m in missions if m["status"] == "executing"), None)
+        planned = next((m for m in missions if m["status"] == "planning"), None)
+        focus = active or planned
+        if focus:
+            suggestion = f"建议推进「{focus['title']}」：{focus['nextStep']}"
+        else:
+            suggestion = "当前没有进行中的任务，可以从一个小目标开始。"
+        engine = "执行中：" + active["title"] if active else "待命"
+        memory_total = len(runtime.memory.inspect(None))
+        highlights = [
+            f"已完成 {stats['completed_missions']} 个任务",
+            f"记忆累计 {memory_total} 条",
+            f"任务引擎{('：' + engine) if active else '待命'}",
+        ]
+        return envelope(
+            {
+                "id": f"d-{now.strftime('%Y-%m-%d')}",
+                "dateText": f"{now.month}月{now.day}日 星期{_WEEKDAY_CN[now.weekday()]}",
+                "greeting": greeting,
+                "energyLevel": energy,
+                "suggestion": suggestion,
+                "highlights": highlights,
+            }
+        )
+
+    @router.get("/memories")
+    def memories(page: int = 1, limit: int = 20) -> dict[str, Any]:
+        items = [_experience_memory(r) for r in runtime.memory.inspect(None)]
+        items.reverse()
+        page_items, page_meta = paginate(items, page, limit)
+        return envelope(page_items, **page_meta)
+
+    @router.get("/conversations")
+    def conversations(page: int = 1, limit: int = 20) -> dict[str, Any]:
+        items = []
+        for conversation in runtime.conversations.list():
+            messages = []
+            for message in runtime.conversations.messages(conversation["conversation_id"]):
+                role = "nexara" if message.get("role") == "assistant" else "user"
+                messages.append(
+                    {
+                        "id": message.get("message_id", ""),
+                        "role": role,
+                        "text": message.get("content", ""),
+                        "timeText": _clock_text(message.get("created_at", "")),
+                    }
+                )
+            items.append(
+                {
+                    "id": conversation["conversation_id"],
+                    "title": conversation.get("title") or "对话",
+                    "messages": messages,
+                }
+            )
+        items.reverse()
+        page_items, page_meta = paginate(items, page, limit)
+        return envelope(page_items, **page_meta)
+
+    @router.get("/token/usage")
+    def token_usage() -> dict[str, Any]:
+        return envelope(_token_stats(runtime))
+
+    @router.get("/system/status")
+    def system_status() -> dict[str, Any]:
+        health = runtime.health()
+        core_ok = health["database_health"] == "ok"
+        provider_ok = health["provider_health"] == "healthy"
+        memory_total = len(runtime.memory.inspect(None))
+        active_mission = next((m for m in runtime.list_missions() if m.get("state") in _EXECUTING_STATES), None)
+        components = [
+            {
+                "id": "comp-1",
+                "name": "Runtime 核心",
+                "state": "normal" if core_ok else "warning",
+                "detail": "运行正常" if core_ok else "数据库不可用",
+            },
+            {
+                "id": "comp-2",
+                "name": "智能层",
+                "state": "normal" if provider_ok else "warning",
+                "detail": f"模型通道：{health['provider']}" if provider_ok else "模型通道不可用",
+            },
+            {
+                "id": "comp-3",
+                "name": "任务引擎",
+                "state": "busy" if active_mission else "normal",
+                "detail": (
+                    "执行中：" + (active_mission.get("spec", {}).get("title") or active_mission.get("mission_id", ""))
+                    if active_mission
+                    else "待命"
+                ),
+            },
+            {
+                "id": "comp-4",
+                "name": "恢复引擎",
+                "state": "normal",
+                "detail": "待命",
+            },
+            {
+                "id": "comp-5",
+                "name": "记忆系统",
+                "state": "normal",
+                "detail": f"已同步 {memory_total} 条",
+            },
+            {
+                "id": "comp-6",
+                "name": "治理层",
+                "state": "normal",
+                "detail": "宪章规则生效中",
+            },
+        ]
+        return envelope(
+            {
+                "runtimeVersion": f"V{health['version']}",
+                "mode": "本地主权运行",
+                "uptimeText": _uptime_text(health["uptime_seconds"]),
+                "components": components,
+                "token": _token_stats(runtime),
+            }
+        )
+
+    @router.get("/agents")
+    def agents_reserved() -> dict[str, Any]:
+        return envelope(None)
+
+    @router.get("/evaluations")
+    def evaluations_reserved() -> dict[str, Any]:
+        return envelope(None)
+
+    return router

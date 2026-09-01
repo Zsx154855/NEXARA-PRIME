@@ -383,7 +383,7 @@ class ChiefBrainKernel:
         """Feed mission results back into the brain for learning."""
         self.budget.record_usage(
             tokens=int(result.get("input_tokens", 0)) + int(result.get("output_tokens", 0)),
-            cost=float(result.get("cost_usd", 0.0)),
+            cost=result.get("cost_usd"),
             provider=str(result.get("provider", "unknown")),
         )
 

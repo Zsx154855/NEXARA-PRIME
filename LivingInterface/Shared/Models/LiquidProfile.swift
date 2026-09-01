@@ -117,7 +117,7 @@ struct LiquidTimingConfig: Sendable {
 
     static let calm = LiquidTimingConfig(
         breathPeriod: 4.0, deformationSpeed: 0.8,
-        particleUpdateRate: 0.05, stateTransitionDuration: 1.2,
+        particleUpdateRate: 0.067, stateTransitionDuration: 1.2,
         thermalEquilibriumTime: 3.0
     )
 

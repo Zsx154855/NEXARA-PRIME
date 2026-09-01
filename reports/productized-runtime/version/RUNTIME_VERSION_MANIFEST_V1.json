@@ -1,0 +1,16 @@
+{
+  "runtime_version": "0.1.0",
+  "git_sha": "3e07318821d296a9cce4246dbb5060797dadabab",
+  "branch": "main",
+  "plist_hash_runtime": "d92fafbfbed668fb9e5425365bbf364e71e17fa952022d48218395b3cf9f3b5f",
+  "plist_hash_grandslam": "a01e9c5369c78e771c626ea2e262783cd2d3a3ee79f96df303dd8faaa0037703",
+  "schema_version": "1",
+  "schema_tables": ["conversation_message_index", "records", "events"],
+  "provider": "deepseek",
+  "model": "deepseek-v4-pro",
+  "mock": false,
+  "migration_version": "1",
+  "db_path": "/Volumes/NEXARA/NEXARA-PRIME/runtime/nexara.db",
+  "rollback_point": "~/Library/LaunchAgents/*.bak-20260820-202315",
+  "frozen_at": "2026-08-21T01:55:00+08:00"
+}

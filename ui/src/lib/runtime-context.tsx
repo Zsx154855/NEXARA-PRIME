@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { NexaraAPI, configureApi } from "@/lib/api";
+import { resolveApiBaseUrl } from "@/lib/platform";
 import type { MemoryRecord, MemoryStats, RuntimeOverview, RuntimeStats } from "@/types";
 
 /**
@@ -23,6 +24,10 @@ const RuntimeDataContext = createContext<RuntimeData | null>(null);
 
 const api = new NexaraAPI();
 
+// 模块级配置：任何组件（含子组件首载）发起请求前 baseUrl 已就绪，
+// 避免 configureApi 放在 effect 中时子组件先于父级 effect 用空 baseUrl 请求。
+configureApi({ baseUrl: resolveApiBaseUrl() });
+
 const POLL_INTERVAL_MS = 10_000;
 
 export function RuntimeDataProvider({ children }: { children: React.ReactNode }) {
@@ -32,13 +37,6 @@ export function RuntimeDataProvider({ children }: { children: React.ReactNode })
   const [memoryStats, setMemoryStats] = useState<MemoryStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    configureApi({
-      baseUrl:
-        window.location.hostname === "localhost" ? "http://127.0.0.1:8765" : "",
-    });
-  }, []);
 
   const load = useCallback(async () => {
     try {

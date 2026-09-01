@@ -448,6 +448,7 @@ class ApprovalEngine:
 
     def list(self, mission_id: str | None = None) -> list[dict]:
         approvals: list[dict] = []
+        now = datetime.now(timezone.utc)
         for envelope in self.store.list_record_envelopes("approval", mission_id):
             approval = ApprovalRequest.model_validate(envelope["payload"])
             if (
@@ -457,7 +458,16 @@ class ApprovalEngine:
                 or not self.terminal_transition_is_valid(approval)
             ):
                 raise ValueError("approval_integrity_invalid")
-            approvals.append(approval.model_dump(mode="json"))
+            data = approval.model_dump(mode="json")
+            # 投影过期：pending 且已过 expires_at 报告为 expired，
+            # 避免 UI 把已过期审批当可决定项（decide 时也会落库转换）。
+            if data.get("status") == ApprovalStatus.PENDING.value and approval.expires_at:
+                expiry = datetime.fromisoformat(approval.expires_at)
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+                if expiry <= now:
+                    data["status"] = ApprovalStatus.EXPIRED.value
+            approvals.append(data)
         return approvals
 
 

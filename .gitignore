@@ -87,6 +87,7 @@ DerivedData/
 LivingInterface/.derivedData/
 LivingInterface/build/
 LivingInterface/.build/
+release/
 xcuserdata/
 *.xcuserstate
 .venv-fresh/
@@ -99,3 +100,9 @@ platform/sdk/typescript/node_modules/
 Chats/
 platform/sdk/typescript/node_modules/
 .worktrees/
+
+# ── Tauri / desktop shell ──
+out-tauri/
+ui/src-tauri/target/
+ui/src-tauri/gen/schemas
+!ui/src-tauri/Cargo.lock

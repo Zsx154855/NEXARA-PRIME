@@ -77,9 +77,14 @@ class ToolRuntime:
             envelope.get("mission_id") != mission_id
             or invocation.mission_id != mission_id
             or invocation.tool_name != tool_name
-            or invocation.arguments != arguments
         ):
             raise ValueError("tool_idempotency_conflict")
+        if invocation.arguments != arguments:
+            # 生成式 tool（写报告/写文件）的 arguments 含动态 content（时间戳/trace），
+            # 重放时字节级不同但语义相同 → reuse 而非 conflict。查询式 tool
+            # （file_read/read_file）保持严格幂等（path 不同 = 不同操作 → conflict）。
+            if tool_name not in {"file_write_report", "write_workspace_file"}:
+                raise ValueError("tool_idempotency_conflict")
         return invocation
 
     def invoke(

@@ -76,3 +76,38 @@ class TestSecretManagement:
         assert env is not None
         assert keychain is not None
         assert memory is not None
+
+
+def test_audit_ledger_chain_survives_concurrent_records(tmp_path) -> None:
+    """并发 record() 不得破坏哈希链（回归：无锁时两个线程读到同一 tail 导致断链）。"""
+    import threading
+    from pathlib import Path
+
+    from nexara_prime.db import SQLiteStore
+    from nexara_prime.security_audit import SecurityAuditLedger
+
+    store = SQLiteStore(tmp_path / "audit.db")
+    ledger = SecurityAuditLedger(store)
+    errors: list[Exception] = []
+
+    def worker(worker_id: int) -> None:
+        try:
+            for i in range(25):
+                ledger.record("test.concurrent", actor_id=f"w{worker_id}", mission_id=f"m{worker_id}", action=f"step-{i}")
+        except Exception as exc:  # pragma: no cover - failure path
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(w,)) for w in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    ok, msg = ledger.verify_chain()
+    assert ok, msg
+    assert ledger.count() == 100
+
+    # 持久化后重载仍可验证
+    reloaded = SecurityAuditLedger(SQLiteStore(tmp_path / "audit.db"))
+    assert reloaded.verify_chain()[0] is True

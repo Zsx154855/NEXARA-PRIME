@@ -5,7 +5,7 @@
   "generated_by": "NEXARA Sovereign Runtime — Architecture Freeze Audit",
 
   "repository": {
-    "root": "/Users/agentos/NEXARA-PRIME",
+    "root": "/Volumes/NEXARA/NEXARA-PRIME",
     "branch": "feat/brand-baihan",
     "head_sha": "8a75910c5f7e7d9c3c8d769307decbef4c74433b",
     "head_short": "8a75910",
@@ -30,7 +30,7 @@
     "package": "nexara-prime==0.1.0",
     "version": "0.1.0",
     "python": "3.12.13",
-    "venv": "/Users/agentos/NEXARA-PRIME/.venv",
+    "venv": "/Volumes/NEXARA/NEXARA-PRIME/.venv",
     "entry_point": "nexara",
     "brand": "柏韩 (Bǎi Hán)",
     "positioning": "Human-Centered Sovereign Agent Kernel on NEXARA PRIME",

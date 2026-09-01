@@ -2,16 +2,14 @@
 // api.ts 尚未封装该端点；此模块按相同语义取数（超时、JSON 错误解析），
 // 错误不静默：503 时如实呈现「知识库模块未就绪」。
 
+import { resolveApiBaseUrl } from "@/lib/platform";
 import type { ApiResult } from "@/types";
 
 const TIMEOUT_MS = 30_000;
 
 /** 与 runtime-context 的 configureApi 相同的 baseUrl 规则。 */
 function knowledgeBaseUrl(): string {
-  return typeof window !== "undefined" &&
-    window.location.hostname === "localhost"
-    ? "http://127.0.0.1:8765"
-    : "";
+  return resolveApiBaseUrl();
 }
 
 export async function fetchKnowledgeUniverse(): Promise<

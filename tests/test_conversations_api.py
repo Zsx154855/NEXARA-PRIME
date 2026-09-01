@@ -106,3 +106,103 @@ def test_unconfigured_provider_does_not_write_assistant_success(tmp_path: Path) 
     assert sent.status_code == 503
     messages = client.get(f"/api/conversations/{conversation_id}/messages").json()
     assert [item["role"] for item in messages] == ["user"]
+
+
+def test_conversation_agent_loop_executes_tools_and_answers(tmp_path: Path, monkeypatch) -> None:
+    """对话（chat/auto）意图走工具循环：脚本化 provider 先请求工具再给最终答复。"""
+    import json as _json
+
+    from nexara_prime.model_gateway import ModelResponse
+
+    settings = Settings(
+        db_path=tmp_path / "runtime.db",
+        workspace_root=tmp_path / "workspace",
+        report_root=tmp_path / "reports",
+        model_provider="mock",
+        mock_model=True,
+        api_host="127.0.0.1",
+        api_port=8870,
+    )
+    (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "workspace" / "HEALTH.md").write_text("runtime: ok\n", encoding="utf-8")
+
+    runtime = NexaraRuntime(settings)
+    calls = {"n": 0}
+
+    def fake_complete(system, task, context=None, *, trace_id="", timeout_seconds=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            text = _json.dumps({"action": "tool", "tool": "file_read", "arguments": {"path": "HEALTH.md"}})
+        else:
+            text = _json.dumps({"action": "answer", "content": "自检完成：已读取 HEALTH.md。"})
+        return ModelResponse(
+            provider="mock", model="mock", text=text,
+            input_tokens=1, output_tokens=1, request_id=f"req-{calls['n']}",
+        )
+
+    monkeypatch.setattr(runtime.models, "complete", fake_complete)
+    client = TestClient(create_app(runtime))
+
+    conversation_id = client.post("/api/conversations", json={"title": "工具循环"}).json()["conversation_id"]
+    sent = client.post(
+        f"/api/conversations/{conversation_id}/messages",
+        json={"content": "请读取 HEALTH.md 并汇报", "execution_mode": "auto", "idempotency_key": "agent-loop-1"},
+    )
+    assert sent.status_code == 200, sent.text
+    body = sent.json()
+    assert body["assistant_message"]["content"] == "自检完成：已读取 HEALTH.md。"
+    meta = body["assistant_message"]["metadata"]
+    assert meta["tool_steps"] == 1
+    assert meta["tools_used"] == ["file_read"]
+    assert meta["request_id"] == "req-2"
+
+    tools = client.get("/api/tools").json()
+    conv_tools = [t for t in tools if str(t.get("mission_id", "")).startswith("conversation-")]
+    assert len(conv_tools) == 1
+    assert conv_tools[0]["tool_name"] == "file_read"
+    assert conv_tools[0]["status"] == "completed"
+    assert conv_tools[0]["result"]["content"] == "runtime: ok\n"
+
+
+def test_conversation_agent_loop_synthesizes_when_steps_exhausted(tmp_path: Path, monkeypatch) -> None:
+    """工具循环用尽仍无答复时，追加纯总结轮，不落库原始工具 JSON。"""
+    import json as _json
+
+    from nexara_prime.model_gateway import ModelResponse
+
+    settings = Settings(
+        db_path=tmp_path / "runtime.db",
+        workspace_root=tmp_path / "workspace",
+        report_root=tmp_path / "reports",
+        model_provider="mock",
+        mock_model=True,
+        api_host="127.0.0.1",
+        api_port=8870,
+    )
+    (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
+
+    runtime = NexaraRuntime(settings)
+    calls = {"n": 0}
+
+    def fake_complete(system, task, context=None, *, trace_id="", timeout_seconds=None):
+        calls["n"] += 1
+        if calls["n"] <= runtime.CONVERSATION_MAX_TOOL_STEPS:
+            text = _json.dumps({"action": "tool", "tool": "file_read", "arguments": {"path": "."}})
+        else:
+            text = "总结：已完成局部检查，未能确认全部状态。"
+        return ModelResponse(provider="mock", model="mock", text=text, input_tokens=1, output_tokens=1)
+
+    monkeypatch.setattr(runtime.models, "complete", fake_complete)
+    client = TestClient(create_app(runtime))
+
+    conversation_id = client.post("/api/conversations", json={}).json()["conversation_id"]
+    sent = client.post(
+        f"/api/conversations/{conversation_id}/messages",
+        json={"content": "全量自检", "execution_mode": "auto", "idempotency_key": "agent-loop-2"},
+    )
+    assert sent.status_code == 200, sent.text
+    body = sent.json()
+    content = body["assistant_message"]["content"]
+    assert content == "总结：已完成局部检查，未能确认全部状态。"
+    assert "{" not in content
+    assert body["assistant_message"]["metadata"]["tool_steps"] == runtime.CONVERSATION_MAX_TOOL_STEPS

@@ -17,7 +17,7 @@ The MVP is intentionally provider-free. It uses a deterministic mock model and d
 ## Quick start
 
 ```bash
-cd /Users/agentos/NEXARA-PRIME
+cd /Volumes/NEXARA/NEXARA-PRIME
 ./scripts/test_all.sh
 ./scripts/run_dev.sh
 ```

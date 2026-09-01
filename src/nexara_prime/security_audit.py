@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from dataclasses import dataclass, field
 
 from .models import new_id, now_iso
@@ -60,6 +61,10 @@ class SecurityAuditLedger:
         self._store = store
         self._entries: list[AuditEntry] = []
         self._last_hash: str = "0" * 64
+        # record() mutates the in-memory tail and persists; uvicorn serves
+        # sync handlers from a threadpool, so concurrent requests can race
+        # and break the hash chain. Serialize appends.
+        self._lock = threading.Lock()
         self._load_from_store()
 
     def _load_from_store(self) -> None:
@@ -81,25 +86,26 @@ class SecurityAuditLedger:
                connector_id: str = "", resource: str = "", action: str = "",
                decision: str = "allowed", policy_id: str = "", risk_level: str = "",
                trace_id: str = "", metadata: dict | None = None) -> AuditEntry:
-        entry = AuditEntry(
-            event_type=event_type, actor_id=actor_id, actor_type=actor_type,
-            session_id=session_id, mission_id=mission_id, task_id=task_id,
-            connector_id=connector_id, resource=resource, action=action,
-            decision=decision, policy_id=policy_id, risk_level=risk_level,
-            trace_id=trace_id, previous_hash=self._last_hash,
-            metadata=metadata or {},
-        )
-        entry.payload_hash = hashlib.sha256(json.dumps(entry.__dict__, sort_keys=True, default=str).encode()).hexdigest()[:16]
-        entry.event_hash = entry.compute_hash()
-        self._entries.append(entry)
-        self._last_hash = entry.event_hash
+        with self._lock:
+            entry = AuditEntry(
+                event_type=event_type, actor_id=actor_id, actor_type=actor_type,
+                session_id=session_id, mission_id=mission_id, task_id=task_id,
+                connector_id=connector_id, resource=resource, action=action,
+                decision=decision, policy_id=policy_id, risk_level=risk_level,
+                trace_id=trace_id, previous_hash=self._last_hash,
+                metadata=metadata or {},
+            )
+            entry.payload_hash = hashlib.sha256(json.dumps(entry.__dict__, sort_keys=True, default=str).encode()).hexdigest()[:16]
+            entry.event_hash = entry.compute_hash()
+            self._entries.append(entry)
+            self._last_hash = entry.event_hash
 
-        if self._store:
-            # Audit persistence is a security boundary: a failed write must
-            # fail closed instead of silently reporting an unverifiable run.
-            self._store.save_record(entry.audit_event_id, "audit_entry",
-                                    entry.__dict__, entry.timestamp)
-        return entry
+            if self._store:
+                # Audit persistence is a security boundary: a failed write must
+                # fail closed instead of silently reporting an unverifiable run.
+                self._store.save_record(entry.audit_event_id, "audit_entry",
+                                        entry.__dict__, entry.timestamp)
+            return entry
 
     def verify_chain(self) -> tuple[bool, str]:
         if not self._entries:

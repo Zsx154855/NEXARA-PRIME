@@ -3,7 +3,7 @@
   "platform": "NEXARA_PRIME",
   "agent_package": "nexara_prime.agent",
   "hermes_runtime_dependency": 0,
-  "repo": "/Users/agentos/NEXARA-PRIME",
+  "repo": "/Volumes/NEXARA/NEXARA-PRIME",
   "branch": "feat/brand-baihan",
   "merge_target_branch": "main",
   "python": "3.12.13",
@@ -103,6 +103,54 @@
     "verified_pr_head": "b1084c6fec69a3199e6ad5e1f4527f67e58f0e44",
     "superseded_by": ".nexara/receipts/pr23_final_attestation.json"
   },
-  "updated_at": "2026-08-08T07:15:00Z",
-  "updated_by": "NEXARA Sovereign OnePass — post-merge state sync (ca1ee57, 2044/0)"
+  "pr42_home_v2_3": {
+    "pr_number": 42,
+    "status": "MERGED",
+    "merge_commit": "09fb533a11bdd268a9cdf69288059db469b33275",
+    "verified_tree": "01994589258f58419a9de192b8747944c17257bd"
+  },
+  "conversation_closure_v1_seal": {
+    "sealed_at": "2026-08-13T07:30:00Z",
+    "pr": 43,
+    "pr_title": "feat(conversation): complete real conversation product closure",
+    "pr_state": "MERGED",
+    "merge_commit": "70e058ac070b51d5292801094f332890f7125e50",
+    "source_branch": "feat/conversation-product-closure-v2",
+    "remote_delivery_commit": "14ae68492f08a91a8ec3e89d253b38aed4a8ba4b",
+    "local_source_commit": "2ce12521be85e10eb321eaebd146ea1dce268dbd",
+    "merge_tree": "cdf3a6d471810961a44db03115250acfc8b9706c",
+    "product_status": {
+      "product_code": "PASS",
+      "runtime": "PASS",
+      "github": "PASS",
+      "nexara_product_delivery": "PASS",
+      "conversation": "PASS",
+      "mission_chain": "PASS",
+      "evidence_chain": "PASS",
+      "memory_chain": "PASS",
+      "recovery": "PASS",
+      "home_v2_3": "PASS",
+      "regression": "2064 passed, 0 failed"
+    },
+    "environment_blockers": [
+      {
+        "id": "GITHUB_ACTIONS_RUNNER",
+        "status": "CI_PLATFORM_FAILURE",
+        "note": "GitHub Actions runner not allocated for 8 of 9 checks; GitGuardian PASS; NOT a code failure"
+      },
+      {
+        "id": "DEEPSEEK_CREDENTIAL",
+        "status": "BLOCKED_BY_CREDENTIALS",
+        "note": "credential present but provider returns authentication_failed; provider logic unchanged; no fake success; no retry loop"
+      },
+      {
+        "id": "BROWSER_NPM_PERMISSION",
+        "status": "ENVIRONMENT_BLOCKED",
+        "note": "npm install/npm ci denied by local deny rule; browser pixel QA not executed; API data contract PASS"
+      }
+    ],
+    "evidence_root": "/tmp/nexara_final_delivery/"
+  },
+  "updated_at": "2026-08-13T07:30:00Z",
+  "updated_by": "NEXARA POST-MERGE STATE SEAL V1 — conversation closure PR #43 merged (70e058ac)"
 }

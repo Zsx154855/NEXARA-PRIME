@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .config import Settings
+from .experience_api import build_experience_router
 try:
     from .knowledge_universe import scan_vault
 except ImportError:
@@ -52,13 +53,22 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     app = FastAPI(title="NEXARA PRIME", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+            "https://nexara-prime.pages.dev",
+        ],
         allow_methods=["*"],
         allow_headers=["*"],
     )
     app.state.runtime = runtime
     default_vault = Path(__file__).resolve().parents[2] / "docs"
     app.state.knowledge_vault = Path(os.environ.get("NEXARA_VAULT_PATH", default_vault))
+
+    app.include_router(build_experience_router(runtime))
 
     def get_mission(mission_id: str):
         try:

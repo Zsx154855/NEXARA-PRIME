@@ -1,11 +1,13 @@
 import type { NextConfig } from "next";
 
+const isDesktop = process.env.NEXT_PUBLIC_PLATFORM === "tauri";
+
 const nextConfig: NextConfig = {
   output: "export",
-  basePath: "/console",
   trailingSlash: true,
-  distDir: "out",
+  distDir: isDesktop ? "out-tauri" : "out",
   images: { unoptimized: true },
+  ...(isDesktop ? {} : { basePath: "/console" }),
 };
 
 export default nextConfig;
