@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from "re
 import { Search, Rocket, Play, Brain, CornerDownLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MissionSnapshot, MemoryRecord } from "@/types";
+import { useDialogA11y } from "@/components/ui/dialog-a11y";
 
 // ── Types ──
 
@@ -45,6 +46,10 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // 模态焦点管理：Escape 关闭、打开聚焦、Tab 面板内循环
+  useDialogA11y(open, onClose, panelRef);
 
   // Focus input on open
   useEffect(() => {
@@ -54,16 +59,6 @@ export function CommandPalette({
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
-
-  // ESC to close
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
 
   // Build results
   const results = useCallback((): SearchResult[] => {
@@ -174,6 +169,7 @@ export function CommandPalette({
 
       {/* Panel */}
       <div
+        ref={panelRef}
         className="relative w-full max-w-lg rounded-2xl border border-border-subtle bg-surface-elevated shadow-2xl overflow-hidden"
         onKeyDown={handleKeyDown}
       >
