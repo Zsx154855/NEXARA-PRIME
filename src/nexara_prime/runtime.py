@@ -649,12 +649,24 @@ class NexaraRuntime:
         self.conversations.save_provider_attempt(attempt)
         self.telemetry.record_health("provider", "starting", f"provider={self.models.provider.name}")
         try:
-            response = self.models.complete(
-                system,
-                task,
-                {"conversation_id": conversation_id, "trace_id": trace_id},
-                trace_id=trace_id,
-            )
+            if intent == "mission":
+                response = self.models.complete(
+                    system,
+                    task,
+                    {"conversation_id": conversation_id, "trace_id": trace_id},
+                    trace_id=trace_id,
+                )
+            else:
+                response = self._conversation_agent_response(
+                    conversation_id=conversation_id,
+                    user_message=user_message,
+                    transcript_text=transcript_text,
+                    intent=intent,
+                    intent_decision=intent_decision,
+                    execution_mode=execution_mode,
+                    trace_id=trace_id,
+                    mission_id=mission_id,
+                )
         except Exception as exc:
             attempt.update({"status": "failed", "error_code": getattr(exc, "code", "provider_failed"), "error": redact_secrets(str(exc))})
             self.conversations.save_provider_attempt(attempt)
@@ -698,6 +710,8 @@ class NexaraRuntime:
                 "finish_reason": response.finish_reason,
                 "retry_count": response.retry_count,
                 "provider_attempt_id": attempt["attempt_id"],
+                "tool_steps": response.metadata.get("tool_steps", 0),
+                "tools_used": response.metadata.get("tools_used", []),
             },
         )
         return {
@@ -712,6 +726,232 @@ class NexaraRuntime:
             "intent_confidence": intent_decision.confidence,
             "idempotent_replay": False,
         }
+
+    # ── Conversation agentic tools ──────────────────────────────────────────
+    # 对话（chat/auto）意图走工具循环：注入真实仓库/运行时上下文，模型以
+    # JSON 信封请求 R0/R1 免审批工具（读取/沙箱命令/浏览器只读），逐轮回填
+    # 结果直到给出最终答复。R2 写入类任务不在此执行，模型应建议创建使命。
+    CONVERSATION_TOOL_WHITELIST: dict[str, dict[str, Any]] = {
+        "file_read": {
+            "description": "Read a text file or list a directory under the NEXARA workspace.",
+            "arguments": {"path": "string, relative path under the workspace (e.g. 'README.md' or 'src')"},
+        },
+        "read_file": {
+            "description": "Alias of file_read: read a text file under the workspace.",
+            "arguments": {"path": "string, relative path under the workspace"},
+        },
+        "run_command_sandboxed": {
+            "description": "Run a sandboxed command. Allowed executables: python, python3, git, ls, pwd, find. No pipes/redirects/shell metacharacters; no git push/merge/tag/deploy.",
+            "arguments": {"command": "list of strings, e.g. ['git', 'status', '--short']"},
+        },
+        "code_exec": {
+            "description": "Run a short Python snippet in a sandbox (no network, no filesystem writes, no subprocess).",
+            "arguments": {"code": "string, python source <= 4000 chars"},
+        },
+        "browser_readonly": {
+            "description": "Read a local file via file:// for read-only inspection.",
+            "arguments": {"url": "string, file:// absolute path under the workspace"},
+        },
+    }
+    CONVERSATION_MAX_TOOL_STEPS = 6
+
+    def _conversation_repo_context(self) -> dict[str, Any]:
+        """Bounded repo facts for the conversation agent (discover git root from workspace)."""
+        try:
+            top_level = subprocess.run(
+                ["git", "-C", str(self.settings.workspace_root), "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if top_level.returncode != 0:
+                raise ValueError("not_a_git_repository")
+            repo_root = top_level.stdout.strip()
+            if not repo_root:
+                raise ValueError("empty_git_root")
+            rc = self.repository_context.collect(repo_root)
+            return {
+                "context_hash": rc.context_hash,
+                "repository": rc.repository_root,
+                "branch": rc.branch,
+                "head_sha": rc.head_sha,
+                "dirty": bool(rc.status_porcelain),
+                "files": [{"path": f["path"], "bytes": f["bytes"]} for f in rc.files][:200],
+                "excerpts": dict(list(rc.excerpts.items())[:12]),
+            }
+        except Exception:
+            return {
+                "context_hash": "",
+                "repository": None,
+                "branch": None,
+                "head_sha": None,
+                "dirty": None,
+                "files": [],
+                "excerpts": {},
+            }
+
+    def _conversation_runtime_status(self) -> dict[str, Any]:
+        try:
+            evidence_total = len(self.evidence.list())
+        except Exception:
+            evidence_total = 0
+        try:
+            missions_total = len(self.list_missions())
+        except Exception:
+            missions_total = 0
+        return {
+            "provider": self.models.provider.name,
+            "provider_available": self.models.provider.name != "UnavailableProvider",
+            "missions_total": missions_total,
+            "evidence_total": evidence_total,
+            "human_control": True,
+        }
+
+    @staticmethod
+    def _parse_agent_envelope(text: str) -> dict[str, Any] | None:
+        text = text.strip()
+        try:
+            obj = json.loads(text)
+            if isinstance(obj, dict):
+                return obj
+        except (json.JSONDecodeError, ValueError):
+            pass
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end > start:
+            try:
+                obj = json.loads(text[start : end + 1])
+                if isinstance(obj, dict):
+                    return obj
+            except (json.JSONDecodeError, ValueError):
+                return None
+        return None
+
+    def _conversation_agent_response(
+        self,
+        *,
+        conversation_id: str,
+        user_message: dict[str, Any],
+        transcript_text: str,
+        intent: str,
+        intent_decision: IntentDecision,
+        execution_mode: str,
+        trace_id: str,
+        mission_id: str | None,
+    ) -> ModelResponse:
+        """Agentic tool loop for chat/auto intents; returns an aggregated ModelResponse."""
+        from .model_gateway import ModelResponse as _ModelResponse
+
+        repo_ctx = self._conversation_repo_context()
+        runtime_status = self._conversation_runtime_status()
+        catalog = json.dumps(self.CONVERSATION_TOOL_WHITELIST, ensure_ascii=False, indent=2)
+        system = (
+            "You are NEXARA PRIME, the user's first-party governed runtime on their machine. "
+            "You have bounded local tools that inspect the workspace, repository, and runtime. "
+            "Use them when the user asks you to check, inspect, diagnose, or execute a local task; "
+            "answer directly without tools for conversational requests. "
+            "Never claim an action completed unless a tool returned evidence for it. "
+            "You may NOT write files or perform consequential actions here — for those, tell the "
+            "user you will create a mission and wait for their approval. "
+            f"Available tools (arguments are JSON objects):\n{catalog}\n"
+            "You MUST respond with exactly one JSON object, either:\n"
+            '  {"action": "tool", "tool": "<name>", "arguments": {<args>}}\n'
+            '  {"action": "answer", "content": "<final reply to the user, including concrete results>"}\n'
+            "Do not include any text outside the JSON object."
+        )
+        provider_ctx: dict[str, Any] = {
+            "context_hash": repo_ctx.get("context_hash", ""),
+            "repository": repo_ctx.get("repository"),
+            "branch": repo_ctx.get("branch"),
+            "head_sha": repo_ctx.get("head_sha"),
+            "dirty": repo_ctx.get("dirty"),
+            "files": repo_ctx.get("files", []),
+        }
+        feed = f"{transcript_text}\n\nRuntime status: {json.dumps(runtime_status, ensure_ascii=False, sort_keys=True)}"
+        last_response: ModelResponse | None = None
+        total_in = 0
+        total_out = 0
+        tool_steps = 0
+        tools_used: list[str] = []
+        final_text = ""
+        for _ in range(self.CONVERSATION_MAX_TOOL_STEPS):
+            task = (
+                "Respond to the latest user message.\n"
+                f"Context so far:\n{feed}\n"
+                f"Execution mode: {execution_mode}\n"
+                f"Runtime intent: {intent} (confidence {intent_decision.confidence:.2f})\n"
+                "Return the JSON envelope described in the system prompt."
+            )
+            last_response = self.models.complete(system, task, provider_ctx, trace_id=trace_id)
+            total_in += last_response.input_tokens
+            total_out += last_response.output_tokens
+            envelope = self._parse_agent_envelope(last_response.text)
+            if envelope is None:
+                final_text = last_response.text
+                break
+            action = envelope.get("action")
+            if action == "answer":
+                final_text = str(envelope.get("content") or last_response.text)
+                break
+            if action != "tool":
+                final_text = last_response.text
+                break
+            tool_name = str(envelope.get("tool") or "")
+            arguments = envelope.get("arguments") or {}
+            if not isinstance(arguments, dict):
+                arguments = {}
+            if tool_name not in self.CONVERSATION_TOOL_WHITELIST:
+                feed += f"\n[tool request rejected: unknown tool {tool_name!r}; choose from {', '.join(self.CONVERSATION_TOOL_WHITELIST)}]"
+                continue
+            tool_steps += 1
+            tools_used.append(tool_name)
+            container_mission_id = f"conversation-{conversation_id}"
+            try:
+                invocation = self.tools.invoke(
+                    mission_id=container_mission_id,
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    trace_id=trace_id,
+                    actor_id="human",
+                    idempotency_key=f"conv-{user_message['message_id']}-{tool_steps}",
+                )
+                result_text = json.dumps(invocation.result, ensure_ascii=False)[:4000]
+            except Exception as exc:
+                result_text = f"tool error: {redact_secrets(str(exc))}"
+            feed += f"\n[tool {tool_name} {json.dumps(arguments, ensure_ascii=False)} -> {result_text}]"
+            # 边界：限制回填上下文长度，避免多轮后 prompt 无限膨胀。
+            if len(feed) > 12_000:
+                feed = feed[-12_000:]
+        if not final_text:
+            # 工具循环用尽仍未给出答复：追加一轮纯总结调用（禁止再调工具）。
+            summary_system = (
+                "You are NEXARA PRIME, the user's first-party governed runtime. "
+                "You have just completed a bounded local investigation. Write your FINAL reply to "
+                "the user summarizing the concrete findings and evidence you obtained. "
+                "Be honest: only state what the tool results support. Do NOT call tools. "
+                "Reply directly in the user's language, without JSON."
+            )
+            summary_task = (
+                "Summarize the investigation for the user's request.\n"
+                f"Tool results:\n{feed}\n"
+                "Write the final user-facing reply now."
+            )
+            last_response = self.models.complete(summary_system, summary_task, provider_ctx, trace_id=trace_id)
+            total_in += last_response.input_tokens
+            total_out += last_response.output_tokens
+            final_text = last_response.text
+        return _ModelResponse(
+            provider=last_response.provider if last_response else self.models.provider.name,
+            model=last_response.model if last_response else "",
+            text=final_text,
+            input_tokens=total_in,
+            output_tokens=total_out,
+            trace_id=trace_id,
+            request_id=last_response.request_id if last_response else "",
+            latency_ms=last_response.latency_ms if last_response else 0.0,
+            retry_count=last_response.retry_count if last_response else 0,
+            cost_usd=last_response.cost_usd if last_response else None,
+            finish_reason="tool_loop" if tool_steps else (last_response.finish_reason if last_response else "stop"),
+            metadata={"tool_steps": tool_steps, "tools_used": tools_used},
+        )
 
     def _advance(self, mission: Mission, target: MissionState, actor: str) -> None:
         previous = mission.state
