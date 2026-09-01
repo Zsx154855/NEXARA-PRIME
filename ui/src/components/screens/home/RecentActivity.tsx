@@ -55,7 +55,7 @@ export function RecentActivity({
                       {conversation.title || "未命名对话"}
                     </span>
                     <span className="mt-0.5 block text-xs text-text-secondary">
-                      {conversation.messages.length} 条消息
+                      {(conversation.messages ?? []).length} 条消息
                       {conversation.status === "closed" ? " · 已关闭" : ""}
                     </span>
                   </span>

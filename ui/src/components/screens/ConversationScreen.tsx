@@ -72,7 +72,7 @@ export function ConversationScreen({
         const detail = await api.getConversation(conversationId);
         setTitle(detail.title);
         setStatus(detail.status);
-        setMessages(detail.messages);
+        setMessages(detail.messages ?? []);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "无法加载对话");
@@ -158,7 +158,7 @@ export function ConversationScreen({
     try {
       const detail = await api.closeConversation(activeId);
       setStatus(detail.status);
-      setMessages(detail.messages);
+      setMessages(detail.messages ?? []);
       await refreshList();
     } catch (err) {
       setError(err instanceof Error ? err.message : "关闭失败");
@@ -174,7 +174,7 @@ export function ConversationScreen({
     try {
       const detail = await api.reopenConversation(activeId);
       setStatus(detail.status);
-      setMessages(detail.messages);
+      setMessages(detail.messages ?? []);
       await refreshList();
     } catch (err) {
       setError(err instanceof Error ? err.message : "重新打开失败");

@@ -76,7 +76,8 @@ function ConversationBlock({
   conversation: ConversationDetail;
   onOpenConversation: (conversationId: string) => void;
 }) {
-  const lastMessage = conversation.messages[conversation.messages.length - 1];
+  const messages = conversation.messages ?? [];
+  const lastMessage = messages[messages.length - 1];
   return (
     <article className="rounded-lg border border-border-default bg-surface-elevated px-6 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="flex flex-wrap items-center gap-2">

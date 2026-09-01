@@ -53,6 +53,7 @@
     "node_modules",
     "out",
     "out-tauri",
-    ".next"
+    ".next",
+    "src-tauri"
   ]
 }
