@@ -59,6 +59,7 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
             "tauri://localhost",
             "http://tauri.localhost",
             "https://tauri.localhost",
+            "https://nexara-prime.pages.dev",
         ],
         allow_methods=["*"],
         allow_headers=["*"],
