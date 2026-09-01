@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type {
+  ConversationAttachmentRef,
   ConversationDetail,
   ConversationExecutionMode,
   ConversationMessage,
@@ -16,6 +17,7 @@ import { ConversationList } from "./conversation/ConversationList";
 import { MessageFlow } from "./conversation/MessageFlow";
 import { ThinkingState } from "./conversation/ThinkingState";
 import { PromptCraft } from "./conversation/PromptCraft";
+import { AttachmentBar, type PendingAttachment } from "./conversation/AttachmentBar";
 
 // ── Props ──
 
@@ -51,6 +53,7 @@ export function ConversationScreen({
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<ConversationExecutionMode>("auto");
   const [draft, setDraft] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
 
   const isClosed = status === "closed";
 
@@ -106,6 +109,7 @@ export function ConversationScreen({
   const handleSelect = async (conversationId: string): Promise<void> => {
     setActiveId(conversationId);
     setDraft("");
+    setPendingAttachments([]);
     setError(null);
     await loadConversation(conversationId);
   };
@@ -119,18 +123,90 @@ export function ConversationScreen({
       setStatus(created.status);
       setMessages([]);
       setDraft("");
+      setPendingAttachments([]);
       await refreshList();
     } catch (err) {
       setError(err instanceof Error ? err.message : "创建对话失败");
     }
   };
 
+  const handlePickFiles = (files: File[]): void => {
+    if (!activeId) return;
+    const conversationId = activeId;
+    for (const file of files) {
+      const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const kind = file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("video/")
+          ? "video"
+          : "file";
+      setPendingAttachments((prev) => [
+        ...prev,
+        { localId, name: file.name, kind, status: "uploading" },
+      ]);
+      api
+        .uploadAttachment(conversationId, file)
+        .then((record) => {
+          setPendingAttachments((prev) =>
+            prev.map((item) =>
+              item.localId === localId ? { ...item, status: "ready", record } : item,
+            ),
+          );
+        })
+        .catch((err: unknown) => {
+          setPendingAttachments((prev) =>
+            prev.map((item) =>
+              item.localId === localId
+                ? {
+                    ...item,
+                    status: "error",
+                    error: err instanceof Error ? err.message : "上传失败",
+                  }
+                : item,
+            ),
+          );
+        });
+    }
+  };
+
+  const handlePickRef = (ref: ConversationAttachmentRef): void => {
+    const localId = `ref-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setPendingAttachments((prev) => [
+      ...prev,
+      {
+        localId,
+        name: ref.name ?? ref.ref_id,
+        kind: ref.kind,
+        status: "ready",
+        ref,
+      },
+    ]);
+  };
+
+  const handleRemoveAttachment = (localId: string): void => {
+    setPendingAttachments((prev) => prev.filter((item) => item.localId !== localId));
+  };
+
+  const readyAttachments = pendingAttachments.filter((item) => item.status === "ready");
+  const uploadingCount = pendingAttachments.filter((item) => item.status === "uploading").length;
+
   const handleSend = async (): Promise<void> => {
-    const content = draft.trim();
-    if (!content || !activeId || sending || isClosed) return;
+    const text = draft.trim();
+    const content =
+      text ||
+      (readyAttachments.length > 0
+        ? `[附件] ${readyAttachments.map((item) => item.name).join("、")}`
+        : "");
+    if (!content || !activeId || sending || isClosed || uploadingCount > 0) return;
     setSending(true);
     setError(null);
     try {
+      const attachmentIds = readyAttachments
+        .map((item) => item.record?.attachment_id)
+        .filter((id): id is string => typeof id === "string");
+      const attachmentRefs = readyAttachments
+        .map((item) => item.ref)
+        .filter((ref): ref is ConversationAttachmentRef => ref !== undefined);
       await api.sendMessage(activeId, {
         content,
         execution_mode: mode,
@@ -138,9 +214,12 @@ export function ConversationScreen({
           typeof crypto !== "undefined" && "randomUUID" in crypto
             ? crypto.randomUUID()
             : `ui-${Date.now()}`,
+        attachment_ids: attachmentIds.length > 0 ? attachmentIds : undefined,
+        attachment_refs: attachmentRefs.length > 0 ? attachmentRefs : undefined,
       });
-      // 发送已被服务端持久化后立即清空输入框，避免刷新失败时残留已发送内容。
+      // 发送已被服务端持久化后立即清空输入框与待发送附件，避免刷新失败时残留已发送内容。
       setDraft("");
+      setPendingAttachments([]);
       // Server is the single source of truth — re-read the conversation.
       await loadConversation(activeId);
       await refreshList();
@@ -362,6 +441,13 @@ export function ConversationScreen({
                   {mode === "chat" && "仅对话，不触发使命"}
                 </span>
               </div>
+              <AttachmentBar
+                attachments={pendingAttachments}
+                disabled={isClosed}
+                onPickFiles={handlePickFiles}
+                onPickRef={handlePickRef}
+                onRemove={handleRemoveAttachment}
+              />
               <div className="flex items-end gap-2">
                 <textarea
                   value={draft}
@@ -381,7 +467,7 @@ export function ConversationScreen({
                   size="md"
                   className="h-14"
                   isBusy={sending}
-                  disabled={!draft.trim()}
+                  disabled={(!draft.trim() && readyAttachments.length === 0) || uploadingCount > 0}
                   onClick={handleSend}
                   aria-label="发送消息"
                 >

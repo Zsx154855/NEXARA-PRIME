@@ -26,6 +26,8 @@ import type {
   ConversationDetail,
   ConversationSendRequest,
   ConversationSendResponse,
+  ConversationAttachment,
+  AttachablesResponse,
 } from "../types";
 
 // ── Configuration ──
@@ -39,7 +41,8 @@ interface ApiConfig {
 
 const DEFAULT_CONFIG: ApiConfig = {
   baseUrl: "",
-  timeoutMs: 30_000,
+  // Provider agentic tool loops can exceed 30s; keep the client patient.
+  timeoutMs: 120_000,
 };
 
 // ── Internal Helpers ──
@@ -622,6 +625,45 @@ export function reopenConversationSafe(
   return apiResult(reopenConversation(conversationId));
 }
 
+/** POST /api/conversations/:id/attachments — upload one file (multipart). */
+export function uploadConversationAttachment(
+  conversationId: string,
+  file: File,
+): Promise<ConversationAttachment> {
+  const form = new FormData();
+  form.append("file", file);
+  return request<ConversationAttachment>(
+    "POST",
+    `/api/conversations/${encodeURIComponent(conversationId)}/attachments`,
+    form,
+  );
+}
+
+/** GET /api/conversations/:id/attachments — list uploaded attachments. */
+export function fetchConversationAttachments(
+  conversationId: string,
+): Promise<ConversationAttachment[]> {
+  return request<ConversationAttachment[]>(
+    "GET",
+    `/api/conversations/${encodeURIComponent(conversationId)}/attachments`,
+  );
+}
+
+/** GET /api/attachables — plugins and connections that can be referenced from a message. */
+export function fetchAttachables(): Promise<AttachablesResponse> {
+  return request<AttachablesResponse>("GET", "/api/attachables");
+}
+
+/** Absolute URL used to render/download an uploaded attachment. */
+export function attachmentContentUrl(
+  conversationId: string,
+  attachmentId: string,
+): string {
+  return url(
+    `/api/conversations/${encodeURIComponent(conversationId)}/attachments/${encodeURIComponent(attachmentId)}/content`,
+  );
+}
+
 // ── Class wrapper (convenience for React components) ──
 
 export class NexaraAPI {
@@ -654,4 +696,7 @@ export class NexaraAPI {
   sendMessage(id: string, body: ConversationSendRequest) { return sendConversationMessage(id, body); }
   closeConversation(id: string) { return closeConversation(id); }
   reopenConversation(id: string) { return reopenConversation(id); }
+  uploadAttachment(id: string, file: File) { return uploadConversationAttachment(id, file); }
+  listAttachments(id: string) { return fetchConversationAttachments(id); }
+  getAttachables() { return fetchAttachables(); }
 }
