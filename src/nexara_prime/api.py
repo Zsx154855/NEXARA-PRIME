@@ -91,7 +91,12 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     @app.middleware("http")
     async def _guard(request, call_next):
         # Preflight carries no credentials; blocking it breaks the console.
-        if request.method == "OPTIONS" or request.url.path == "/health":
+        # Static mounts are public assets: a browser cannot attach a Bearer to
+        # <script>/<img> requests, so exempt them while APIs stay protected.
+        path = request.url.path
+        public = path == "/health" or path.startswith(
+            ("/console", "/runtime-truth", "/knowledge-universe"))
+        if request.method == "OPTIONS" or public:
             return await call_next(request)
         if token:
             supplied = request.headers.get("authorization", "")

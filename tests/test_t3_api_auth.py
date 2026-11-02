@@ -65,6 +65,14 @@ def test_non_loopback_client_without_token_is_rejected(tmp_path: Path):
     assert client.get("/health").status_code == 200
 
 
+def test_static_assets_are_reachable_in_token_mode(tmp_path: Path):
+    # A browser cannot put a Bearer on <script src>; static mounts must stay public.
+    runtime = make_runtime(tmp_path, token="s3cret")
+    client = TestClient(create_app(runtime))
+    for path in ("/console/index.html", "/runtime-truth/", "/knowledge-universe/"):
+        assert client.get(path).status_code != 401, path
+
+
 def test_options_preflight_is_not_blocked_by_auth(tmp_path: Path):
     runtime = make_runtime(tmp_path, token="s3cret")
     client = TestClient(create_app(runtime))
