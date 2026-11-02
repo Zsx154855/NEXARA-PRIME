@@ -10,11 +10,7 @@ import subprocess
 
 import pytest
 
-from nexara_prime.sandbox_v2 import (
-    DockerSandboxBackend,
-    SandboxInvocation,
-    select_sandbox_backend,
-)
+from nexara_prime.sandbox_v2 import DockerSandboxBackend, SandboxInvocation
 
 
 def test_argv_is_hardened(monkeypatch):
