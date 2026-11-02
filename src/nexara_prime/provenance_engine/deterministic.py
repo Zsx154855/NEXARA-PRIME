@@ -59,8 +59,8 @@ def _read_lines(path: Path) -> list[str]:
         return []
 
 
-def _walk(root: Path, max_files: int) -> list[Path]:
-    found: list[Path] = []
+def _walk(root: Path, max_files: int) -> list[tuple[Path, int]]:
+    found: list[tuple[Path, int]] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
         for name in sorted(filenames):
@@ -68,11 +68,12 @@ def _walk(root: Path, max_files: int) -> list[Path]:
             if path.suffix.lower() not in TEXT_SUFFIXES:
                 continue
             try:
-                if path.stat().st_size > MAX_FILE_BYTES:
-                    continue
+                size = path.stat().st_size
             except OSError:
                 continue
-            found.append(path)
+            if size > MAX_FILE_BYTES:
+                continue
+            found.append((path, size))
             if len(found) >= max_files:
                 return found
     return found
@@ -142,16 +143,18 @@ def analyze(root: Path, *, max_files: int = 5000) -> Analysis:
     if not root.exists() or not root.is_dir():
         return analysis
 
-    files = _walk(root, max_files)
-    if not files:
+    entries = _walk(root, max_files)
+    if not entries:
         return analysis
 
+    files = [path for path, _size in entries]
+    sizes = {path: size for path, size in entries}
     analysis.files = len(files)
-    analysis.bytes = sum(p.stat().st_size for p in files if p.exists())
+    analysis.bytes = sum(sizes.values())
 
     python_files = [p for p in files if p.suffix == ".py"]
     tests = _find_test_functions(files)
-    largest = max(files, key=lambda p: (p.stat().st_size, str(p)))
+    largest = max(files, key=lambda p: (sizes.get(p, 0), str(p)))
 
     if python_files:
         first = python_files[0]
@@ -171,7 +174,7 @@ def analyze(root: Path, *, max_files: int = 5000) -> Analysis:
     line, excerpt = _first_line(largest)
     analysis.assertions.append(Assertion(
         claim=(f"largest text file is {_rel(largest, root)} "
-               f"({largest.stat().st_size} bytes, {len(_read_lines(largest))} lines)"),
+               f"({sizes.get(largest, 0)} bytes, {len(_read_lines(largest))} lines)"),
         path=_rel(largest, root), line=line, excerpt=excerpt,
     ))
 

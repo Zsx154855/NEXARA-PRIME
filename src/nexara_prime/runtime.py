@@ -1033,6 +1033,22 @@ class NexaraRuntime:
             metadata={"tool_steps": tool_steps, "tools_used": tools_used},
         )
 
+    def _block(self, mission: Mission, code: str, detail: dict | None = None) -> Mission:
+        """Block a mission *with* evidence and a released scheduler lease."""
+        mission.result["error"] = code
+        payload = {"code": code, "detail": detail or {}, "from_state": mission.state}
+        self.evidence.add(
+            mission.mission_id, "block_reason", "Blocked", json.dumps(payload, ensure_ascii=False, sort_keys=True),
+            mission.trace_id, actor="runtime", source="runtime", verification_status="verified",
+            idempotency_key=f"{mission.mission_id}:block:{code}",
+        )
+        try:
+            self.scheduler.release(mission.assignments)
+        except Exception:  # noqa: BLE001 - release is best-effort, evidence is not
+            pass
+        self._advance(mission, MissionState.BLOCKED, "runtime")
+        return mission
+
     def _advance(self, mission: Mission, target: MissionState, actor: str) -> None:
         previous = mission.state
         self.state_machine.transition(mission, target, actor)
@@ -1358,9 +1374,8 @@ class NexaraRuntime:
         # Only an explicitly requested source that yields nothing is a block.
         # A mission without source_dir may legitimately be a health check.
         if explicit_source and analysis.files == 0:
-            mission.result["error"] = "mission_blocked:no_readable_source_files"
-            self._advance(mission, MissionState.BLOCKED, "runtime")
-            return mission
+            return self._block(mission, "mission_blocked:no_readable_source_files",
+                               {"root": analysis.root})
         mission.result["analysis_root"] = analysis.root
         mission.result["analysis_assertions"] = analysis.as_dict()["assertions"]
         report = self._render_report(mission, mission.spec.objective, model_text, provider, analysis)
@@ -1394,16 +1409,8 @@ class NexaraRuntime:
         if (mission.result.get("analysis_root")
                 and int(citations.get("checked", 0)) > 0
                 and not citations.get("ok")):
-            mission.result["error"] = "verification_citations_invalid"
-            self.evidence.add(
-                mission.mission_id, "verification_report", "VerificationReport",
-                json.dumps({**verification, "blocked": True}, ensure_ascii=False, sort_keys=True),
-                mission.trace_id, actor="reviewer", source="verification",
-                verification_status="failed",
-                idempotency_key=f"{mission.mission_id}:verification-blocked",
-            )
-            self._advance(mission, MissionState.BLOCKED, "reviewer")
-            return mission
+            return self._block(mission, "verification_citations_invalid",
+                               {"citations": citations, "verification": verification})
         context_object = self._execution_context(mission)
         if context_object:
             verification["context_hash"] = context_object.context_hash

@@ -48,9 +48,9 @@ def wait_health(base: str, timeout: float = 40.0) -> None:
             status, _ = request(base + "/health")
             if status == 200:
                 return
-        except Exception:  # noqa: BLE001 - still starting
-            pass
-        time.sleep(0.4)
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            time.sleep(0.4)
+            continue
     raise SystemExit("server did not become healthy")
 
 

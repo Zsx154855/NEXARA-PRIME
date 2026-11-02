@@ -26,24 +26,26 @@ def _norm(path: str) -> str:
     return path.rstrip("/")
 
 
-def ui_endpoints() -> set[str]:
-    found: set[str] = set()
+def ui_endpoints() -> set[tuple[str, str]]:
+    """(method, path) pairs the UI actually calls via the shared request helper."""
+    found: set[tuple[str, str]] = set()
     for path in (ROOT / "ui" / "src").rglob("*.ts*"):
         text = path.read_text(encoding="utf-8", errors="ignore")
-        for match in re.findall(r"[\"'`](/api/[^\"'`\s]*)", text):
-            found.add(_norm(match))
+        for method, target in re.findall(
+                r"request<[^>]*>\(\s*[\"'](GET|POST|PUT|DELETE|PATCH)[\"']\s*,\s*[`\"']([^`\"']+)", text):
+            found.add((method.upper(), _norm(target)))
     return found
 
 
-def backend_routes() -> set[str]:
+def backend_routes() -> set[tuple[str, str]]:
     text = (ROOT / "src" / "nexara_prime" / "api.py").read_text(encoding="utf-8")
-    routes = re.findall(r"@app\.(?:get|post|put|delete|patch)\(\"([^\"]+)\"", text)
-    return {_norm(route) for route in routes}
+    routes = re.findall(r"@app\.(get|post|put|delete|patch)\(\"([^\"]+)\"", text)
+    return {(method.upper(), _norm(path)) for method, path in routes}
 
 
 def report() -> dict:
     ui, backend = ui_endpoints(), backend_routes()
-    missing = sorted(ui - backend)
+    missing = sorted(f"{method} {path}" for method, path in (ui - backend))
     return {
         "ui_endpoints": sorted(ui),
         "backend_routes": sorted(backend),

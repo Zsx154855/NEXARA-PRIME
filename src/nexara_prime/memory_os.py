@@ -172,6 +172,10 @@ class MemoryOS:
         if idempotency_key:
             existing = self._load(memory_id)
             if existing:
+                expected = (str(_as_type(type)), content, source)
+                actual = (str(existing.get("type")), str(existing.get("content")), str(existing.get("source")))
+                if actual != expected:
+                    raise ValueError("memory_idempotency_conflict")
                 names = {f.name for f in dataclasses.fields(MemoryEntry)}
                 return MemoryEntry(**{k: v for k, v in existing.items() if k in names})
         entry = MemoryEntry(
