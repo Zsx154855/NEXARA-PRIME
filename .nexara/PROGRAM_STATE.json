@@ -4,7 +4,7 @@
   "agent_package": "nexara_prime.agent",
   "hermes_runtime_dependency": 0,
   "repo": "/Volumes/NEXARA/NEXARA-PRIME",
-  "branch": "takeover/phase1",
+  "branch": "product/external-contract",
   "merge_target_branch": "main",
   "python": "3.12.13",
   "test_baseline": "2044 passed, 0 failed, 2044 collected",
