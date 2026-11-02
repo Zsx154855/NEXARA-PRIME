@@ -1,5 +1,10 @@
 # Deploy in 15 minutes (external-product v0)
 
+> Verified end-to-end on 2026-11-03 (Docker 29.5.2, colima, macOS arm64):
+> image builds, `/health` 200, signup/login 200, mission `Completed`,
+> report written under `/data/reports/<mission_id>/mission-report.md`,
+> anonymous `POST /api/missions` → 401, cross-tenant `GET` → 404.
+
 ## Local single owner (unchanged default)
 ```sh
 pip install -e ".[test]"
