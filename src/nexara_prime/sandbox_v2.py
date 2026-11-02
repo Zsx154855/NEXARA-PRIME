@@ -184,8 +184,8 @@ class MacOSSandboxBackend(SandboxBackend):
             cap.verified_at = now_iso()
             cap.escape_tests_passed = self._escape_tests
         else:
-            cap.sandbox_mechanism = "workspace_jail"
-            cap.flags = [WORKSPACE_JAIL_ENFORCED]
+            cap.sandbox_mechanism = "none"
+            cap.flags = []
         return cap
 
     def execute(self, invocation: SandboxInvocation) -> SandboxReceipt:
@@ -310,7 +310,7 @@ class ProcessConstrainedBackend(SandboxBackend):
 
     def execute(self, invocation: SandboxInvocation) -> SandboxReceipt:
         receipt = _workspace_jail_execute(invocation)
-        receipt.sandbox_mechanism = "workspace_jail"
+        receipt.sandbox_mechanism = "process_restricted"
         return receipt
 
 

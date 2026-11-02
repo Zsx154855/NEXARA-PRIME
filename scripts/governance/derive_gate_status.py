@@ -15,6 +15,7 @@ exists; otherwise the gate is PARTIAL or BLOCKED. No gate is PASS by assertion.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -42,19 +43,31 @@ def derive() -> dict:
     def gate(gid, status, reason, evidence):
         gates.append({"id": gid, "status": status, "reason": reason, "evidence": evidence})
 
-    gate("G0", "PASS", "constitution and blueprint present, no runtime dependency",
+    constitution = _exists("NEXARA_PROGRAM_CONSTITUTION_V1.md")
+    blueprint = _exists("NEXARA_PRIME_SOVEREIGN_AGENT_MASTER_BLUEPRINT_V1.md")
+    gate("G0", "PASS" if constitution and blueprint else "BLOCKED",
+         "constitution and blueprint present" if constitution and blueprint
+         else "constitution or blueprint missing",
          "NEXARA_PROGRAM_CONSTITUTION_V1.md")
+    core_src = _exists("src/nexara_prime/runtime.py")
+    api_src = _exists("src/nexara_prime/api.py")
+    e2e_doc = _exists("docs/03-Runtime/Runtime Truth.md")
     for gid in ("G1", "G2", "G3", "G4", "G5", "G6"):
-        gate(gid, "PARTIAL",
-             "implementation exists; end-to-end verification not recorded in this checkout",
+        evidence = core_src and api_src
+        gate(gid, "PARTIAL" if evidence else "BLOCKED",
+             "runtime and api present; no recorded end-to-end verification"
+             if evidence else "runtime or api missing",
              "src/nexara_prime")
-    gate("G7", "PARTIAL",
+    gate("G7", "PARTIAL" if e2e_doc else "BLOCKED",
          f"screenshots/usability evidence {'present' if screenshots else 'missing'}",
          "docs/05-UI-UX")
     gate("G8", "PARTIAL",
          f"swift SDK {'present' if swift_sdk else 'missing'}; plugin signature {'present' if plugin_sig else 'not implemented'}",
          "platform/sdk")
-    gate("G9", "PARTIAL", "benchmark/evaluation code exists; no recorded run", "src/nexara_prime/benchmark_runner.py")
+    bench = _exists("src/nexara_prime/benchmark_runner.py")
+    gate("G9", "PARTIAL" if bench else "BLOCKED",
+         "benchmark code exists; no recorded run" if bench else "benchmark code missing",
+         "src/nexara_prime/benchmark_runner.py")
     gate("G10", "BLOCKED" if not dist else "PARTIAL",
          f"dist artifacts {'found: ' + ', '.join(dist) if dist else 'missing (dist/ is gitignored)'}",
          "dist/")
@@ -99,16 +112,24 @@ def sync(data: dict) -> None:
     gate["authority"] = ".nexara/GATE_STATUS_DERIVED.json"
     composite = gate.setdefault("g10_composite_status", {})
     composite["local_release"] = "LOCAL_RELEASE_BLOCKED"
-    gate_path.write_text(json.dumps(gate, indent=2) + "\n", encoding="utf-8")
+    gate_path.write_text(json.dumps(gate, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     program_path = ROOT / ".nexara" / "PROGRAM_STATE.json"
     program = json.loads(program_path.read_text(encoding="utf-8"))
-    program["gate_status"] = "PARTIAL_WITH_BLOCKERS"
+    program["gate_status"] = composite.get("local_release", "PARTIAL_WITH_BLOCKERS")
+    # detect_state_drift requires PROGRAM_STATE to account for every gate that
+    # GATE_STATUS lists, not only the passing ones.
     program["gates_pass"] = [g["id"] for g in gate.get("gates", []) if g.get("status") == "PASS"]
+    program["gates_partial"] = [g["id"] for g in gate.get("gates", []) if g.get("status") == "PARTIAL"]
     program["gates_blocked"] = [g["id"] for g in gate.get("gates", []) if g.get("status") == "BLOCKED"]
-    program.setdefault("g10_composite_status", {})["local_release"] = "LOCAL_RELEASE_BLOCKED"
+    program["test_baseline"] = gate.get("test_baseline", program.get("test_baseline"))
+    branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                            capture_output=True, text=True, cwd=ROOT, check=False).stdout.strip()
+    if branch:
+        program["branch"] = branch
+    program["g10_composite_status"] = dict(composite)
     program["authority"] = ".nexara/GATE_STATUS_DERIVED.json"
-    program_path.write_text(json.dumps(program, indent=2) + "\n", encoding="utf-8")
+    program_path.write_text(json.dumps(program, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -118,6 +139,17 @@ def main() -> int:
         target = ROOT / ".nexara" / "GATE_STATUS_DERIVED.json"
         target.write_text(text, encoding="utf-8")
         print(f"wrote {target}")
+    if "--check" in sys.argv:
+        target = ROOT / ".nexara" / "GATE_STATUS_DERIVED.json"
+        if not target.exists():
+            print("derived file missing")
+            return 2
+        committed = json.loads(target.read_text(encoding="utf-8"))
+        if committed.get("gates") != data.get("gates"):
+            print("derived status is stale: re-run --write --sync")
+            return 1
+        print("derived status matches the repository")
+        return 0
     if "--sync" in sys.argv:
         sync(data)
         print("synced YAML + GATE_STATUS.json + PROGRAM_STATE.json")

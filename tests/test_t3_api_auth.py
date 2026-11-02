@@ -54,3 +54,21 @@ def test_loopback_without_token_still_works(tmp_path: Path):
     runtime = make_runtime(tmp_path)
     client = TestClient(create_app(runtime))
     assert client.get("/api/runtime/overview").status_code == 200
+
+
+def test_non_loopback_client_without_token_is_rejected(tmp_path: Path):
+    # `uvicorn --host 0.0.0.0` bypasses the bind-time check; the request is the
+    # real boundary.
+    runtime = make_runtime(tmp_path)
+    client = TestClient(create_app(runtime), client=("203.0.113.9", 51000))
+    assert client.get("/api/runtime/overview").status_code == 401
+    assert client.get("/health").status_code == 200
+
+
+def test_options_preflight_is_not_blocked_by_auth(tmp_path: Path):
+    runtime = make_runtime(tmp_path, token="s3cret")
+    client = TestClient(create_app(runtime))
+    response = client.options("/api/runtime/overview",
+                              headers={"Origin": "http://localhost:3000",
+                                       "Access-Control-Request-Method": "GET"})
+    assert response.status_code != 401

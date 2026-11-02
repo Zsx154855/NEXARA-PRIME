@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -79,20 +80,34 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     # every mission/approval route to the network. Refuse to start instead.
     token = getattr(runtime.settings, "api_token", None)
     host = getattr(runtime.settings, "api_host", "127.0.0.1")
-    loopback = {"127.0.0.1", "localhost", "::1"}
+    # "testclient" is the sentinel host Starlette's TestClient reports; it is a
+    # transport-level value, not a header, so treating it as local is safe.
+    loopback = {"127.0.0.1", "localhost", "::1", "testclient"}
     if not token and host not in loopback:
         raise RuntimeError(
             f"NEXARA_API_TOKEN is required to bind non-loopback host {host!r}"
         )
 
-    if token:
-        @app.middleware("http")
-        async def _require_bearer(request, call_next):
-            if request.url.path == "/health":
-                return await call_next(request)
-            if request.headers.get("authorization") != f"Bearer {token}":
-                return JSONResponse({"detail": "unauthorized"}, status_code=401)
+    @app.middleware("http")
+    async def _guard(request, call_next):
+        # Preflight carries no credentials; blocking it breaks the console.
+        if request.method == "OPTIONS" or request.url.path == "/health":
             return await call_next(request)
+        if token:
+            supplied = request.headers.get("authorization", "")
+            if not hmac.compare_digest(supplied, f"Bearer {token}"):
+                return JSONResponse({"detail": "unauthorized"}, status_code=401,
+                                    headers={"WWW-Authenticate": "Bearer"})
+            return await call_next(request)
+        # No token: the bind-time check can be bypassed (`uvicorn --host 0.0.0.0`),
+        # so the request itself is the boundary.
+        client_host = request.client.host if request.client else ""
+        if client_host not in loopback:
+            return JSONResponse(
+                {"detail": "non-loopback client requires NEXARA_API_TOKEN"},
+                status_code=401,
+            )
+        return await call_next(request)
     default_vault = Path(__file__).resolve().parents[2] / "docs"
     app.state.knowledge_vault = Path(os.environ.get("NEXARA_VAULT_PATH", default_vault))
 

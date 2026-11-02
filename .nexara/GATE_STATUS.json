@@ -9,7 +9,7 @@
     "local_release": "LOCAL_RELEASE_BLOCKED",
     "external_distribution": "NOT_REQUIRED_LOCAL_PROJECT",
     "git_push_tag": "LOCAL_TAG_V0.1.0_CREATED",
-    "product_brand_name": "RESOLVED_\u67cf\u97e9_B\u01cei_H\u00e1n"
+    "product_brand_name": "RESOLVED_柏韩_Bǎi_Hán"
   },
   "gates": [
     {
@@ -79,7 +79,7 @@
       "status": "BLOCKED",
       "verified": false,
       "local_release": "LOCAL_RELEASE_COMPLETE",
-      "note": "\u672c\u5730\u79c1\u4eba\u9879\u76ee \u2014 Apple \u7b7e\u540d/\u516c\u8bc1/\u5206\u53d1\u975e\u5fc5\u9700\u3002tag v0.1.0 \u5df2\u521b\u5efa\u3002"
+      "note": "本地私人项目 — Apple 签名/公证/分发非必需。tag v0.1.0 已创建。"
     }
   ],
   "gates_verified_pass": 1,
@@ -107,9 +107,9 @@
   ],
   "updated_at": "2026-08-08T08:00:00Z",
   "completed_at": "2026-08-08T08:00:00Z",
-  "completed_by": "NEXARA Sovereign OnePass \u2014 \u672c\u5730\u5b8c\u5de5 v0.1.0",
+  "completed_by": "NEXARA Sovereign OnePass — 本地完工 v0.1.0",
   "tag": "v0.1.0",
   "tag_head": "1762f77",
-  "brand": "\u67cf\u97e9 (B\u01cei H\u00e1n) \u2014 resolved 2026-07-23",
+  "brand": "柏韩 (Bǎi Hán) — resolved 2026-07-23",
   "authority": ".nexara/GATE_STATUS_DERIVED.json"
 }

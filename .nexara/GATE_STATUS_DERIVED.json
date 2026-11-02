@@ -6,43 +6,43 @@
     {
       "id": "G0",
       "status": "PASS",
-      "reason": "constitution and blueprint present, no runtime dependency",
+      "reason": "constitution and blueprint present",
       "evidence": "NEXARA_PROGRAM_CONSTITUTION_V1.md"
     },
     {
       "id": "G1",
       "status": "PARTIAL",
-      "reason": "implementation exists; end-to-end verification not recorded in this checkout",
+      "reason": "runtime and api present; no recorded end-to-end verification",
       "evidence": "src/nexara_prime"
     },
     {
       "id": "G2",
       "status": "PARTIAL",
-      "reason": "implementation exists; end-to-end verification not recorded in this checkout",
+      "reason": "runtime and api present; no recorded end-to-end verification",
       "evidence": "src/nexara_prime"
     },
     {
       "id": "G3",
       "status": "PARTIAL",
-      "reason": "implementation exists; end-to-end verification not recorded in this checkout",
+      "reason": "runtime and api present; no recorded end-to-end verification",
       "evidence": "src/nexara_prime"
     },
     {
       "id": "G4",
       "status": "PARTIAL",
-      "reason": "implementation exists; end-to-end verification not recorded in this checkout",
+      "reason": "runtime and api present; no recorded end-to-end verification",
       "evidence": "src/nexara_prime"
     },
     {
       "id": "G5",
       "status": "PARTIAL",
-      "reason": "implementation exists; end-to-end verification not recorded in this checkout",
+      "reason": "runtime and api present; no recorded end-to-end verification",
       "evidence": "src/nexara_prime"
     },
     {
       "id": "G6",
       "status": "PARTIAL",
-      "reason": "implementation exists; end-to-end verification not recorded in this checkout",
+      "reason": "runtime and api present; no recorded end-to-end verification",
       "evidence": "src/nexara_prime"
     },
     {
@@ -60,7 +60,7 @@
     {
       "id": "G9",
       "status": "PARTIAL",
-      "reason": "benchmark/evaluation code exists; no recorded run",
+      "reason": "benchmark code exists; no recorded run",
       "evidence": "src/nexara_prime/benchmark_runner.py"
     },
     {

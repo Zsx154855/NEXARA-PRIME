@@ -220,4 +220,7 @@ def verify_citations(analysis: Analysis, limit: int = 50) -> dict:
         checked += 1
         if not target.exists() or assertion.line < 1 or assertion.line > len(lines):
             bad.append({"path": assertion.path, "line": assertion.line})
+        elif assertion.excerpt and lines[assertion.line - 1].strip() != assertion.excerpt:
+            bad.append({"path": assertion.path, "line": assertion.line,
+                        "reason": "excerpt_mismatch"})
     return {"checked": checked, "bad": bad, "ok": checked > 0 and not bad}

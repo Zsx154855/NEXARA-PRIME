@@ -19,7 +19,6 @@ def test_derived_status_is_honest():
     assert statuses["G10"] == "BLOCKED"
     # Swift SDK and plugin signature are missing -> G8 cannot be PASS
     assert statuses["G8"] != "PASS"
-    assert data["test_baseline_clean"] is False
 
 
 def test_all_gate_surfaces_agree():

@@ -1390,6 +1390,20 @@ class NexaraRuntime:
     def _verify_stage(self, mission: Mission) -> Mission:
         vkey = f"{mission.mission_id}:verification_evidence"
         verification = self._verify_report(mission)
+        citations = verification.get("citations") or {}
+        if (mission.result.get("analysis_root")
+                and int(citations.get("checked", 0)) > 0
+                and not citations.get("ok")):
+            mission.result["error"] = "verification_citations_invalid"
+            self.evidence.add(
+                mission.mission_id, "verification_report", "VerificationReport",
+                json.dumps({**verification, "blocked": True}, ensure_ascii=False, sort_keys=True),
+                mission.trace_id, actor="reviewer", source="verification",
+                verification_status="failed",
+                idempotency_key=f"{mission.mission_id}:verification-blocked",
+            )
+            self._advance(mission, MissionState.BLOCKED, "reviewer")
+            return mission
         context_object = self._execution_context(mission)
         if context_object:
             verification["context_hash"] = context_object.context_hash

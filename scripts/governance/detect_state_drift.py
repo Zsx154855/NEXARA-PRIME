@@ -204,9 +204,10 @@ def check_consistency(
 
     ps_passed_ids = {str(gate) for gate in program_passed}
     ps_blocked_ids = {str(gate) for gate in program_state.get("gates_blocked", [])}
+    ps_partial_ids = {str(gate) for gate in program_state.get("gates_partial", [])}
 
     # Check gate ID coverage
-    ps_all_ids = ps_passed_ids | ps_blocked_ids
+    ps_all_ids = ps_passed_ids | ps_blocked_ids | ps_partial_ids
     if gs_gate_status.keys() != ps_all_ids:
         only_in_gs = set(gs_gate_status.keys()) - ps_all_ids
         only_in_ps = ps_all_ids - set(gs_gate_status.keys())
@@ -230,6 +231,12 @@ def check_consistency(
         elif in_ps_blocked and gs_status != "BLOCKED":
             inconsistencies.append(
                 "Gate {}: GATE_STATUS={} but PROGRAM_STATE lists it as BLOCKED".format(gate_id, gs_status))
+        elif gate_id in ps_partial_ids and gs_status != "PARTIAL":
+            inconsistencies.append(
+                "Gate {}: GATE_STATUS={} but PROGRAM_STATE lists it as PARTIAL".format(gate_id, gs_status))
+        elif not (in_ps_pass or in_ps_blocked or gate_id in ps_partial_ids):
+            inconsistencies.append(
+                "Gate {}: present in GATE_STATUS but missing from PROGRAM_STATE lists".format(gate_id))
 
     # Top-level gates_pass validation (GATE_STATUS)
     gs_gates_pass = gate_status.get("gates_pass")

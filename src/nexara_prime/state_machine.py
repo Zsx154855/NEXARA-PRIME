@@ -58,7 +58,7 @@ class MissionStateMachine:
         mission.updated_at = event.timestamp
         self.evidence.state_change(
             mission.mission_id, current.value, target.value, mission.trace_id, event.event_id,
-            idempotency_key=f"state-transition:{mission.mission_id}:{current.value}->{target.value}",
+            idempotency_key=f"state-transition:{mission.mission_id}:{event.event_id}",
         )
         return mission, event
 

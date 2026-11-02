@@ -73,3 +73,42 @@ def test_mission_report_contains_resolvable_citations(tmp_path: Path):
         assert 1 <= int(line) <= len(target.read_text(encoding="utf-8").splitlines())
 
     assert final.result.get("analysis_assertions"), "assertions must be persisted"
+
+
+def test_reviewer_accepts_report_for_a_workspace_repository(tmp_path: Path):
+    """P0 regression: a real mission (source_dir inside the workspace, a git repo)
+    must pass the independent reviewer. The reviewer used to match exact prose
+    labels, so any template change made every such mission FAILED.
+    """
+    import subprocess
+
+    workspace = tmp_path / "workspace"
+    repo = workspace / "repo"
+    repo.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "t"], check=True)
+    (repo / "app.py").write_text("def hello():\n    return 1\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
+
+    settings = Settings(
+        db_path=tmp_path / "runtime.db",
+        workspace_root=workspace,
+        report_root=tmp_path / "reports",
+        model_provider="mock",
+        mock_model=True,
+        api_host="127.0.0.1",
+        api_port=8896,
+    )
+    settings.ensure_dirs()
+    runtime = NexaraRuntime(settings)
+
+    mission = runtime.create_mission("review this repository", str(repo))
+    runtime.plan_mission(mission.mission_id)
+    runtime.approve_mission(mission.mission_id, actor="human")
+    final = runtime.run_mission(mission.mission_id)
+
+    assert final.state.value == "Completed", final.result.get("error")
+    kinds = {e.get("kind") for e in runtime.evidence.list(mission.mission_id)}
+    assert "reviewer_verdict" in kinds

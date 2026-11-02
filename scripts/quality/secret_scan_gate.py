@@ -23,12 +23,15 @@ EXCLUDE = ("scripts/security/", "scripts/quality/")
 PATTERNS = [
     re.compile(r"(?i)\b(api[_-]?key|secret|token|password|passwd)\b\s*[:=]\s*['\"]([^'\"]{8,})['\"]"),
 ]
-PLACEHOLDERS = ("test", "dummy", "example", "placeholder", "not-a-secret", "xxxx", "changeme", "<")
+PLACEHOLDERS = ("dummy", "example", "placeholder", "not-a-secret", "xxxx", "changeme")
 
 
 def changed_files() -> list[Path]:
     proc = subprocess.run(["git", "diff", "--name-only", "origin/main...HEAD"],
-                          capture_output=True, text=True, cwd=ROOT)
+                          capture_output=True, text=True, cwd=ROOT, check=False)
+    if proc.returncode != 0:
+        print("secret scan: cannot diff against origin/main (fail-closed)")
+        raise SystemExit(2)
     names = [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
     out = []
     for name in names:
@@ -48,8 +51,10 @@ def scan_changed() -> list[str]:
                 match = pattern.search(line)
                 if not match:
                     continue
-                value = match.group(2).lower()
-                if any(token in value for token in PLACEHOLDERS):
+                value = match.group(2).strip().lower()
+                if value.startswith("<") or value in PLACEHOLDERS:
+                    continue
+                if value.startswith(("test-", "test_", "fake-", "fake_")):
                     continue
                 rel = path.relative_to(ROOT).as_posix()
                 findings.append(f"{rel}:{number}: {match.group(1)} = <redacted>")
@@ -58,7 +63,7 @@ def scan_changed() -> list[str]:
 
 def main() -> int:
     if "--full" in sys.argv:
-        proc = subprocess.run([sys.executable, str(SCANNER)], cwd=ROOT)
+        proc = subprocess.run([sys.executable, str(SCANNER)], cwd=ROOT, check=False)
         return proc.returncode
     findings = scan_changed()
     if not findings:

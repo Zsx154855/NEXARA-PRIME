@@ -1,7 +1,9 @@
-"""T6 acceptance: a replayed stage does not append duplicate evidence/memory."""
+"""T6 acceptance: crash-replay of a state transition must not poison the mission."""
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
 
 from nexara_prime.config import Settings
 from nexara_prime.memory_os import MemoryOS, MemoryType
@@ -22,19 +24,37 @@ def _runtime(tmp_path: Path) -> NexaraRuntime:
     return NexaraRuntime(settings)
 
 
-def test_state_transition_evidence_is_idempotent(tmp_path: Path):
+def test_state_transition_survives_crash_and_replay(tmp_path: Path):
+    """Evidence is written, the save is interrupted, then the transition is retried.
+
+    With a (from,to) idempotency key the replay raises evidence_idempotency_conflict
+    and run_mission would mark the mission FAILED forever. The key must follow the
+    transition *event*, not the state pair.
+    """
+    from nexara_prime.models import MissionState
+
     runtime = _runtime(tmp_path)
-    first = runtime.evidence.state_change(
-        "mission_x", "Intent", "Context", "trace_x", "evt_1",
-        idempotency_key="state-transition:mission_x:Intent->Context",
-    )
-    second = runtime.evidence.state_change(
-        "mission_x", "Intent", "Context", "trace_x", "evt_1",
-        idempotency_key="state-transition:mission_x:Intent->Context",
-    )
-    assert first.evidence_id == second.evidence_id
-    rows = [e for e in runtime.evidence.list("mission_x") if e.get("kind") == "state_transition"]
-    assert len(rows) == 1, f"expected 1 transition evidence, found {len(rows)}"
+    mission = runtime.create_mission("replay check")
+
+    original_save = runtime._save_mission
+
+    def crash(_mission):
+        raise KeyboardInterrupt
+
+    runtime._save_mission = crash
+    with pytest.raises(KeyboardInterrupt):
+        runtime._advance(mission, MissionState.CONTEXT, "test")
+    runtime._save_mission = original_save
+
+    reloaded = runtime.get_mission(mission.mission_id)
+    assert reloaded.state == "Intent", "the interrupted save must not advance the stored state"
+
+    runtime._advance(reloaded, MissionState.CONTEXT, "test")  # must not raise
+    assert runtime.get_mission(mission.mission_id).state == "Context"
+
+    transitions = [e for e in runtime.evidence.list(mission.mission_id)
+                   if e.get("kind") == "state_transition"]
+    assert len(transitions) == 2, f"expected both attempts recorded, found {len(transitions)}"
 
 
 def test_memory_os_entry_is_idempotent(tmp_path: Path):
@@ -46,4 +66,4 @@ def test_memory_os_entry_is_idempotent(tmp_path: Path):
                             idempotency_key="mission_y:memory_episodic")
     assert a.memory_id == b.memory_id
     rows = [r for r in runtime.store.list_records("memory") if r.get("memory_id") == a.memory_id]
-    assert len(rows) == 1, f"expected 1 memory row, found {len(rows)}"
+    assert len(rows) == 1

@@ -18,8 +18,14 @@ export PYTHONDONTWRITEBYTECODE=1
 
 PYTHON_BIN="${NEXARA_PYTHON:-python3}"
 FAST_TESTS=(
+  tests/test_t1_deterministic_report.py
+  tests/test_t2_sandbox_selection.py
   tests/test_t3_api_auth.py
   tests/test_t4_wal_concurrency.py
+  tests/test_t5_gate_single_source.py
+  tests/test_t6_idempotency.py
+  tests/test_t7_rollback_scope.py
+  tests/test_t8_ui_route_truth.py
   tests/test_conversations_api.py
   tests/test_evaluation.py
   tests/test_runtime_v2_stage_recovery.py

@@ -27,3 +27,4 @@ def test_opt_in_process_backend_actually_runs():
     ))
     assert receipt.exit_code == 0, receipt.error
     assert "t2-ok" in receipt.stdout
+    assert receipt.sandbox_mechanism == "process_restricted"
