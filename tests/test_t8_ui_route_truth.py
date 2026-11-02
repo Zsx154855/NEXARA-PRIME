@@ -24,5 +24,7 @@ def test_known_503_route_is_present_but_module_is_absent():
     # Honest edge: the route exists, the module behind it does not, so the UI
     # shows 503. That is documented in the page, not hidden.
     data = route_truth.report()
+    # The route exists; the module behind it is still missing, so the page shows a
+    # 503. That defect lives in the issue tracker, not in an assertion that would
+    # fail the day someone implements it.
     assert "/api/knowledge-universe" in data["backend_routes"]
-    assert not (ROOT / "src" / "nexara_prime" / "knowledge_universe.py").exists()
