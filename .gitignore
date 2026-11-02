@@ -107,3 +107,7 @@ out-tauri/
 ui/src-tauri/target/
 ui/src-tauri/gen/schemas
 !ui/src-tauri/Cargo.lock
+
+# scripts/release holds the release tooling; the top-level release/ dir is an artifact dir
+!scripts/release/
+!scripts/release/**
