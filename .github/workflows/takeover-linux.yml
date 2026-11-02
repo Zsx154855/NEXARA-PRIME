@@ -9,7 +9,7 @@ jobs:
     # Dedicated label so legacy workflows (NEXARA CI, sovereign-delivery) cannot
     # starve this job on the shared runner. Switch to ubuntu-latest when billing
     # is resolved.
-    runs-on: [self-hosted, ci-quick]
+    runs-on: [self-hosted, macOS, ARM64]
     env:
       BOOTSTRAP_PYTHON: /opt/homebrew/bin/python3.12
       PIP_NO_INPUT: "1"
