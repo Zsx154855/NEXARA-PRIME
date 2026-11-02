@@ -3,10 +3,10 @@
   "gates_file": "NEXARA_DEVELOPMENT_GATES_V1.yaml",
   "inventory": "G0_REALITY_INVENTORY_V2_20260723",
   "inventory_head": "dd0505ac53721d8e2e6150e47936119fe16734d6",
-  "program_status": "LOCAL_RELEASE_COMPLETE",
+  "program_status": "PARTIAL_WITH_BLOCKERS",
   "current_gate": "G10",
   "g10_composite_status": {
-    "local_release": "LOCAL_RELEASE_COMPLETE",
+    "local_release": "LOCAL_RELEASE_BLOCKED",
     "external_distribution": "NOT_REQUIRED_LOCAL_PROJECT",
     "git_push_tag": "LOCAL_TAG_V0.1.0_CREATED",
     "product_brand_name": "RESOLVED_柏韩_Bǎi_Hán"
@@ -19,45 +19,45 @@
     },
     {
       "id": "G1",
-      "status": "PASS",
-      "verified": true
+      "status": "PARTIAL",
+      "verified": false
     },
     {
       "id": "G2",
-      "status": "PASS",
-      "verified": true
+      "status": "PARTIAL",
+      "verified": false
     },
     {
       "id": "G3",
-      "status": "PASS",
-      "verified": true
+      "status": "PARTIAL",
+      "verified": false
     },
     {
       "id": "G4",
-      "status": "PASS",
-      "verified": true
+      "status": "PARTIAL",
+      "verified": false
     },
     {
       "id": "G5",
-      "status": "PASS",
-      "verified": true
+      "status": "PARTIAL",
+      "verified": false
     },
     {
       "id": "G6",
-      "status": "PASS",
-      "verified": true
+      "status": "PARTIAL",
+      "verified": false
     },
     {
       "id": "G7",
-      "status": "PASS",
-      "verified": true,
+      "status": "PARTIAL",
+      "verified": false,
       "strategy": "web-primary",
       "note": "macOS+iOS compile & bind Runtime Truth"
     },
     {
       "id": "G8",
-      "status": "PASS",
-      "verified": true,
+      "status": "PARTIAL",
+      "verified": false,
       "evidence": [
         "Python SDK installable (23 methods)",
         "Plugin schema V1",
@@ -66,8 +66,8 @@
     },
     {
       "id": "G9",
-      "status": "PASS",
-      "verified": true,
+      "status": "PARTIAL",
+      "verified": false,
       "evidence": [
         "EvaluationEngine 6-dim scoring",
         "BenchmarkRunner compare",
@@ -76,14 +76,16 @@
     },
     {
       "id": "G10",
-      "status": "PASS",
-      "verified": true,
+      "status": "BLOCKED",
+      "verified": false,
       "local_release": "LOCAL_RELEASE_COMPLETE",
       "note": "本地私人项目 — Apple 签名/公证/分发非必需。tag v0.1.0 已创建。"
     }
   ],
-  "gates_verified_pass": 10,
-  "gates_blocked": 0,
+  "gates_verified_pass": 1,
+  "gates_blocked": [
+    "G10"
+  ],
   "previous_false_pass_corrected": [
     "G7",
     "G8",
@@ -99,12 +101,15 @@
     "dist/sbom-0.1.0.json",
     "dist/checksums-0.1.0.txt"
   ],
-  "supersedes": "GATE_STATUS.json from 2026-07-15 (false G7-G9 PASS claims)",
+  "supersedes": [
+    "GATE_STATUS.json from 2026-07-15 (false G7-G9 PASS claims)",
+    ".nexara/receipts/pr23_final_attestation.json"
+  ],
   "updated_at": "2026-08-08T08:00:00Z",
   "completed_at": "2026-08-08T08:00:00Z",
   "completed_by": "NEXARA Sovereign OnePass — 本地完工 v0.1.0",
   "tag": "v0.1.0",
   "tag_head": "1762f77",
-  "supersedes": ["GATE_STATUS.json from 2026-07-15 (false G7-G9 PASS claims)", ".nexara/receipts/pr23_final_attestation.json"],
-  "brand": "柏韩 (Bǎi Hán) — resolved 2026-07-23"
+  "brand": "柏韩 (Bǎi Hán) — resolved 2026-07-23",
+  "authority": ".nexara/GATE_STATUS_DERIVED.json"
 }

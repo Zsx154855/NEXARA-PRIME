@@ -168,8 +168,10 @@ class MacOSSandboxBackend(SandboxBackend):
     def probe_capability(self) -> SandboxCapability:
         cap = SandboxCapability()
         if platform.system() != "Darwin":
-            cap.sandbox_mechanism = "workspace_jail"
-            cap.flags = [WORKSPACE_JAIL_ENFORCED]
+            # Not a sandbox at all on other platforms; never claim a jail we
+            # do not implement (see D-001 in the takeover decision log).
+            cap.sandbox_mechanism = "none"
+            cap.flags = []
             return cap
 
         if self._sandbox_exec:
@@ -182,8 +184,8 @@ class MacOSSandboxBackend(SandboxBackend):
             cap.verified_at = now_iso()
             cap.escape_tests_passed = self._escape_tests
         else:
-            cap.sandbox_mechanism = "workspace_jail"
-            cap.flags = [WORKSPACE_JAIL_ENFORCED]
+            cap.sandbox_mechanism = "none"
+            cap.flags = []
         return cap
 
     def execute(self, invocation: SandboxInvocation) -> SandboxReceipt:
@@ -297,13 +299,54 @@ class MacOSSandboxBackend(SandboxBackend):
 
 
 class ProcessConstrainedBackend(SandboxBackend):
+    """Best-effort execution without an OS sandbox: sanitized argv, filtered env,
+    own process group, timeout kill. It is NOT a filesystem or network jail."""
+
+    def __init__(self, workspace_root: str | None = None):
+        self.workspace_root = workspace_root or os.getcwd()
+
     def probe_capability(self) -> SandboxCapability:
-        return SandboxCapability(flags=[WORKSPACE_JAIL_ENFORCED], sandbox_mechanism="workspace_jail")
+        return SandboxCapability(flags=[], sandbox_mechanism="process_restricted")
 
     def execute(self, invocation: SandboxInvocation) -> SandboxReceipt:
         receipt = _workspace_jail_execute(invocation)
-        receipt.sandbox_mechanism = "workspace_jail"
+        receipt.sandbox_mechanism = "process_restricted"
         return receipt
+
+
+class UnavailableSandboxBackend(SandboxBackend):
+    """Fail-closed default: no sandbox on this platform, so nothing executes."""
+
+    def __init__(self, workspace_root: str | None = None, reason: str = ""):
+        self.workspace_root = workspace_root or os.getcwd()
+        self.reason = reason or (
+            "no sandbox backend for this platform; set "
+            "NEXARA_SANDBOX_ALLOW_PROCESS_FALLBACK=true to opt into the process jail"
+        )
+
+    def probe_capability(self) -> SandboxCapability:
+        return SandboxCapability(flags=[], sandbox_mechanism="none")
+
+    def execute(self, invocation: SandboxInvocation) -> SandboxReceipt:
+        return SandboxReceipt(invocation_id=invocation.invocation_id, error=self.reason)
+
+
+def select_sandbox_backend(workspace_root: str,
+                           allow_process_fallback: bool | None = None) -> SandboxBackend:
+    """Pick the strongest backend available, without silent degradation.
+
+    macOS with sandbox-exec -> OS sandbox. Otherwise the process backend is used
+    ONLY when explicitly enabled (env or argument); the default stays fail-closed.
+    """
+    if allow_process_fallback is None:
+        allow_process_fallback = os.getenv(
+            "NEXARA_SANDBOX_ALLOW_PROCESS_FALLBACK", "false"
+        ).lower() in {"1", "true", "yes", "on"}
+    if platform.system() == "Darwin" and shutil.which("sandbox-exec"):
+        return MacOSSandboxBackend(workspace_root)
+    if allow_process_fallback:
+        return ProcessConstrainedBackend(workspace_root)
+    return UnavailableSandboxBackend(workspace_root)
 
 
 class TestSandboxBackend(SandboxBackend):

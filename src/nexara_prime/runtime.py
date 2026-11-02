@@ -7,12 +7,16 @@ import subprocess
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .adaptive_runtime import AdaptiveRuntime as AdaptiveOrchestrator
 from .attachments import ConversationAttachmentStore
 from .capabilities import CapabilityRegistry
+from .provenance_engine import analyze, verify_citations
 from .config import Settings
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .model_gateway import ModelResponse
 from .contract_engine import ContractEngine
 from .db import SQLiteStore
 from .evaluation import EvaluationEngine
@@ -1029,6 +1033,25 @@ class NexaraRuntime:
             metadata={"tool_steps": tool_steps, "tools_used": tools_used},
         )
 
+    def _block(self, mission: Mission, code: str, detail: dict | None = None) -> Mission:
+        """Block a mission *with* evidence and a released scheduler lease."""
+        mission.result["error"] = code
+        payload = {"code": code, "detail": detail or {}, "from_state": mission.state}
+        self.evidence.add(
+            mission.mission_id, "block_reason", "Blocked", json.dumps(payload, ensure_ascii=False, sort_keys=True),
+            mission.trace_id, actor="runtime", source="runtime", verification_status="verified",
+            idempotency_key=f"{mission.mission_id}:block:{code}",
+        )
+        try:
+            self.scheduler.release(mission.assignments)
+        except Exception:  # noqa: BLE001 - release is best-effort, evidence is not
+            pass
+        for assignment in mission.assignments:
+            self._assignment_lifecycle(mission, assignment, "released", "scheduler", assignment.current_step_id)
+        self._advance(mission, MissionState.BLOCKED, "runtime")
+        self._save_mission(mission)
+        return mission
+
     def _advance(self, mission: Mission, target: MissionState, actor: str) -> None:
         previous = mission.state
         self.state_machine.transition(mission, target, actor)
@@ -1338,12 +1361,27 @@ class NexaraRuntime:
             # the optional code probe is unavailable. The failed tool Receipt is
             # already durable; preserve the limitation instead of fabricating a
             # successful probe or bypassing the sandbox.
-            if not str(exc).startswith("os_sandbox_denied"):
+            message = str(exc)
+            # The probe is optional health-check work, not the mission's output.
+            # A missing backend (Linux, no fallback) is different from a denied
+            # sandbox, but neither may silently pass: both are recorded below.
+            if not message.startswith(("os_sandbox_denied", "os_sandbox_unavailable")):
                 raise
-            mission.result["environment_limitation"] = "code_exec_probe_unavailable: sandbox enforcement unavailable"
+            mission.result["environment_limitation"] = (
+                "code_exec_probe_unavailable: " + message.split(":", 1)[-1][:160]
+            )
             self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"status": "environment_limited", "reason": "sandbox_enforcement_unavailable"})
             self._save_mission(mission)
-        report = self._render_report(mission, mission.spec.objective, model_text, provider)
+        explicit_source = bool(mission.spec.source_dir)
+        analysis = analyze(Path(mission.spec.source_dir) if explicit_source else self.settings.workspace_root)
+        # Only an explicitly requested source that yields nothing is a block.
+        # A mission without source_dir may legitimately be a health check.
+        if explicit_source and analysis.files == 0:
+            return self._block(mission, "mission_blocked:no_readable_source_files",
+                               {"root": analysis.root})
+        mission.result["analysis_root"] = analysis.root
+        mission.result["analysis_assertions"] = analysis.as_dict()["assertions"]
+        report = self._render_report(mission, mission.spec.objective, model_text, provider, analysis)
         lease = self.leases.acquire(f"report:{mission.mission_id}", "vertex", mission.trace_id)
         try:
             if not mission.pending_approval_id:
@@ -1370,6 +1408,12 @@ class NexaraRuntime:
     def _verify_stage(self, mission: Mission) -> Mission:
         vkey = f"{mission.mission_id}:verification_evidence"
         verification = self._verify_report(mission)
+        citations = verification.get("citations") or {}
+        if (mission.result.get("analysis_root")
+                and int(citations.get("checked", 0)) > 0
+                and not citations.get("ok")):
+            return self._block(mission, "verification_citations_invalid",
+                               {"citations": citations, "verification": verification})
         context_object = self._execution_context(mission)
         if context_object:
             verification["context_hash"] = context_object.context_hash
@@ -1450,6 +1494,7 @@ class NexaraRuntime:
             content="mission.completed_report",
             source=mission.mission_id,
             provenance={"trace_id": mission.trace_id, "evidence_id": re_id or "", "kernel_patch_id": mem.memory_id},
+            idempotency_key=f"{mission.mission_id}:memory_episodic",
         )
         mission.result["memory_lifecycle_id"] = lifecycle_entry.memory_id
         self._save_mission(mission)
@@ -1500,26 +1545,62 @@ class NexaraRuntime:
             return False
         return not any(item.get("state") == MissionState.BLOCKED.value for item in self.recovery.recover().missions if item.get("mission_id") == mission.mission_id)
 
-    def _render_report(self, mission: Mission, task: str, model_text: str, provider: str) -> str:
+    def _render_report(self, mission: Mission, task: str, model_text: str,
+                       provider: str, analysis) -> str:
         context_hash = mission.result.get("context_hash", "not_applicable")
         manifest = mission.result.get("context_manifest", {})
-        facts = "\n".join([
-            f"- Repository Branch: `{manifest.get('branch', 'not_applicable')}`",
-            f"- Repository HEAD: `{manifest.get('head_sha', 'not_applicable')}`",
-            f"- Repository Dirty: `{manifest.get('dirty', False)}`",
-            f"- Repository Files: `{manifest.get('file_count', 0)}`",
-            f"- Context Hash: `{context_hash}`",
-            f"- Environment Limitation: `{mission.result.get('environment_limitation', 'none')}`",
-        ])
-        return f"# NEXARA PRIME Mission Report\n\n- Mission: `{mission.mission_id}`\n- Title: {mission.spec.title}\n- Risk: {mission.spec.risk_level.value}\n- Provider: {provider}\n\n## Verified repository facts\n\n{facts}\n\n## Compiled task\n\n{task}\n\n## Result\n\n{model_text}\n\n## Governance\n\nThis report was written only after human approval, under a Writer Lease, with an execution receipt and verification evidence.\n"
+        if analysis.assertions:
+            facts = "\n".join(
+                f"{index}. {item.claim} — `{item.path}:{item.line}`\n   > {item.excerpt[:160]}"
+                for index, item in enumerate(analysis.assertions, start=1)
+            )
+        else:
+            facts = ("No readable source files were found in the analysed root. "
+                     "This report therefore contains no repository facts.")
+        return (
+            "# NEXARA PRIME Mission Report\n\n"
+            f"- Mission: `{mission.mission_id}`\n"
+            f"- Title: {mission.spec.title}\n"
+            f"- Risk: {mission.spec.risk_level.value}\n"
+            f"- Provider: {provider}\n"
+            f"- Analysed root: `{analysis.root}` ({analysis.files} files, {analysis.bytes} bytes)\n\n"
+            "## Verified repository facts\n\n"
+            f"{facts}\n\n"
+            "## Repository context\n\n"
+            f"- Branch: `{manifest.get('branch', 'not_applicable')}`\n"
+            f"- HEAD: `{manifest.get('head_sha', 'not_applicable')}`\n"
+            f"- Dirty: `{manifest.get('dirty', False)}`\n"
+            f"- Files: `{manifest.get('file_count', 0)}`\n"
+            f"- Context hash: `{context_hash}`\n"
+            f"- Environment limitation: `{mission.result.get('environment_limitation', 'none')}`\n\n"
+            "## Compiled task\n\n"
+            f"{task}\n\n"
+            "## Model output\n\n"
+            f"{model_text}\n\n"
+            "## Governance\n\n"
+            "This report was written only after human approval, under a Writer Lease, "
+            "with an execution receipt and verification evidence. The facts above cite "
+            "the exact file and line they were derived from.\n"
+        )
 
     def _verify_report(self, mission: Mission) -> dict:
         import hashlib
+        from .provenance_engine import Analysis, Assertion
+
         path = Path(mission.result["report_path"])
         exists = path.exists()
         bytes_count = path.stat().st_size if exists else 0
         digest = hashlib.sha256(path.read_bytes()).hexdigest() if exists else None
-        return {"exists": exists, "bytes": bytes_count, "non_empty": bytes_count > 0, "sha256": digest, "verified_at": now_iso()}
+        citations = {"checked": 0, "bad": [], "ok": False}
+        if mission.result.get("analysis_root"):
+            raw = mission.result.get("analysis_assertions", [])
+            analysis = Analysis(
+                root=mission.result["analysis_root"],
+                assertions=[Assertion(**item) for item in raw],
+            )
+            citations = verify_citations(analysis)
+        return {"exists": exists, "bytes": bytes_count, "non_empty": bytes_count > 0,
+                "sha256": digest, "citations": citations, "verified_at": now_iso()}
 
     def _find_evidence_by_idempotency(self, key: str, mission_id: str) -> Any:
         """Find existing evidence by idempotency_key using public EvidenceStore.list API.
@@ -1625,14 +1706,34 @@ class NexaraRuntime:
         return mission
 
     def rollback(self, mission_id: str) -> Mission:
+        """Roll the mission state back and record where it came from.
+
+        Scope is explicit: this restores the *state machine* position and keeps a
+        pointer to the rollback point. It does NOT restore filesystem content —
+        `files_restored` is always 0 until a real snapshot backend exists.
+        """
         mission = self._load_mission(mission_id)
         if mission.state == MissionState.ROLLED_BACK.value:
             return mission
         previous_state = mission.state
         self._advance(mission, MissionState.ROLLED_BACK, "human")
+        payload = {
+            "previous_state": previous_state,
+            "checkpoint": mission.rollback_point,
+            "scope": "state_only",
+            "files_restored": 0,
+            "note": "state-only rollback: filesystem content is not restored",
+        }
         mission.result["rollback_at"] = now_iso()
+        mission.result["rollback_scope"] = "state_only"
+        mission.result["rollback_files_restored"] = 0
         self._save_mission(mission)
-        self.evidence.add(mission_id, "rollback_point", "RollbackPoint", json.dumps({"previous_state": previous_state, "checkpoint": mission.rollback_point}), mission.trace_id, actor="human", source="governance", verification_status="verified")
+        self.evidence.add(
+            mission_id, "rollback_point", "RollbackPoint", json.dumps(payload),
+            mission.trace_id, actor="human", source="governance",
+            verification_status="verified",
+            idempotency_key=f"rollback:{mission_id}:{previous_state}",
+        )
         return mission
 
     def safe_mode(self, mission_id: str, enabled: bool = True) -> Mission:
