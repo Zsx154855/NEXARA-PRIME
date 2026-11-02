@@ -125,6 +125,14 @@ def _project_dependencies(root: Path) -> tuple[int, tuple[str, int, str] | None]
     return count, first
 
 
+def _first_contentful(paths: list[Path]) -> Path | None:
+    """A file worth citing: an empty __init__.py makes a useless reference."""
+    for path in paths:
+        if any(line.strip() for line in _read_lines(path)):
+            return path
+    return paths[0] if paths else None
+
+
 def _find_test_functions(paths: list[Path]) -> list[tuple[Path, int, str]]:
     hits: list[tuple[Path, int, str]] = []
     for path in paths:
@@ -134,6 +142,50 @@ def _find_test_functions(paths: list[Path]) -> list[tuple[Path, int, str]]:
             if text.lstrip().startswith("def test_"):
                 hits.append((path, index, text.strip()))
     return hits
+
+
+
+def _top_level_layout(root: Path, files: list[Path]) -> tuple[str, Path, int, str] | None:
+    """Largest top-level group, with a citation inside it."""
+    groups: dict[str, list[Path]] = {}
+    for path in files:
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            continue
+        head = relative.parts[0] if len(relative.parts) > 1 else "(root)"
+        groups.setdefault(head, []).append(path)
+    if not groups:
+        return None
+    head, members = max(groups.items(), key=lambda item: (len(item[1]), item[0]))
+    ordered = sorted(members)
+    first = _first_contentful(ordered) or ordered[0]
+    line, excerpt = _first_line(first)
+    claim = (f"top-level layout: {len(groups)} group(s); largest is `{head}` "
+             f"with {len(members)} text file(s)")
+    return claim, first, line, excerpt
+
+
+def _entry_point(files: list[Path]) -> tuple[str, Path, int, str] | None:
+    """First `if __name__ == ...` guard or a [project.scripts] declaration."""
+    for path in sorted(files):
+        if path.suffix != ".py":
+            continue
+        for index, text in enumerate(_read_lines(path), start=1):
+            if "__name__" in text and "__main__" in text:
+                return ("""entry point: `if __name__ == "__main__"` guard""", path, index, text.strip())
+    for path in sorted(files):
+        if path.name != "pyproject.toml":
+            continue
+        lines = _read_lines(path)
+        for index, text in enumerate(lines, start=1):
+            if text.strip().startswith("[project.scripts]"):
+                for offset in range(index, min(index + 3, len(lines) + 1)):
+                    candidate = lines[offset - 1].strip()
+                    if "=" in candidate:
+                        return ("entry point: console script declared in pyproject.toml",
+                                path, offset, candidate)
+    return None
 
 
 def analyze(root: Path, *, max_files: int = 5000) -> Analysis:
@@ -157,7 +209,7 @@ def analyze(root: Path, *, max_files: int = 5000) -> Analysis:
     largest = max(files, key=lambda p: (sizes.get(p, 0), str(p)))
 
     if python_files:
-        first = python_files[0]
+        first = _first_contentful(python_files) or python_files[0]
         line, excerpt = _first_line(first)
         analysis.assertions.append(Assertion(
             claim=f"{len(python_files)} Python module(s); first is {_rel(first, root)}",
@@ -203,12 +255,30 @@ def analyze(root: Path, *, max_files: int = 5000) -> Analysis:
             path=_rel(path, root), line=line, excerpt=excerpt,
         ))
     else:
-        path = python_files[0] if python_files else files[0]
+        path = (_first_contentful(python_files) if python_files else None) or files[0]
         line, excerpt = _first_line(path)
         analysis.assertions.append(Assertion(
             claim="no test functions found in the analysed tree",
             path=_rel(path, root), line=line, excerpt=excerpt,
         ))
+
+    layout = _top_level_layout(root, files)
+    if layout:
+        claim, path, line, excerpt = layout
+        analysis.assertions.append(Assertion(
+            claim=claim, path=_rel(path, root), line=line, excerpt=excerpt))
+
+    entry = _entry_point(files)
+    if entry:
+        claim, path, line, excerpt = entry
+        analysis.assertions.append(Assertion(
+            claim=claim, path=_rel(path, root), line=line, excerpt=excerpt))
+    else:
+        path = files[0]
+        line, excerpt = _first_line(path)
+        analysis.assertions.append(Assertion(
+            claim="entry point: none declared (no __main__ guard, no console script)",
+            path=_rel(path, root), line=line, excerpt=excerpt))
 
     return analysis
 
@@ -221,8 +291,11 @@ def verify_citations(analysis: Analysis, limit: int = 50) -> dict:
         target = root / assertion.path
         lines = _read_lines(target) if target.exists() else []
         checked += 1
+        empty = not lines
         if not target.exists() or assertion.line < 1 or assertion.line > len(lines):
-            bad.append({"path": assertion.path, "line": assertion.line})
+            # An empty file can still be cited at line 1 (nothing to quote).
+            if not (empty and assertion.line == 1 and target.exists()):
+                bad.append({"path": assertion.path, "line": assertion.line})
         elif assertion.excerpt and lines[assertion.line - 1].strip() != assertion.excerpt:
             bad.append({"path": assertion.path, "line": assertion.line,
                         "reason": "excerpt_mismatch"})
