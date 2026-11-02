@@ -1,0 +1,15 @@
+services:
+  nexara:
+    build: .
+    ports: ["8765:8765"]
+    environment:
+      NEXARA_MULTI_TENANT: "1"
+      NEXARA_DB_PATH: /data/nexara.db
+      NEXARA_WORKSPACE_ROOT: /data/workspace
+      NEXARA_REPORT_ROOT: /data/reports
+      NEXARA_MODEL_PROVIDER: ${NEXARA_MODEL_PROVIDER:-none}
+      NEXARA_API_TOKEN: ${NEXARA_API_TOKEN:-}
+    volumes: ["nexara-data:/data"]
+    restart: unless-stopped
+volumes:
+  nexara-data:

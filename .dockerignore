@@ -1,0 +1,12 @@
+.git
+node_modules
+ui/node_modules
+ui/.next
+ui/out
+reports
+evidence
+runtime
+dist
+*.db
+**/__pycache__
+.venv*

@@ -344,9 +344,84 @@ def select_sandbox_backend(workspace_root: str,
         ).lower() in {"1", "true", "yes", "on"}
     if platform.system() == "Darwin" and shutil.which("sandbox-exec"):
         return MacOSSandboxBackend(workspace_root)
+    docker = DockerSandboxBackend(workspace_root)
+    if docker.probe_capability().sandbox_mechanism == "docker":
+        return docker
     if allow_process_fallback:
         return ProcessConstrainedBackend(workspace_root)
     return UnavailableSandboxBackend(workspace_root)
+
+
+
+class DockerSandboxBackend(SandboxBackend):
+    """Run commands in a throwaway container.
+
+    This is the isolation story for non-macOS deployments: no network, read-only
+    root, capped memory/pids, and only the workspace mounted read-write.
+    """
+
+    DEFAULT_IMAGE = "python:3.12-slim"
+
+    def __init__(self, workspace_root: str | None = None, image: str | None = None):
+        self.workspace_root = workspace_root or os.getcwd()
+        self.image = image or os.getenv("NEXARA_SANDBOX_IMAGE") or self.DEFAULT_IMAGE
+        self._docker = shutil.which("docker")
+        self._usable: bool | None = None
+
+    def _daemon_available(self) -> bool:
+        if self._usable is None:
+            if not self._docker:
+                self._usable = False
+            else:
+                probe = subprocess.run([self._docker, "info", "--format", "{{.ServerVersion}}"],
+                                       capture_output=True, text=True, timeout=10, check=False)
+                self._usable = probe.returncode == 0 and bool((probe.stdout or "").strip())
+        return bool(self._usable)
+
+    def probe_capability(self) -> SandboxCapability:
+        if self._daemon_available():
+            return SandboxCapability(flags=[], sandbox_mechanism="docker")
+        return SandboxCapability(flags=[], sandbox_mechanism="none")
+
+    def execute(self, invocation: SandboxInvocation) -> SandboxReceipt:
+        if not self._daemon_available():
+            return SandboxReceipt(
+                invocation_id=invocation.invocation_id,
+                error="docker_backend_unavailable: docker CLI or daemon not available",
+            )
+        workspace = os.path.realpath(invocation.workspace_root or self.workspace_root)
+        argv = [
+            self._docker, "run", "--rm",
+            "--network", "none",
+            "--read-only",
+            "--pids-limit", "128",
+            "--memory", os.getenv("NEXARA_SANDBOX_MEMORY", "512m"),
+            "--cpus", os.getenv("NEXARA_SANDBOX_CPUS", "1"),
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
+            "-v", f"{workspace}:/workspace:rw",
+            "-w", "/workspace",
+            "--user", f"{os.getuid()}:{os.getgid()}" if hasattr(os, "getuid") else "65534:65534",
+            self.image,
+            "sh", "-lc", invocation.command if invocation.command else shlex.join(invocation.argv),
+        ]
+        started = time.time()
+        try:
+            result = subprocess.run(argv, capture_output=True, text=True,
+                                    timeout=max(int(invocation.timeout or 30), 5), check=False)
+        except subprocess.TimeoutExpired as exc:
+            return SandboxReceipt(invocation_id=invocation.invocation_id, timed_out=True,
+                                  error="timeout", duration_ms=(time.time() - started) * 1000,
+                                  sandbox_mechanism="docker")
+        elapsed = (time.time() - started) * 1000
+        limit = invocation.max_output_bytes or 10_000
+        return SandboxReceipt(
+            invocation_id=invocation.invocation_id,
+            exit_code=result.returncode,
+            stdout=(result.stdout or "")[:limit],
+            stderr=(result.stderr or "")[:limit],
+            duration_ms=elapsed,
+            sandbox_mechanism="docker",
+        )
 
 
 class TestSandboxBackend(SandboxBackend):
