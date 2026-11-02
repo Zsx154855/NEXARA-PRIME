@@ -16,8 +16,18 @@ jobs:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PIP_PROGRESS_BAR: "off"
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+      - name: checkout (shell, no action download)
+        run: |
+          # codeload.github.com is not reachable from this host, so the
+          # actions/checkout bundle cannot be downloaded. The machine already has
+          # an SSH remote configured for this repository.
+          git init -q .
+          git remote add origin git@github-nexara:Zsx154855/NEXARA-PRIME.git 2>/dev/null \
+            || git remote set-url origin git@github-nexara:Zsx154855/NEXARA-PRIME.git
+          git fetch -q origin main:refs/remotes/origin/main
+          git fetch -q origin "$GITHUB_SHA"
+          git checkout -q --detach FETCH_HEAD
+          git log -1 --format='checked out %h %s' 
       - name: install
         run: |
           # Homebrew's python is externally managed (PEP 668); use a venv.
