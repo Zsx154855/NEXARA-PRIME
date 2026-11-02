@@ -10,18 +10,18 @@ jobs:
     # runs on the repository's registered self-hosted machine. Switch back to
     # ubuntu-latest once billing is resolved.
     runs-on: [self-hosted, macOS, ARM64]
+    env:
+      NEXARA_PYTHON: /opt/homebrew/bin/python3.12
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
       - name: install
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[test]" ruff
-          pip install -e platform/sdk/python
+          "$NEXARA_PYTHON" -m pip install --upgrade pip
+          "$NEXARA_PYTHON" -m pip install -e ".[test]" ruff
+          "$NEXARA_PYTHON" -m pip install -e platform/sdk/python
       - name: compile
-        run: python -m compileall -q src
+        run: "$NEXARA_PYTHON" -m compileall -q src
       - name: lint (new code)
         run: |
           ruff check src/nexara_prime/provenance_engine tests/test_t*.py scripts/
@@ -32,12 +32,12 @@ jobs:
       - name: tests
         run: bash scripts/test_linux.sh
       - name: coverage ratchet
-        run: python scripts/quality/coverage_gate.py
+        run: "$NEXARA_PYTHON" scripts/quality/coverage_gate.py
       - name: e2e (real http)
-        run: python scripts/e2e/http_smoke.py
+        run: "$NEXARA_PYTHON" scripts/e2e/http_smoke.py
       - name: ui route truth
-        run: python scripts/ui/route_truth.py
+        run: "$NEXARA_PYTHON" scripts/ui/route_truth.py
       - name: gate status
-        run: python scripts/governance/derive_gate_status.py
+        run: "$NEXARA_PYTHON" scripts/governance/derive_gate_status.py --check
       - name: secret scan
-        run: python scripts/security/scan_hardcoded_secrets.py
+        run: "$NEXARA_PYTHON" scripts/quality/secret_scan_gate.py
