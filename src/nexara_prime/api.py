@@ -98,7 +98,10 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     # "testclient" is the sentinel host Starlette's TestClient reports; it is a
     # transport-level value, not a header, so treating it as local is safe.
     loopback = {"127.0.0.1", "localhost", "::1", "testclient"}
-    if not token and host not in loopback:
+    # In multi-tenant mode the session cookie is the boundary, so a public bind
+    # is expected (a container has to listen on 0.0.0.0). The token guard exists
+    # for the single-owner profile, which has no accounts.
+    if not token and not multi_tenant and host not in loopback:
         raise RuntimeError(
             f"NEXARA_API_TOKEN is required to bind non-loopback host {host!r}"
         )

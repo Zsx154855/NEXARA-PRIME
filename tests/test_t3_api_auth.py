@@ -80,3 +80,11 @@ def test_options_preflight_is_not_blocked_by_auth(tmp_path: Path):
                               headers={"Origin": "http://localhost:3000",
                                        "Access-Control-Request-Method": "GET"})
     assert response.status_code != 401
+
+
+def test_multi_tenant_may_bind_publicly(tmp_path: Path):
+    runtime = make_runtime(tmp_path, host="0.0.0.0", token=None)
+    runtime.settings = type(runtime.settings)(**{**runtime.settings.__dict__, "multi_tenant": True})
+    app = create_app(runtime)  # must not raise: sessions are the boundary
+    client = TestClient(app)
+    assert client.get("/api/runtime/overview").status_code == 401
