@@ -42,7 +42,6 @@ class ToolRuntime:
         self.report_root = report_root.resolve()
         self.audit = audit
         self.sandbox = select_sandbox_backend(str(self.workspace_root))
-        self._fallback_sandbox: ProcessConstrainedBackend | None = None
         self.workspace_root.mkdir(parents=True, exist_ok=True)
         self.report_root.mkdir(parents=True, exist_ok=True)
 

@@ -48,7 +48,7 @@ def derive() -> dict:
         gate(gid, "PARTIAL",
              "implementation exists; end-to-end verification not recorded in this checkout",
              "src/nexara_prime")
-    gate("G7", "PARTIAL" if not screenshots else "PARTIAL",
+    gate("G7", "PARTIAL",
          f"screenshots/usability evidence {'present' if screenshots else 'missing'}",
          "docs/05-UI-UX")
     gate("G8", "PARTIAL",

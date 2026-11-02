@@ -12,11 +12,9 @@ from __future__ import annotations
 import multiprocessing
 import os
 import signal
-import sqlite3
 import subprocess
 import sys
 import tempfile
-import time
 
 from nexara_prime.db import SQLiteStore
 
@@ -39,7 +37,7 @@ def _make_store() -> tuple[SQLiteStore, str]:
 
 
 def test_wal_and_busy_timeout_are_set():
-    store, path = _make_store()
+    store, _path = _make_store()
     mode = store._conn.execute("PRAGMA journal_mode").fetchone()[0]
     timeout = store._conn.execute("PRAGMA busy_timeout").fetchone()[0]
     assert str(mode).lower() == "wal", f"journal_mode is {mode!r}"

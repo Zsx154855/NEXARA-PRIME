@@ -7,13 +7,16 @@ import subprocess
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .adaptive_runtime import AdaptiveRuntime as AdaptiveOrchestrator
 from .attachments import ConversationAttachmentStore
 from .capabilities import CapabilityRegistry
 from .provenance_engine import analyze, verify_citations
 from .config import Settings
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .model_gateway import ModelResponse
 from .contract_engine import ContractEngine
 from .db import SQLiteStore
 from .evaluation import EvaluationEngine

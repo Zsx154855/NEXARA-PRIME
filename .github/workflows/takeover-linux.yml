@@ -1,0 +1,36 @@
+name: takeover-linux
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [takeover/phase1]
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]" ruff
+          pip install -e platform/sdk/python
+      - name: compile
+        run: python -m compileall -q src
+      - name: lint (new code)
+        run: |
+          ruff check src/nexara_prime/provenance_engine tests/test_t*.py scripts/
+      - name: lint (changed legacy files, correctness rules only)
+        run: |
+          FILES=$(git diff --name-only origin/main...HEAD -- '*.py')
+          [ -z "$FILES" ] || ruff check --select E9,F63,F7,F82 $FILES
+      - name: tests
+        run: bash scripts/test_linux.sh
+      - name: ui route truth
+        run: python scripts/ui/route_truth.py
+      - name: gate status
+        run: python scripts/governance/derive_gate_status.py
+      - name: secret scan
+        run: python scripts/security/scan_hardcoded_secrets.py

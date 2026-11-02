@@ -1,8 +1,6 @@
 """T2 acceptance: backend selection is explicit and never lies about isolation."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from nexara_prime.sandbox_v2 import (
     ProcessConstrainedBackend,
     SandboxInvocation,

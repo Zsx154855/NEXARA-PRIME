@@ -34,5 +34,5 @@ def test_all_gate_surfaces_agree():
     assert program["gates_blocked"] == ["G10"]
 
     yaml_text = (ROOT / "NEXARA_DEVELOPMENT_GATES_V1.yaml").read_text(encoding="utf-8")
-    block = re.search(r"- id: G10.*?status: (\w+)", yaml_text, re.S)
+    block = re.search(r"- id: G10.*?status: (\w+)", yaml_text, re.DOTALL)
     assert block and block.group(1) == "BLOCKED"

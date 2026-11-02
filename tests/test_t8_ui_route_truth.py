@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "ui"))
 
-import route_truth  # noqa: E402
+import route_truth
 
 
 def test_no_ui_endpoint_is_missing_from_the_backend():
