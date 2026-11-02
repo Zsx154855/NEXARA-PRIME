@@ -14,7 +14,7 @@ def parse(freeze: str) -> list[dict]:
     components = []
     for line in freeze.splitlines():
         line = line.strip()
-        if not line or line.startswith("#") or line.startswith("-e "):
+        if not line or line.startswith(("#", "-e ")):
             continue
         name, _, version = line.partition("==")
         if not version:

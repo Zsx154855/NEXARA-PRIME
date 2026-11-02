@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "release"))
 
-import sbom  # noqa: E402
+import sbom
 
 
 def test_sbom_is_valid_cyclonedx():

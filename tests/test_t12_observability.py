@@ -38,3 +38,14 @@ def test_metrics_exposes_prometheus_text(tmp_path: Path):
 def test_metrics_rejects_non_loopback_without_token(tmp_path: Path):
     client = TestClient(_client(tmp_path).app, client=("203.0.113.7", 50000))
     assert client.get("/metrics").status_code == 401
+
+
+def test_metrics_can_be_exposed_for_scraping(tmp_path: Path):
+    settings = Settings(
+        db_path=tmp_path / "runtime.db", workspace_root=tmp_path / "w", report_root=tmp_path / "r",
+        model_provider="mock", mock_model=True, api_host="127.0.0.1", api_port=8902,
+        multi_tenant=False, metrics_public=True,
+    )
+    settings.ensure_dirs()
+    client = TestClient(create_app(NexaraRuntime(settings)), client=("203.0.113.9", 50000))
+    assert client.get("/metrics").status_code == 200

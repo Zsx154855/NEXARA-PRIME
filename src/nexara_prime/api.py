@@ -125,7 +125,8 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
         # <script>/<img> requests, so exempt them while APIs stay protected.
         path = request.url.path
         client_host = request.client.host if request.client else ""
-        metrics_public = path == "/metrics" and client_host in loopback
+        metrics_public = path == "/metrics" and (
+            client_host in loopback or bool(getattr(runtime.settings, "metrics_public", False)))
         public = path == "/health" or metrics_public or path.startswith(
             ("/console", "/runtime-truth", "/knowledge-universe", "/auth/"))
         if request.method == "OPTIONS":
