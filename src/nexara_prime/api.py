@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -74,6 +74,25 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.state.runtime = runtime
+
+    # Local-first control plane: a non-loopback bind without a token would expose
+    # every mission/approval route to the network. Refuse to start instead.
+    token = getattr(runtime.settings, "api_token", None)
+    host = getattr(runtime.settings, "api_host", "127.0.0.1")
+    loopback = {"127.0.0.1", "localhost", "::1"}
+    if not token and host not in loopback:
+        raise RuntimeError(
+            f"NEXARA_API_TOKEN is required to bind non-loopback host {host!r}"
+        )
+
+    if token:
+        @app.middleware("http")
+        async def _require_bearer(request, call_next):
+            if request.url.path == "/health":
+                return await call_next(request)
+            if request.headers.get("authorization") != f"Bearer {token}":
+                return JSONResponse({"detail": "unauthorized"}, status_code=401)
+            return await call_next(request)
     default_vault = Path(__file__).resolve().parents[2] / "docs"
     app.state.knowledge_vault = Path(os.environ.get("NEXARA_VAULT_PATH", default_vault))
 

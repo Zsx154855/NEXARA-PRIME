@@ -16,6 +16,7 @@ class Settings:
     api_port: int
     ui_root: Path | None = None
     max_execution_seconds: int = 0  # 0 = no limit (Runtime Productization v1)
+    api_token: str | None = None    # required to bind a non-loopback host
 
     @classmethod
     def from_env(cls, root: Path | None = None) -> "Settings":
@@ -31,6 +32,7 @@ class Settings:
             mock_model=os.getenv("NEXARA_MOCK_MODEL", "false").lower() in {"1", "true", "yes", "on"},
             api_host=os.getenv("NEXARA_API_HOST", "127.0.0.1"),
             api_port=int(os.getenv("NEXARA_API_PORT", "8765")),
+            api_token=os.getenv("NEXARA_API_TOKEN") or None,
         )
 
     def ensure_dirs(self) -> None:
