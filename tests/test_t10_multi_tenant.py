@@ -63,3 +63,36 @@ def test_wrong_password_is_rejected(tmp_path: Path):
     client = TestClient(_app(tmp_path))
     _signup(client, "carol@example.com")
     assert client.post("/auth/login", json={"email": "carol@example.com", "password": "wrong"}).status_code == 401
+
+
+def test_only_owner_can_approve(tmp_path: Path):
+    """A member of the same tenant must not be able to approve work."""
+    app = _app(tmp_path)
+    owner = TestClient(app)
+    _signup(owner, "owner@example.com")
+    owner.post("/auth/login", json={"email": "owner@example.com", "password": "correct-horse-1"})
+
+    invited = owner.post("/auth/invite", json={"email": "member@example.com", "password": "correct-horse-1"})
+    assert invited.status_code in (200, 201), invited.text
+
+    member = TestClient(app)
+    member.post("/auth/login", json={"email": "member@example.com", "password": "correct-horse-1"})
+
+    created = owner.post("/api/missions", json={"objective": "needs approval"})
+    mission_id = created.json()["mission_id"]
+    assert owner.post(f"/api/missions/{mission_id}/plan", json={}).status_code == 200
+
+    assert member.post(f"/api/missions/{mission_id}/approve", json={"approved": True}).status_code == 403
+    assert owner.post(f"/api/missions/{mission_id}/approve", json={"approved": True}).status_code == 200
+
+
+def test_invite_requires_owner(tmp_path: Path):
+    app = _app(tmp_path)
+    owner = TestClient(app)
+    _signup(owner, "o2@example.com")
+    owner.post("/auth/login", json={"email": "o2@example.com", "password": "correct-horse-1"})
+    owner.post("/auth/invite", json={"email": "m2@example.com", "password": "correct-horse-1"})
+
+    member = TestClient(app)
+    member.post("/auth/login", json={"email": "m2@example.com", "password": "correct-horse-1"})
+    assert member.post("/auth/invite", json={"email": "x@example.com", "password": "correct-horse-1"}).status_code == 403

@@ -57,6 +57,7 @@ class AuthService:
                     email TEXT NOT NULL UNIQUE,
                     password_hash TEXT NOT NULL,
                     tenant_id TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'owner',
                     created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -68,6 +69,9 @@ class AuthService:
                 );
                 """
             )
+            columns = {row["name"] for row in self.store._conn.execute("PRAGMA table_info(users)")}
+            if "role" not in columns:
+                self.store._conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'")
 
     # -- users -----------------------------------------------------------
     def signup(self, email: str, password: str) -> dict:
@@ -80,21 +84,37 @@ class AuthService:
         user_id = "usr_" + secrets.token_hex(8)
         with self.store._lock, self.store._conn:
             self.store._conn.execute(
-                "INSERT INTO users(user_id, email, password_hash, tenant_id, created_at) VALUES (?,?,?,?,?)",
-                (user_id, email, _hash_password(password), tenant, _now().isoformat()),
+                "INSERT INTO users(user_id, email, password_hash, tenant_id, role, created_at) VALUES (?,?,?,?,?,?)",
+                (user_id, email, _hash_password(password), tenant, "owner", _now().isoformat()),
             )
-        return {"user_id": user_id, "email": email, "tenant_id": tenant}
+        return {"user_id": user_id, "email": email, "tenant_id": tenant, "role": "owner"}
+
+    def invite(self, owner: dict, email: str, password: str) -> dict:
+        """Add a member to the owner's tenant. Owner-only (checked by the route)."""
+        email = email.strip().lower()
+        if "@" not in email or len(email) > 254:
+            raise ValueError("invalid_email")
+        if len(password) < 8:
+            raise ValueError("password_too_short")
+        user_id = "usr_" + secrets.token_hex(8)
+        with self.store._lock, self.store._conn:
+            self.store._conn.execute(
+                "INSERT INTO users(user_id, email, password_hash, tenant_id, role, created_at) VALUES (?,?,?,?,?,?)",
+                (user_id, email, _hash_password(password), owner["tenant_id"], "member", _now().isoformat()),
+            )
+        return {"user_id": user_id, "email": email, "tenant_id": owner["tenant_id"], "role": "member"}
 
     def authenticate(self, email: str, password: str) -> dict | None:
         email = email.strip().lower()
         with self.store._lock:
             row = self.store._conn.execute(
-                "SELECT user_id, email, password_hash, tenant_id FROM users WHERE email=?",
+                "SELECT user_id, email, password_hash, tenant_id, role FROM users WHERE email=?",
                 (email,),
             ).fetchone()
         if not row or not _verify_password(password, row["password_hash"]):
             return None
-        return {"user_id": row["user_id"], "email": row["email"], "tenant_id": row["tenant_id"]}
+        return {"user_id": row["user_id"], "email": row["email"],
+                "tenant_id": row["tenant_id"], "role": row["role"]}
 
     # -- sessions --------------------------------------------------------
     def issue(self, user: dict) -> str:
@@ -114,7 +134,7 @@ class AuthService:
         digest = hashlib.sha256(token.encode()).hexdigest()
         with self.store._lock:
             row = self.store._conn.execute(
-                "SELECT s.user_id, s.tenant_id, s.expires_at, u.email FROM sessions s "
+                "SELECT s.user_id, s.tenant_id, s.expires_at, u.email, u.role FROM sessions s "
                 "JOIN users u ON u.user_id = s.user_id WHERE s.token_hash=?",
                 (digest,),
             ).fetchone()
@@ -122,7 +142,8 @@ class AuthService:
             return None
         if datetime.fromisoformat(row["expires_at"]) <= _now():
             return None
-        return {"user_id": row["user_id"], "tenant_id": row["tenant_id"], "email": row["email"]}
+        return {"user_id": row["user_id"], "tenant_id": row["tenant_id"],
+                "email": row["email"], "role": row["role"]}
 
     def revoke(self, token: str) -> None:
         digest = hashlib.sha256(token.encode()).hexdigest()

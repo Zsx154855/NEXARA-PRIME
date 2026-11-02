@@ -111,13 +111,27 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
         path = request.url.path
         public = path == "/health" or path.startswith(
             ("/console", "/runtime-truth", "/knowledge-universe", "/auth/"))
-        if request.method == "OPTIONS" or public:
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        if public:
+            # Auth endpoints stay reachable without a session, but must still see
+            # one when present (e.g. /auth/invite needs the caller's role).
+            if multi_tenant and request.url.path.startswith("/auth/"):
+                user = auth.resolve(request.cookies.get(COOKIE_NAME, ""))
+                if user:
+                    request.state.user = user
+                    ctx = set_tenant(user["tenant_id"])
+                    try:
+                        return await call_next(request)
+                    finally:
+                        reset_tenant(ctx)
             return await call_next(request)
         if multi_tenant:
             session_token = request.cookies.get(COOKIE_NAME, "")
             user = auth.resolve(session_token)
             if not user:
                 return JSONResponse({"detail": "authentication required"}, status_code=401)
+            request.state.user = user
             ctx_token = set_tenant(user["tenant_id"])
             try:
                 return await call_next(request)
@@ -159,6 +173,20 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
         except Exception as exc:  # noqa: BLE001 - sqlite unique violation
             raise HTTPException(status_code=409, detail="email_already_registered") from exc
         return user
+
+    @app.post("/auth/invite")
+    def invite(request: Request, body: SignupRequest):
+        current = getattr(request.state, "user", None)
+        if not current:
+            raise HTTPException(status_code=401, detail="not_authenticated")
+        if current.get("role") != "owner":
+            raise HTTPException(status_code=403, detail="owner_role_required")
+        try:
+            return auth.invite(current, body.email, body.password)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - sqlite unique violation
+            raise HTTPException(status_code=409, detail="email_already_registered") from exc
 
     @app.post("/auth/login")
     def login(body: LoginRequest):
@@ -376,7 +404,11 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/missions/{mission_id}/approve")
-    def approve(mission_id: str, body: ApprovalRequestBody) -> dict[str, Any]:
+    def approve(request: Request, mission_id: str, body: ApprovalRequestBody) -> dict[str, Any]:
+        if multi_tenant:
+            current = getattr(request.state, "user", None) or {}
+            if current.get("role") != "owner":
+                raise HTTPException(status_code=403, detail="owner_role_required")
         try:
             runtime.approve_mission(mission_id, bool(body.approved), body.actor, body.note, body.decision, body.scope)
             return runtime.inspect_mission(mission_id)
