@@ -28,3 +28,12 @@ installable deps: fastapi, pydantic, uvicorn, python-multipart, httpx2, pytest, 
 - Pre-takeover full run (same commit f4a5400): 2259 passed / 44 failed.
 - This baseline is intentionally **not all green**: the goal is a list where
   every failure has a named cause.
+
+## UI checks (2026-11-02)
+- `npm ci` → 375 packages, 639 MB.
+- `npx tsc --noEmit` → **exit 0**.
+- `next build` → **blocked by the runtime**: Next injects `--single-generation`
+  into `NODE_OPTIONS` for its build worker, and this Node build rejects that flag
+  (`ERR_WORKER_INVALID_EXEC_ARGV`). Not a code defect; the build must run on a
+  Node without that restriction (or a newer/older Next).
+- `scripts/ui/route_truth.py` → 28 UI endpoints, **0 missing** in `api.py`.
