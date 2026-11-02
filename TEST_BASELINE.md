@@ -26,5 +26,5 @@ installable deps: fastapi, pydantic, uvicorn, python-multipart, httpx2, pytest, 
 
 ## History
 - Pre-takeover full run (same commit f4a5400): 2259 passed / 44 failed.
-- This baseline is intentionally **not** "0 failed": the goal is a list where
+- This baseline is intentionally **not all green**: the goal is a list where
   every failure has a named cause.

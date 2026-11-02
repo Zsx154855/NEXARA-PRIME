@@ -1467,6 +1467,7 @@ class NexaraRuntime:
             content="mission.completed_report",
             source=mission.mission_id,
             provenance={"trace_id": mission.trace_id, "evidence_id": re_id or "", "kernel_patch_id": mem.memory_id},
+            idempotency_key=f"{mission.mission_id}:memory_episodic",
         )
         mission.result["memory_lifecycle_id"] = lifecycle_entry.memory_id
         self._save_mission(mission)
@@ -1678,14 +1679,34 @@ class NexaraRuntime:
         return mission
 
     def rollback(self, mission_id: str) -> Mission:
+        """Roll the mission state back and record where it came from.
+
+        Scope is explicit: this restores the *state machine* position and keeps a
+        pointer to the rollback point. It does NOT restore filesystem content —
+        `files_restored` is always 0 until a real snapshot backend exists.
+        """
         mission = self._load_mission(mission_id)
         if mission.state == MissionState.ROLLED_BACK.value:
             return mission
         previous_state = mission.state
         self._advance(mission, MissionState.ROLLED_BACK, "human")
+        payload = {
+            "previous_state": previous_state,
+            "checkpoint": mission.rollback_point,
+            "scope": "state_only",
+            "files_restored": 0,
+            "note": "state-only rollback: filesystem content is not restored",
+        }
         mission.result["rollback_at"] = now_iso()
+        mission.result["rollback_scope"] = "state_only"
+        mission.result["rollback_files_restored"] = 0
         self._save_mission(mission)
-        self.evidence.add(mission_id, "rollback_point", "RollbackPoint", json.dumps({"previous_state": previous_state, "checkpoint": mission.rollback_point}), mission.trace_id, actor="human", source="governance", verification_status="verified")
+        self.evidence.add(
+            mission_id, "rollback_point", "RollbackPoint", json.dumps(payload),
+            mission.trace_id, actor="human", source="governance",
+            verification_status="verified",
+            idempotency_key=f"rollback:{mission_id}:{previous_state}",
+        )
         return mission
 
     def safe_mode(self, mission_id: str, enabled: bool = True) -> Mission:

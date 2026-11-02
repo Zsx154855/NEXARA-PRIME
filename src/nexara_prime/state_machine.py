@@ -56,7 +56,10 @@ class MissionStateMachine:
         )
         mission.state = target
         mission.updated_at = event.timestamp
-        self.evidence.state_change(mission.mission_id, current.value, target.value, mission.trace_id, event.event_id)
+        self.evidence.state_change(
+            mission.mission_id, current.value, target.value, mission.trace_id, event.event_id,
+            idempotency_key=f"state-transition:{mission.mission_id}:{current.value}->{target.value}",
+        )
         return mission, event
 
     def can_escalate(self, current_mode: str, target_mode: str) -> bool:

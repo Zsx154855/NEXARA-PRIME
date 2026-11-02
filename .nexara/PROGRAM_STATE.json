@@ -9,14 +9,18 @@
   "python": "3.12.13",
   "test_baseline": "2044 passed, 0 failed, 2044 collected (merge ca1ee57: origin/feat/brand-baihan integrated)",
   "current_program_gate": "G10",
-  "gate_status": "LOCAL_RELEASE_READY",
-  "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
-  "gates_blocked": ["G10"],
+  "gate_status": "PARTIAL_WITH_BLOCKERS",
+  "gates_pass": [
+    "G0"
+  ],
+  "gates_blocked": [
+    "G10"
+  ],
   "g10_composite_status": {
-    "local_release": "LOCAL_RELEASE_READY",
+    "local_release": "LOCAL_RELEASE_BLOCKED",
     "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
     "git_push_tag": "PENDING_HUMAN_APPROVAL",
-    "product_brand_name": "RESOLVED_柏韩_Bǎi_Hán"
+    "product_brand_name": "RESOLVED_\u67cf\u97e9_B\u01cei_H\u00e1n"
   },
   "pr5_squash_merge": {
     "merged_at": "2026-07-15T20:20:36Z",
@@ -40,7 +44,7 @@
     "git tag v0.1.0"
   ],
   "product_decision_resolved": [
-    "product brand name: 柏韩 (Bǎi Hán) — decided 2026-07-23"
+    "product brand name: \u67cf\u97e9 (B\u01cei H\u00e1n) \u2014 decided 2026-07-23"
   ],
   "orchestration_status": {
     "phase": "POST_MERGE_VALIDATED",
@@ -61,7 +65,7 @@
     "created_at": "2026-07-15T21:01:58Z",
     "ci_audit": {
       "result": "CI_PLATFORM_FAILURE",
-      "detail": "All jobs: runner_name empty, steps_count 0 — no GitHub Actions runner allocated",
+      "detail": "All jobs: runner_name empty, steps_count 0 \u2014 no GitHub Actions runner allocated",
       "gitguardian": "PASS"
     },
     "pr8_post_merge_validation": {
@@ -94,7 +98,7 @@
     "pr_number": 23,
     "url": "https://github.com/Zsx154855/NEXARA-PRIME/pull/23",
     "branch": "feat/brand-baihan",
-    "brand": "柏韩 (Bǎi Hán) — resolved",
+    "brand": "\u67cf\u97e9 (B\u01cei H\u00e1n) \u2014 resolved",
     "status": "MERGED",
     "merged_at": "2026-07-26T08:44:08Z",
     "merge_method": "MERGE_COMMIT",
@@ -152,5 +156,6 @@
     "evidence_root": "/tmp/nexara_final_delivery/"
   },
   "updated_at": "2026-08-13T07:30:00Z",
-  "updated_by": "NEXARA POST-MERGE STATE SEAL V1 — conversation closure PR #43 merged (70e058ac)"
+  "updated_by": "NEXARA POST-MERGE STATE SEAL V1 \u2014 conversation closure PR #43 merged (70e058ac)",
+  "authority": ".nexara/GATE_STATUS_DERIVED.json"
 }

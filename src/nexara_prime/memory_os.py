@@ -154,11 +154,28 @@ class MemoryOS:
         content: str,
         source: str,
         provenance: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
     ) -> MemoryEntry:
-        """Create a new memory entry in ACTIVE state (version 1)."""
+        """Create a new memory entry in ACTIVE state (version 1).
+
+        With an idempotency key the memory_id is derived from it, so a crash and
+        re-entry returns the same entry instead of appending a duplicate.
+        """
+        import dataclasses
+        import hashlib
+
         ts = now_iso()
+        memory_id = (
+            f"mem_{hashlib.sha256(f'memory_os:{idempotency_key}'.encode()).hexdigest()[:16]}"
+            if idempotency_key else new_id("mem")
+        )
+        if idempotency_key:
+            existing = self._load(memory_id)
+            if existing:
+                names = {f.name for f in dataclasses.fields(MemoryEntry)}
+                return MemoryEntry(**{k: v for k, v in existing.items() if k in names})
         entry = MemoryEntry(
-            memory_id=new_id("mem"),
+            memory_id=memory_id,
             type=_as_type(type),
             content=content,
             source=source,
