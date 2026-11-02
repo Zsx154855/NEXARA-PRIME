@@ -7,11 +7,12 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .auth import COOKIE_NAME, AuthService
+from . import metrics as metrics_mod
 from .db import current_tenant, reset_tenant, set_tenant
 from .config import Settings
 from .experience_api import build_experience_router
@@ -108,11 +109,24 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def _guard(request, call_next):
+        try:
+            response = await _guard_inner(request, call_next)
+        except Exception:
+            metrics_mod.inc("nexara_http_requests_total", method=request.method,
+                            path=request.url.path, status="500")
+            raise
+        metrics_mod.inc("nexara_http_requests_total", method=request.method,
+                        path=request.url.path, status=str(response.status_code))
+        return response
+
+    async def _guard_inner(request, call_next):
         # Preflight carries no credentials; blocking it breaks the console.
         # Static mounts are public assets: a browser cannot attach a Bearer to
         # <script>/<img> requests, so exempt them while APIs stay protected.
         path = request.url.path
-        public = path == "/health" or path.startswith(
+        client_host = request.client.host if request.client else ""
+        metrics_public = path == "/metrics" and client_host in loopback
+        public = path == "/health" or metrics_public or path.startswith(
             ("/console", "/runtime-truth", "/knowledge-universe", "/auth/"))
         if request.method == "OPTIONS":
             return await call_next(request)
@@ -215,6 +229,10 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
         if not user:
             raise HTTPException(status_code=401, detail="not_authenticated")
         return user
+
+    @app.get("/metrics")
+    def metrics():
+        return PlainTextResponse(metrics_mod.render(runtime.store))
 
     @app.get("/health")
     def health() -> dict[str, Any]:
