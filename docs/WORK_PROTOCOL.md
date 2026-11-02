@@ -28,3 +28,16 @@ Every claim carries `command → exit code → one-line result`. No command, mar
 ## 5. Review is independent
 Author never signs their own security/architecture change. Dispatch a fresh
 sub-agent with the diff and the standard; fix what it finds before claiming done.
+
+## 6. CI operations (self-hosted)
+- The quality workflow runs on the registered macOS runner (hosted runners are
+  blocked by an account billing issue). It executes the same
+  `scripts/quality/gate.sh` a developer runs, plus a UI build and an
+  `npm audit --audit-level=high`.
+- The runner is a user LaunchAgent (`~/Library/LaunchAgents/actions.runner.*`)
+  with its own `caffeinate -dimsu` agent (`local.nexara.caffeinate`) so the
+  machine does not sleep mid-job.
+- If a job is cancelled or the machine sleep-walks, the runner can report
+  `A session for this runner already exists`; cancel the stale run in the UI and
+  the listener reconnects within seconds. Restarting the service does not clear
+  a server-side session.
