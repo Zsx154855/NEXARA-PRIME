@@ -9,6 +9,11 @@ cd "$ROOT"
 export PYTHONPATH="$ROOT/src:$ROOT/platform/sdk/python${PYTHONPATH:+:$PYTHONPATH}"
 export PYTHONDONTWRITEBYTECODE=1
 PY="${NEXARA_PYTHON:-python3}"
+# Use the ruff that lives beside the selected interpreter: a different ruff
+# version has a different default rule set and would make the gate host-dependent.
+RUFF="$(dirname "$PY")/ruff"
+[ -x "$RUFF" ] || RUFF="$(command -v ruff || true)"
+[ -n "$RUFF" ] || { echo "GATE FAILED: ruff not found"; exit 1; }
 FAILED=0
 
 step() { printf "\n== %s ==\n" "$1"; }
@@ -27,10 +32,11 @@ if [ -n "$FILES" ]; then
   # Ratchet: new code follows the full rule set; legacy files we touch only have
   # to stay correct (E9/F63/F7/F82), so this gate cannot be "fixed" by reformatting
   # unrelated code.
+  echo "ruff: $($RUFF --version)"
   NEW=$(printf "%s\n" $FILES | grep -E 'provenance_engine|tests/test_t|scripts/' || true)
   LEGACY=$(printf "%s\n" $FILES | grep -Ev 'provenance_engine|tests/test_t|scripts/' || true)
-  [ -z "$NEW" ] || { ruff check $NEW; check $? "ruff (new code)"; }
-  [ -z "$LEGACY" ] || { ruff check --select E9,F63,F7,F82 $LEGACY; check $? "ruff (legacy correctness)"; }
+  [ -z "$NEW" ] || { "$RUFF" check $NEW; check $? "ruff (new code)"; }
+  [ -z "$LEGACY" ] || { "$RUFF" check --select E9,F63,F7,F82 $LEGACY; check $? "ruff (legacy correctness)"; }
 else
   echo "no python changes"
 fi
