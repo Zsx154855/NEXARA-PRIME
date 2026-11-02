@@ -6,10 +6,10 @@ on:
     branches: [takeover/phase1]
 jobs:
   quality:
-    # GitHub-hosted runners are blocked by an account billing lock, so this job
-    # runs on the repository's registered self-hosted machine. Switch back to
-    # ubuntu-latest once billing is resolved.
-    runs-on: [self-hosted, macOS, ARM64]
+    # Dedicated label so legacy workflows (NEXARA CI, sovereign-delivery) cannot
+    # starve this job on the shared runner. Switch to ubuntu-latest when billing
+    # is resolved.
+    runs-on: [self-hosted, ci-quick]
     env:
       BOOTSTRAP_PYTHON: /opt/homebrew/bin/python3.12
       PIP_NO_INPUT: "1"
