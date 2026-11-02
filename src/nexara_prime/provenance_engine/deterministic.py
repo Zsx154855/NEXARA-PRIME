@@ -92,6 +92,38 @@ def _first_line(path: Path) -> tuple[int, str]:
     return 1, ""
 
 
+def _find_markers(paths: list[Path], markers: tuple[str, ...] = ("TODO", "FIXME")) -> list[tuple[Path, int, str]]:
+    hits: list[tuple[Path, int, str]] = []
+    for path in paths:
+        for index, text in enumerate(_read_lines(path), start=1):
+            if any(marker in text for marker in markers):
+                hits.append((path, index, text.strip()))
+    return hits
+
+
+def _project_dependencies(root: Path) -> tuple[int, tuple[str, int, str] | None]:
+    """Count declared runtime deps and cite the first one, without a TOML parser."""
+    pyproject = root / "pyproject.toml"
+    if not pyproject.exists():
+        return 0, None
+    lines = _read_lines(pyproject)
+    in_deps = False
+    count = 0
+    first: tuple[str, int, str] | None = None
+    for index, text in enumerate(lines, start=1):
+        stripped = text.strip()
+        if stripped.startswith("dependencies") and "[" in stripped:
+            in_deps = True
+            continue
+        if in_deps and stripped.startswith("]"):
+            break
+        if in_deps and stripped.startswith('"'):
+            count += 1
+            if first is None:
+                first = ("pyproject.toml", index, stripped)
+    return count, first
+
+
 def _find_test_functions(paths: list[Path]) -> list[tuple[Path, int, str]]:
     hits: list[tuple[Path, int, str]] = []
     for path in paths:
@@ -142,6 +174,23 @@ def analyze(root: Path, *, max_files: int = 5000) -> Analysis:
                f"({largest.stat().st_size} bytes, {len(_read_lines(largest))} lines)"),
         path=_rel(largest, root), line=line, excerpt=excerpt,
     ))
+
+    markers = _find_markers(files)
+    if markers:
+        path, line, excerpt = markers[0]
+        analysis.assertions.append(Assertion(
+            claim=(f"{len(markers)} TODO/FIXME marker(s); first is "
+                   f"{_rel(path, root)}:{line}"),
+            path=_rel(path, root), line=line, excerpt=excerpt,
+        ))
+
+    dep_count, dep_first = _project_dependencies(root)
+    if dep_count:
+        path, line, excerpt = dep_first
+        analysis.assertions.append(Assertion(
+            claim=f"pyproject.toml declares {dep_count} runtime dependency(ies); first is {excerpt[:60]}",
+            path=path, line=line, excerpt=excerpt,
+        ))
 
     if tests:
         path, line, excerpt = tests[0]

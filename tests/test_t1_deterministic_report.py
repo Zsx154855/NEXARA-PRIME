@@ -20,14 +20,21 @@ def _sample_tree(root: Path) -> None:
         encoding="utf-8",
     )
     (root / "README.md").write_text("# sample\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "sample"\ndependencies = [\n  "fastapi>=0.110",\n  "pydantic>=2",\n]\n',
+        encoding="utf-8",
+    )
+    (root / "pkg" / "todo.py").write_text("# TODO: later\nx = 1\n", encoding="utf-8")
 
 
 def test_analysis_cites_existing_lines(tmp_path: Path):
     _sample_tree(tmp_path)
     analysis = analyze(tmp_path)
     assert analysis.files >= 4
-    assert len(analysis.assertions) == 3
+    assert len(analysis.assertions) >= 3
     assert any("test function" in a.claim for a in analysis.assertions)
+    assert any("TODO/FIXME" in a.claim for a in analysis.assertions)
+    assert any("runtime dependency" in a.claim for a in analysis.assertions)
     assert verify_citations(analysis)["ok"] is True
 
 
