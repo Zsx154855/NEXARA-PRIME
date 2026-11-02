@@ -112,3 +112,31 @@ def test_reviewer_accepts_report_for_a_workspace_repository(tmp_path: Path):
     assert final.state.value == "Completed", final.result.get("error")
     kinds = {e.get("kind") for e in runtime.evidence.list(mission.mission_id)}
     assert "reviewer_verdict" in kinds
+
+
+def test_empty_explicit_source_blocks_with_evidence(tmp_path: Path):
+    """Reviewer-flagged gap: the empty-source path had no test at all."""
+    empty = tmp_path / "workspace" / "empty"
+    empty.mkdir(parents=True)
+    settings = Settings(
+        db_path=tmp_path / "runtime.db",
+        workspace_root=tmp_path / "workspace",
+        report_root=tmp_path / "reports",
+        model_provider="mock",
+        mock_model=True,
+        api_host="127.0.0.1",
+        api_port=8897,
+    )
+    settings.ensure_dirs()
+    runtime = NexaraRuntime(settings)
+
+    mission = runtime.create_mission("block on empty source", str(empty))
+    runtime.plan_mission(mission.mission_id)
+    runtime.approve_mission(mission.mission_id, actor="human")
+    final = runtime.run_mission(mission.mission_id)
+
+    assert final.state.value == "Blocked", final.result.get("error")
+    kinds = {e.get("kind") for e in runtime.evidence.list(mission.mission_id)}
+    assert "block_reason" in kinds
+    assigned = [a for a in final.assignments if getattr(a, "status", "") == "assigned"]
+    assert not assigned, "scheduler leases must be released when blocking"

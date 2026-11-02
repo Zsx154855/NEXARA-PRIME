@@ -1046,7 +1046,10 @@ class NexaraRuntime:
             self.scheduler.release(mission.assignments)
         except Exception:  # noqa: BLE001 - release is best-effort, evidence is not
             pass
+        for assignment in mission.assignments:
+            self._assignment_lifecycle(mission, assignment, "released", "scheduler", assignment.current_step_id)
         self._advance(mission, MissionState.BLOCKED, "runtime")
+        self._save_mission(mission)
         return mission
 
     def _advance(self, mission: Mission, target: MissionState, actor: str) -> None:
