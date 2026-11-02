@@ -1,4 +1,4 @@
-name: takeover-linux
+name: takeover-ci
 on:
   pull_request:
     branches: [main]
@@ -6,7 +6,10 @@ on:
     branches: [takeover/phase1]
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    # GitHub-hosted runners are blocked by an account billing lock, so this job
+    # runs on the repository's registered self-hosted machine. Switch back to
+    # ubuntu-latest once billing is resolved.
+    runs-on: [self-hosted, macOS, ARM64]
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
