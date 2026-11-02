@@ -5,12 +5,14 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from .auth import COOKIE_NAME, AuthService
+from .db import current_tenant, reset_tenant, set_tenant
 from .config import Settings
 from .experience_api import build_experience_router
 try:
@@ -18,6 +20,16 @@ try:
 except ImportError:
     scan_vault = None
 from .runtime import NexaraRuntime
+
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 
 class MissionCreateRequest(BaseModel):
@@ -75,6 +87,9 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.state.runtime = runtime
+    auth = AuthService(runtime.store)
+    app.state.auth = auth
+    multi_tenant = bool(getattr(runtime.settings, "multi_tenant", False))
 
     # Local-first control plane: a non-loopback bind without a token would expose
     # every mission/approval route to the network. Refuse to start instead.
@@ -95,9 +110,19 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
         # <script>/<img> requests, so exempt them while APIs stay protected.
         path = request.url.path
         public = path == "/health" or path.startswith(
-            ("/console", "/runtime-truth", "/knowledge-universe"))
+            ("/console", "/runtime-truth", "/knowledge-universe", "/auth/"))
         if request.method == "OPTIONS" or public:
             return await call_next(request)
+        if multi_tenant:
+            session_token = request.cookies.get(COOKIE_NAME, "")
+            user = auth.resolve(session_token)
+            if not user:
+                return JSONResponse({"detail": "authentication required"}, status_code=401)
+            ctx_token = set_tenant(user["tenant_id"])
+            try:
+                return await call_next(request)
+            finally:
+                reset_tenant(ctx_token)
         if token:
             supplied = request.headers.get("authorization", "")
             if not hmac.compare_digest(supplied, f"Bearer {token}"):
@@ -123,6 +148,42 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
             return runtime.get_mission(mission_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/auth/signup")
+    def signup(body: SignupRequest):
+        try:
+            user = auth.signup(body.email, body.password)
+        except ValueError as exc:
+            status = 409 if "UNIQUE" in str(exc).upper() else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - sqlite unique violation
+            raise HTTPException(status_code=409, detail="email_already_registered") from exc
+        return user
+
+    @app.post("/auth/login")
+    def login(body: LoginRequest):
+        user = auth.authenticate(body.email, body.password)
+        if not user:
+            raise HTTPException(status_code=401, detail="invalid_credentials")
+        token = auth.issue(user)
+        response = JSONResponse({"ok": True, "tenant_id": user["tenant_id"], "email": user["email"]})
+        response.set_cookie(COOKIE_NAME, token, httponly=True, samesite="lax",
+                            max_age=7 * 24 * 3600, path="/")
+        return response
+
+    @app.post("/auth/logout")
+    def logout(request: Request):
+        auth.revoke(request.cookies.get(COOKIE_NAME, ""))
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(COOKIE_NAME, path="/")
+        return response
+
+    @app.get("/auth/me")
+    def me(request: Request):
+        user = auth.resolve(request.cookies.get(COOKIE_NAME, ""))
+        if not user:
+            raise HTTPException(status_code=401, detail="not_authenticated")
+        return user
 
     @app.get("/health")
     def health() -> dict[str, Any]:

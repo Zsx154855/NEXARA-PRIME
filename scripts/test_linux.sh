@@ -26,6 +26,8 @@ FAST_TESTS=(
   tests/test_t6_idempotency.py
   tests/test_t7_rollback_scope.py
   tests/test_t8_ui_route_truth.py
+  tests/test_t9_analysis_depth.py
+  tests/test_t10_multi_tenant.py
   tests/test_conversations_api.py
   tests/test_evaluation.py
   tests/test_runtime_v2_stage_recovery.py

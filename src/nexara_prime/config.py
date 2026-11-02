@@ -17,6 +17,7 @@ class Settings:
     ui_root: Path | None = None
     max_execution_seconds: int = 0  # 0 = no limit (Runtime Productization v1)
     api_token: str | None = None    # required to bind a non-loopback host
+    multi_tenant: bool = False      # NEXARA_MULTI_TENANT=1 enables accounts + isolation
 
     @classmethod
     def from_env(cls, root: Path | None = None) -> "Settings":
@@ -33,6 +34,7 @@ class Settings:
             api_host=os.getenv("NEXARA_API_HOST", "127.0.0.1"),
             api_port=int(os.getenv("NEXARA_API_PORT", "8765")),
             api_token=os.getenv("NEXARA_API_TOKEN") or None,
+            multi_tenant=os.getenv("NEXARA_MULTI_TENANT", "false").lower() in {"1", "true", "yes", "on"},
         )
 
     def ensure_dirs(self) -> None:

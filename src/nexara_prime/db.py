@@ -1,11 +1,28 @@
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import sqlite3
 import threading
 from pathlib import Path
 from typing import Any
+
+
+_TENANT: contextvars.ContextVar[str] = contextvars.ContextVar("nexara_tenant", default="default")
+
+
+def current_tenant() -> str:
+    return _TENANT.get()
+
+
+def reset_tenant(token) -> None:
+    _TENANT.reset(token)
+
+
+def set_tenant(tenant_id: str):
+    """Set the tenant for the current context; caller must reset the token."""
+    return _TENANT.set(tenant_id or "default")
 
 
 class SQLiteStore:
@@ -30,6 +47,7 @@ class SQLiteStore:
         self._conn.execute("PRAGMA synchronous=FULL")
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._init_schema()
+        self._migrate_tenancy()
 
     @staticmethod
     def _canonical_payload(payload: dict[str, Any]) -> str:
@@ -82,6 +100,13 @@ class SQLiteStore:
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
+    def _migrate_tenancy(self) -> None:
+        with self._lock, self._conn:
+            columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(records)")}
+            if "tenant_id" not in columns:
+                self._conn.execute("ALTER TABLE records ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_records_tenant ON records(tenant_id, record_type)")
+
     def _init_schema(self) -> None:
         with self._lock, self._conn:
             self._conn.execute("PRAGMA foreign_keys=ON")
@@ -94,7 +119,8 @@ class SQLiteStore:
                     payload TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     integrity_sha256 TEXT,
-                    origin_sha256 TEXT
+                    origin_sha256 TEXT,
+                    tenant_id TEXT NOT NULL DEFAULT 'default'
                 );
                 CREATE INDEX IF NOT EXISTS idx_records_type ON records(record_type);
                 CREATE INDEX IF NOT EXISTS idx_records_mission ON records(mission_id);
@@ -388,8 +414,8 @@ class SQLiteStore:
             self._conn.execute(
                 """INSERT INTO records(
                        record_id, record_type, mission_id, payload, created_at,
-                       integrity_sha256, origin_sha256
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                       integrity_sha256, origin_sha256, tenant_id
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(record_id) DO UPDATE SET
                        payload=excluded.payload,
                        mission_id=excluded.mission_id,
@@ -404,13 +430,15 @@ class SQLiteStore:
                     created_at,
                     integrity,
                     integrity,
+                    current_tenant(),
                 ),
             )
 
     def get_record(self, record_id: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._conn.execute(
-                "SELECT payload FROM records WHERE record_id=?", (record_id,)
+                "SELECT payload FROM records WHERE record_id=? AND tenant_id=?",
+                (record_id, current_tenant()),
             ).fetchone()
         return json.loads(row["payload"]) if row else None
 
@@ -955,8 +983,8 @@ class SQLiteStore:
     def list_records(
         self, record_type: str, mission_id: str | None = None
     ) -> list[dict[str, Any]]:
-        query = "SELECT payload FROM records WHERE record_type=?"
-        params: list[Any] = [record_type]
+        query = "SELECT payload FROM records WHERE record_type=? AND tenant_id=?"
+        params: list[Any] = [record_type, current_tenant()]
         if mission_id:
             query += " AND mission_id=?"
             params.append(mission_id)
