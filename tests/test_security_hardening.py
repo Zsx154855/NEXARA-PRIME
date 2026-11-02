@@ -563,10 +563,13 @@ class SandboxCapabilityTests(unittest.TestCase):
         self.assertIn(cap.sandbox_mechanism, ("macos_sandbox", "workspace_jail", "test", "none"))
 
     def test_process_constrained_backend(self):
-        from nexara_prime.sandbox_v2 import ProcessConstrainedBackend, WORKSPACE_JAIL_ENFORCED
+        # The process backend is not a filesystem/network jail; it must report
+        # what it is instead of claiming WORKSPACE_JAIL_ENFORCED (see D-001).
+        from nexara_prime.sandbox_v2 import ProcessConstrainedBackend
         sb = ProcessConstrainedBackend()
         cap = sb.probe_capability()
-        self.assertIn(WORKSPACE_JAIL_ENFORCED, cap.flags)
+        self.assertEqual(cap.sandbox_mechanism, "process_restricted")
+        self.assertEqual(cap.flags, [])
 
     def test_test_backend_execute(self):
         from nexara_prime.sandbox_v2 import TestSandboxBackend, SandboxInvocation

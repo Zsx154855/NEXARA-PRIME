@@ -12,6 +12,7 @@ from typing import Any
 from .adaptive_runtime import AdaptiveRuntime as AdaptiveOrchestrator
 from .attachments import ConversationAttachmentStore
 from .capabilities import CapabilityRegistry
+from .provenance_engine import analyze, verify_citations
 from .config import Settings
 from .contract_engine import ContractEngine
 from .db import SQLiteStore
@@ -1338,12 +1339,28 @@ class NexaraRuntime:
             # the optional code probe is unavailable. The failed tool Receipt is
             # already durable; preserve the limitation instead of fabricating a
             # successful probe or bypassing the sandbox.
-            if not str(exc).startswith("os_sandbox_denied"):
+            message = str(exc)
+            # The probe is optional health-check work, not the mission's output.
+            # A missing backend (Linux, no fallback) is different from a denied
+            # sandbox, but neither may silently pass: both are recorded below.
+            if not message.startswith(("os_sandbox_denied", "os_sandbox_unavailable")):
                 raise
-            mission.result["environment_limitation"] = "code_exec_probe_unavailable: sandbox enforcement unavailable"
+            mission.result["environment_limitation"] = (
+                "code_exec_probe_unavailable: " + message.split(":", 1)[-1][:160]
+            )
             self.recovery.checkpoint(mission.mission_id, "tools_checked", mission.trace_id, data={"status": "environment_limited", "reason": "sandbox_enforcement_unavailable"})
             self._save_mission(mission)
-        report = self._render_report(mission, mission.spec.objective, model_text, provider)
+        explicit_source = bool(mission.spec.source_dir)
+        analysis = analyze(Path(mission.spec.source_dir) if explicit_source else self.settings.workspace_root)
+        # Only an explicitly requested source that yields nothing is a block.
+        # A mission without source_dir may legitimately be a health check.
+        if explicit_source and analysis.files == 0:
+            mission.result["error"] = "mission_blocked:no_readable_source_files"
+            self._advance(mission, MissionState.BLOCKED, "runtime")
+            return mission
+        mission.result["analysis_root"] = analysis.root
+        mission.result["analysis_assertions"] = analysis.as_dict()["assertions"]
+        report = self._render_report(mission, mission.spec.objective, model_text, provider, analysis)
         lease = self.leases.acquire(f"report:{mission.mission_id}", "vertex", mission.trace_id)
         try:
             if not mission.pending_approval_id:
@@ -1500,26 +1517,62 @@ class NexaraRuntime:
             return False
         return not any(item.get("state") == MissionState.BLOCKED.value for item in self.recovery.recover().missions if item.get("mission_id") == mission.mission_id)
 
-    def _render_report(self, mission: Mission, task: str, model_text: str, provider: str) -> str:
+    def _render_report(self, mission: Mission, task: str, model_text: str,
+                       provider: str, analysis) -> str:
         context_hash = mission.result.get("context_hash", "not_applicable")
         manifest = mission.result.get("context_manifest", {})
-        facts = "\n".join([
-            f"- Repository Branch: `{manifest.get('branch', 'not_applicable')}`",
-            f"- Repository HEAD: `{manifest.get('head_sha', 'not_applicable')}`",
-            f"- Repository Dirty: `{manifest.get('dirty', False)}`",
-            f"- Repository Files: `{manifest.get('file_count', 0)}`",
-            f"- Context Hash: `{context_hash}`",
-            f"- Environment Limitation: `{mission.result.get('environment_limitation', 'none')}`",
-        ])
-        return f"# NEXARA PRIME Mission Report\n\n- Mission: `{mission.mission_id}`\n- Title: {mission.spec.title}\n- Risk: {mission.spec.risk_level.value}\n- Provider: {provider}\n\n## Verified repository facts\n\n{facts}\n\n## Compiled task\n\n{task}\n\n## Result\n\n{model_text}\n\n## Governance\n\nThis report was written only after human approval, under a Writer Lease, with an execution receipt and verification evidence.\n"
+        if analysis.assertions:
+            facts = "\n".join(
+                f"{index}. {item.claim} — `{item.path}:{item.line}`\n   > {item.excerpt[:160]}"
+                for index, item in enumerate(analysis.assertions, start=1)
+            )
+        else:
+            facts = ("No readable source files were found in the analysed root. "
+                     "This report therefore contains no repository facts.")
+        return (
+            "# NEXARA PRIME Mission Report\n\n"
+            f"- Mission: `{mission.mission_id}`\n"
+            f"- Title: {mission.spec.title}\n"
+            f"- Risk: {mission.spec.risk_level.value}\n"
+            f"- Provider: {provider}\n"
+            f"- Analysed root: `{analysis.root}` ({analysis.files} files, {analysis.bytes} bytes)\n\n"
+            "## Verified repository facts\n\n"
+            f"{facts}\n\n"
+            "## Repository context\n\n"
+            f"- Branch: `{manifest.get('branch', 'not_applicable')}`\n"
+            f"- HEAD: `{manifest.get('head_sha', 'not_applicable')}`\n"
+            f"- Dirty: `{manifest.get('dirty', False)}`\n"
+            f"- Files: `{manifest.get('file_count', 0)}`\n"
+            f"- Context hash: `{context_hash}`\n"
+            f"- Environment limitation: `{mission.result.get('environment_limitation', 'none')}`\n\n"
+            "## Compiled task\n\n"
+            f"{task}\n\n"
+            "## Model output\n\n"
+            f"{model_text}\n\n"
+            "## Governance\n\n"
+            "This report was written only after human approval, under a Writer Lease, "
+            "with an execution receipt and verification evidence. The facts above cite "
+            "the exact file and line they were derived from.\n"
+        )
 
     def _verify_report(self, mission: Mission) -> dict:
         import hashlib
+        from .provenance_engine import Analysis, Assertion
+
         path = Path(mission.result["report_path"])
         exists = path.exists()
         bytes_count = path.stat().st_size if exists else 0
         digest = hashlib.sha256(path.read_bytes()).hexdigest() if exists else None
-        return {"exists": exists, "bytes": bytes_count, "non_empty": bytes_count > 0, "sha256": digest, "verified_at": now_iso()}
+        citations = {"checked": 0, "bad": [], "ok": False}
+        if mission.result.get("analysis_root"):
+            raw = mission.result.get("analysis_assertions", [])
+            analysis = Analysis(
+                root=mission.result["analysis_root"],
+                assertions=[Assertion(**item) for item in raw],
+            )
+            citations = verify_citations(analysis)
+        return {"exists": exists, "bytes": bytes_count, "non_empty": bytes_count > 0,
+                "sha256": digest, "citations": citations, "verified_at": now_iso()}
 
     def _find_evidence_by_idempotency(self, key: str, mission_id: str) -> Any:
         """Find existing evidence by idempotency_key using public EvidenceStore.list API.
