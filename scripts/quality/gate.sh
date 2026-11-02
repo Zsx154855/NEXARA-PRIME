@@ -43,8 +43,19 @@ check $rc "pytest fast"
 step "ui route truth"
 $PY scripts/ui/route_truth.py >/dev/null; check $? "route_truth"
 
-step "gate status"
-$PY scripts/governance/derive_gate_status.py >/dev/null; check $? "derive_gate_status"
+step "gate status (committed == derived)"
+$PY scripts/governance/derive_gate_status.py --check >/tmp/gate-derived.log 2>&1; rc=$?
+tail -2 /tmp/gate-derived.log
+check $rc "derive_gate_status --check"
+
+step "state drift (clean tree only)"
+if [ -z "$(git status --porcelain)" ]; then
+  $PY scripts/governance/detect_state_drift.py >/tmp/gate-drift.log 2>&1; rc=$?
+  tail -2 /tmp/gate-drift.log
+  check $rc "state drift"
+else
+  echo "skipped: working tree dirty (CI runs this on the committed state)"
+fi
 
 step "secret scan"
 if [ -f scripts/quality/secret_scan_gate.py ]; then

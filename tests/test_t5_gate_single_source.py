@@ -29,8 +29,10 @@ def test_all_gate_surfaces_agree():
     assert gate["authority"] == ".nexara/GATE_STATUS_DERIVED.json"
 
     program = json.loads((ROOT / ".nexara" / "PROGRAM_STATE.json").read_text(encoding="utf-8"))
-    assert program["gate_status"] == "PARTIAL_WITH_BLOCKERS"
+    gate = json.loads((ROOT / ".nexara" / "GATE_STATUS.json").read_text(encoding="utf-8"))
+    assert program["gate_status"] == gate["g10_composite_status"]["local_release"]
     assert program["gates_blocked"] == ["G10"]
+    assert program["gates_partial"] and "G1" in program["gates_partial"]
 
     yaml_text = (ROOT / "NEXARA_DEVELOPMENT_GATES_V1.yaml").read_text(encoding="utf-8")
     block = re.search(r"- id: G10.*?status: (\w+)", yaml_text, re.DOTALL)

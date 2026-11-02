@@ -13,7 +13,7 @@ installable deps: fastapi, pydantic, uvicorn, python-multipart, httpx2, pytest, 
 
 | Suite | Result |
 |---|---|
-| fast subset (T1/T2/T3/T4 + API + evaluation + stage recovery) | **50 passed** |
+| fast subset (T1–T8 + API + evaluation + stage recovery), 11 files | **64 passed** |
 | core + stage recovery + T1 | 18 passed |
 | hardening + tool runtime + security | 218 passed, 4 failed |
 
@@ -37,3 +37,5 @@ installable deps: fastapi, pydantic, uvicorn, python-multipart, httpx2, pytest, 
   (`ERR_WORKER_INVALID_EXEC_ARGV`). Not a code defect; the build must run on a
   Node without that restriction (or a newer/older Next).
 - `scripts/ui/route_truth.py` → 28 UI endpoints, **0 missing** in `api.py`.
+- `scripts/governance/detect_state_drift.py` → **NO DRIFT DETECTED** (after syncing GATE_STATUS/PROGRAM_STATE/YAML).
+- `scripts/quality/gate.sh` → **PASS** (compile, lint, tests, route truth, gate check, secret scan).
