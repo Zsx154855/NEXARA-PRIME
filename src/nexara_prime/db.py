@@ -459,8 +459,8 @@ class SQLiteStore:
             cursor = self._conn.execute(
                 "INSERT OR IGNORE INTO records("
                 "record_id, record_type, mission_id, payload, created_at, "
-                "integrity_sha256, origin_sha256"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "integrity_sha256, origin_sha256, tenant_id"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     record_id,
                     record_type,
@@ -469,6 +469,7 @@ class SQLiteStore:
                     created_at,
                     integrity,
                     integrity,
+                    current_tenant(),
                 ),
             )
             return cursor.rowcount == 1
@@ -508,16 +509,16 @@ class SQLiteStore:
             try:
                 self._conn.execute("BEGIN IMMEDIATE")
                 self._conn.execute(
-                    """INSERT INTO records(record_id, record_type, mission_id, payload, created_at, integrity_sha256, origin_sha256)
-                       VALUES (?, 'conversation_message', ?, ?, ?, ?, ?)
+                    """INSERT INTO records(record_id, record_type, mission_id, payload, created_at, integrity_sha256, origin_sha256, tenant_id)
+                       VALUES (?, 'conversation_message', ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(record_id) DO UPDATE SET payload=excluded.payload, integrity_sha256=excluded.integrity_sha256""",
-                    (message["message_id"], message["conversation_id"], message_payload, message["created_at"], message_integrity, message_integrity),
+                    (message["message_id"], message["conversation_id"], message_payload, message["created_at"], message_integrity, message_integrity, current_tenant()),
                 )
                 self._conn.execute(
-                    """INSERT INTO records(record_id, record_type, mission_id, payload, created_at, integrity_sha256, origin_sha256)
-                       VALUES (?, 'conversation', ?, ?, ?, ?, ?)
+                    """INSERT INTO records(record_id, record_type, mission_id, payload, created_at, integrity_sha256, origin_sha256, tenant_id)
+                       VALUES (?, 'conversation', ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(record_id) DO UPDATE SET payload=excluded.payload, integrity_sha256=excluded.integrity_sha256""",
-                    (conversation["conversation_id"], conversation["conversation_id"], conversation_payload, conversation["created_at"], conversation_integrity, conversation_integrity),
+                    (conversation["conversation_id"], conversation["conversation_id"], conversation_payload, conversation["created_at"], conversation_integrity, conversation_integrity, current_tenant()),
                 )
                 self._conn.execute(
                     """INSERT INTO conversation_message_index(message_id, conversation_id, created_at)
@@ -596,9 +597,9 @@ class SQLiteStore:
                         continue
                     self._conn.execute(
                         "INSERT INTO records(record_id, record_type, mission_id, "
-                        "payload, created_at, integrity_sha256, origin_sha256) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (*item, item[5]),
+                        "payload, created_at, integrity_sha256, origin_sha256, tenant_id) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (*item, item[5], current_tenant()),
                     )
                 self._conn.commit()
             except Exception:
@@ -1143,8 +1144,8 @@ class SQLiteStore:
 
                 self._conn.execute(
                     "INSERT INTO records(record_id, record_type, mission_id, "
-                    "payload, created_at, integrity_sha256, origin_sha256) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "payload, created_at, integrity_sha256, origin_sha256, tenant_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         record_id,
                         record_type,
@@ -1153,6 +1154,7 @@ class SQLiteStore:
                         created_at,
                         record_integrity,
                         record_integrity,
+                        current_tenant(),
                     ),
                 )
                 if idempotency_key:

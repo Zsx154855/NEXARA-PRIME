@@ -96,3 +96,31 @@ def test_invite_requires_owner(tmp_path: Path):
     member = TestClient(app)
     member.post("/auth/login", json={"email": "m2@example.com", "password": "correct-horse-1"})
     assert member.post("/auth/invite", json={"email": "x@example.com", "password": "correct-horse-1"}).status_code == 403
+
+
+def test_evidence_written_in_tenant_is_visible_only_there(tmp_path: Path):
+    """Every insert path must stamp tenant_id, not just save_record()."""
+    from nexara_prime.db import SQLiteStore, reset_tenant, set_tenant
+    from nexara_prime.events import EventBus
+    from nexara_prime.evidence import EvidenceStore
+
+    store = SQLiteStore(str(tmp_path / "t.db"))
+    evidence = EvidenceStore(store, EventBus(store))
+
+    token = set_tenant("t_alpha")
+    try:
+        evidence.add("mission_a", "note", "A", "alpha content", "trace_a")
+    finally:
+        reset_tenant(token)
+
+    token = set_tenant("t_alpha")
+    try:
+        assert len(evidence.list("mission_a")) == 1
+    finally:
+        reset_tenant(token)
+
+    token = set_tenant("t_beta")
+    try:
+        assert evidence.list("mission_a") == []
+    finally:
+        reset_tenant(token)
