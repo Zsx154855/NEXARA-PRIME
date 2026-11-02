@@ -32,7 +32,10 @@ installable deps: fastapi, pydantic, uvicorn, python-multipart, httpx2, pytest, 
 ## UI checks (2026-11-02)
 - `npm ci` → 375 packages, 639 MB.
 - `npx tsc --noEmit` → **exit 0**.
-- `next build` → **blocked by the runtime**: Next injects `--single-generation`
+- `next build` → **succeeded on the macOS runner** (Next 16.4.4, 16 static routes).
+  It remains blocked on the iSH host (`--single-generation` in NODE_OPTIONS).
+- `npm audit` (ui): **0 critical / 0 high** after bumping next to 16.4.4.
+- Previously noted: `next build` → **blocked by the runtime**: Next injects `--single-generation`
   into `NODE_OPTIONS` for its build worker, and this Node build rejects that flag
   (`ERR_WORKER_INVALID_EXEC_ARGV`). Not a code defect; the build must run on a
   Node without that restriction (or a newer/older Next).
