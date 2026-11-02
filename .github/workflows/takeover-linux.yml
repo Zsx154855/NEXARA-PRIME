@@ -23,24 +23,5 @@ jobs:
           .venv-ci/bin/python -m pip install -e ".[test]" ruff
           .venv-ci/bin/python -m pip install -e platform/sdk/python
           echo "NEXARA_PYTHON=$GITHUB_WORKSPACE/.venv-ci/bin/python" >> "$GITHUB_ENV"
-      - name: compile
-        run: '"$NEXARA_PYTHON" -m compileall -q src'
-      - name: lint (new code)
-        run: |
-          ruff check src/nexara_prime/provenance_engine tests/test_t*.py scripts/
-      - name: lint (changed legacy files, correctness rules only)
-        run: |
-          FILES=$(git diff --name-only origin/main...HEAD -- '*.py')
-          [ -z "$FILES" ] || ruff check --select E9,F63,F7,F82 $FILES
-      - name: tests
-        run: bash scripts/test_linux.sh
-      - name: coverage ratchet
-        run: '"$NEXARA_PYTHON" scripts/quality/coverage_gate.py'
-      - name: e2e (real http)
-        run: '"$NEXARA_PYTHON" scripts/e2e/http_smoke.py'
-      - name: ui route truth
-        run: '"$NEXARA_PYTHON" scripts/ui/route_truth.py'
-      - name: gate status
-        run: '"$NEXARA_PYTHON" scripts/governance/derive_gate_status.py --check'
-      - name: secret scan
-        run: '"$NEXARA_PYTHON" scripts/quality/secret_scan_gate.py'
+      - name: quality gate (same command as local)
+        run: bash scripts/quality/gate.sh

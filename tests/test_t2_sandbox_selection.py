@@ -10,6 +10,10 @@ from nexara_prime.sandbox_v2 import (
 
 
 def test_default_is_fail_closed(monkeypatch):
+    import nexara_prime.sandbox_v2 as sb
+
+    monkeypatch.setattr(sb.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(sb.shutil, "which", lambda _name: None)
     monkeypatch.delenv("NEXARA_SANDBOX_ALLOW_PROCESS_FALLBACK", raising=False)
     backend = select_sandbox_backend("/tmp", allow_process_fallback=False)
     assert isinstance(backend, UnavailableSandboxBackend)
@@ -18,7 +22,11 @@ def test_default_is_fail_closed(monkeypatch):
     assert receipt.error and "NEXARA_SANDBOX_ALLOW_PROCESS_FALLBACK" in receipt.error
 
 
-def test_opt_in_process_backend_actually_runs():
+def test_opt_in_process_backend_actually_runs(monkeypatch):
+    import nexara_prime.sandbox_v2 as sb
+
+    monkeypatch.setattr(sb.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(sb.shutil, "which", lambda _name: None)
     backend = select_sandbox_backend("/tmp", allow_process_fallback=True)
     assert isinstance(backend, ProcessConstrainedBackend)
     assert backend.probe_capability().sandbox_mechanism == "process_restricted"
