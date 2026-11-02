@@ -28,6 +28,10 @@ jobs:
           [ -z "$FILES" ] || ruff check --select E9,F63,F7,F82 $FILES
       - name: tests
         run: bash scripts/test_linux.sh
+      - name: coverage ratchet
+        run: python scripts/quality/coverage_gate.py
+      - name: e2e (real http)
+        run: python scripts/e2e/http_smoke.py
       - name: ui route truth
         run: python scripts/ui/route_truth.py
       - name: gate status

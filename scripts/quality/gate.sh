@@ -40,6 +40,11 @@ bash scripts/test_linux.sh >/tmp/gate-tests.log 2>&1; rc=$?
 tail -2 /tmp/gate-tests.log
 check $rc "pytest fast"
 
+step "e2e (real http)"
+$PY scripts/e2e/http_smoke.py >/tmp/gate-e2e.log 2>&1; rc=$?
+tail -3 /tmp/gate-e2e.log
+check $rc "http e2e"
+
 step "ui route truth"
 $PY scripts/ui/route_truth.py >/dev/null; check $? "route_truth"
 
