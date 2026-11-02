@@ -23,5 +23,16 @@ jobs:
           .venv-ci/bin/python -m pip install -e ".[test]" ruff
           .venv-ci/bin/python -m pip install -e platform/sdk/python
           echo "NEXARA_PYTHON=$GITHUB_WORKSPACE/.venv-ci/bin/python" >> "$GITHUB_ENV"
+      - name: ui build (static export)
+        working-directory: ui
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: ui dependency audit (no high/critical)
+        working-directory: ui
+        run: |
+          npm audit --package-lock-only --audit-level=high
+
       - name: quality gate (same command as local)
         run: bash scripts/quality/gate.sh
