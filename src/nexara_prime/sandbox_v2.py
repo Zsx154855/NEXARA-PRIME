@@ -331,6 +331,17 @@ class UnavailableSandboxBackend(SandboxBackend):
         return SandboxReceipt(invocation_id=invocation.invocation_id, error=self.reason)
 
 
+def _inside_container() -> bool:
+    return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
+
+
+class ContainerProcessBackend(ProcessConstrainedBackend):
+    """The process backend when the outer container already provides isolation."""
+
+    def probe_capability(self) -> SandboxCapability:
+        return SandboxCapability(flags=[], sandbox_mechanism="container_process")
+
+
 def select_sandbox_backend(workspace_root: str,
                            allow_process_fallback: bool | None = None) -> SandboxBackend:
     """Pick the strongest backend available, without silent degradation.
@@ -347,6 +358,10 @@ def select_sandbox_backend(workspace_root: str,
     docker = DockerSandboxBackend(workspace_root)
     if docker.probe_capability().sandbox_mechanism == "docker":
         return docker
+    if _inside_container():
+        # Nested docker is usually unavailable; the container boundary is the
+        # isolation, and the probe must still be able to run.
+        return ContainerProcessBackend(workspace_root)
     if allow_process_fallback:
         return ProcessConstrainedBackend(workspace_root)
     return UnavailableSandboxBackend(workspace_root)

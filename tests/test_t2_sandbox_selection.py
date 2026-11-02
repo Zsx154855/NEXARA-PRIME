@@ -36,3 +36,13 @@ def test_opt_in_process_backend_actually_runs(monkeypatch):
     assert receipt.exit_code == 0, receipt.error
     assert "t2-ok" in receipt.stdout
     assert receipt.sandbox_mechanism == "process_restricted"
+
+
+def test_container_uses_container_process_backend(monkeypatch):
+    import nexara_prime.sandbox_v2 as sb
+
+    monkeypatch.setattr(sb.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(sb.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(sb, "_inside_container", lambda: True)
+    backend = sb.select_sandbox_backend("/tmp")
+    assert backend.probe_capability().sandbox_mechanism == "container_process"

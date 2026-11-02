@@ -4,7 +4,10 @@ FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     NEXARA_API_HOST=0.0.0.0 \
-    NEXARA_MULTI_TENANT=1
+    NEXARA_MULTI_TENANT=1 \
+    NEXARA_DB_PATH=/data/nexara.db \
+    NEXARA_WORKSPACE_ROOT=/data/workspace \
+    NEXARA_REPORT_ROOT=/data/reports
 
 WORKDIR /app
 
