@@ -16,6 +16,7 @@ from . import metrics as metrics_mod
 from .db import current_tenant, reset_tenant, set_tenant
 from .config import Settings
 from .experience_api import build_experience_router
+from .request_log import RequestLogMiddleware
 try:
     from .knowledge_universe import scan_vault
 except ImportError:
@@ -74,6 +75,7 @@ class ConversationMessageRequest(BaseModel):
 def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     runtime = runtime or NexaraRuntime(Settings.from_env(Path.cwd()))
     app = FastAPI(title="NEXARA PRIME", version="0.1.0")
+    app.add_middleware(RequestLogMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
