@@ -12,12 +12,48 @@ from collections import defaultdict
 _STARTED = time.time()
 _LOCK = threading.Lock()
 _COUNTERS: dict[tuple[str, tuple[tuple[str, str], ...]], int] = defaultdict(int)
+# (name, labels) -> {bucket_upper_bound: cumulative_count}
+_BUCKETS = (0.005, 0.025, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
+_HIST: dict[tuple[str, tuple[tuple[str, str], ...]], dict[float, int]] = defaultdict(
+    lambda: {b: 0 for b in _BUCKETS}
+)
+_HIST_SUM: dict[tuple[str, tuple[tuple[str, str], ...]], float] = defaultdict(float)
+_HIST_COUNT: dict[tuple[str, tuple[tuple[str, str], ...]], int] = defaultdict(int)
 
 
 def inc(name: str, **labels: str) -> None:
     key = (name, tuple(sorted(labels.items())))
     with _LOCK:
         _COUNTERS[key] += 1
+
+
+def observe(name: str, value: float, **labels: str) -> None:
+    """Record one observation in a cumulative histogram."""
+    key = (name, tuple(sorted(labels.items())))
+    with _LOCK:
+        for bound in _BUCKETS:
+            if value <= bound:
+                _HIST[key][bound] += 1
+        _HIST_SUM[key] += value
+        _HIST_COUNT[key] += 1
+
+
+def _render_histograms() -> list[str]:
+    lines: list[str] = []
+    with _LOCK:
+        snapshot = {k: dict(v) for k, v in _HIST.items()}
+        sums = dict(_HIST_SUM)
+        counts = dict(_HIST_COUNT)
+    for (name, labels), buckets in sorted(snapshot.items()):
+        label_text = ",".join(f'{k}="{v}"' for k, v in labels)
+        prefix = f"{label_text}," if label_text else ""
+        lines.append(f"# TYPE {name} histogram")
+        for bound in _BUCKETS:
+            lines.append(f'{name}_bucket{{{prefix}le="{bound}"}} {buckets[bound]}')
+        lines.append(f'{name}_bucket{{{prefix}le="+Inf"}} {counts[(name, labels)]}')
+        lines.append(f"{name}_sum{{{label_text}}} {round(sums[(name, labels)], 6)}")
+        lines.append(f"{name}_count{{{label_text}}} {counts[(name, labels)]}")
+    return lines
 
 
 def _render_counters() -> list[str]:
@@ -40,6 +76,7 @@ def render(store=None) -> str:
         "# TYPE nexara_uptime_seconds gauge",
         f"nexara_uptime_seconds {time.time() - _STARTED:.1f}",
         *_render_counters(),
+        *_render_histograms(),
     ]
     if store is not None:
         try:

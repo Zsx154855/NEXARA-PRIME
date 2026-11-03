@@ -23,6 +23,7 @@ Everything here is deliberately small: stdout logs plus one scrape endpoint.
 | `nexara_http_requests_total{method,path,status}` | counter | requests by route and status |
 | `nexara_missions{state}` | gauge | missions currently stored, by state |
 | `nexara_evidence_total` | gauge | evidence artifacts stored |
+| `nexara_http_request_duration_seconds` | histogram | request latency, buckets 5 ms … 10 s; ids collapsed to `{id}` to bound cardinality |
 
 Access: loopback only by default. Set `NEXARA_METRICS_PUBLIC=1` only when a
 scraper on another host needs it, and put it behind your proxy's auth.
@@ -35,7 +36,7 @@ above so it can be wired without new instrumentation.
 | Alert | Expression | Why |
 |---|---|---|
 | 5xx rate | `sum(rate(nexara_http_requests_total{status=~"5.."}[5m])) / sum(rate(nexara_http_requests_total[5m])) > 0.02` | 2% of requests failing for 5 minutes is a page |
-| Latency | `histogram_quantile` is not available in v0; use log `duration_ms` p95 over 5 min > 2000 ms | the current latency signal lives in logs |
+| Latency | `histogram_quantile(0.95, sum(rate(nexara_http_request_duration_seconds_bucket[5m])) by (le)) > 2` | p95 above 2 s for five minutes |
 | Missions stuck | `nexara_missions{state="Execution"} > 0` for 30 min | a mission that never advances is a stuck worker |
 | No traffic | `rate(nexara_http_requests_total[10m]) == 0` while the process is up | scrape or proxy is misconfigured |
 | Disk | volume `/data` > 80% | SQLite and reports both live there |
@@ -45,5 +46,5 @@ above so it can be wired without new instrumentation.
 - No distributed tracing (no `trace_id` propagation across processes).
 - No log shipping config: rely on the platform (`docker logs`, journald, k8s).
 - No dashboards checked in. The metric names above are the contract.
-- Latency percentiles require a histogram; that is the first thing to add if you
-  adopt this beyond a single instance.
+- Percentiles come from a fixed-bucket histogram (5 ms … 10 s); bucket edges are
+  a constant in `metrics.py` if your workload needs different ones.

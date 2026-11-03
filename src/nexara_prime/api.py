@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import os
+import time
 from pathlib import Path
 from typing import Any, Literal
 
@@ -72,6 +73,16 @@ class ConversationMessageRequest(BaseModel):
     attachment_refs: list[ConversationAttachmentRef] | None = None
 
 
+def _metric_path(path: str) -> str:
+    """Collapse ids so one route does not create unbounded label values."""
+    parts = []
+    for part in path.strip("/").split("/"):
+        if not part:
+            continue
+        parts.append("{id}" if any(ch.isdigit() for ch in part) and len(part) >= 8 else part)
+    return "/" + "/".join(parts)
+
+
 def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
     runtime = runtime or NexaraRuntime(Settings.from_env(Path.cwd()))
     app = FastAPI(title="NEXARA PRIME", version="0.1.0")
@@ -111,14 +122,19 @@ def create_app(runtime: NexaraRuntime | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def _guard(request, call_next):
+        started = time.perf_counter()
+        path_label = _metric_path(request.url.path)
         try:
             response = await _guard_inner(request, call_next)
         except Exception:
             metrics_mod.inc("nexara_http_requests_total", method=request.method,
-                            path=request.url.path, status="500")
+                            path=path_label, status="500")
             raise
+        elapsed = time.perf_counter() - started
         metrics_mod.inc("nexara_http_requests_total", method=request.method,
-                        path=request.url.path, status=str(response.status_code))
+                        path=path_label, status=str(response.status_code))
+        metrics_mod.observe("nexara_http_request_duration_seconds", elapsed,
+                            method=request.method, path=path_label)
         return response
 
     async def _guard_inner(request, call_next):

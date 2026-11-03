@@ -49,3 +49,13 @@ def test_metrics_can_be_exposed_for_scraping(tmp_path: Path):
     settings.ensure_dirs()
     client = TestClient(create_app(NexaraRuntime(settings)), client=("203.0.113.9", 50000))
     assert client.get("/metrics").status_code == 200
+
+
+def test_latency_histogram_is_exposed(tmp_path: Path):
+    client = _client(tmp_path)
+    client.get("/health")
+    body = client.get("/metrics").text
+    assert "nexara_http_request_duration_seconds_bucket" in body
+    assert 'le="+Inf"' in body
+    assert "nexara_http_request_duration_seconds_count" in body
+    assert "nexara_http_request_duration_seconds_sum" in body
