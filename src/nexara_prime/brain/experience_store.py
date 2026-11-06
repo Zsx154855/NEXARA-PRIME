@@ -6,8 +6,9 @@ for the Chief Brain Feedback Loop. Built on MemoryController read interface.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+import json
+from dataclasses import asdict, dataclass, field
+from typing import Any, Callable, TYPE_CHECKING
 
 from nexara_prime.models import now_iso, new_id
 
@@ -50,9 +51,29 @@ class ExperienceStore:
     planning, risk assessment, and adapter selection.
     """
 
-    def __init__(self, memory_controller: MemoryController | None = None) -> None:
+    def __init__(
+        self,
+        memory_controller: MemoryController | None = None,
+        *,
+        evidence_validator: Callable[[str, str], bool] | None = None,
+        evidence_store: Any | None = None,
+    ) -> None:
         self._mc = memory_controller
+        self._evidence_validator = evidence_validator
+        if self._evidence_validator is None and evidence_store is not None:
+            def _canonical_evidence_check(mission_id: str, evidence_id: str) -> bool:
+                try:
+                    return (
+                        evidence_store.is_preverified_and_integrity_bound(evidence_id) is True
+                        and evidence_store.get_by_id(evidence_id).mission_id == mission_id
+                    )
+                except (KeyError, ValueError, RuntimeError, AttributeError):
+                    return False
+            self._evidence_validator = _canonical_evidence_check
         self._experiences: dict[str, MissionExperience] = {}
+        # Persisted records must always be read from the canonical memory
+        # layer, so a stale local cache cannot resurrect an invalidated record.
+        self._persisted_ids: set[str] = set()
 
     def record(
         self,
@@ -85,26 +106,73 @@ class ExperienceStore:
             lessons=lessons or [],
             evidence_refs=evidence_refs or [],
         )
+        if self._mc is not None:
+            refs = list(exp.evidence_refs)
+            if (
+                not refs
+                or not isinstance(refs[0], str)
+                or self._evidence_validator is None
+                or self._evidence_validator(mission_id, refs[0]) is not True
+            ):
+                raise ValueError("experience_verified_evidence_required")
+            self._mc.commit(
+                mission_id=mission_id,
+                key=f"mission_experience:{exp_id}",
+                content=json.dumps(asdict(exp), sort_keys=True),
+                kind="experience",
+                evidence_id=refs[0],
+                confidence=max(0.0, min(1.0, score)),
+            )
+            self._persisted_ids.add(exp_id)
         self._experiences[exp_id] = exp
         return exp
 
     def get(self, experience_id: str) -> MissionExperience | None:
-        return self._experiences.get(experience_id)
+        return next((e for e in self.list_all() if e.experience_id == experience_id), None)
 
     def get_by_mission(self, mission_id: str) -> list[MissionExperience]:
-        return [e for e in self._experiences.values() if e.mission_id == mission_id]
+        return [e for e in self.list_all() if e.mission_id == mission_id]
 
     def list_all(self) -> list[MissionExperience]:
-        return list(self._experiences.values())
+        if self._mc is None:
+            return list(self._experiences.values())
+        # MemoryController.rank_retrieve filters non-active records; never
+        # resurrect superseded or invalidated knowledge from local caches.
+        records = self._mc.rank_retrieve(
+            query="mission_experience:", top_k=10000,
+            layers=["semantic"], min_confidence=0.0,
+        )
+        active: dict[str, MissionExperience] = {}
+        for record in records:
+            if (
+                record.get("kind") != "experience"
+                or record.get("status") != "active"
+                or not str(record.get("key", "")).startswith("mission_experience:")
+            ):
+                continue
+            try:
+                parsed = json.loads(str(record["content"]))
+                exp = MissionExperience(**parsed)
+            except (TypeError, ValueError, KeyError):
+                continue
+            # MemoryController only accepts evidence-bound experience writes.
+            if (
+                exp.evidence_refs
+                and exp.evidence_refs[0] == record.get("evidence_id")
+                and self._evidence_validator is not None
+                and self._evidence_validator(exp.mission_id, exp.evidence_refs[0]) is True
+            ):
+                active[exp.experience_id] = exp
+        return list(active.values())
 
     def list_by_risk(self, risk_level: str) -> list[MissionExperience]:
-        return [e for e in self._experiences.values() if e.risk_level == risk_level]
+        return [e for e in self.list_all() if e.risk_level == risk_level]
 
     def list_by_status(self, status: str) -> list[MissionExperience]:
-        return [e for e in self._experiences.values() if e.status == status]
+        return [e for e in self.list_all() if e.status == status]
 
     def list_by_adapter(self, adapter: str) -> list[MissionExperience]:
-        return [e for e in self._experiences.values() if e.adapter == adapter]
+        return [e for e in self.list_all() if e.adapter == adapter]
 
     def stats(self) -> ExperienceStoreStats:
         all_exp = self.list_all()
@@ -137,4 +205,4 @@ class ExperienceStore:
         )
 
     def __len__(self) -> int:
-        return len(self._experiences)
+        return len(self.list_all())
