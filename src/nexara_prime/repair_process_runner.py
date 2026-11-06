@@ -97,6 +97,13 @@ class LocalRepairProcessRunner:
 
         if self.evidence is None:
             return fail("repair_evidence_store_unavailable")
+        if contract.proposed_patch != self.patch_diff:
+            return fail("repair_patch_contract_mismatch")
+        # Recompute against the original stored digest: the approved patch
+        # and affected file list must not have changed after review.
+        original_digest = contract.contract_digest
+        if not original_digest or contract.compute_digest() != original_digest:
+            return fail("repair_contract_integrity_invalid")
         try:
             if self._git("rev-parse", "HEAD").stdout.strip() != self._base:
                 return fail("repair_worktree_already_changed")
