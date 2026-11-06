@@ -146,6 +146,34 @@ def test_invalid_external_script_is_not_allowed(tmp_path):
         })
 
 
+
+def test_missing_workspace_script_fails_closed(tmp_path):
+    _, kw, _, _, _ = setup(tmp_path)
+    with pytest.raises(ValueError, match="worker_script_not_in_authorized_workspace"):
+        ContinuousLocalWorker(**{
+            **kw,
+            "tasks": (
+                LocalWorkerTask("task-A", "does-not-exist.py"),
+                LocalWorkerTask("task-B", "b.py"),
+            ),
+        })
+
+
+def test_symlink_to_external_script_fails_closed(tmp_path):
+    _, kw, root, _, _ = setup(tmp_path)
+    outside = tmp_path / "external.py"
+    outside.write_text("raise RuntimeError('should_not_execute')\n")
+    (root / "linked.py").symlink_to(outside)
+    with pytest.raises(ValueError, match="worker_script_not_in_authorized_workspace"):
+        ContinuousLocalWorker(**{
+            **kw,
+            "tasks": (
+                LocalWorkerTask("task-A", "linked.py"),
+                LocalWorkerTask("task-B", "b.py"),
+            ),
+        })
+
+
 def test_concurrent_process_lock_prevents_duplicate_claim(tmp_path):
     worker, _, root, _, _ = setup(tmp_path)
     with (root / ".naeos-worker.lock").open("a+b") as fh:
