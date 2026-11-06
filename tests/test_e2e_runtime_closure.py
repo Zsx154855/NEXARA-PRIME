@@ -377,6 +377,11 @@ class TestRepairLoop:
             "mis-escalation",
             "persistent error",
             traceback="test",
+            # Non-null test double only to reach the reviewer: it rejects
+            # every contract before any patch callback can be invoked.
+            apply_patch_fn=lambda contract: (_ for _ in ()).throw(
+                AssertionError("review_rejection_must_precede_patch_apply")
+            ),
         )
         assert result.status.value == "escalated"
 
