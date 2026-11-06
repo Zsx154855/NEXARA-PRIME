@@ -1,7 +1,7 @@
 """Isolated, deterministic unit contract for the receipt gate (not full NEXARA E2E)."""
 import json
 
-from repair_receipt import validate_repair_receipt
+from nexara_prime.repair_receipt import validate_repair_receipt
 
 
 def obj(**kw):
