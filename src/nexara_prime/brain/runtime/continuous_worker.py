@@ -97,9 +97,21 @@ class ContinuousLocalWorker:
             raise ValueError("max_steps_must_be_one_or_two")
         with self._exclusive():
             cp = self._load_or_create()
+            if not self._checkpoint_consistent(cp):
+                cp.state = "blocked"
+                cp.data["error"] = "checkpoint_integrity_invalid"
+                self.state.save_checkpoint(cp)
+                return self._report(cp)
             if not self._prior_receipts_valid(cp):
                 cp.state = "blocked"
                 cp.data["error"] = "prior_receipt_unverified"
+                self.state.save_checkpoint(cp)
+                return self._report(cp)
+            if cp.state == "running":
+                # The previous controller died in the uncertain side-effect
+                # window. Re-executing could duplicate an already applied effect.
+                cp.state = "blocked"
+                cp.data["error"] = "interrupted_execution_requires_reconciliation"
                 self.state.save_checkpoint(cp)
                 return self._report(cp)
             if cp.state in {"failed", "blocked", "completed"}:
@@ -195,6 +207,29 @@ class ContinuousLocalWorker:
                 self.state.save_checkpoint(cp)
                 executed += 1
             return self._report(cp)
+
+    def _checkpoint_consistent(self, cp: Checkpoint) -> bool:
+        planned = [task.task_id for task in self.tasks]
+        if type(cp.step_index) is not int or not 0 <= cp.step_index <= len(planned):
+            return False
+        if not isinstance(cp.data, dict) or cp.data.get("planned_tasks") != planned:
+            return False
+        receipts = cp.data.get("receipts")
+        if not isinstance(receipts, dict):
+            return False
+        if cp.completed_actions != planned[:cp.step_index]:
+            return False
+        if cp.pending_actions != planned[cp.step_index:]:
+            return False
+        if set(receipts) != set(cp.completed_actions):
+            return False
+        if cp.state == "completed":
+            return cp.step_index == len(planned)
+        if cp.state == "created":
+            return cp.step_index == 0
+        if cp.state == "paused":
+            return 0 < cp.step_index < len(planned)
+        return cp.state in {"running", "failed", "blocked"}
 
     def _prior_receipts_valid(self, cp: Checkpoint) -> bool:
         for task_id, evidence_id in cp.data.get("receipts", {}).items():
