@@ -188,3 +188,36 @@ def test_unsafe_pytest_target_rejected_before_process(tmp_path):
             worktree=root, mission_id="mission-1", evidence_store=evidence,
             patch_diff=runner.patch_diff, pytest_targets=("../secret.py",),
         )
+
+
+def test_concurrent_git_worktree_lock_prevents_double_apply(tmp_path):
+    import fcntl
+    root, runner, contract, _, initial = setup_case(tmp_path)
+    with runner._lock_path.open("a+b") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            result = runner(contract)
+            assert not result.success
+            assert result.error == "repair_runner_busy"
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+    assert git(root, "rev-parse", "HEAD") == initial
+
+
+def test_test_path_traversal_is_rejected(tmp_path):
+    root, runner, _, evidence, _ = setup_case(tmp_path)
+    (tmp_path / "escape.py").write_text("raise AssertionError('outside tests')\n")
+    with pytest.raises(ValueError, match="pytest_target_escapes_workspace"):
+        LocalRepairProcessRunner(
+            worktree=root, mission_id="mission-1", evidence_store=evidence,
+            patch_diff=runner.patch_diff,
+            pytest_targets=("tests/../../escape.py",),
+        )
+
+
+def test_failure_still_returns_real_persisted_evidence_id(tmp_path):
+    _, runner, contract, evidence, _ = setup_case(tmp_path, repaired="return x + 9")
+    result = runner(contract)
+    assert not result.success and result.patch_applied
+    assert len(result.evidence_ids) == 1
+    assert result.evidence_ids[0] in evidence.records
