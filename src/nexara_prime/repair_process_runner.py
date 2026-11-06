@@ -7,7 +7,9 @@ The authority captures process output; callbacks cannot submit their own scores.
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import os
 import json
 import re
 import subprocess
@@ -71,6 +73,12 @@ class LocalRepairProcessRunner:
         not against a malicious host or a compromised controller.
         """
         run_id = payload.get("run_id")
+        try:
+            raw_log = base64.b64decode(payload["test_log_b64"], validate=True)
+            if hashlib.sha256(raw_log).hexdigest() != payload["test_log_sha256"]:
+                return False
+        except (KeyError, TypeError, ValueError):
+            return False
         if not isinstance(run_id, str) or self._observed.get(run_id) != payload:
             return False
         try:
@@ -82,8 +90,10 @@ class LocalRepairProcessRunner:
 
     def __call__(self, contract: RepairContract) -> RepairResult:
         """Called only by RepairLoop after its governance review."""
-        def fail(error: str, *, applied: bool = False) -> RepairResult:
-            return RepairResult(contract_id=contract.contract_id, error=error, patch_applied=applied)
+        did_apply = False
+
+        def fail(error: str) -> RepairResult:
+            return RepairResult(contract_id=contract.contract_id, error=error, patch_applied=did_apply)
 
         if self.evidence is None:
             return fail("repair_evidence_store_unavailable")
@@ -96,12 +106,13 @@ class LocalRepairProcessRunner:
                 return fail("repair_patch_missing")
             self._git("apply", "--check", "-", input_text=self.patch_diff)
             self._git("apply", "-", input_text=self.patch_diff)
+            did_apply = True
             diff = self._git("diff", "--binary").stdout
             changed = set(self._git("diff", "--name-only").stdout.splitlines())
             if not diff or not changed:
                 return fail("repair_patch_no_effect")
             if not changed.issubset(set(contract.affected_files)):
-                return fail("repair_patch_outside_contract_scope", applied=True)
+                return fail("repair_patch_outside_contract_scope")
             patch_digest = hashlib.sha256(diff.encode("utf-8")).hexdigest()
             self._git("add", "--", *sorted(changed))
             self._git("-c", "user.name=NEXARA Test Runner", "-c",
@@ -110,14 +121,15 @@ class LocalRepairProcessRunner:
             post_commit = self._git("rev-parse", "HEAD").stdout.strip()
             run_id = uuid4().hex
             cmd = [sys.executable, "-m", "pytest", "-q", *self.pytest_targets]
-            env = None  # Inherit only the caller's explicitly isolated process environment.
+            env = {k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "HOME", "VIRTUAL_ENV") if k in os.environ}
+            env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
             completed = subprocess.run(
                 cmd, cwd=self.worktree, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 timeout=self.timeout_s, env=env, check=False,
             )
             log = completed.stdout or b""
             if len(log) > self.max_log_bytes:
-                return fail("repair_test_log_over_limit", applied=True)
+                return fail("repair_test_log_over_limit")
             found = re.search(rb"(?:^|\s)(\d+) passed(?:\s|,|$)", log)
             passed = int(found.group(1)) if found else 0
             log_digest = hashlib.sha256(log).hexdigest()
@@ -137,6 +149,7 @@ class LocalRepairProcessRunner:
                 "executor_id": "local-repair-process-runner",
                 "patch_sha256": patch_digest,
                 "test_log_sha256": log_digest,
+                "test_log_b64": base64.b64encode(log).decode("ascii"),
                 "base_commit": self._base,
                 "post_commit": post_commit,
             }
@@ -148,11 +161,11 @@ class LocalRepairProcessRunner:
                 idempotency_key=f"repair:{self.mission_id}:{contract.contract_id}:{run_id}",
             )
             if self.evidence.verify(artifact.evidence_id) is not True:
-                return fail("repair_evidence_verification_failed", applied=True)
+                return fail("repair_evidence_verification_failed")
             # Only register a successful observed process; a failure receipt is
             # persisted for debugging but cannot become evidence of success.
             if completed.returncode != 0 or passed <= 0:
-                return fail("repair_tests_failed_or_missing", applied=True)
+                return fail("repair_tests_failed_or_missing")
             self._observed[run_id] = payload.copy()
             return RepairResult(
                 contract_id=contract.contract_id, success=True, patch_applied=True,
