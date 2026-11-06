@@ -8,6 +8,8 @@ The authority captures process output; callbacks cannot submit their own scores.
 from __future__ import annotations
 
 import base64
+import fcntl
+from contextlib import contextmanager
 import hashlib
 import os
 import json
@@ -48,10 +50,16 @@ class LocalRepairProcessRunner:
         self.timeout_s = timeout_s
         self.max_log_bytes = max_log_bytes
         self._observed: dict[str, dict[str, Any]] = {}
+        self._lock_path = self.worktree / self._git("rev-parse", "--git-path", "nexara-repair.lock").stdout.strip()
         if not (1 <= timeout_s <= 900) or not pytest_targets:
             raise ValueError("invalid_execution_limits")
         if not all(re.fullmatch(r"tests/[A-Za-z0-9_./-]+\.py(?:::[A-Za-z0-9_]+)*", t) for t in pytest_targets):
             raise ValueError("pytest_targets_not_allowlisted")
+        for target in pytest_targets:
+            relative = Path(target.split("::", 1)[0])
+            resolved = (self.worktree / relative).resolve(strict=True)
+            if ".." in relative.parts or not resolved.is_relative_to(self.worktree / "tests"):
+                raise ValueError("pytest_target_escapes_workspace")
         branch = self._git("branch", "--show-current").stdout.strip()
         if not (branch.startswith("fix/") or branch.startswith("repair/") or branch.startswith("agent/")):
             raise ValueError("isolated_worktree_branch_required")
@@ -88,12 +96,39 @@ class LocalRepairProcessRunner:
         except (subprocess.SubprocessError, KeyError, ValueError):
             return False
 
+    @contextmanager
+    def _exclusive(self):
+        # Git metadata location works for both normal repos and git worktrees.
+        with self._lock_path.open("a+b") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise RuntimeError("repair_runner_busy") from exc
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+
     def __call__(self, contract: RepairContract) -> RepairResult:
+        """Run one attempt while holding an OS-visible exclusive worktree lock."""
+        try:
+            with self._exclusive():
+                return self._execute_attempt(contract)
+        except RuntimeError as exc:
+            if str(exc) != "repair_runner_busy":
+                raise
+            return RepairResult(contract_id=contract.contract_id, error="repair_runner_busy")
+
+    def _execute_attempt(self, contract: RepairContract) -> RepairResult:
         """Called only by RepairLoop after its governance review."""
         did_apply = False
+        recorded_evidence_ids: list[str] = []
 
         def fail(error: str) -> RepairResult:
-            return RepairResult(contract_id=contract.contract_id, error=error, patch_applied=did_apply)
+            return RepairResult(
+                contract_id=contract.contract_id, error=error,
+                patch_applied=did_apply, evidence_ids=recorded_evidence_ids.copy(),
+            )
 
         if self.evidence is None:
             return fail("repair_evidence_store_unavailable")
@@ -167,6 +202,7 @@ class LocalRepairProcessRunner:
                 actor="local-repair-process-runner", source="host-subprocess",
                 idempotency_key=f"repair:{self.mission_id}:{contract.contract_id}:{run_id}",
             )
+            recorded_evidence_ids.append(artifact.evidence_id)
             if self.evidence.verify(artifact.evidence_id) is not True:
                 return fail("repair_evidence_verification_failed")
             # Only register a successful observed process; a failure receipt is
