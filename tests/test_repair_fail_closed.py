@@ -162,3 +162,45 @@ def test_failing_executor_retries_are_bounded():
     assert not result.success
     assert result.status is RepairStatus.ESCALATED
     assert attempts == [1, 2, 3]
+
+
+def test_missing_executor_bypasses_reviewer_without_spending_retries():
+    from nexara_prime.repair_loop import IndependentReviewer
+
+    class MustNotRunReviewer(IndependentReviewer):
+        def review(self, contract, rca):
+            raise AssertionError("review_must_not_run_without_executor")
+
+    loop = RepairLoop(reviewer=MustNotRunReviewer())
+    result = loop.repair("mission-no-executor", "AssertionError: unmatched")
+    assert result.error == "patch_executor_unavailable"
+    assert result.status is RepairStatus.FAILED
+    assert not result.success
+    assert list(loop._failures.values())[0].retry_count == 0
+
+
+def test_stale_callback_receipt_cannot_validate_current_repair():
+    loop = RepairLoop()
+    fid = _failure(loop).failure_id
+    result = loop.attempt_repair(
+        fid, apply_patch_fn=lambda c: RepairResult(
+            contract_id="different-contract", success=True,
+            patch_applied=True, tests_passed=3,
+        ),
+    )
+    assert not result.success
+    assert not result.patch_applied
+    assert "patch_executor_contract_mismatch" in result.error
+
+
+def test_negative_test_counters_cannot_validate_current_repair():
+    loop = RepairLoop()
+    fid = _failure(loop).failure_id
+    result = loop.attempt_repair(
+        fid, apply_patch_fn=lambda c: _callback_result(
+            c, success=True, applied=True, passed=1, failed=-7,
+        ),
+    )
+    assert not result.success
+    assert not result.patch_applied
+    assert "patch_executor_invalid_test_count" in result.error
