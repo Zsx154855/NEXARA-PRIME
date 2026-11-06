@@ -31,7 +31,7 @@ def test_task_a_recalled_after_new_sqlite_controller(tmp_path):
         mid == "task-A" and eid == "evidence-task-A"
     ))
     exp = record_good(first)
-    second, _ = store(tmp_path, checker=lambda mid, eid: False)
+    second, _ = store(tmp_path, checker=lambda mid, eid: True)
     assert second.get(exp.experience_id) is not None
     assert len(second) == 1
     assert second.get_by_mission("task-A")[0].evidence_refs == ["evidence-task-A"]
@@ -44,7 +44,7 @@ def test_task_b_decision_changes_with_real_recalled_experience(tmp_path):
     assert baseline["recommended_adapter"] == "claude"
     first, _ = store(tmp_path, checker=lambda mid, eid: True)
     record_good(first)
-    after_restart, _ = store(tmp_path)
+    after_restart, _ = store(tmp_path, checker=lambda mid, eid: True)
     learned = ExperienceRecall(after_restart).recommend_adapter(
         "reconcile supplier invoices"
     )
@@ -92,7 +92,7 @@ def test_bad_history_does_not_promote_failing_adapter(tmp_path):
         risk_level="R1", adapter="bad-adapter", model="local", status="failed",
         score=0.2, evidence_refs=["evidence-failure"],
     )
-    later, _ = store(tmp_path)
+    later, _ = store(tmp_path, checker=lambda mid, eid: True)
     answer = ExperienceRecall(later).recommend_adapter("reconcile supplier invoices")
     assert answer["recommended_adapter"] == "claude"
     assert answer["confidence"] == 0.0
@@ -106,3 +106,30 @@ def test_backward_compatible_in_memory_store():
     )
     assert original.get(exp.experience_id) is not None
     assert len(original) == 1
+
+
+
+def test_retracted_evidence_disappears_immediately_from_recall(tmp_path):
+    enabled = {"value": True}
+    s, _ = store(tmp_path, checker=lambda mid, eid: enabled["value"])
+    record_good(s)
+    assert len(s) == 1
+    enabled["value"] = False
+    assert len(s) == 0
+    assert ExperienceRecall(s).search("reconcile supplier invoices").total_matches == 0
+    reopened, _ = store(tmp_path, checker=lambda mid, eid: False)
+    assert len(reopened) == 0
+
+
+def test_canonical_evidence_store_checks_mission_identity(tmp_path):
+    class EvidenceStoreDouble:
+        def is_preverified_and_integrity_bound(self, eid):
+            return True
+        def get_by_id(self, eid):
+            from types import SimpleNamespace
+            return SimpleNamespace(mission_id="not-task-A")
+    mc = MemoryController(db=BrainDB(tmp_path / "different-db.db"))
+    s = ExperienceStore(mc, evidence_store=EvidenceStoreDouble())
+    with pytest.raises(ValueError, match="experience_verified_evidence_required"):
+        record_good(s)
+    assert len(s) == 0
