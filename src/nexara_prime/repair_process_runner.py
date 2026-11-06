@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .repair_loop import RepairContract, RepairResult
+from .repair_loop import PatchGenerator, RepairContract, RepairResult
 
 
 class LocalRepairProcessRunner:
@@ -182,3 +182,25 @@ class LocalRepairProcessRunner:
             return fail("repair_process_timeout")
         except (subprocess.CalledProcessError, OSError, ValueError) as exc:
             return fail(f"repair_process_failed:{type(exc).__name__}")
+
+
+class ApprovedDiffPatchGenerator(PatchGenerator):
+    """Replace placeholder suggestions with an operator-approved unified diff.
+
+    This adapter does not invent patches and does not approve anything itself.
+    RepairLoop's independent reviewer sees the actual diff before subprocess use.
+    """
+
+    def __init__(self, runner: LocalRepairProcessRunner, approved_files: tuple[str, ...]) -> None:
+        self.runner = runner
+        self.approved_files = approved_files
+
+    def generate(self, rca: Any, failure: Any, previous_contracts: Any = None) -> RepairContract:
+        contract = super().generate(rca, failure, previous_contracts)
+        contract.proposed_patch = self.runner.patch_diff
+        contract.affected_files = list(self.approved_files)
+        contract.test_plan = [
+            "python -m pytest -q " + " ".join(self.runner.pytest_targets)
+        ]
+        contract.compute_digest()
+        return contract
