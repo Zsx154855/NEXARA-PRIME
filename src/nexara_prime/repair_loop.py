@@ -504,9 +504,15 @@ class RepairLoop:
         else:
             try:
                 apply_result = apply_patch_fn(contract)
+                # A receipt from an earlier repair/mission cannot validate this
+                # contract. Invalid counts must not be silently clamped.
+                if apply_result.contract_id != contract.contract_id:
+                    raise ValueError("patch_executor_contract_mismatch")
+                if int(apply_result.tests_passed) < 0 or int(apply_result.tests_failed) < 0:
+                    raise ValueError("patch_executor_invalid_test_count")
                 patch_applied = bool(apply_result.patch_applied)
-                tests_passed_actual = max(0, int(apply_result.tests_passed))
-                tests_failed_actual = max(0, int(apply_result.tests_failed))
+                tests_passed_actual = int(apply_result.tests_passed)
+                tests_failed_actual = int(apply_result.tests_failed)
                 tests_weakened = list(apply_result.tests_weakened)
                 executor_reported_success = bool(apply_result.success)
                 if not patch_applied:
