@@ -56,9 +56,20 @@ class ExperienceStore:
         memory_controller: MemoryController | None = None,
         *,
         evidence_validator: Callable[[str, str], bool] | None = None,
+        evidence_store: Any | None = None,
     ) -> None:
         self._mc = memory_controller
         self._evidence_validator = evidence_validator
+        if self._evidence_validator is None and evidence_store is not None:
+            def _canonical_evidence_check(mission_id: str, evidence_id: str) -> bool:
+                try:
+                    return (
+                        evidence_store.is_preverified_and_integrity_bound(evidence_id) is True
+                        and evidence_store.get_by_id(evidence_id).mission_id == mission_id
+                    )
+                except (KeyError, ValueError, RuntimeError, AttributeError):
+                    return False
+            self._evidence_validator = _canonical_evidence_check
         self._experiences: dict[str, MissionExperience] = {}
         # Persisted records must always be read from the canonical memory
         # layer, so a stale local cache cannot resurrect an invalidated record.
@@ -145,7 +156,12 @@ class ExperienceStore:
             except (TypeError, ValueError, KeyError):
                 continue
             # MemoryController only accepts evidence-bound experience writes.
-            if exp.evidence_refs and exp.evidence_refs[0] == record.get("evidence_id"):
+            if (
+                exp.evidence_refs
+                and exp.evidence_refs[0] == record.get("evidence_id")
+                and self._evidence_validator is not None
+                and self._evidence_validator(exp.mission_id, exp.evidence_refs[0]) is True
+            ):
                 active[exp.experience_id] = exp
         return list(active.values())
 
