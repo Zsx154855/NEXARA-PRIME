@@ -189,4 +189,4 @@ class ExperienceStore:
         )
 
     def __len__(self) -> int:
-        return len(self._experiences)
+        return len(self.list_all())
