@@ -624,6 +624,11 @@ class RepairLoop:
             if result.success:
                 return result
 
+            # Any already-applied patch is a side effect. Its failed or
+            # unverified outcome must be reconciled before another attempt.
+            if result.patch_applied:
+                return result
+
             if result.error == "patch_executor_unavailable" or result.error.startswith("repair_"):
                 # Never blindly re-apply a potentially changed patch when its
                 # provenance is missing or invalid.
