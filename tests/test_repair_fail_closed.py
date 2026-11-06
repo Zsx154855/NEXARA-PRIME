@@ -206,3 +206,25 @@ def test_negative_test_counters_cannot_validate_current_repair():
     assert not result.success
     assert not result.patch_applied
     assert "patch_executor_invalid_test_count" in result.error
+
+
+
+def test_patch_applied_but_tests_fail_does_not_reapply():
+    loop = RepairLoop()
+    attempts = []
+
+    def applied_but_failing(contract):
+        attempts.append(contract.attempt_number)
+        return _callback_result(contract, success=False, applied=True, passed=0, failed=1)
+
+    result = loop.repair(
+        "mission-test-failed-after-patch",
+        "AssertionError: unexpected result",
+        traceback=TRACE,
+        apply_patch_fn=applied_but_failing,
+    )
+    assert not result.success
+    assert result.patch_applied
+    assert result.status is RepairStatus.FAILED
+    assert result.error == "patch_verification_failed"
+    assert attempts == [1]  # Never replay a potentially applied patch.
