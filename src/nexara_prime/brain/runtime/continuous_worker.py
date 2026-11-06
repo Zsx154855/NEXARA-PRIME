@@ -55,7 +55,9 @@ class ContinuousLocalWorker:
         if not 1 <= timeout_s <= 900:
             raise ValueError("invalid_timeout")
         for task in tasks:
-            path = (self.workdir / task.script_path).resolve(strict=True)
+            # Canonicalize without requiring existence so invalid paths fail
+            # through the same explicit authorization contract.
+            path = (self.workdir / task.script_path).resolve(strict=False)
             if (
                 not path.is_relative_to(self.workdir)
                 or path.suffix != ".py"
