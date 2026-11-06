@@ -517,8 +517,8 @@ class TestE2EMissionFlow:
         evidence_list = runtime.evidence.list(mission.mission_id)
         assert isinstance(evidence_list, list)
 
-        # Mission complete!
-        assert True
+        # Adapter smoke only: a real repair was NOT executed or verified.
+        # A mission repair acceptance test requires an actual patch executor.
 
 
 class TestAdapterDiscovery:
