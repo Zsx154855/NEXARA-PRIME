@@ -179,3 +179,33 @@ def test_tampered_prior_log_prevents_success_claim(tmp_path):
     result = ContinuousLocalWorker(**kw).run()
     assert result["status"] == "blocked"
     assert result["error"] == "prior_receipt_unverified"
+
+
+def test_crash_in_running_checkpoint_never_reexecutes_side_effect(tmp_path):
+    worker, kw, root, _, _ = setup(
+        tmp_path, script_a=(
+            "from pathlib import Path\n"
+            "p = Path('counter')\n"
+            "p.write_text(str(int(p.read_text()) + 1 if p.exists() else 1))\n"
+        ),
+    )
+    (root / "counter").write_text("1")
+    cp = worker._load_or_create()
+    cp.state = "running"
+    kw["state"].save_checkpoint(cp)
+    result = ContinuousLocalWorker(**kw).run()
+    assert result["status"] == "blocked"
+    assert result["error"] == "interrupted_execution_requires_reconciliation"
+    assert (root / "counter").read_text() == "1"
+    assert not (root / "done-b").exists()
+
+
+def test_false_completed_checkpoint_cannot_claim_success(tmp_path):
+    worker, kw, root, _, _ = setup(tmp_path)
+    cp = worker._load_or_create()
+    cp.state = "completed"
+    kw["state"].save_checkpoint(cp)
+    result = ContinuousLocalWorker(**kw).run()
+    assert result["status"] == "blocked"
+    assert result["error"] == "checkpoint_integrity_invalid"
+    assert not (root / "done-a").exists()
