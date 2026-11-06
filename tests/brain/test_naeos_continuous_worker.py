@@ -25,7 +25,7 @@ class EvidenceDouble:
     def add(self, mid, kind, title, content, trace, **kw):
         from types import SimpleNamespace
         eid = f"ev-{len(self.records)+1}"
-        r = SimpleNamespace(evidence_id=eid, mission_id=mid, kind=kind, content=content)
+        r = SimpleNamespace(evidence_id=eid, mission_id=mid, kind=kind, content=content, task_id=kw["task_id"])
         self.records[eid] = r
         return r
 
@@ -34,6 +34,9 @@ class EvidenceDouble:
 
     def is_preverified_and_integrity_bound(self, eid):
         return self.valid
+
+    def get_by_id(self, eid):
+        return self.records[eid]
 
 
 def setup(tmp_path, *, script_a=None, script_b=None, evidence=None, timeout=20):
@@ -152,3 +155,27 @@ def test_concurrent_process_lock_prevents_duplicate_claim(tmp_path):
                 worker.run()
         finally:
             fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+
+def test_revoked_task_a_receipt_blocks_task_b_on_restart(tmp_path):
+    ev = EvidenceDouble(valid=True)
+    worker, kw, root, _, _ = setup(tmp_path, evidence=ev)
+    assert worker.run(max_steps=1)["status"] == "paused"
+    ev.valid = False
+    resumed = ContinuousLocalWorker(**kw).run()
+    assert resumed["status"] == "blocked"
+    assert resumed["error"] == "prior_receipt_unverified"
+    assert not (root / "done-b").exists()
+
+
+def test_tampered_prior_log_prevents_success_claim(tmp_path):
+    worker, kw, root, _, ev = setup(tmp_path)
+    assert worker.run()["status"] == "completed"
+    ev.records["ev-1"].content = json.dumps({
+        **json.loads(ev.records["ev-1"].content),
+        "stdout_sha256": "0" * 64,
+    })
+    result = ContinuousLocalWorker(**kw).run()
+    assert result["status"] == "blocked"
+    assert result["error"] == "prior_receipt_unverified"
