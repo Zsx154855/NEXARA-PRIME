@@ -155,7 +155,8 @@ def test_failing_executor_retries_are_bounded():
 
     def failing(contract):
         attempts.append(contract.attempt_number)
-        return _callback_result(contract, success=False)
+        # Retry is safe only when the executor reports no patch was applied.
+        return _callback_result(contract, success=False, applied=False)
 
     result = loop.repair(
         "mission-unit-test", "AssertionError: mismatched value",
@@ -164,6 +165,27 @@ def test_failing_executor_retries_are_bounded():
     assert not result.success
     assert result.status is RepairStatus.ESCALATED
     assert attempts == [1, 2, 3]
+
+
+
+def test_failing_executor_after_patch_applied_must_not_retry():
+    loop = RepairLoop()
+    attempts = []
+
+    def failing_after_apply(contract):
+        attempts.append(contract.attempt_number)
+        return _callback_result(contract, success=False, applied=True)
+
+    result = loop.repair(
+        "mission-patch-reconciliation-required",
+        "AssertionError: patch executor reported failure",
+        traceback=TRACE, apply_patch_fn=failing_after_apply,
+    )
+    assert not result.success
+    assert result.patch_applied
+    assert result.status is RepairStatus.FAILED
+    assert result.error == "patch_executor_reported_failure"
+    assert attempts == [1]  # A possibly applied patch is never blindly retried.
 
 
 def test_missing_executor_bypasses_reviewer_without_spending_retries():
