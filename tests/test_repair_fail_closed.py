@@ -106,15 +106,16 @@ def test_executor_failure_is_not_accepted():
     assert result.error == "patch_executor_reported_failure"
 
 
-def test_callback_contract_can_accept_verified_test_double():
+def test_callback_claim_cannot_validate_without_evidence_store():
     loop = RepairLoop()
     result = loop.repair(
         "mission-unit-test", "AssertionError: mismatched value", traceback=TRACE,
         apply_patch_fn=lambda c: _callback_result(c, passed=2),
     )
-    assert result.success
-    assert result.status is RepairStatus.RESOLVED
-    assert result.patch_applied
+    assert not result.success
+    assert result.status is RepairStatus.FAILED
+    assert result.error == "repair_evidence_store_unavailable"
+    assert result.patch_applied  # The callback claim is retained, NOT accepted.
     assert result.tests_passed == 2
 
 
@@ -127,7 +128,8 @@ def test_executor_does_not_leak_to_later_mission():
     second = loop.repair(
         "mission-2", "AssertionError: mismatch", traceback=TRACE,
     )
-    assert first.success
+    assert not first.success
+    assert first.error == "repair_evidence_store_unavailable"
     assert not second.success
     assert second.error == "patch_executor_unavailable"
 
