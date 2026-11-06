@@ -413,8 +413,13 @@ class RepairLoop:
 
     # ── Step 3-5: Generate Contract + Patch + Review ──
 
-    def attempt_repair(self, failure_id: str) -> RepairResult:
-        """Attempt a single repair cycle."""
+    def attempt_repair(
+        self,
+        failure_id: str,
+        *,
+        apply_patch_fn: Callable[[RepairContract], RepairResult] | None = None,
+    ) -> RepairResult:
+        """Attempt a repair; fail closed unless an executor supplies verifiable results."""
         failure = self._failures.get(failure_id)
         if not failure:
             return RepairResult(error=f"failure_not_found:{failure_id}")
@@ -459,43 +464,63 @@ class RepairLoop:
                 self._results[result.repair_id] = result
                 return result
 
-        # Apply — use supplied patch function when available, otherwise simulate
+        # Apply — the callback is an explicit per-attempt dependency, not shared
+        # mutable state. Never fabricate patch application or test outcomes.
         contract.status = RepairStatus.APPLYING
-        apply_fn = getattr(self, "_active_apply_patch_fn", None)
-        if apply_fn:
+        patch_applied = False
+        tests_passed_actual = 0
+        tests_failed_actual = 0
+        tests_weakened: list[str] = []
+        executor_reported_success = False
+        if apply_patch_fn is None:
+            contract.error = "patch_executor_unavailable"
+        else:
             try:
-                apply_result = apply_fn(contract)
-                patch_applied = apply_result.success
-                tests_passed_actual = apply_result.tests_passed
-                tests_failed_actual = apply_result.tests_failed
+                apply_result = apply_patch_fn(contract)
+                patch_applied = bool(apply_result.patch_applied)
+                tests_passed_actual = max(0, int(apply_result.tests_passed))
+                tests_failed_actual = max(0, int(apply_result.tests_failed))
+                tests_weakened = list(apply_result.tests_weakened)
+                executor_reported_success = bool(apply_result.success)
+                if not patch_applied:
+                    contract.error = "patch_application_unverified"
+                elif tests_weakened:
+                    contract.error = "tests_weakened"
+                elif tests_failed_actual:
+                    contract.error = "patch_verification_failed"
+                elif not tests_passed_actual:
+                    contract.error = "patch_verification_missing"
+                elif not executor_reported_success:
+                    contract.error = "patch_executor_reported_failure"
             except Exception as exc:
                 patch_applied = False
                 tests_passed_actual = 0
                 tests_failed_actual = 1
                 contract.error = f"apply_patch_fn_failed:{exc}"
-        else:
-            patch_applied = True
-            tests_passed_actual = 3  # Simulated
-            tests_failed_actual = 0
-        contract.status = RepairStatus.RESOLVED if patch_applied else RepairStatus.FAILED
 
-        # Verify results
-        tests_passed = tests_passed_actual
-        tests_failed = tests_failed_actual
+        verified = bool(
+            executor_reported_success and patch_applied and tests_passed_actual > 0
+            and tests_failed_actual == 0 and not tests_weakened and not contract.error
+        )
+        contract.status = RepairStatus.RESOLVED if verified else RepairStatus.FAILED
 
         result = RepairResult(
             contract_id=contract.contract_id,
-            success=patch_applied and tests_failed == 0,
-            status=RepairStatus.RESOLVED if (patch_applied and tests_failed == 0) else RepairStatus.FAILED,
+            success=verified,
+            status=contract.status,
             attempt_number=contract.attempt_number,
             hypothesis=contract.hypothesis,
             patch_applied=patch_applied,
-            tests_passed=tests_passed,
-            tests_failed=tests_failed,
+            tests_passed=tests_passed_actual,
+            tests_failed=tests_failed_actual,
+            tests_weakened=tests_weakened,
+            error=contract.error,
             duration_ms=(time.monotonic() - started) * 1000,
         )
 
-        failure.retry_count += 1
+        # Missing infrastructure is not an attempted patch. Do not burn retries.
+        if apply_patch_fn is not None:
+            failure.retry_count += 1
 
         if result.success:
             failure.retry_count = 0  # Reset on success
@@ -529,19 +554,18 @@ class RepairLoop:
             traceback=traceback, context=context, component=component,
         )
 
-        # Try up to MAX_ATTEMPTS
-        self._active_apply_patch_fn = apply_patch_fn
-        try:
-            for _ in range(self.MAX_ATTEMPTS):
-                result = self.attempt_repair(failure.failure_id)
+        # The executor is passed explicitly to prevent cross-mission leakage.
+        for _ in range(self.MAX_ATTEMPTS):
+            result = self.attempt_repair(failure.failure_id, apply_patch_fn=apply_patch_fn)
 
-                if result.success:
-                    return result
+            if result.success:
+                return result
 
-                if result.status == RepairStatus.ESCALATED:
-                    return result
-        finally:
-            self._active_apply_patch_fn = None
+            if result.error == "patch_executor_unavailable":
+                return result
+
+            if result.status == RepairStatus.ESCALATED:
+                return result
 
         # Escalate if all attempts failed
         return RepairResult(
