@@ -97,6 +97,11 @@ class ContinuousLocalWorker:
             raise ValueError("max_steps_must_be_one_or_two")
         with self._exclusive():
             cp = self._load_or_create()
+            if not self._prior_receipts_valid(cp):
+                cp.state = "blocked"
+                cp.data["error"] = "prior_receipt_unverified"
+                self.state.save_checkpoint(cp)
+                return self._report(cp)
             if cp.state in {"failed", "blocked", "completed"}:
                 return self._report(cp)
             executed = 0
@@ -191,8 +196,31 @@ class ContinuousLocalWorker:
                 executed += 1
             return self._report(cp)
 
-    @staticmethod
-    def _report(cp: Checkpoint) -> dict[str, Any]:
+    def _prior_receipts_valid(self, cp: Checkpoint) -> bool:
+        for task_id, evidence_id in cp.data.get("receipts", {}).items():
+            if self.evidence is None:
+                return False
+            try:
+                if self.evidence.is_preverified_and_integrity_bound(evidence_id) is not True:
+                    return False
+                artifact = self.evidence.get_by_id(evidence_id)
+                data = json.loads(artifact.content)
+                raw = base64.b64decode(data["stdout_b64"], validate=True)
+                if (
+                    artifact.mission_id != self.mission_id
+                    or artifact.task_id != task_id
+                    or data["task_id"] != task_id
+                    or data["mission_id"] != self.mission_id
+                    or data["run_id"] != cp.run_id
+                    or data["exit_code"] != 0
+                    or hashlib.sha256(raw).hexdigest() != data["stdout_sha256"]
+                ):
+                    return False
+            except (KeyError, ValueError, TypeError, AttributeError, RuntimeError):
+                return False
+        return True
+
+    def _report(self, cp: Checkpoint) -> dict[str, Any]:
         return {
             "mission_id": cp.mission_id, "run_id": cp.run_id,
             "status": cp.state, "completed": list(cp.completed_actions),
