@@ -445,6 +445,33 @@ class RepairLoop:
         contracts = self._contracts.setdefault(failure_id, [])
         contracts.append(contract)
 
+        # Infrastructure failures must not be disguised as review failures or
+        # consume the finite repair retry budget. No patch was attempted.
+        if apply_patch_fn is None:
+            contract.status = RepairStatus.FAILED
+            contract.error = "patch_executor_unavailable"
+            result = RepairResult(
+                contract_id=contract.contract_id,
+                success=False,
+                status=RepairStatus.FAILED,
+                attempt_number=contract.attempt_number,
+                hypothesis=contract.hypothesis,
+                patch_applied=False,
+                tests_passed=0,
+                tests_failed=0,
+                error=contract.error,
+                duration_ms=(time.monotonic() - started) * 1000,
+            )
+            self._results[result.repair_id] = result
+            self._action_history.append({
+                "step": "repair", "failure_id": failure_id,
+                "contract_id": contract.contract_id,
+                "attempt": contract.attempt_number,
+                "success": False,
+                "hypothesis": contract.hypothesis,
+            })
+            return result
+
         # Independent review
         if self.enable_independent_review:
             approved, review_reason = self.reviewer.review(contract, rca)
