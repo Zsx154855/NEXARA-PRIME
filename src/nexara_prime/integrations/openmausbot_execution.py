@@ -65,7 +65,7 @@ class TaskLedger:
 
     def transition(self, mission_id: str, status: str, *, message_id: str | None = None,
                    report: dict[str, Any] | None = None) -> dict[str, Any]:
-        if status not in {"QUEUED", "SENT", "AWAITING_CONNECTIVITY", "RUNNING",
+        if status not in {"QUEUED", "SENT", "AWAITING_CONNECTIVITY", "WAITING_FOR_DEVICE", "RUNNING",
                           "NEEDS_INPUT", "REPORTED", "EXECUTION_FAILED"}:
             raise ProofError("invalid_status")
         with self.db:
@@ -108,7 +108,7 @@ class ExecutionProof:
 
     def submit(self, mission_id: str, bot_id: str, thread_id: str, objective: str) -> dict[str, Any]:
         record = self.ledger.create(mission_id, bot_id, thread_id, objective)
-        if record["status"] in {"SENT", "RUNNING", "NEEDS_INPUT", "REPORTED", "EXECUTION_FAILED"}:
+        if record["status"] in {"SENT", "WAITING_FOR_DEVICE", "RUNNING", "NEEDS_INPUT", "REPORTED", "EXECUTION_FAILED"}:
             return record
         # Stable taskId plus sendId prevent duplicate external side effects
         # on crash/retry. The task must already exist in OpenMausBot.
@@ -148,7 +148,7 @@ class ExecutionProof:
         state = result.get("state")
         if code == 5:
             # The work was already sent. Resume waiting, never resend it.
-            return self.ledger.transition(mission_id, "RUNNING")
+            return self.ledger.transition(mission_id, "WAITING_FOR_DEVICE")
         if code == 4 or state in {"timed-out", "running"}:
             return self.ledger.transition(mission_id, "RUNNING")
         if code == 3 or state == "needs-input":
