@@ -153,6 +153,7 @@ def test_learning_refuses_unverified_result_and_forged_metrics(kit):
         learner.evaluate(mission_id="m1", strategy="fake", baseline_id=before,
                          candidate_id=malformed, executor_id="dev", auditor_id="auditor")
 
+
 def test_goal_loop_refuses_unauthenticated_observers(kit):
     db, evidence = kit
     events = [EnvironmentEvent(f"f{i}", EventType.TEST_FAILURE, "pytest", "failure")
