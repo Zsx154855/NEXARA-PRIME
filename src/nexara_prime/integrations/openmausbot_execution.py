@@ -34,6 +34,10 @@ class TaskLedger:
                         " bot_id TEXT NOT NULL, thread_id TEXT NOT NULL,"
                         " objective TEXT NOT NULL, send_id TEXT NOT NULL UNIQUE,"
                         " status TEXT NOT NULL, message_id TEXT, report TEXT)")
+        # Race-safe: two separate NEXARA missions may never treat the same
+        # OpenMausBot conversation as their own execution receipt.
+        self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS missions_omb_thread "
+                        "ON missions(bot_id, thread_id)")
 
     def get(self, mission_id: str) -> dict[str, Any] | None:
         row = self.db.execute("SELECT id,bot_id,thread_id,objective,send_id,status,message_id,report "
@@ -51,14 +55,11 @@ class TaskLedger:
         send_id = "nexa-" + hashlib.sha256(mission_id.encode()).hexdigest()[:48]
         # CLI wait observes a conversation's job, not a particular message:
         # bind one NEXARA mission to each dedicated OpenMausBot thread.
-        existing = self.db.execute("SELECT id FROM missions WHERE bot_id=? AND thread_id=? AND id<>?",
-                                   (bot_id, thread_id, mission_id)).fetchone()
-        if existing:
-            raise ProofError("thread_already_bound_to_mission")
-        with self.db:
-            self.db.execute("INSERT OR IGNORE INTO missions VALUES (?,?,?,?,?,'QUEUED',NULL,NULL)",
-                            (mission_id, bot_id, thread_id, objective, send_id))
+        self.db.execute("INSERT OR IGNORE INTO missions VALUES (?,?,?,?,?,'QUEUED',NULL,NULL)",
+                        (mission_id, bot_id, thread_id, objective, send_id))
         row = self.get(mission_id)
+        if row is None:
+            raise ProofError("thread_already_bound_to_mission")
         if (row["bot_id"], row["thread_id"], row["objective"]) != (bot_id, thread_id, objective):
             raise ProofError("mission_id_conflict")
         return row
@@ -68,11 +69,16 @@ class TaskLedger:
         if status not in {"QUEUED", "SENT", "AWAITING_CONNECTIVITY", "WAITING_FOR_DEVICE", "RUNNING",
                           "NEEDS_INPUT", "REPORTED", "EXECUTION_FAILED"}:
             raise ProofError("invalid_status")
-        with self.db:
-            self.db.execute("UPDATE missions SET status=?,message_id=COALESCE(?,message_id),"
-                            "report=COALESCE(?,report) WHERE id=?",
-                            (status, message_id, json.dumps(report, ensure_ascii=False) if report is not None else None, mission_id))
-        return self.get(mission_id)
+        # An in-flight wait can finish after a different worker has already
+        # persisted the final receipt. Never turn REPORTED back into RUNNING.
+        self.db.execute("UPDATE missions SET status=?,message_id=COALESCE(?,message_id),"
+                        "report=COALESCE(?,report) WHERE id=? "
+                        "AND status NOT IN ('REPORTED','EXECUTION_FAILED')",
+                        (status, message_id, json.dumps(report, ensure_ascii=False) if report is not None else None, mission_id))
+        result = self.get(mission_id)
+        if result is None:
+            raise ProofError("mission_not_found")
+        return result
 
 
 class OMBCLI:
@@ -112,8 +118,15 @@ class ExecutionProof:
             return record
         # Stable taskId plus sendId prevent duplicate external side effects
         # on crash/retry. The task must already exist in OpenMausBot.
-        code, result = self.cli.call("send", "--bot", bot_id, "-", "--task", thread_id,
-                                     "--send-id", record["send_id"], message=record["objective"])
+        try:
+            code, result = self.cli.call("send", "--bot", bot_id, "-", "--task", thread_id,
+                                         "--send-id", record["send_id"], message=record["objective"])
+        except ProofError as exc:
+            if str(exc) == "cli_unavailable_or_timeout":
+                # The process could have sent the message before timing out;
+                # retry only with the same durable send-id.
+                return self.ledger.transition(mission_id, "AWAITING_CONNECTIVITY")
+            raise
         if code != 0 or result.get("success") is not True:
             if code in {4, 5}:
                 return self.ledger.transition(mission_id, "AWAITING_CONNECTIVITY")
@@ -143,8 +156,15 @@ class ExecutionProof:
             return self.submit(rec["id"], rec["bot_id"], rec["thread_id"], rec["objective"])
         if rec["status"] in {"REPORTED", "EXECUTION_FAILED"}:
             return rec
-        code, result = self.cli.call("wait", "--bot", rec["bot_id"],
-                                     "--task", rec["thread_id"], "--timeout", "60s", "--strict")
+        try:
+            code, result = self.cli.call("wait", "--bot", rec["bot_id"],
+                                         "--task", rec["thread_id"], "--timeout", "60s", "--strict")
+        except ProofError as exc:
+            if str(exc) == "cli_unavailable_or_timeout":
+                # The task may still be running on the remote Mac; don't
+                # classify it as failed or resend the same work.
+                return self.ledger.transition(mission_id, "WAITING_FOR_DEVICE")
+            raise
         state = result.get("state")
         if code == 5:
             # The work was already sent. Resume waiting, never resend it.
@@ -153,7 +173,12 @@ class ExecutionProof:
             return self.ledger.transition(mission_id, "RUNNING")
         if code == 3 or state == "needs-input":
             return self.ledger.transition(mission_id, "NEEDS_INPUT", report=result)
-        nodes = (result.get("job") or {}).get("nodes") or []
+        job = result.get("job")
+        nodes = job.get("nodes") if isinstance(job, dict) else None
+        if not isinstance(nodes, list) or not nodes or not all(isinstance(n, dict) for n in nodes):
+            # Missing child/task metadata is a malformed receipt, not proof
+            # that the task completed or a reason to silently retry it.
+            return self.ledger.transition(mission_id, "EXECUTION_FAILED", report=result)
         has_failed_child = any(n.get("status") in {"failed", "cancelled"} for n in nodes)
         if code == 0 and result.get("ok") is True and state == "completed" and not has_failed_child:
             return self.ledger.transition(mission_id, "REPORTED", report=result)
