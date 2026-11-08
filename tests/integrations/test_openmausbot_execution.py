@@ -154,3 +154,15 @@ def test_dedicated_thread_cannot_run_two_missions(probe):
     submit(proof)
     with pytest.raises(ProofError, match="thread_already_bound_to_mission"):
         submit(proof, name="m-2")
+
+
+def test_cognitive_goal_proposal_to_cli_contract(probe):
+    proof, _, _ = probe
+    proposal = {"proposal_id": "coggoal-42",
+                "objective": "Find and repair failing test", "status": "HYPOTHESIS"}
+    result = proof.submit_proposal(proposal, "research-lead", "thread-fixed")
+    assert result["status"] == "SENT"
+    assert proof.ledger.get("coggoal-42")["objective"] == "Find and repair failing test"
+    with pytest.raises(ProofError, match="invalid_cognitive_proposal"):
+        proof.submit_proposal({"proposal_id": "bad", "objective": "x", "status": "REJECTED"},
+                              "lead", "unused-thread")
