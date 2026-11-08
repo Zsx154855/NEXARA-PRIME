@@ -47,8 +47,8 @@ class TaskLedger:
                         "ON missions(bot_id, thread_id)")
 
     def get(self, mission_id: str) -> dict[str, Any] | None:
-        row = self.db.execute("SELECT id,bot_id,thread_id,objective,send_id,status,message_id,report "
-                              " ,since_ms FROM missions WHERE id=?", (mission_id,)).fetchone()
+        row = self.db.execute("SELECT id,bot_id,thread_id,objective,send_id,status,message_id,report,"
+                              "since_ms FROM missions WHERE id=?", (mission_id,)).fetchone()
         if row is None:
             return None
         return dict(zip(("id", "bot_id", "thread_id", "objective", "send_id", "status",
