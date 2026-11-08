@@ -238,9 +238,9 @@ def test_autonomous_loop_proposes_from_unverified_observations_without_exec(kit)
 
 def test_self_learning_is_provisional_without_external_auditor(kit):
     db, evidence = kit
-    before = proof(evidence, content=json.dumps(
+    before = proof(evidence, actor="agent", content=json.dumps(
         {"suite_id": "same", "tests_passed": 5, "tests_failed": 0, "tokens": 1000}))
-    after = proof(evidence, content=json.dumps(
+    after = proof(evidence, actor="agent", content=json.dumps(
         {"suite_id": "same", "tests_passed": 5, "tests_failed": 0, "tokens": 600}))
     result = EvidenceGatedLearning(db, evidence, "cognitive-free").evaluate(
         mission_id="m1", strategy="smaller context", baseline_id=before, candidate_id=after,
