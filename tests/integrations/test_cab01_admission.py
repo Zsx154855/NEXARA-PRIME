@@ -136,7 +136,7 @@ def test_restart_uses_identical_mission_without_resending(tmp_path):
 def test_model_flag_does_not_grant_execution(tmp_path):
     s = lab(tmp_path, approval_present=False)
     claimed = dict(s["proposal"], execution_authorized=True)
-    with pytest.raises(ProofError, match="admission_denied:missing_unique_trusted_approval"):
+    with pytest.raises(ProofError, match="kernel_admission_required"):
         s["proof"].submit_proposal(claimed, BOT, THREAD, contract=s["contract"], guard=None)
     # The low-level path is protected, too.
     with pytest.raises(ProofError, match="missing_unique_trusted_approval"):
