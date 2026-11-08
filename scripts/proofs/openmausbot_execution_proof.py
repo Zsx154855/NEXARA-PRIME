@@ -37,6 +37,11 @@ def main(argv=None) -> int:
             if result is None:
                 raise ProofError("mission_not_found")
         public = {key: result[key] for key in ("id", "status", "message_id")}
+        public["since_ms"] = result.get("since_ms")
+        if result.get("report"):
+            report = json.loads(result["report"])
+            if isinstance(report, dict) and isinstance(report.get("reason"), str):
+                public["reason"] = report["reason"]
         if result["status"] in {"REPORTED", "EXECUTION_FAILED"}:
             public["team_report"] = proof.team_evidence(result["id"])
         print(json.dumps({"ok": True, "mission": public}, ensure_ascii=False))
