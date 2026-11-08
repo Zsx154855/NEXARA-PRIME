@@ -166,18 +166,45 @@ class ExecutionProof:
                                           report={"reason": "ambiguous_job_anchor", "at": at, "since": since})
         return self.ledger.transition(mission_id, "SENT", message_id=str(result["messageId"]), since_ms=since)
 
-    def submit_proposal(self, proposal: dict[str, Any], bot_id: str,
-                        thread_id: str) -> dict[str, Any]:
-        """One-call bridge from NEXARA cognitive goal proposal to OMB work.
+    def submit_proposal(self, proposal: dict[str, Any], bot_id: str, thread_id: str,
+                        *, contract: Any = None, guard: Any = None) -> dict[str, Any]:
+        """Dispatch an admitted cognitive goal; a proposal alone is never authority.
 
-        The caller supplies an already-provisioned laboratory thread. HYPOTHESIS
-        means a free research idea, not a verified claim or production right.
+        A trusted NEXARA controller must first compile/approve a WorkContract,
+        admit its mission through ChiefBrainKernel, and supply that active guard.
+        The model cannot authorize itself by writing execution_authorized=True.
+        This protects the adapter entry point; OS permissions, model costs and
+        workspace isolation MUST still be enforced at the actual tool boundary.
         """
-        if (proposal.get("status") not in {"HYPOTHESIS", "EVIDENCE_BACKED"}
+        from ..kernel_boundary import KernelBoundaryViolation, KernelExecutionGuard
+        from ..models import WorkContract
+
+        if (not isinstance(proposal, dict)
+            or proposal.get("status") not in {"HYPOTHESIS", "EVIDENCE_BACKED"}
             or not isinstance(proposal.get("proposal_id"), str)
-            or not isinstance(proposal.get("objective"), str)):
+            or not proposal["proposal_id"].strip()
+            or not isinstance(proposal.get("objective"), str)
+            or not proposal["objective"].strip()):
             raise ProofError("invalid_cognitive_proposal")
-        return self.submit(proposal["proposal_id"], bot_id, thread_id, proposal["objective"])
+        if not isinstance(contract, WorkContract) or not isinstance(guard, KernelExecutionGuard):
+            raise ProofError("kernel_admission_required")
+        if (contract.status != "approved" or not contract.approved_at
+            or contract.provenance != proposal["proposal_id"]):
+            raise ProofError("cognitive_contract_not_authorized")
+        if not contract.mission_id or not contract.objective.strip():
+            raise ProofError("invalid_execution_contract")
+        try:
+            admission = guard.assert_admitted(contract.mission_id)
+        except KernelBoundaryViolation as exc:
+            raise ProofError("kernel_admission_required") from exc
+        admission.assert_complete()
+        # A mission admission may cover multiple contracts. Only the exact
+        # approved WorkContract linked by the trusted controller is dispatchable.
+        if admission.metadata.get("contract_id") != contract.contract_id:
+            raise ProofError("contract_admission_mismatch")
+        # Project-specific tools and budget checks stay with the existing
+        # Policy/Runtime, not with the OpenMausBot correlation ledger.
+        return self.submit(contract.mission_id, bot_id, thread_id, contract.objective)
 
     def reconcile(self, mission_id: str) -> dict[str, Any]:
         rec = self.ledger.get(mission_id)
