@@ -21,30 +21,24 @@ def main(argv=None) -> int:
     parser.add_argument("--thread-id", help="Dedicated existing OpenMausBot task thread ID")
     parser.add_argument("--mission-id", help="NEXARA mission / cognitive proposal ID")
     args = parser.parse_args(argv)
-    if args.action == "submit":
-        # A JSON file (even one claiming execution_authorized=true) cannot
-        # authenticate kernel admission. Trusted callers must supply the
-        # actual admitted WorkContract and guard in the same runtime process.
+    if args.action in {"submit", "resume"}:
+        # Neither a proposal JSON nor a persisted lab ledger can attest that
+        # scoped approval is still valid. The trusted host owns both dispatch
+        # and resume and must re-check canonical records before OpenMausBot I/O.
         print(json.dumps({"ok": False, "status": "BLOCKED",
-                          "error": "trusted_kernel_admission_required",
-                          "next": "use ExecutionProof.submit_proposal with approved WorkContract "
-                                  "and active ChiefBrainKernel.guard()"}, ensure_ascii=False))
+                          "error": "trusted_admission_gateway_required",
+                          "next": "use a host-side CAB01TrustedAdmission backed by canonical "
+                                  "SQLiteStore, ApprovalEngine and PolicyEngine"}, ensure_ascii=False))
         return 3
     ledger = TaskLedger(Path(args.db))
     try:
         cli = OMBCLI(executable=args.binary, url=args.url, token_file=args.token_file)
         proof = ExecutionProof(ledger, cli)
-        if args.action == "submit":
-            if not args.proposal_json or not args.bot_id or not args.thread_id:
-                parser.error("submit requires --proposal-json, --bot-id, --thread-id")
-            proposal = json.loads(Path(args.proposal_json).read_text())
-            result = proof.submit_proposal(proposal, args.bot_id, args.thread_id)
-        else:
-            if not args.mission_id:
-                parser.error("resume / inspect require --mission-id")
-            result = proof.reconcile(args.mission_id) if args.action == "resume" else ledger.get(args.mission_id)
-            if result is None:
-                raise ProofError("mission_not_found")
+        if not args.mission_id:
+            parser.error("inspect requires --mission-id")
+        result = ledger.get(args.mission_id)
+        if result is None:
+            raise ProofError("mission_not_found")
         public = {key: result[key] for key in ("id", "status", "message_id")}
         public["since_ms"] = result.get("since_ms")
         if result.get("report"):

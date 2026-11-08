@@ -10,12 +10,26 @@ import pytest
 from nexara_prime.kernel_boundary import KernelAdmissionContext, KernelExecutionGuard, KernelBoundaryViolation
 from nexara_prime.models import WorkContract, RiskLevel
 
+from nexara_prime.integrations.cab01_admission import CAB01TrustedAdmission
 from nexara_prime.integrations.openmausbot_execution import (
     ExecutionProof,
     OMBCLI,
     ProofError,
     TaskLedger,
 )
+
+
+class _OfflineTransportOnly(CAB01TrustedAdmission):
+    """CAB-01 TEST DOUBLE: no external CLI, checks legacy AEP-02 transport only.
+
+    This bypass belongs exclusively in tests; CAB-01 security regressions
+    exercise the real durable SQLiteStore + ApprovalEngine path separately.
+    """
+    def __init__(self):
+        pass
+
+    def authorize(self, mission_id, bot_id, thread_id, objective):
+        return None
 
 
 @pytest.fixture
@@ -33,7 +47,7 @@ def probe(tmp_path, monkeypatch):
         return subprocess.run([sys.executable, str(fixture), *argv[1:]], **kwargs)
 
     cli = OMBCLI(runner=run_fake)
-    return ExecutionProof(ledger, cli), state, tmp_path
+    return ExecutionProof(ledger, cli, authority=_OfflineTransportOnly()), state, tmp_path
 
 
 def submit(proof, name="m-1"):
@@ -48,7 +62,7 @@ def test_submit_and_restart_do_not_duplicate(probe):
     a = submit(proof)
     b = submit(proof)
     assert a["status"] == b["status"] == "SENT"
-    restarted = ExecutionProof(TaskLedger(path / "missions.db"), proof.cli)
+    restarted = ExecutionProof(TaskLedger(path / "missions.db"), proof.cli, authority=proof.authority)
     assert submit(restarted)["status"] == "SENT"
     data = json.loads(state.read_text())
     assert len(data["unique_sends"]) == 1
@@ -407,7 +421,7 @@ def test_legacy_ledger_schema_migrates_and_does_not_accept_old_job(tmp_path):
     class NoCall:
         def call(self, *args, **kwargs):
             raise AssertionError("must not trust an unanchored historical job")
-    proof = ExecutionProof(ledger, NoCall())
+    proof = ExecutionProof(ledger, NoCall(), authority=_OfflineTransportOnly())
     result = proof.reconcile("old")
     assert result["status"] == "NEEDS_INPUT"
     assert json.loads(result["report"])["reason"] == "missing_job_anchor"
@@ -442,5 +456,25 @@ def test_standalone_json_submit_fails_closed_before_ledger_creation(tmp_path, ca
     assert status == 3
     assert result["ok"] is False
     assert result["status"] == "BLOCKED"
-    assert result["error"] == "trusted_kernel_admission_required"
+    assert result["error"] == "trusted_admission_gateway_required"
     assert not database.exists()
+
+
+def test_standalone_resume_requires_trusted_gateway(tmp_path, capsys):
+    from scripts.proofs.openmausbot_execution_proof import main
+    database = tmp_path / "no-resume.db"
+    status = main(["resume", "--db", str(database), "--mission-id", "unknown"])
+    result = json.loads(capsys.readouterr().out)
+    assert status == 3
+    assert result["error"] == "trusted_admission_gateway_required"
+    assert not database.exists()
+
+
+def test_missing_admission_prevents_real_send_even_when_ledger_is_empty(tmp_path):
+    class NeverCall:
+        def call(self, *args, **kwargs):
+            raise AssertionError("CLI must never execute without CAB01")
+    proof = ExecutionProof(TaskLedger(tmp_path / "missions.db"), NeverCall())
+    with pytest.raises(ProofError, match="trusted_admission_required"):
+        proof.submit("m1", "bot1", "thread1", "send a message")
+    assert proof.ledger.get("m1") is None

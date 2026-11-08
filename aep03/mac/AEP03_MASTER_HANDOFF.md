@@ -45,16 +45,16 @@ python3 aep03_local_gate.py verify --project "$LAB/task_b_memory" --phase baseli
 
 **任务接线：** 先由 NEXARA 实际 `AutonomousGoalLoop.tick` 处理 `task_a` 的真实测试失败事件并持久化真实提案 ID。该机制当前只会生成 `fix_failing_tests` 的 R0 只读建议；要实现“修改合成代码”必须由 NEXARA 现有 Mission/Kernel 以本轮既有授权产生相应执行任务，绝不能暗中把只读提案当作写入许可。不要伪造 AEP-01 示例 JSON 充当真实认知产生的提案。若连接不上该任务编译/授权入口，Gate E=`PARTIAL/BLOCKED`，不得宣称全闭环。
 
-**V3.0 接线变更：** `scripts/proofs/openmausbot_execution_proof.py submit` 现在只接受 inspect/resume，`submit` 因缺少可信 Kernel admission 而 fail closed（退出码 3）。不能再使用下方旧的 JSON-only submit 命令派发真实任务。真实提交只能通过 NEXARA 可信 Controller 在同一进程内持有已获准的 `WorkContract` 与 `ChiefBrainKernel.guard()`，执行 `ExecutionProof.submit_proposal(proposal, bot_id, thread_id, contract=approved_work_contract, guard=kernel.guard())`；须绑定 `WorkContract.provenance=proposal_id` 和 `admission.metadata.contract_id=WorkContract.contract_id`。单纯编辑 JSON 或手工将审批标志设为 true，不能获得实际执行权限。所有实际的模型费用、文件作用域、工具权限仍由隔离环境的独立可信执行边界控制；本接线本身**不是 OS 沙箱**。
+**CAB-01 接线更新：** `scripts/proofs/openmausbot_execution_proof.py` 的 standalone `submit`、`resume` 均因缺少实时可信授权源而返回 BLOCKED（退出码 3）；`inspect` 仅可读取本地账本。Mac Agent 不能绕过该限制直接运行旧的 JSON/CLI 派发。可信 NEXARA 主机必须持有权威 `SQLiteStore`、`ApprovalEngine`、`PolicyEngine` 和已完成的 `KernelExecutionGuard`，构造 `CAB01TrustedAdmission`：先验证持久化 `cognitive_goal_proposal_v1`、最新 `work_contract`、独立审批原始记录与决议事件、批准者身份来源、合同版本、授权工作区、Bot/Thread/执行身份、有效期、撤销事件和已核实零新增费用的执行引擎，再由 `ExecutionProof(..., authority=trusted_admission)` 处理 `submit` 或 `reconcile`。Guard 必须绑定 `contract_id` 和 `contract_version`；模型写入 `approved=True` 或构造 dataclass 都不能替代持久化审批核验。当前 `ChiefBrainKernel.submit()` 的入参布尔值仍可能由调用方伪造，**不能以调用它本身作为最终授权证明**；本轮仍需本机可信控制器完成真实身份和预算验证。当前同一进程权限与 SQLite 文件写权限**不是 OS 沙箱**，没有隔离环境/已核实免费模型则不得进行真实 Agent 任务。
 
 为每项任务使用**全新且专用的真实 OpenMausBot conversation/thread**，避免旧消息干扰。`openmausbot run ... --wait none --send-id ...` 必须返回真实 `threadId`、`since`、`at`、`messageId`、`sendId`；使用 AEP-02 既有脚本（位于 PR #58）：
 
 ```bash
-# 已禁用：不再以 standalone JSON 直接触发外部 Worker。
-# 由 NEXARA 的可信 Controller 编译 WorkContract、完成实际 Kernel
-# admission，并调用 ExecutionProof.submit_proposal(..., contract=..., guard=...)。
-# 只有真实提交后，方可使用下面的 resume 检查进度。
-PYTHONPATH=src python scripts/proofs/openmausbot_execution_proof.py resume \
+# 已禁用：standalone submit / resume 都缺少实时可信授权校验。
+# 由 NEXARA 的可信 Controller 持有受保护存储与 Kernel Guard，
+# 创建 CAB01TrustedAdmission，再注入 ExecutionProof(..., authority=...)，
+# 在同一受控主机中提交 / 恢复。仅 inspect 是不产生 OpenMausBot I/O 的操作。
+PYTHONPATH=src python scripts/proofs/openmausbot_execution_proof.py inspect \
   --db "$LAB/evidence/mission-ledger.db" --mission-id "$ACTUAL_NEXARA_MISSION_ID"
 ```
 

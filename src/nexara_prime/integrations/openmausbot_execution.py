@@ -14,6 +14,8 @@ import subprocess
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
+from .cab01_admission import CAB01AdmissionDenied, CAB01TrustedAdmission
+
 
 class ProofError(RuntimeError):
     pass
@@ -130,10 +132,28 @@ class OMBCLI:
 
 
 class ExecutionProof:
-    def __init__(self, ledger: TaskLedger, cli: OMBCLI):
-        self.ledger, self.cli = ledger, cli
+    def __init__(self, ledger: TaskLedger, cli: OMBCLI,
+                 authority: CAB01TrustedAdmission | None = None):
+        # Without a trusted host-side authority the adapter can inspect a
+        # ledger, but cannot send or resume an external OpenMausBot task.
+        if authority is not None and not isinstance(authority, CAB01TrustedAdmission):
+            raise ProofError("trusted_admission_type_required")
+        self.ledger, self.cli, self.authority = ledger, cli, authority
+
+    def _authorize(self, mission_id: str, bot_id: str,
+                   thread_id: str, objective: str) -> None:
+        if self.authority is None:
+            raise ProofError("trusted_admission_required")
+        try:
+            self.authority.authorize(mission_id, bot_id, thread_id, objective)
+        except CAB01AdmissionDenied as exc:
+            raise ProofError(f"admission_denied:{exc}") from exc
 
     def submit(self, mission_id: str, bot_id: str, thread_id: str, objective: str) -> dict[str, Any]:
+        # Check *before* creating a ledger row or calling the CLI. A cached
+        # approval bool, WorkContract dataclass, or prior successful run is not
+        # acceptable authority for a fresh side effect.
+        self._authorize(mission_id, bot_id, thread_id, objective)
         record = self.ledger.create(mission_id, bot_id, thread_id, objective)
         if record["status"] in {"SENT", "WAITING_FOR_DEVICE", "RUNNING", "NEEDS_INPUT", "REPORTED", "EXECUTION_FAILED"}:
             return record
@@ -210,10 +230,14 @@ class ExecutionProof:
         rec = self.ledger.get(mission_id)
         if rec is None:
             raise ProofError("mission_not_found")
+        if rec["status"] in {"REPORTED", "EXECUTION_FAILED"}:
+            return rec  # Inspection of an already recorded result is not I/O.
+        # Revocation/expiry/provider budget are re-evaluated when resuming.
+        # An already-running external task might have produced side effects:
+        # revocation prevents *new* calls, it does not undo past operations.
+        self._authorize(rec["id"], rec["bot_id"], rec["thread_id"], rec["objective"])
         if rec["status"] in {"QUEUED", "AWAITING_CONNECTIVITY"}:
             return self.submit(rec["id"], rec["bot_id"], rec["thread_id"], rec["objective"])
-        if rec["status"] in {"REPORTED", "EXECUTION_FAILED"}:
-            return rec
         if rec["since_ms"] is None:
             # Legacy AEP-01 jobs have no durable execution epoch.
             return self.ledger.transition(mission_id, "NEEDS_INPUT", report={"reason": "missing_job_anchor"})
