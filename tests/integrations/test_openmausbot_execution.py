@@ -1,5 +1,6 @@
 """Real subprocess contract tests using a fake CLI, not real OpenMausBot Agents."""
 import json
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -18,7 +19,9 @@ from nexara_prime.integrations.openmausbot_execution import (
 def probe(tmp_path, monkeypatch):
     state = tmp_path / "fake.json"
     monkeypatch.setenv("AEP_TEST_STATE", str(state))
-    for name in ("AEP_SEND_UNREACHABLE", "AEP_WAIT_STATUS", "AEP_TEAM", "AEP_MISMATCH"):
+    for name in ("AEP_SEND_UNREACHABLE", "AEP_WAIT_STATUS", "AEP_TEAM", "AEP_MISMATCH",
+                 "AEP_ANCHOR_STALE", "AEP_QUEUED", "AEP_STEERED", "AEP_NODE_RUNNING",
+                 "AEP_WRONG_JOB", "AEP_STALE_JOB", "AEP_FAILED_COUNTS"):
         monkeypatch.delenv(name, raising=False)
     fixture = Path(__file__).parent / "fixtures" / "fake_openmausbot.py"
     ledger = TaskLedger(tmp_path / "missions.db")
@@ -232,3 +235,100 @@ def test_completion_without_job_tree_is_not_success(probe):
     proof.cli.runner = incomplete
     assert proof.reconcile("m-1")["status"] == "EXECUTION_FAILED"
     assert proof.team_evidence("m-1")["qa_verified"] is False
+
+
+# AEP-02: fresh server-clock anchoring and strict receipt validation.
+
+def test_server_clock_persisted_and_wait_uses_since(probe):
+    proof, state, _ = probe
+    record = submit(proof)
+    assert record["since_ms"] == 1000
+    assert proof.reconcile("m-1")["status"] == "REPORTED"
+    calls = json.loads(state.read_text())["calls"]
+    assert calls[0][0] == "run" and calls[0][calls[0].index("--wait") + 1] == "none"
+    assert calls[1][0] == "wait" and calls[1][calls[1].index("--since") + 1] == "1000"
+
+
+def test_ambiguous_retry_does_not_accept_unanchored_job(probe, monkeypatch):
+    proof, state, _ = probe
+    monkeypatch.setenv("AEP_ANCHOR_STALE", "1")
+    record = submit(proof)
+    assert record["status"] == "NEEDS_INPUT" and record["since_ms"] is None
+    assert json.loads(record["report"])["reason"] == "ambiguous_job_anchor"
+    assert proof.reconcile("m-1")["status"] == "NEEDS_INPUT"
+    assert len(json.loads(state.read_text())["calls"]) == 1
+
+
+def test_stale_job_receipt_is_rejected(probe, monkeypatch):
+    proof, _, _ = probe
+    submit(proof)
+    monkeypatch.setenv("AEP_STALE_JOB", "1")
+    assert proof.reconcile("m-1")["status"] == "EXECUTION_FAILED"
+
+
+def test_wrong_thread_receipt_is_rejected(probe, monkeypatch):
+    proof, _, _ = probe
+    submit(proof)
+    monkeypatch.setenv("AEP_WRONG_JOB", "1")
+    assert proof.reconcile("m-1")["status"] == "EXECUTION_FAILED"
+
+
+def test_nonterminal_child_rejects_completed_root(probe, monkeypatch):
+    proof, _, _ = probe
+    submit(proof)
+    monkeypatch.setenv("AEP_NODE_RUNNING", "1")
+    assert proof.reconcile("m-1")["status"] == "EXECUTION_FAILED"
+
+
+def test_failed_count_rejects_completed_root(probe, monkeypatch):
+    proof, _, _ = probe
+    submit(proof)
+    monkeypatch.setenv("AEP_FAILED_COUNTS", "1")
+    assert proof.reconcile("m-1")["status"] == "EXECUTION_FAILED"
+
+
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1:8799@evil.example", "http://localhost:8799@evil.example",
+    "http://127.0.0.1:8799/x", "https://user:secret@example.com", "https://example.com/#fragment",
+    "http://127.0.0.1:0", "http://localhost", "https://example.com/path",
+])
+def test_url_validation_rejects_authority_confusion(url):
+    with pytest.raises(ProofError, match="explicit_loopback_or_https_required"):
+        OMBCLI(url=url)
+
+
+def test_legacy_ledger_schema_migrates_and_does_not_accept_old_job(tmp_path):
+    path = tmp_path / "legacy.db"
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE missions (id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, thread_id TEXT NOT NULL, "
+               "objective TEXT NOT NULL, send_id TEXT NOT NULL UNIQUE, status TEXT NOT NULL, "
+               "message_id TEXT, report TEXT)")
+    db.execute("INSERT INTO missions VALUES ('old','lead','thread-fixed','x','nexa-old','SENT','m1',NULL)")
+    db.commit()
+    db.close()
+    ledger = TaskLedger(path)
+    assert ledger.get("old")["since_ms"] is None
+    class NoCall:
+        def call(self, *args, **kwargs):
+            raise AssertionError("must not trust an unanchored historical job")
+    proof = ExecutionProof(ledger, NoCall())
+    result = proof.reconcile("old")
+    assert result["status"] == "NEEDS_INPUT"
+    assert json.loads(result["report"])["reason"] == "missing_job_anchor"
+
+
+def test_busy_thread_queue_not_accepted_as_exclusive_execution(probe, monkeypatch):
+    proof, _, _ = probe
+    monkeypatch.setenv("AEP_QUEUED", "1")
+    result = submit(proof)
+    assert result["status"] == "NEEDS_INPUT"
+    assert json.loads(result["report"])["reason"] == "nonexclusive_thread_send"
+    assert proof.reconcile("m-1")["status"] == "NEEDS_INPUT"
+
+
+def test_steered_message_not_accepted_as_independent_job(probe, monkeypatch):
+    proof, _, _ = probe
+    monkeypatch.setenv("AEP_STEERED", "1")
+    result = submit(proof)
+    assert result["status"] == "NEEDS_INPUT"
+    assert json.loads(result["report"])["reason"] == "nonexclusive_thread_send"
