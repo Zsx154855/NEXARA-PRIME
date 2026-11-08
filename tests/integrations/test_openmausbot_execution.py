@@ -428,3 +428,19 @@ def test_steered_message_not_accepted_as_independent_job(probe, monkeypatch):
     result = submit(proof)
     assert result["status"] == "NEEDS_INPUT"
     assert json.loads(result["report"])["reason"] == "nonexclusive_thread_send"
+
+
+def test_standalone_json_submit_fails_closed_before_ledger_creation(tmp_path, capsys):
+    from scripts.proofs.openmausbot_execution_proof import main
+    database = tmp_path / "should-not-exist.db"
+    status = main([
+        "submit", "--db", str(database),
+        "--proposal-json", str(tmp_path / "forged.json"),
+        "--bot-id", "lead", "--thread-id", "thread-fixed",
+    ])
+    result = json.loads(capsys.readouterr().out)
+    assert status == 3
+    assert result["ok"] is False
+    assert result["status"] == "BLOCKED"
+    assert result["error"] == "trusted_kernel_admission_required"
+    assert not database.exists()
