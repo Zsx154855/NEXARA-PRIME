@@ -21,19 +21,20 @@ These are static default-branch findings, NOT proof that other branches or curre
 - SignalAnalyzer from brain/environment/intelligence.py: two allowlisted read-only audit objectives, not general autonomous command execution.
 - ChiefBrainKernel / PolicyEngine / ApprovalEngine / runtime continue to own mission admission, execution and human approvals. No direct runtime dispatch in this patch.
 
-## Operational and security boundaries
+## Cognitive freedom by default; external effects remain governed
 
-- CognitiveStateStore reconstructs immutable project-scoped revisions, checks parent integrity anchors, and rejects stale writes. Only a trusted owner authorization callback can allow core identity, owner goals, beliefs or commitments changes. An Agent can update only hypotheses/uncertainties with verified evidence.
-- AutonomousGoalLoop.tick converts verified, event-bound observations into R0, cost-zero proposals ONLY when an injected trusted event authorizer accepts every signal. Without an event authorizer it fails closed and emits no proposal. Every proposal has execution_authorized=false; retry does not duplicate. It NEVER calls tools.
-- EvidenceGatedLearning.evaluate parses metrics from two mission-bound, verified evidence records. An injected trusted auditor authorization callback and distinct executor/auditor are required. Only zero-failure, non-empty tests on the same explicit suite_id with non-regressing pass count and strictly reduced measured tokens produce REVIEWABLE; otherwise REJECTED. Both results remain inactive.
-- The owner and auditor callbacks MUST be wired to the existing server-side identity/approval authority before production. Never use unconditional allow lambdas except tests.
-- A hash-verified EvidenceArtifact is not proof its claims about the external world are true. Runner attestation and exact log references are a separate gate.
-- A source_event_id binding does not authenticate an external event producer. The event_authorizer callback must be backed by a trusted producer identity and checked per project; a permissive lambda is for isolated tests ONLY.
-- This patch is opt-in. It does NOT create daemon, schedule, Mac remote control, paid model calls, human approval, or policy activation.
+This revision separates **thought** from **action**. The cognitive kernel must not be forced to seek approval before brainstorming, questioning, updating its own tentative hypotheses, proposing goals or testing learning ideas.
+
+- CognitiveStateStore permits Agent hypotheses and uncertainties to persist with no EvidenceStore artifact. Such revisions are explicitly marked TENTATIVE and cannot directly overwrite owner-defined identity, goals, commitments or established beliefs. Changes to owner-controlled fields still require genuine owner authorization and an evidence artifact.
+- AutonomousGoalLoop.tick can propose read-only investigations from unverified signals with no authorizer or evidence. These are explicitly HYPOTHESIS, never runtime permission. Trusted and evidence-linked observations can produce EVIDENCE_BACKED proposals. Both are idempotent and execution_authorized=false; existing Kernel handles real-world action.
+- EvidenceGatedLearning.evaluate allows the Agent to self-review results without a separate authenticated auditor, yielding PROVISIONAL suggestions. Same-suite tests with improved quality and lower tokens can become REVIEWABLE when a genuine independent auditor is authenticated. No learning candidate silently changes live policies or tools.
+- Agent creativity, critique, planning, internal memory and local analysis are not blocked by enterprise-style approval bureaucracy. Identity permissions, paid actions, production writes, external publication, destructive operations and secret export are checked only at their actual execution boundaries.
+- A hash-verified EvidenceArtifact does not prove that claimed real-world test results are true. Runner provenance and exact logs are required for external activation, not for thinking.
+- This patch is opt-in and contains no daemon, external connector, Mac remote access, paid calls, production write, or policy activation.
 
 ## Actual tests and limits
 
-- Compatibility harness used local Python 3.13 + pytest 9, a SQLite-compatible test store and evidence doubles: **12 PASS**; syntax compilation: PASS.
+- The earlier isolated compatibility harness reported 12 PASS before this relaxation. This revision has **15 repository-native test functions, NOT YET EXECUTED**. Do not transfer the earlier result to this head.
 - Repository-native tests under tests/brain/test_cognitive_continuity.py target the real SQLiteStore/EvidenceStore.
 - Actual full repository, real native EvidenceStore tests, Ruff and live Mac Bridge: **NOT RUN** in this session. These must run in the actual repository before anything is called production verified.
 - Mock or test-double success never counts as a real autonomous Agent execution.
