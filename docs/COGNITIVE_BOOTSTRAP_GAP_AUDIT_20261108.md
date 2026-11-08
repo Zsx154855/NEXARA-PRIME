@@ -24,16 +24,16 @@ These are static default-branch findings, NOT proof that other branches or curre
 ## Operational and security boundaries
 
 - CognitiveStateStore reconstructs immutable project-scoped revisions, checks parent integrity anchors, and rejects stale writes. Only a trusted owner authorization callback can allow core identity, owner goals, beliefs or commitments changes. An Agent can update only hypotheses/uncertainties with verified evidence.
-- AutonomousGoalLoop.tick converts verified, event-bound signal observations into R0, cost-zero proposal records. Every proposal has execution_authorized=false; retry does not duplicate. It NEVER calls tools.
-- EvidenceGatedLearning.evaluate parses metrics from two mission-bound, verified evidence records. An injected trusted auditor authorization callback and distinct executor/auditor are required. Only zero-failure, non-regressing tests and strictly reduced measured tokens produce REVIEWABLE; otherwise REJECTED. Both results remain inactive.
+- AutonomousGoalLoop.tick converts verified, event-bound observations into R0, cost-zero proposals ONLY when an injected trusted event authorizer accepts every signal. Without an event authorizer it fails closed and emits no proposal. Every proposal has execution_authorized=false; retry does not duplicate. It NEVER calls tools.
+- EvidenceGatedLearning.evaluate parses metrics from two mission-bound, verified evidence records. An injected trusted auditor authorization callback and distinct executor/auditor are required. Only zero-failure, non-empty tests on the same explicit suite_id with non-regressing pass count and strictly reduced measured tokens produce REVIEWABLE; otherwise REJECTED. Both results remain inactive.
 - The owner and auditor callbacks MUST be wired to the existing server-side identity/approval authority before production. Never use unconditional allow lambdas except tests.
 - A hash-verified EvidenceArtifact is not proof its claims about the external world are true. Runner attestation and exact log references are a separate gate.
-- A source_event_id binding does not authenticate an external event producer. Event observers must be authenticated before enabling active dispatch.
+- A source_event_id binding does not authenticate an external event producer. The event_authorizer callback must be backed by a trusted producer identity and checked per project; a permissive lambda is for isolated tests ONLY.
 - This patch is opt-in. It does NOT create daemon, schedule, Mac remote control, paid model calls, human approval, or policy activation.
 
 ## Actual tests and limits
 
-- Compatibility harness used local Python 3.13 + pytest 9, a SQLite-compatible test store and evidence doubles: **8 PASS**; syntax compilation: PASS.
+- Compatibility harness used local Python 3.13 + pytest 9, a SQLite-compatible test store and evidence doubles: **12 PASS**; syntax compilation: PASS.
 - Repository-native tests under tests/brain/test_cognitive_continuity.py target the real SQLiteStore/EvidenceStore.
 - Actual full repository, real native EvidenceStore tests, Ruff and live Mac Bridge: **NOT RUN** in this session. These must run in the actual repository before anything is called production verified.
 - Mock or test-double success never counts as a real autonomous Agent execution.
