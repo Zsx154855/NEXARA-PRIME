@@ -1,0 +1,5 @@
+{
+  "proposal_id": "coggoal_synthetic_aep01",
+  "objective": "In an isolated synthetic repository, investigate one failing test, implement the smallest repair, and ask an independent reviewer to run that test and record the result. Do not make paid model calls or interact with production repositories.",
+  "status": "HYPOTHESIS"
+}
