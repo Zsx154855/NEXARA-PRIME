@@ -122,6 +122,19 @@ class ExecutionProof:
             raise ProofError("send_ack_mismatch")
         return self.ledger.transition(mission_id, "SENT", message_id=str(result["messageId"]))
 
+    def submit_proposal(self, proposal: dict[str, Any], bot_id: str,
+                        thread_id: str) -> dict[str, Any]:
+        """One-call bridge from NEXARA cognitive goal proposal to OMB work.
+
+        The caller supplies an already-provisioned laboratory thread. HYPOTHESIS
+        means a free research idea, not a verified claim or production right.
+        """
+        if (proposal.get("status") not in {"HYPOTHESIS", "EVIDENCE_BACKED"}
+            or not isinstance(proposal.get("proposal_id"), str)
+            or not isinstance(proposal.get("objective"), str)):
+            raise ProofError("invalid_cognitive_proposal")
+        return self.submit(proposal["proposal_id"], bot_id, thread_id, proposal["objective"])
+
     def reconcile(self, mission_id: str) -> dict[str, Any]:
         rec = self.ledger.get(mission_id)
         if rec is None:
