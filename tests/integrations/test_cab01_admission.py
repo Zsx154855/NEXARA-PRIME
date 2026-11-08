@@ -17,6 +17,7 @@ from nexara_prime.integrations.cab01_admission import (
     CAB01AdmissionDenied, CAB01TrustedAdmission, _digest,
 )
 from nexara_prime.integrations.openmausbot_execution import ExecutionProof, ProofError, TaskLedger
+from nexara_prime.kernel_boundary import KernelAdmissionContext, KernelExecutionGuard
 from nexara_prime.models import MissionSpec, RiskLevel, now_iso
 
 
@@ -266,3 +267,54 @@ def test_approved_hypothesis_remains_non_executable_by_itself(tmp_path):
     # Executable authority comes from independent durable approval, not this
     # record's epistemic status.
     assert s["authority"].authorize(MISSION, BOT, THREAD, OBJECTIVE).mission_id == MISSION
+
+
+def test_fake_full_kernel_context_cannot_invent_missing_durable_approval(tmp_path):
+    s = lab(tmp_path, approval_present=False)
+    contract = s["contract"]
+    guard = KernelExecutionGuard()
+    guard.admit(KernelAdmissionContext(
+        mission_id=MISSION, caller="model_supplied", contract_verified=True,
+        authority_verified=True, state_valid=True, governance_approved=True,
+        evidence_chain_initialized=True,
+        metadata={"contract_id": contract.contract_id},
+    ))
+    with pytest.raises(ProofError, match="missing_unique_trusted_approval"):
+        s["proof"].submit_proposal(s["proposal"], BOT, THREAD, contract=contract, guard=guard)
+    assert not s["cli"].calls
+
+
+def test_older_contract_grant_does_not_authorize_new_version(tmp_path):
+    s = lab(tmp_path)
+    newer = s["contract"].model_copy(update={
+        "contract_id": "cab-newer-contract",
+        "version": s["contract"].version + 1,
+        "status": "draft",
+    })
+    assert s["store"].save_record_if_absent(
+        newer.contract_id, "work_contract", newer.model_dump(mode="json"),
+        now_iso(), MISSION)
+    with pytest.raises(ProofError, match="work_contract_not_current"):
+        send(s)
+    assert not s["cli"].calls
+
+
+def test_revoking_inflight_contract_still_allows_inspection_not_new_wait(tmp_path):
+    s = lab(tmp_path)
+    send(s)
+    s["events"].publish("cab.contract.revoked", MISSION, "mission", OWNER,
+                        "cab01-test", {"approval_id": s["approval_id"]})
+    with pytest.raises(ProofError, match="authorization_revoked"):
+        s["proof"].reconcile(MISSION)
+    assert s["proof"].ledger.get(MISSION)["status"] == "SENT"
+    assert [x[0] for x in s["cli"].calls] == ["run"]
+
+
+def test_current_contract_with_tampered_project_id_fails(tmp_path):
+    s = lab(tmp_path)
+    contract = s["contract"]
+    mutated = contract.model_copy(update={"project_id": "other-project"})
+    s["store"].save_record(contract.contract_id, "work_contract",
+                           mutated.model_dump(mode="json"), now_iso(), MISSION)
+    with pytest.raises(ProofError, match="work_contract_not_current"):
+        send(s)
