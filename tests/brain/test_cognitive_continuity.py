@@ -102,8 +102,11 @@ def test_autonomous_goal_does_not_ingest_unverified_claims(kit):
     events = [EnvironmentEvent(f"f{i}", EventType.TEST_FAILURE, "pytest", "claim")
               for i in range(2)]
     loop = AutonomousGoalLoop(db, evidence, "project", event_authorizer=lambda project, event, ref: True)
-    assert loop.tick(events, {"f0": "fabricated", "f1": "fabricated2"}) == []
-    assert loop.list_proposals() == []
+    proposal = loop.tick(events, {"f0": "fabricated", "f1": "fabricated2"})
+    assert len(proposal) == 1
+    assert proposal[0]["status"] == "HYPOTHESIS"
+    assert proposal[0]["execution_authorized"] is False
+    assert proposal[0]["evidence_refs"] == []
 
 
 def test_learning_candidate_requires_independent_verified_metrics(kit):
@@ -121,9 +124,11 @@ def test_learning_candidate_requires_independent_verified_metrics(kit):
                             baseline_id=before, candidate_id=after,
                             executor_id="dev", auditor_id="auditor")["new"] is False
     assert len(learner.list_candidates()) == 1
-    with pytest.raises(ContinuityError, match="independent_evidence_required"):
-        learner.evaluate(mission_id="m1", strategy="bad", baseline_id=before, candidate_id=after,
-                         executor_id="auditor", auditor_id="auditor")
+    self_review = learner.evaluate(mission_id="m1", strategy="self-review", baseline_id=before,
+                                   candidate_id=after, executor_id="auditor", auditor_id="auditor")
+    assert self_review["status"] == "PROVISIONAL"
+    assert self_review["independently_verified"] is False
+    assert self_review["activated"] is False
 
 
 def test_learning_regression_and_mission_mismatch_fail_closed(kit):
@@ -159,9 +164,15 @@ def test_goal_loop_refuses_unauthenticated_observers(kit):
     events = [EnvironmentEvent(f"f{i}", EventType.TEST_FAILURE, "pytest", "failure")
               for i in range(2)]
     refs = {e.event_id: proof(evidence, source_event_id=e.event_id) for e in events}
-    assert AutonomousGoalLoop(db, evidence, "project").tick(events, refs) == []
-    assert AutonomousGoalLoop(db, evidence, "project", event_authorizer=lambda p,e,r: False).tick(events, refs) == []
-    assert AutonomousGoalLoop(db, evidence, "project").list_proposals() == []
+    unauthenticated = AutonomousGoalLoop(db, evidence, "project").tick(events, refs)
+    assert len(unauthenticated) == 1
+    assert unauthenticated[0]["status"] == "HYPOTHESIS"
+    assert unauthenticated[0]["new"] is True
+    assert unauthenticated[0]["execution_authorized"] is False
+    denied = AutonomousGoalLoop(db, evidence, "project",
+                                event_authorizer=lambda p,e,r: False).tick(events, refs)
+    assert denied[0]["status"] == "HYPOTHESIS"
+    assert denied[0]["new"] is False
 
 
 def test_goal_loop_refuses_mismatched_event_evidence(kit):
@@ -169,7 +180,11 @@ def test_goal_loop_refuses_mismatched_event_evidence(kit):
     events = [EnvironmentEvent(f"f{i}", EventType.TEST_FAILURE, "pytest", "failure")
               for i in range(2)]
     refs = {e.event_id: proof(evidence, source_event_id="unrelated") for e in events}
-    assert AutonomousGoalLoop(db, evidence, "project", event_authorizer=lambda p,e,r: True).tick(events, refs) == []
+    proposals = AutonomousGoalLoop(db, evidence, "project",
+                                   event_authorizer=lambda p,e,r: True).tick(events, refs)
+    assert len(proposals) == 1
+    assert proposals[0]["status"] == "HYPOTHESIS"
+    assert proposals[0]["evidence_refs"] == []
 
 
 def test_learning_mismatched_suite_and_no_tests_never_reviewable(kit):
@@ -192,3 +207,44 @@ def test_owner_requires_actual_authorizer(kit):
         CognitiveStateStore(db, evidence, "project").update(
             expected_revision=0, actor="owner", evidence_id=p,
             changes={"identity":"forged owner"})
+
+
+def test_agent_can_think_and_remember_without_audit_receipt(kit):
+    db, evidence = kit
+    store = CognitiveStateStore(db, evidence, "cognitive-free")
+    state = store.update(expected_revision=0, actor="agent",
+                         changes={"hypotheses": ["Maybe task routing can improve"],
+                                  "uncertainties": ["Need to measure actual token use"]})
+    assert state.revision == 1
+    assert store.load().last_evidence_id == ""
+    assert store.load().hypotheses == ("Maybe task routing can improve",)
+    envelope = db.get_record_envelope(f"cogstate_{store._prefix}_1")
+    assert envelope["payload"]["epistemic_status"] == "TENTATIVE"
+    with pytest.raises(ContinuityError, match="state_permission_denied"):
+        store.update(expected_revision=1, actor="agent",
+                     changes={"owner_goals": ["self-authorize deployments"]})
+
+
+def test_autonomous_loop_proposes_from_unverified_observations_without_exec(kit):
+    db, evidence = kit
+    events = [EnvironmentEvent(f"observed{i}", EventType.TEST_FAILURE,
+                               "unknown observer", "potential regression") for i in range(2)]
+    result = AutonomousGoalLoop(db, evidence, "cognitive-free").tick(events)
+    assert len(result) == 1
+    assert result[0]["status"] == "HYPOTHESIS"
+    assert result[0]["cost_limit"] == 0
+    assert result[0]["execution_authorized"] is False
+
+
+def test_self_learning_is_provisional_without_external_auditor(kit):
+    db, evidence = kit
+    before = proof(evidence, content=json.dumps(
+        {"suite_id": "same", "tests_passed": 5, "tests_failed": 0, "tokens": 1000}))
+    after = proof(evidence, content=json.dumps(
+        {"suite_id": "same", "tests_passed": 5, "tests_failed": 0, "tokens": 600}))
+    result = EvidenceGatedLearning(db, evidence, "cognitive-free").evaluate(
+        mission_id="m1", strategy="smaller context", baseline_id=before, candidate_id=after,
+        executor_id="agent", auditor_id="agent")
+    assert result["status"] == "PROVISIONAL"
+    assert result["independently_verified"] is False
+    assert result["activated"] is False
