@@ -111,7 +111,7 @@ def test_network_drop_after_send_does_not_resend(probe, monkeypatch):
     proof, state, _ = probe
     submit(proof)
     monkeypatch.setenv("AEP_WAIT_STATUS", "offline")
-    assert proof.reconcile("m-1")["status"] == "RUNNING"
+    assert proof.reconcile("m-1")["status"] == "WAITING_FOR_DEVICE"
     monkeypatch.setenv("AEP_WAIT_STATUS", "completed")
     assert proof.reconcile("m-1")["status"] == "REPORTED"
     assert json.loads(state.read_text())["send_attempts"] == 1
