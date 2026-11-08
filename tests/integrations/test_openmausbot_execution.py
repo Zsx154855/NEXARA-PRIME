@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from nexara_prime.kernel_boundary import KernelAdmissionContext, KernelExecutionGuard, KernelBoundaryViolation
+from nexara_prime.models import WorkContract, RiskLevel
+
 from nexara_prime.integrations.openmausbot_execution import (
     ExecutionProof,
     OMBCLI,
@@ -159,16 +162,109 @@ def test_dedicated_thread_cannot_run_two_missions(probe):
         submit(proof, name="m-2")
 
 
+def authorized_cognitive_dispatch(proposal, *, contract_status="approved", contract_source=None,
+                                  mission_id="mission-42", admitted_mission=None, admitted_contract=None,
+                                  approved_at="2026-11-08T00:00:00Z"):
+    contract = WorkContract(
+        mission_id=mission_id, objective="Patch a disposable synthetic repository",
+        provenance=proposal["proposal_id"] if contract_source is None else contract_source,
+        status=contract_status, approved_at=approved_at, risk_level=RiskLevel.R2,
+        boundaries=["Only inside a disposable test directory"],
+    )
+    guard = KernelExecutionGuard()
+    ctx = KernelAdmissionContext(
+        mission_id=mission_id if admitted_mission is None else admitted_mission,
+        caller="trusted_test_controller", contract_verified=True,
+        authority_verified=True, state_valid=True, governance_approved=True,
+        evidence_chain_initialized=True,
+        metadata={"contract_id": contract.contract_id if admitted_contract is None else admitted_contract},
+    )
+    # This test only verifies the adapter gate, NOT the controller's trust
+    # in real external authorization or actual physical OS sandbox.
+    guard.admit(ctx)
+    return contract, guard
+
+
 def test_cognitive_goal_proposal_to_cli_contract(probe):
-    proof, _, _ = probe
-    proposal = {"proposal_id": "coggoal-42",
-                "objective": "Find and repair failing test", "status": "HYPOTHESIS"}
-    result = proof.submit_proposal(proposal, "research-lead", "thread-fixed")
+    proof, state, _ = probe
+    proposal = {"proposal_id": "coggoal-42", "project_id": "nexara-aep03",
+                "objective": "Investigate observed failing tests (read-only)", "status": "HYPOTHESIS",
+                "execution_authorized": False}
+    contract, guard = authorized_cognitive_dispatch(proposal)
+    result = proof.submit_proposal(proposal, "research-lead", "thread-fixed",
+                                   contract=contract, guard=guard)
     assert result["status"] == "SENT"
-    assert proof.ledger.get("coggoal-42")["objective"] == "Find and repair failing test"
-    with pytest.raises(ProofError, match="invalid_cognitive_proposal"):
-        proof.submit_proposal({"proposal_id": "bad", "objective": "x", "status": "REJECTED"},
-                              "lead", "unused-thread")
+    assert proof.ledger.get(contract.mission_id)["objective"] == contract.objective
+    assert proof.ledger.get(contract.mission_id)["id"] != proposal["proposal_id"]
+    assert len(json.loads(state.read_text())["unique_sends"]) == 1
+    assert proof.submit_proposal(proposal, "research-lead", "thread-fixed",
+                                 contract=contract, guard=guard)["status"] == "SENT"
+    assert json.loads(state.read_text())["send_attempts"] == 1
+
+
+def test_cognitive_goal_cannot_dispatch_by_self_claim(probe):
+    proof, state, _ = probe
+    proposal = {"proposal_id": "coggoal-42", "status": "HYPOTHESIS",
+                "objective": "Investigate synthetic failing tests", "execution_authorized": True}
+    with pytest.raises(ProofError, match="kernel_admission_required"):
+        proof.submit_proposal(proposal, "lead", "thread-fixed")
+    assert proof.ledger.get("coggoal-42") is None
+    assert not state.exists()
+
+
+def test_cognitive_goal_rejects_wrong_admission_and_contract(probe):
+    proof, state, _ = probe
+    proposal = {"proposal_id": "coggoal-42", "status": "EVIDENCE_BACKED",
+                "objective": "Analyze a failing test"}
+    params = [
+        {"contract_status": "draft"},
+        {"approved_at": ""},
+        {"contract_source": "other-source"},
+        {"admitted_mission": "other-mission"},
+        {"admitted_contract": "other-contract"},
+    ]
+    for kwargs in params:
+        contract, guard = authorized_cognitive_dispatch(proposal, **kwargs)
+        with pytest.raises(ProofError, match="cognitive_contract_not_authorized|kernel_admission_required|contract_admission_mismatch"):
+            proof.submit_proposal(proposal, "lead", "thread-fixed", contract=contract, guard=guard)
+    assert proof.ledger.get("mission-42") is None
+    assert not state.exists()
+
+
+def test_cognitive_goal_rejects_incomplete_admission(probe):
+    proof, state, _ = probe
+    proposal = {"proposal_id": "coggoal-42", "status": "HYPOTHESIS",
+                "objective": "Analyze synthetic failing test"}
+    contract, _ = authorized_cognitive_dispatch(proposal)
+    guard = KernelExecutionGuard()
+    with pytest.raises(KernelBoundaryViolation):
+        guard.admit(KernelAdmissionContext(
+            mission_id=contract.mission_id, caller="test",
+            contract_verified=True, authority_verified=True,
+            state_valid=True, governance_approved=False,
+            evidence_chain_initialized=True,
+            metadata={"contract_id": contract.contract_id},
+        ))
+    with pytest.raises(ProofError, match="kernel_admission_required"):
+        proof.submit_proposal(proposal, "lead", "thread-fixed", contract=contract, guard=guard)
+    assert not state.exists()
+
+
+def test_cognitive_goal_rejects_invalid_proposal_even_with_admission(probe):
+    proof, state, _ = probe
+    valid = {"proposal_id": "coggoal-42", "status": "HYPOTHESIS",
+             "objective": "Read synthetic repository"}
+    contract, guard = authorized_cognitive_dispatch(valid)
+    for bad in (
+        {"proposal_id": "bad", "objective": "x", "status": "REJECTED"},
+        {"proposal_id": "coggoal-42", "objective": "", "status": "HYPOTHESIS"},
+        {"proposal_id": "", "objective": "x", "status": "HYPOTHESIS"},
+        {"proposal_id": "coggoal-42", "objective": "x", "status": "PERMISSION_GRANTED"},
+    ):
+        with pytest.raises(ProofError, match="invalid_cognitive_proposal"):
+            proof.submit_proposal(bad, "lead", "thread-fixed", contract=contract, guard=guard)
+    assert not state.exists()
+
 
 
 def test_cross_connection_thread_binding_is_database_unique(probe):
