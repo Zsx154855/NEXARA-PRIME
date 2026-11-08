@@ -28,14 +28,17 @@ Source: src/nexara_prime/integrations/openmausbot_execution.py
 7. REPORTED = runner reports completion, NOT independent QA. The returned team evidence explicitly sets qa_verified=false.
 8. Cognitive proposal handoff is implemented via ExecutionProof.submit_proposal(), accepting HYPOTHESIS or EVIDENCE_BACKED goals. This grants no production permission.
 9. Recreate TaskLedger using the same SQLite database on process restart. Retried sends use the same send_id and pinned task thread, so the OMB server can deduplicate them.
+10. A SQLite UNIQUE index on (bot_id, thread_id) prevents separate NEXARA missions from binding one OpenMausBot task, including across separate database connections.
+11. Persisted final REPORTED or EXECUTION_FAILED receipts cannot be overwritten by stale, in-flight reconciliation results.
+12. An OpenMausBot CLI transport timeout is recoverable; it is not proof of a failed job. A completed reply without a valid job tree is NOT a successful execution.
 
 ## Test evidence
 
 Command: python -m pytest -q tests/integrations/test_openmausbot_execution.py
 
-There are 14 isolated contract test cases. They execute a real subprocess which emulates published OpenMausBot CLI JSON and exit codes, testing restart, retry, offline, timeout, needs-input, status correctness, distinct bots in task tree, conflicts, mismatched acknowledgements, token-file isolation and free cognitive goal handoff.
+There are 19 isolated contract test cases. They execute a real subprocess which emulates published OpenMausBot CLI JSON and exit codes, testing restart, retry, offline, timeout, needs-input, status correctness, distinct bots in task tree, conflicts, mismatched acknowledgements, token-file isolation, free cognitive goal handoff, cross-connection thread uniqueness, stale terminal receipts, CLI timeouts before/after send, and malformed job-tree receipts.
 
-**14 PASS, 0 FAIL** in a local Python 3.13 pytest environment using a corresponding local mirror. This is not the actual OpenMausBot binary or the complete NEXARA repository.
+**19 PASS, 0 FAIL** in a local Python 3.13 pytest environment using a corresponding local mirror. This is not the actual OpenMausBot binary or the complete NEXARA repository.
 
 **Repo-native pytest, full CI, Ruff and a real OpenMausBot backend were not executed.** Never label a simulated three-bot response a successful real multi-Agent run.
 
@@ -53,7 +56,7 @@ There are 14 isolated contract test cases. They execute a real subprocess which 
 
 | Gate | Acceptance | Current |
 |---|---|---|
-| A | 14 CLI-contract tests | ISOLATED PASS |
+| A | 19 CLI-contract tests | ISOLATED PASS |
 | B | Full NEXARA repo tests and lint | NOT RUN |
 | C | Actual OpenMausBot CLI and server | NOT RUN |
 | D | Three real Agents, verified job tree | NOT RUN |
@@ -65,7 +68,15 @@ There are 14 isolated contract test cases. They execute a real subprocess which 
 - No permanent daemon, deployment, CI workflow modification, purchase, model call, Mac access, secrets or main merge in this PR.
 - Autonomy B applies to real external side effects, not internal thoughts, hypotheses or research.
 - User's new fixed cloud cost initial target is zero; upper bound THB 300/month.
-- This proof expects a dedicated existing thread, and does not provision it or lock it across multiple independent host processes.
+- This proof expects a dedicated existing thread and does not provision it. A persistent SQLite uniqueness constraint prevents two mission IDs using the same bot/thread, but does not provide a full distributed lease or authenticated multi-host task owner.
+- SQLite TaskLedger is a standalone *laboratory correlation ledger*, not a substitute for NEXARA's canonical production Mission Store. Production adapter integration must store this mapping in canonical NEXARA records and avoid competing schedulers.
 - A content hash or server claim cannot replace independent test evidence and real process exit receipts.
 - Review OpenMausBot GitHub Issues #4840 (Codex long-running commands) and #4832 (cross-project scoping) before live use.
 - Full integration requires binding the adapter to the actual NEXARA Mission Kernel; no duplicate scheduler should be installed.
+
+## 2026-11-08 continuation: durability hardening
+
+- Updated isolated adapter and tests directly on stacked PR #58.
+- Added cross-process SQLite uniqueness and terminal-state non-regression; improved CLI timeout recovery and malformed completion detection.
+- Current local adapter mirror: **19/19 tests PASS** (Python 3.13). This does not certify real OpenMausBot, the complete NEXARA repo, the Mac, or external Agent execution.
+- CI workflow requires self-hosted macOS ARM64 and is not running in this environment. No cloud runner, paid service, or permanent Agent started.
