@@ -262,6 +262,18 @@ class WorkContract(NModel):
     mission_run_id: str | None = None
     correlation_id: str | None = None
     provenance: str | None = None
+    # Optional machine-checked CAB-01 scope. Existing WorkContracts remain
+    # readable but cannot authorize OpenMausBot without an explicit scope.
+    project_id: str | None = None
+    authorized_workspace: str | None = None
+    allowed_actions: list[str] = Field(default_factory=list)
+    execution_backend: str | None = None
+    execution_bot_id: str | None = None
+    execution_thread_id: str | None = None
+    execution_identity: str | None = None
+    execution_engine: str | None = None
+    cost_limit: float | None = None
+    expires_at: str | None = None
 
 
 class PlanStep(NModel):
