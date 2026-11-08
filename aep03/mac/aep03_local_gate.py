@@ -84,11 +84,12 @@ def probe(args):
                         "server_version": (server.get("version") if isinstance(server, dict) else None),
                         "available_engine_count": len(engine_list) if isinstance(engine_list, list) else None,
                         "zero_incremental_cost_confirmed": False},
+        "python_compatible": sys.version_info >= (3, 12),
         "pytest_installed": call([sys.executable, "-m", "pytest", "--version"], timeout=12)["exit_code"] == 0,
         "openminis_binary_found": bool(shutil.which("openminis")),
         "note": "No local executable was started except read-only Git/doctor/pytest-version checks."
     }
-    result["status"] = "READY_FOR_MANUAL_COST_REVIEW" if (repo_ok and result["git"]["pr57_ancestor_of_pr58"] and result["openmausbot"]["server_ready"]) else "BLOCKED"
+    result["status"] = "READY_FOR_MANUAL_COST_REVIEW" if (repo_ok and result["python_compatible"] and result["git"]["pr57_ancestor_of_pr58"] and result["openmausbot"]["server_ready"]) else "BLOCKED"
     json_dump(Path(args.out), result)
     print(json.dumps({"status": result["status"], "receipt": str(args.out),
                       "server_ready": result["openmausbot"]["server_ready"]}))
