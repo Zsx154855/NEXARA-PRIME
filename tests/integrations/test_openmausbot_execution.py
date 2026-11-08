@@ -166,3 +166,69 @@ def test_cognitive_goal_proposal_to_cli_contract(probe):
     with pytest.raises(ProofError, match="invalid_cognitive_proposal"):
         proof.submit_proposal({"proposal_id": "bad", "objective": "x", "status": "REJECTED"},
                               "lead", "unused-thread")
+
+
+def test_cross_connection_thread_binding_is_database_unique(probe):
+    proof, _, path = probe
+    second = TaskLedger(path / "missions.db")
+    proof.ledger.create("first", "lead", "shared-thread", "first task")
+    with pytest.raises(ProofError, match="thread_already_bound_to_mission"):
+        second.create("second", "lead", "shared-thread", "second task")
+    assert second.get("second") is None
+    assert second.get("first")["thread_id"] == "shared-thread"
+
+
+def test_late_state_update_cannot_erase_terminal_receipt(probe):
+    proof, _, path = probe
+    submit(proof)
+    reported = proof.reconcile("m-1")
+    assert reported["status"] == "REPORTED"
+    original = json.loads(reported["report"])
+    from_another_worker = TaskLedger(path / "missions.db")
+    late = from_another_worker.transition("m-1", "RUNNING", report={"state": "old"})
+    assert late["status"] == "REPORTED"
+    assert json.loads(late["report"]) == original
+
+
+def test_send_cli_timeout_must_be_resumable_with_identical_send_id(probe):
+    proof, state, _ = probe
+    original = proof.cli.runner
+
+    def timeout(_argv, **_kwargs):
+        raise subprocess.TimeoutExpired("openmausbot", 75)
+
+    proof.cli.runner = timeout
+    assert submit(proof)["status"] == "AWAITING_CONNECTIVITY"
+    record_id = proof.ledger.get("m-1")["send_id"]
+    proof.cli.runner = original
+    assert proof.reconcile("m-1")["status"] == "SENT"
+    assert json.loads(state.read_text())["unique_sends"].keys() == {record_id}
+
+
+def test_wait_cli_timeout_does_not_resend_or_mark_failed(probe):
+    proof, state, _ = probe
+    submit(proof)
+    original = proof.cli.runner
+
+    def timeout(_argv, **_kwargs):
+        raise subprocess.TimeoutExpired("openmausbot", 75)
+
+    proof.cli.runner = timeout
+    assert proof.reconcile("m-1")["status"] == "WAITING_FOR_DEVICE"
+    proof.cli.runner = original
+    assert proof.reconcile("m-1")["status"] == "REPORTED"
+    assert json.loads(state.read_text())["send_attempts"] == 1
+
+
+def test_completion_without_job_tree_is_not_success(probe):
+    proof, _, _ = probe
+    submit(proof)
+
+    def incomplete(_argv, **_kwargs):
+        return subprocess.CompletedProcess([], 0, stdout=json.dumps({
+            "ok": True, "state": "completed", "job": {"nodes": []}
+        }), stderr="")
+
+    proof.cli.runner = incomplete
+    assert proof.reconcile("m-1")["status"] == "EXECUTION_FAILED"
+    assert proof.team_evidence("m-1")["qa_verified"] is False
