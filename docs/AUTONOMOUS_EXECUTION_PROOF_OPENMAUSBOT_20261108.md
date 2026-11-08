@@ -24,7 +24,7 @@ Source: src/nexara_prime/integrations/openmausbot_execution.py
 3. CLI: openmausbot send --bot BOT - --task THREAD --send-id ID --url URL --json --quiet. Objective text goes to stdin, not argv.
 4. CLI response must contain the matching taskId and a messageId. An absent acknowledgement cannot become success.
 5. After acknowledgement, run: openmausbot wait --bot BOT --task THREAD --timeout 60s --strict --url URL --json --quiet.
-6. Exit 3 -> NEEDS_INPUT, 4 -> RUNNING, 5 after send -> RUNNING (offline; wait later), 1 -> EXECUTION_FAILED, exit 0 + state=completed + no failed children -> REPORTED.
+6. Exit 3 -> NEEDS_INPUT, 4 -> RUNNING, 5 after send -> WAITING_FOR_DEVICE (offline; wait later, do not resend), 1 -> EXECUTION_FAILED, exit 0 + state=completed + no failed children -> REPORTED.
 7. REPORTED = runner reports completion, NOT independent QA. The returned team evidence explicitly sets qa_verified=false.
 8. Cognitive proposal handoff is implemented via ExecutionProof.submit_proposal(), accepting HYPOTHESIS or EVIDENCE_BACKED goals. This grants no production permission.
 9. Recreate TaskLedger using the same SQLite database on process restart. Retried sends use the same send_id and pinned task thread, so the OMB server can deduplicate them.
