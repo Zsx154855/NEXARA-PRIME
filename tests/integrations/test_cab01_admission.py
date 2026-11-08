@@ -4,11 +4,8 @@ OpenMausBot itself is replaced by an inert deterministic transport. These
 are NOT a real provider, paid model, OS sandbox or live three-Agent tests.
 """
 from datetime import datetime, timedelta, timezone
-import json
-
 import pytest
 
-from nexara_prime.brain.cognitive_continuity import CognitiveStateStore
 from nexara_prime.contract_engine import ContractEngine
 from nexara_prime.db import SQLiteStore
 from nexara_prime.events import EventBus
