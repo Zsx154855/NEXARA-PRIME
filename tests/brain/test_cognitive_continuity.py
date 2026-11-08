@@ -85,13 +85,13 @@ def test_autonomous_goal_proposals_verified_and_idempotent(kit):
     events = [EnvironmentEvent(f"f{i}", EventType.TEST_FAILURE, "pytest", "6 common failures")
               for i in range(2)]
     refs = {e.event_id: proof(evidence, source_event_id=e.event_id) for e in events}
-    loop = AutonomousGoalLoop(db, evidence, "project")
+    loop = AutonomousGoalLoop(db, evidence, "project", event_authorizer=lambda project, event, ref: True)
     first = loop.tick(events, refs)
     assert len(first) == 1
     assert first[0]["new"] is True
     assert first[0]["risk_level"] == "R0"
     assert first[0]["execution_authorized"] is False
-    again = AutonomousGoalLoop(db, evidence, "project").tick(events, refs)
+    again = AutonomousGoalLoop(db, evidence, "project", event_authorizer=lambda project, event, ref: True).tick(events, refs)
     assert again[0]["proposal_id"] == first[0]["proposal_id"]
     assert again[0]["new"] is False
     assert len(loop.list_proposals()) == 1
@@ -101,15 +101,15 @@ def test_autonomous_goal_does_not_ingest_unverified_claims(kit):
     db, evidence = kit
     events = [EnvironmentEvent(f"f{i}", EventType.TEST_FAILURE, "pytest", "claim")
               for i in range(2)]
-    loop = AutonomousGoalLoop(db, evidence, "project")
+    loop = AutonomousGoalLoop(db, evidence, "project", event_authorizer=lambda project, event, ref: True)
     assert loop.tick(events, {"f0": "fabricated", "f1": "fabricated2"}) == []
     assert loop.list_proposals() == []
 
 
 def test_learning_candidate_requires_independent_verified_metrics(kit):
     db, evidence = kit
-    before = proof(evidence, content=json.dumps({"tests_passed": 10, "tests_failed": 0, "tokens": 900}))
-    after = proof(evidence, content=json.dumps({"tests_passed": 11, "tests_failed": 0, "tokens": 500}))
+    before = proof(evidence, content=json.dumps({"suite_id": "suite-alpha", "tests_passed": 10, "tests_failed": 0, "tokens": 900}))
+    after = proof(evidence, content=json.dumps({"suite_id": "suite-alpha", "tests_passed": 11, "tests_failed": 0, "tokens": 500}))
     learner = EvidenceGatedLearning(db, evidence, "project", auditor_authorizer=lambda _: True)
     record = learner.evaluate(mission_id="m1", strategy="Symbol-level file retrieval",
                               baseline_id=before, candidate_id=after,
@@ -128,8 +128,8 @@ def test_learning_candidate_requires_independent_verified_metrics(kit):
 
 def test_learning_regression_and_mission_mismatch_fail_closed(kit):
     db, evidence = kit
-    before = proof(evidence, content=json.dumps({"tests_passed": 10, "tests_failed": 0, "tokens": 300}))
-    after = proof(evidence, content=json.dumps({"tests_passed": 10, "tests_failed": 1, "tokens": 100}))
+    before = proof(evidence, content=json.dumps({"suite_id": "suite-alpha", "tests_passed": 10, "tests_failed": 0, "tokens": 300}))
+    after = proof(evidence, content=json.dumps({"suite_id": "suite-alpha", "tests_passed": 10, "tests_failed": 1, "tokens": 100}))
     learner = EvidenceGatedLearning(db, evidence, "project", auditor_authorizer=lambda _: True)
     rejected = learner.evaluate(mission_id="m1", strategy="poor regression", baseline_id=before,
                                 candidate_id=after, executor_id="dev", auditor_id="auditor")
@@ -142,7 +142,7 @@ def test_learning_regression_and_mission_mismatch_fail_closed(kit):
 
 def test_learning_refuses_unverified_result_and_forged_metrics(kit):
     db, evidence = kit
-    before = proof(evidence, content=json.dumps({"tests_passed": 10, "tests_failed": 0, "tokens": 300}))
+    before = proof(evidence, content=json.dumps({"suite_id": "suite-alpha", "tests_passed": 10, "tests_failed": 0, "tokens": 300}))
     unknown = "evidence_not_found"
     learner = EvidenceGatedLearning(db, evidence, "project", auditor_authorizer=lambda _: True)
     with pytest.raises(ContinuityError, match="verified_evidence_required"):
@@ -152,3 +152,42 @@ def test_learning_refuses_unverified_result_and_forged_metrics(kit):
     with pytest.raises(ContinuityError, match="verified_metrics_invalid"):
         learner.evaluate(mission_id="m1", strategy="fake", baseline_id=before,
                          candidate_id=malformed, executor_id="dev", auditor_id="auditor")
+
+def test_goal_loop_refuses_unauthenticated_observers(kit):
+    db, evidence = kit
+    events = [EnvironmentEvent(f"f{i}", EventType.TEST_FAILURE, "pytest", "failure")
+              for i in range(2)]
+    refs = {e.event_id: proof(evidence, source_event_id=e.event_id) for e in events}
+    assert AutonomousGoalLoop(db, evidence, "project").tick(events, refs) == []
+    assert AutonomousGoalLoop(db, evidence, "project", event_authorizer=lambda p,e,r: False).tick(events, refs) == []
+    assert AutonomousGoalLoop(db, evidence, "project").list_proposals() == []
+
+
+def test_goal_loop_refuses_mismatched_event_evidence(kit):
+    db, evidence = kit
+    events = [EnvironmentEvent(f"f{i}", EventType.TEST_FAILURE, "pytest", "failure")
+              for i in range(2)]
+    refs = {e.event_id: proof(evidence, source_event_id="unrelated") for e in events}
+    assert AutonomousGoalLoop(db, evidence, "project", event_authorizer=lambda p,e,r: True).tick(events, refs) == []
+
+
+def test_learning_mismatched_suite_and_no_tests_never_reviewable(kit):
+    db, evidence = kit
+    before = proof(evidence, content=json.dumps({"suite_id":"suite-a","tests_passed":10,"tests_failed":0,"tokens":900}))
+    different = proof(evidence, content=json.dumps({"suite_id":"suite-b","tests_passed":11,"tests_failed":0,"tokens":100}))
+    learner = EvidenceGatedLearning(db, evidence, "project", auditor_authorizer=lambda _: True)
+    assert learner.evaluate(mission_id="m1", strategy="not comparable", baseline_id=before,
+                            candidate_id=different, executor_id="dev", auditor_id="auditor")["status"] == "REJECTED"
+    no_tests = proof(evidence, content=json.dumps({"suite_id":"suite-a","tests_passed":0,"tests_failed":0,"tokens":600}))
+    less_tokens = proof(evidence, content=json.dumps({"suite_id":"suite-a","tests_passed":0,"tests_failed":0,"tokens":20}))
+    assert learner.evaluate(mission_id="m1", strategy="empty tests", baseline_id=no_tests,
+                            candidate_id=less_tokens, executor_id="dev", auditor_id="auditor")["status"] == "REJECTED"
+
+
+def test_owner_requires_actual_authorizer(kit):
+    db, evidence = kit
+    p = proof(evidence)
+    with pytest.raises(ContinuityError, match="trusted_owner_authorization_required"):
+        CognitiveStateStore(db, evidence, "project").update(
+            expected_revision=0, actor="owner", evidence_id=p,
+            changes={"identity":"forged owner"})
