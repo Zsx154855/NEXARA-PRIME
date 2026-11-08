@@ -45,13 +45,15 @@ python3 aep03_local_gate.py verify --project "$LAB/task_b_memory" --phase baseli
 
 **任务接线：** 先由 NEXARA 实际 `AutonomousGoalLoop.tick` 处理 `task_a` 的真实测试失败事件并持久化真实提案 ID。该机制当前只会生成 `fix_failing_tests` 的 R0 只读建议；要实现“修改合成代码”必须由 NEXARA 现有 Mission/Kernel 以本轮既有授权产生相应执行任务，绝不能暗中把只读提案当作写入许可。不要伪造 AEP-01 示例 JSON 充当真实认知产生的提案。若连接不上该任务编译/授权入口，Gate E=`PARTIAL/BLOCKED`，不得宣称全闭环。
 
+**V3.0 接线变更：** `scripts/proofs/openmausbot_execution_proof.py submit` 现在只接受 inspect/resume，`submit` 因缺少可信 Kernel admission 而 fail closed（退出码 3）。不能再使用下方旧的 JSON-only submit 命令派发真实任务。真实提交只能通过 NEXARA 可信 Controller 在同一进程内持有已获准的 `WorkContract` 与 `ChiefBrainKernel.guard()`，执行 `ExecutionProof.submit_proposal(proposal, bot_id, thread_id, contract=approved_work_contract, guard=kernel.guard())`；须绑定 `WorkContract.provenance=proposal_id` 和 `admission.metadata.contract_id=WorkContract.contract_id`。单纯编辑 JSON 或手工将审批标志设为 true，不能获得实际执行权限。所有实际的模型费用、文件作用域、工具权限仍由隔离环境的独立可信执行边界控制；本接线本身**不是 OS 沙箱**。
+
 为每项任务使用**全新且专用的真实 OpenMausBot conversation/thread**，避免旧消息干扰。`openmausbot run ... --wait none --send-id ...` 必须返回真实 `threadId`、`since`、`at`、`messageId`、`sendId`；使用 AEP-02 既有脚本（位于 PR #58）：
 
 ```bash
-PYTHONPATH=src python scripts/proofs/openmausbot_execution_proof.py submit \
-  --db "$LAB/evidence/mission-ledger.db" \
-  --proposal-json "$LAB/evidence/actual-nexara-proposal.json" \
-  --bot-id "$ACTUAL_LEAD_BOT_ID" --thread-id "$ACTUAL_DEDICATED_THREAD_ID"
+# 已禁用：不再以 standalone JSON 直接触发外部 Worker。
+# 由 NEXARA 的可信 Controller 编译 WorkContract、完成实际 Kernel
+# admission，并调用 ExecutionProof.submit_proposal(..., contract=..., guard=...)。
+# 只有真实提交后，方可使用下面的 resume 检查进度。
 PYTHONPATH=src python scripts/proofs/openmausbot_execution_proof.py resume \
   --db "$LAB/evidence/mission-ledger.db" --mission-id "$ACTUAL_NEXARA_MISSION_ID"
 ```

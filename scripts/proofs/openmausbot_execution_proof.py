@@ -21,6 +21,15 @@ def main(argv=None) -> int:
     parser.add_argument("--thread-id", help="Dedicated existing OpenMausBot task thread ID")
     parser.add_argument("--mission-id", help="NEXARA mission / cognitive proposal ID")
     args = parser.parse_args(argv)
+    if args.action == "submit":
+        # A JSON file (even one claiming execution_authorized=true) cannot
+        # authenticate kernel admission. Trusted callers must supply the
+        # actual admitted WorkContract and guard in the same runtime process.
+        print(json.dumps({"ok": False, "status": "BLOCKED",
+                          "error": "trusted_kernel_admission_required",
+                          "next": "use ExecutionProof.submit_proposal with approved WorkContract "
+                                  "and active ChiefBrainKernel.guard()"}, ensure_ascii=False))
+        return 3
     ledger = TaskLedger(Path(args.db))
     try:
         cli = OMBCLI(executable=args.binary, url=args.url, token_file=args.token_file)
