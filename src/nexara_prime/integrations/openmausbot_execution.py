@@ -12,6 +12,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 
 class ProofError(RuntimeError):
@@ -33,7 +34,13 @@ class TaskLedger:
         self.db.execute("CREATE TABLE IF NOT EXISTS missions (id TEXT PRIMARY KEY,"
                         " bot_id TEXT NOT NULL, thread_id TEXT NOT NULL,"
                         " objective TEXT NOT NULL, send_id TEXT NOT NULL UNIQUE,"
-                        " status TEXT NOT NULL, message_id TEXT, report TEXT)")
+                        " status TEXT NOT NULL, message_id TEXT, report TEXT, since_ms INTEGER)")
+        if "since_ms" not in {r[1] for r in self.db.execute("PRAGMA table_info(missions)")}:
+            try:
+                self.db.execute("ALTER TABLE missions ADD COLUMN since_ms INTEGER")
+            except sqlite3.OperationalError as exc:
+                if "duplicate column" not in str(exc).lower():
+                    raise
         # Race-safe: two separate NEXARA missions may never treat the same
         # OpenMausBot conversation as their own execution receipt.
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS missions_omb_thread "
@@ -41,11 +48,11 @@ class TaskLedger:
 
     def get(self, mission_id: str) -> dict[str, Any] | None:
         row = self.db.execute("SELECT id,bot_id,thread_id,objective,send_id,status,message_id,report "
-                              "FROM missions WHERE id=?", (mission_id,)).fetchone()
+                              " ,since_ms FROM missions WHERE id=?", (mission_id,)).fetchone()
         if row is None:
             return None
         return dict(zip(("id", "bot_id", "thread_id", "objective", "send_id", "status",
-                         "message_id", "report"), row))
+                         "message_id", "report", "since_ms"), row))
 
     def create(self, mission_id: str, bot_id: str, thread_id: str, objective: str) -> dict[str, Any]:
         if not all(isinstance(x, str) and x.strip() for x in (mission_id, bot_id, thread_id, objective)):
@@ -55,7 +62,8 @@ class TaskLedger:
         send_id = "nexa-" + hashlib.sha256(mission_id.encode()).hexdigest()[:48]
         # CLI wait observes a conversation's job, not a particular message:
         # bind one NEXARA mission to each dedicated OpenMausBot thread.
-        self.db.execute("INSERT OR IGNORE INTO missions VALUES (?,?,?,?,?,'QUEUED',NULL,NULL)",
+        self.db.execute("INSERT OR IGNORE INTO missions "
+                        "(id,bot_id,thread_id,objective,send_id,status) VALUES (?,?,?,?,?,'QUEUED')",
                         (mission_id, bot_id, thread_id, objective, send_id))
         row = self.get(mission_id)
         if row is None:
@@ -65,16 +73,19 @@ class TaskLedger:
         return row
 
     def transition(self, mission_id: str, status: str, *, message_id: str | None = None,
-                   report: dict[str, Any] | None = None) -> dict[str, Any]:
+                   report: dict[str, Any] | None = None, since_ms: int | None = None) -> dict[str, Any]:
         if status not in {"QUEUED", "SENT", "AWAITING_CONNECTIVITY", "WAITING_FOR_DEVICE", "RUNNING",
                           "NEEDS_INPUT", "REPORTED", "EXECUTION_FAILED"}:
             raise ProofError("invalid_status")
+        if since_ms is not None and (type(since_ms) is not int or since_ms < 0):
+            raise ProofError("invalid_job_anchor")
         # An in-flight wait can finish after a different worker has already
         # persisted the final receipt. Never turn REPORTED back into RUNNING.
         self.db.execute("UPDATE missions SET status=?,message_id=COALESCE(?,message_id),"
-                        "report=COALESCE(?,report) WHERE id=? "
+                        "report=COALESCE(?,report),since_ms=COALESCE(?,since_ms) WHERE id=? "
                         "AND status NOT IN ('REPORTED','EXECUTION_FAILED')",
-                        (status, message_id, json.dumps(report, ensure_ascii=False) if report is not None else None, mission_id))
+                        (status, message_id, json.dumps(report, ensure_ascii=False) if report is not None else None,
+                         since_ms, mission_id))
         result = self.get(mission_id)
         if result is None:
             raise ProofError("mission_not_found")
@@ -86,8 +97,18 @@ class OMBCLI:
 
     def __init__(self, *, executable: str = "openmausbot", url: str = "http://127.0.0.1:8799",
                  token_file: str | None = None, runner: Callable[..., Any] = subprocess.run):
-        if not (url.startswith("http://127.0.0.1:") or url.startswith("http://localhost:")
-                or url.startswith("https://")):
+        try:
+            origin = urlsplit(url)
+            valid = (origin.scheme == "https" and bool(origin.hostname)) or (
+                origin.scheme == "http" and origin.hostname in {"localhost", "127.0.0.1"}
+                and origin.port is not None)
+            valid = valid and origin.username is None and origin.password is None
+            valid = valid and not origin.path.strip("/") and not origin.query and not origin.fragment
+            if origin.port is not None and not (1 <= origin.port <= 65535):
+                valid = False
+        except ValueError:
+            valid = False
+        if not valid:
             raise ProofError("explicit_loopback_or_https_required")
         self.executable, self.url, self.token_file, self.runner = executable, url, token_file, runner
 
@@ -116,24 +137,34 @@ class ExecutionProof:
         record = self.ledger.create(mission_id, bot_id, thread_id, objective)
         if record["status"] in {"SENT", "WAITING_FOR_DEVICE", "RUNNING", "NEEDS_INPUT", "REPORTED", "EXECUTION_FAILED"}:
             return record
-        # Stable taskId plus sendId prevent duplicate external side effects
-        # on crash/retry. The task must already exist in OpenMausBot.
+        # The official run --wait none records the server's clock BEFORE
+        # sending. wait --since then binds a receipt to this execution epoch.
         try:
-            code, result = self.cli.call("send", "--bot", bot_id, "-", "--task", thread_id,
-                                         "--send-id", record["send_id"], message=record["objective"])
+            code, result = self.cli.call("run", "--bot", bot_id, "-", "--task", thread_id,
+                                         "--send-id", record["send_id"], "--wait", "none",
+                                         message=record["objective"])
         except ProofError as exc:
             if str(exc) == "cli_unavailable_or_timeout":
-                # The process could have sent the message before timing out;
-                # retry only with the same durable send-id.
                 return self.ledger.transition(mission_id, "AWAITING_CONNECTIVITY")
             raise
-        if code != 0 or result.get("success") is not True:
+        if code != 0 or result.get("ok") is not True:
             if code in {4, 5}:
                 return self.ledger.transition(mission_id, "AWAITING_CONNECTIVITY")
             raise CLIResponseError(code, result)
-        if result.get("taskId") != thread_id or not result.get("messageId"):
+        if (result.get("threadId") != thread_id or not result.get("messageId")
+                or result.get("sendId") != record["send_id"]):
             raise ProofError("send_ack_mismatch")
-        return self.ledger.transition(mission_id, "SENT", message_id=str(result["messageId"]))
+        if result.get("queued") is True or result.get("steered") is True:
+            # A busy conversation may complete its previous job first.
+            return self.ledger.transition(mission_id, "NEEDS_INPUT", message_id=str(result["messageId"]),
+                                          report={"reason": "nonexclusive_thread_send"})
+        since, at = result.get("since"), result.get("at")
+        if type(since) is not int or type(at) is not int or since < 0 or at < since:
+            # After an ambiguous send timeout, a duplicate ack may be older
+            # than the new clock. Never certify that job with the new anchor.
+            return self.ledger.transition(mission_id, "NEEDS_INPUT", message_id=str(result["messageId"]),
+                                          report={"reason": "ambiguous_job_anchor", "at": at, "since": since})
+        return self.ledger.transition(mission_id, "SENT", message_id=str(result["messageId"]), since_ms=since)
 
     def submit_proposal(self, proposal: dict[str, Any], bot_id: str,
                         thread_id: str) -> dict[str, Any]:
@@ -156,18 +187,19 @@ class ExecutionProof:
             return self.submit(rec["id"], rec["bot_id"], rec["thread_id"], rec["objective"])
         if rec["status"] in {"REPORTED", "EXECUTION_FAILED"}:
             return rec
+        if rec["since_ms"] is None:
+            # Legacy AEP-01 jobs have no durable execution epoch.
+            return self.ledger.transition(mission_id, "NEEDS_INPUT", report={"reason": "missing_job_anchor"})
         try:
             code, result = self.cli.call("wait", "--bot", rec["bot_id"],
-                                         "--task", rec["thread_id"], "--timeout", "60s", "--strict")
+                                         "--task", rec["thread_id"], "--since", str(rec["since_ms"]),
+                                         "--timeout", "60s", "--strict")
         except ProofError as exc:
             if str(exc) == "cli_unavailable_or_timeout":
-                # The task may still be running on the remote Mac; don't
-                # classify it as failed or resend the same work.
                 return self.ledger.transition(mission_id, "WAITING_FOR_DEVICE")
             raise
         state = result.get("state")
         if code == 5:
-            # The work was already sent. Resume waiting, never resend it.
             return self.ledger.transition(mission_id, "WAITING_FOR_DEVICE")
         if code == 4 or state in {"timed-out", "running"}:
             return self.ledger.transition(mission_id, "RUNNING")
@@ -175,14 +207,18 @@ class ExecutionProof:
             return self.ledger.transition(mission_id, "NEEDS_INPUT", report=result)
         job = result.get("job")
         nodes = job.get("nodes") if isinstance(job, dict) else None
-        if not isinstance(nodes, list) or not nodes or not all(isinstance(n, dict) for n in nodes):
-            # Missing child/task metadata is a malformed receipt, not proof
-            # that the task completed or a reason to silently retry it.
-            return self.ledger.transition(mission_id, "EXECUTION_FAILED", report=result)
-        has_failed_child = any(n.get("status") in {"failed", "cancelled"} for n in nodes)
-        if code == 0 and result.get("ok") is True and state == "completed" and not has_failed_child:
+        if (result.get("taskId") != rec["thread_id"] or not isinstance(job, dict)
+            or job.get("threadId") != rec["thread_id"]
+            or type(job.get("since")) is not int or job["since"] < rec["since_ms"]
+            or not isinstance(nodes, list) or not nodes or not all(isinstance(n, dict) for n in nodes)):
+            return self.ledger.transition(mission_id, "EXECUTION_FAILED",
+                                          report={"reason": "unbound_job_receipt", "raw": result})
+        counts = job.get("counts") or {}
+        failed_counts = (not isinstance(counts, dict) or any(
+            type(counts.get(k, 0)) is not int or counts.get(k, 0) > 0 for k in ("failed", "cancelled")))
+        all_complete = all(n.get("status") == "completed" for n in nodes)
+        if code == 0 and result.get("ok") is True and state == "completed" and all_complete and not failed_counts:
             return self.ledger.transition(mission_id, "REPORTED", report=result)
-        # "settled" != "success", and no model-written message is test proof.
         return self.ledger.transition(mission_id, "EXECUTION_FAILED", report=result)
 
     def team_evidence(self, mission_id: str, minimum_unique_bots: int = 3) -> dict[str, Any]:
