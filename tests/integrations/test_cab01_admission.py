@@ -96,11 +96,19 @@ def lab(tmp_path, *, engine=ENGINE, expires_seconds=900,
         approvals.decide(approval.approval_id, approved=True, actor=OWNER,
                          note="Approved only for this temporary lab", trace_id="cab01-test")
         approval_id = approval.approval_id
+    guard = KernelExecutionGuard()
+    guard.admit(KernelAdmissionContext(
+        mission_id=MISSION, caller="trusted_cab_controller",
+        contract_verified=True, authority_verified=True,
+        state_valid=True, governance_approved=True,
+        evidence_chain_initialized=True,
+        metadata={"contract_id": contract.contract_id, "contract_version": contract.version},
+    ))
     authority = CAB01TrustedAdmission(
         store, approvals, policy, workspace_root=root,
         execution_identity=IDENTITY,
         verified_zero_cost_engines=frozenset({ENGINE}),
-        trusted_deciders=frozenset({OWNER}),
+        trusted_deciders=frozenset({OWNER}), guard=guard,
     )
     cli = OfflineCLI()
     proof = ExecutionProof(TaskLedger(tmp_path / "transport.db"), cli, authority=authority)
@@ -318,3 +326,19 @@ def test_current_contract_with_tampered_project_id_fails(tmp_path):
                            mutated.model_dump(mode="json"), now_iso(), MISSION)
     with pytest.raises(ProofError, match="work_contract_not_current"):
         send(s)
+
+
+def test_guard_missing_admission_blocks_even_with_persisted_approval(tmp_path):
+    s = lab(tmp_path)
+    s["authority"].guard.clear()
+    with pytest.raises(ProofError, match="kernel_admission_required"):
+        send(s)
+    assert not s["cli"].calls
+
+
+def test_guard_wrong_contract_version_blocks_even_if_flags_are_true(tmp_path):
+    s = lab(tmp_path)
+    s["authority"].guard.assert_admitted(MISSION).metadata["contract_version"] = 99
+    with pytest.raises(ProofError, match="kernel_contract_binding_invalid"):
+        send(s)
+    assert not s["cli"].calls
