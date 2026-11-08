@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ..models import ApprovalStatus, RiskLevel, WorkContract
+from ..kernel_boundary import KernelBoundaryViolation, KernelExecutionGuard
 
 
 class CAB01AdmissionDenied(PermissionError):
@@ -46,10 +47,11 @@ class CAB01TrustedAdmission:
     def __init__(self, store: Any, approvals: Any, policy: Any, *,
                  workspace_root: Path, execution_identity: str,
                  verified_zero_cost_engines: frozenset[str],
-                 trusted_deciders: frozenset[str]):
+                 trusted_deciders: frozenset[str], guard: KernelExecutionGuard):
         if (not isinstance(workspace_root, Path) or not workspace_root.is_absolute()
             or not workspace_root.is_dir() or workspace_root.is_symlink()
-            or not execution_identity or not trusted_deciders):
+            or not execution_identity or not trusted_deciders
+            or not isinstance(guard, KernelExecutionGuard)):
             raise CAB01AdmissionDenied("invalid_host_authority_config")
         self.store = store
         self.approvals = approvals
@@ -58,6 +60,7 @@ class CAB01TrustedAdmission:
         self.execution_identity = execution_identity
         self.verified_zero_cost_engines = verified_zero_cost_engines
         self.trusted_deciders = trusted_deciders
+        self.guard = guard
 
     def authorize(self, mission_id: str, bot_id: str, thread_id: str,
                   objective: str) -> WorkContract:
@@ -154,6 +157,17 @@ class CAB01TrustedAdmission:
             or not approval.external_effect
             or not _future(approval.expires_at)):
             raise CAB01AdmissionDenied("approval_scope_invalid_or_expired")
+        # The existing Kernel guard is an additional admitted-work check, NOT
+        # an authority oracle: its in-process dataclass can be constructed by
+        # a caller, so the durable approval validation above remains mandatory.
+        try:
+            admission = self.guard.assert_admitted(mission_id)
+            admission.assert_complete()
+        except KernelBoundaryViolation as exc:
+            raise CAB01AdmissionDenied("kernel_admission_required") from exc
+        if (admission.metadata.get("contract_id") != contract.contract_id
+            or admission.metadata.get("contract_version") != contract.version):
+            raise CAB01AdmissionDenied("kernel_contract_binding_invalid")
         # No second approval store: revocation is an append-only mission event.
         # A revoked approval cannot authorize new retries or new effects.
         for event in self.store.list_events(mission_id):
