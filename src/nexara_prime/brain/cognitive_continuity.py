@@ -153,10 +153,17 @@ class AutonomousGoalLoop:
     _approved_signals = {"fix_failing_tests": "Investigate verified failing tests (read-only)",
                          "audit_recent_changes": "Audit verified recent file changes (read-only)"}
 
-    def __init__(self, records: DurableRecords, evidence: VerifiedEvidence, project_id: str):
+    def __init__(self, records: DurableRecords, evidence: VerifiedEvidence, project_id: str,
+                 event_authorizer: Callable[[str, str, str], bool] | None = None):
         self.records, self.evidence, self.project_id = records, evidence, project_id
+        # A verified content hash is not an authenticated observation. The
+        # caller must inject a trusted, project-scoped event provenance check.
+        self._event_authorizer = event_authorizer
 
     def tick(self, events: list[Any], evidence_by_event: dict[str, str]) -> list[dict[str, Any]]:
+        if self._event_authorizer is None:
+            # No authenticated observer, no durable autonomous proposals.
+            return []
         from .environment.intelligence import SignalAnalyzer
         suggestions = SignalAnalyzer().analyze(events)
         output: list[dict[str, Any]] = []
@@ -174,6 +181,9 @@ class AutonomousGoalLoop:
             # A verified but unrelated artifact is not proof of this event.
             if any(self.evidence.get_by_id(ref).source_event_id != eid
                    for eid, ref in zip(event_ids, refs)):
+                continue
+            if not all(self._event_authorizer(self.project_id, eid, ref)
+                       for eid, ref in zip(event_ids, refs)):
                 continue
             fingerprint = _digest({"project": self.project_id, "type": goal_type,
                                    "event_ids": sorted(event_ids)})
@@ -232,12 +242,17 @@ class EvidenceGatedLearning:
                 keys = ("tests_passed", "tests_failed", "tokens")
                 if not isinstance(obj, dict) or any(type(obj.get(k)) is not int or obj[k] < 0 for k in keys):
                     raise ValueError("invalid_metrics")
-                return {key: obj[key] for key in keys}
+                suite_id = obj.get("suite_id")
+                if not isinstance(suite_id, str) or not suite_id.strip() or len(suite_id) > 200:
+                    raise ValueError("missing_comparable_test_suite")
+                return {**{key: obj[key] for key in keys}, "suite_id": suite_id}
             except (TypeError, ValueError, KeyError) as exc:
                 raise ContinuityError("verified_metrics_invalid") from exc
 
         before, after = metrics(baseline), metrics(candidate)
-        passing = (before["tests_failed"] == 0 and after["tests_failed"] == 0
+        passing = (before["suite_id"] == after["suite_id"]
+                   and before["tests_passed"] > 0
+                   and before["tests_failed"] == 0 and after["tests_failed"] == 0
                    and after["tests_passed"] >= before["tests_passed"]
                    and after["tokens"] < before["tokens"])
         payload = {"project_id": self.project_id, "mission_id": mission_id,
