@@ -108,16 +108,25 @@ class CognitiveStateStore:
         return state
 
     def update(self, *, expected_revision: int, actor: str, changes: dict[str, Any],
-               evidence_id: str) -> CognitiveState:
-        if not evidence_id or not self.evidence.is_preverified_and_integrity_bound(evidence_id):
-            raise ContinuityError("verified_evidence_required")
+               evidence_id: str = "") -> CognitiveState:
+        """Private thinking does not require a formal approval or evidence receipt.
+
+        Agents may freely record tentative hypotheses and uncertainties.
+        Owner-defined identity/goals/commitments remain owner-authorized; a
+        hypothesis is not silently promoted into an established belief.
+        """
         if actor not in {"owner", "agent"} or not isinstance(changes, dict) or not changes:
             raise ContinuityError("invalid_actor_or_changes")
         allowed = self._owner_fields | self._agent_fields if actor == "owner" else self._agent_fields
         if any(key not in allowed for key in changes):
             raise ContinuityError("state_permission_denied")
-        if actor == "owner" and (self._owner_authorizer is None or not self._owner_authorizer(evidence_id)):
-            raise ContinuityError("trusted_owner_authorization_required")
+        if evidence_id and not self.evidence.is_preverified_and_integrity_bound(evidence_id):
+            raise ContinuityError("verified_evidence_required")
+        if actor == "owner":
+            if not evidence_id:
+                raise ContinuityError("verified_evidence_required")
+            if self._owner_authorizer is None or not self._owner_authorizer(evidence_id):
+                raise ContinuityError("trusted_owner_authorization_required")
         before = self.load()
         if before.revision != expected_revision:
             raise ContinuityError("stale_cognitive_revision")
@@ -135,7 +144,8 @@ class CognitiveStateStore:
             else:
                 data[key] = _valid_texts(value)
         payload = {"revision": expected_revision + 1, "parent_anchor": before.anchor,
-                   "state": data, "evidence_id": evidence_id, "actor": actor}
+                   "state": data, "evidence_id": evidence_id, "actor": actor,
+                   "epistemic_status": "SUPPORTED" if evidence_id else "TENTATIVE"}
         record_id = f"cogstate_{self._prefix}_{expected_revision + 1}"
         if not self.records.save_record_if_absent(record_id, self._type, payload, _timestamp(), self.project_id):
             raise ContinuityError("concurrent_cognitive_update")
@@ -150,8 +160,8 @@ class AutonomousGoalLoop:
     """
 
     _type = "cognitive_goal_proposal_v1"
-    _approved_signals = {"fix_failing_tests": "Investigate verified failing tests (read-only)",
-                         "audit_recent_changes": "Audit verified recent file changes (read-only)"}
+    _approved_signals = {"fix_failing_tests": "Investigate observed failing tests (read-only)",
+                         "audit_recent_changes": "Audit observed recent file changes (read-only)"}
 
     def __init__(self, records: DurableRecords, evidence: VerifiedEvidence, project_id: str,
                  event_authorizer: Callable[[str, str, str], bool] | None = None):
@@ -160,10 +170,13 @@ class AutonomousGoalLoop:
         # caller must inject a trusted, project-scoped event provenance check.
         self._event_authorizer = event_authorizer
 
-    def tick(self, events: list[Any], evidence_by_event: dict[str, str]) -> list[dict[str, Any]]:
-        if self._event_authorizer is None:
-            # No authenticated observer, no durable autonomous proposals.
-            return []
+    def tick(self, events: list[Any], evidence_by_event: dict[str, str] | None = None) -> list[dict[str, Any]]:
+        """Generate ideas freely; require trusted evidence only for admission.
+
+        Without authenticated observations the suggestion remains HYPOTHESIS.
+        It is never executable authority, regardless of classification.
+        """
+        evidence_by_event = evidence_by_event or {}
         from .environment.intelligence import SignalAnalyzer
         suggestions = SignalAnalyzer().analyze(events)
         output: list[dict[str, Any]] = []
@@ -175,23 +188,26 @@ class AutonomousGoalLoop:
             if not event_ids or len(event_ids) != len(set(event_ids)):
                 continue
             refs = [evidence_by_event.get(eid, "") for eid in event_ids]
-            if (not all(refs) or len(set(refs)) != len(refs)
-                or not all(self.evidence.is_preverified_and_integrity_bound(ref) for ref in refs)):
-                continue
-            # A verified but unrelated artifact is not proof of this event.
-            if any(self.evidence.get_by_id(ref).source_event_id != eid
-                   for eid, ref in zip(event_ids, refs)):
-                continue
-            if not all(self._event_authorizer(self.project_id, eid, ref)
-                       for eid, ref in zip(event_ids, refs)):
-                continue
+            verified = (all(refs) and len(set(refs)) == len(refs)
+                        and all(self.evidence.is_preverified_and_integrity_bound(ref) for ref in refs))
+            if verified:
+                verified = all(self.evidence.get_by_id(ref).source_event_id == eid
+                               for eid, ref in zip(event_ids, refs))
+            trusted = bool(verified and self._event_authorizer is not None
+                           and all(self._event_authorizer(self.project_id, eid, ref)
+                                   for eid, ref in zip(event_ids, refs)))
+            status = "EVIDENCE_BACKED" if trusted else "HYPOTHESIS"
+            bound_refs = refs if trusted else []
+            # The same hypothesis can later be strengthened without mutating
+            # its original historical record.
             fingerprint = _digest({"project": self.project_id, "type": goal_type,
-                                   "event_ids": sorted(event_ids)})
+                                   "event_ids": sorted(event_ids), "status": status,
+                                   "evidence_refs": sorted(bound_refs)})
             record_id = f"coggoal_{fingerprint[:32]}"
             payload = {"proposal_id": record_id, "project_id": self.project_id,
                        "objective": self._approved_signals[goal_type], "source": goal_type,
-                       "risk_level": "R0", "cost_limit": 0, "status": "PROPOSED",
-                       "event_ids": sorted(event_ids), "evidence_refs": refs,
+                       "risk_level": "R0", "cost_limit": 0, "status": status,
+                       "event_ids": sorted(event_ids), "evidence_refs": bound_refs,
                        "execution_authorized": False}
             inserted = self.records.save_record_if_absent(
                 record_id, self._type, payload, _timestamp(), self.project_id)
@@ -223,10 +239,13 @@ class EvidenceGatedLearning:
                  candidate_id: str, executor_id: str, auditor_id: str) -> dict[str, Any]:
         if (not mission_id or not strategy or len(strategy) > 2000
             or not baseline_id or not candidate_id or baseline_id == candidate_id
-            or not executor_id or not auditor_id or executor_id == auditor_id):
-            raise ContinuityError("independent_evidence_required")
-        if self._auditor_authorizer is None or not self._auditor_authorizer(auditor_id):
-            raise ContinuityError("trusted_auditor_authorization_required")
+            or not executor_id or not auditor_id):
+            raise ContinuityError("evidence_required_for_learning")
+        # Reflection and self-evaluation are always allowed. Independent,
+        # authenticated assessment is required only to mark a result reviewable
+        # for possible application outside this cognitive sandbox.
+        trusted_audit = (executor_id != auditor_id and self._auditor_authorizer is not None
+                         and self._auditor_authorizer(auditor_id))
         for eid in (baseline_id, candidate_id):
             if not self.evidence.is_preverified_and_integrity_bound(eid):
                 raise ContinuityError("verified_evidence_required")
@@ -259,7 +278,9 @@ class EvidenceGatedLearning:
                    "strategy": strategy, "baseline_evidence": baseline_id,
                    "candidate_evidence": candidate_id, "executor_id": executor_id,
                    "auditor_id": auditor_id, "baseline": before, "candidate": after,
-                   "status": "REVIEWABLE" if passing else "REJECTED",
+                   "status": ("REVIEWABLE" if trusted_audit else "PROVISIONAL") if passing
+                             else "REJECTED",
+                   "independently_verified": bool(trusted_audit),
                    "activated": False, "permission_granted": False}
         record_id = f"coglearn_{_digest(payload)[:32]}"
         inserted = self.records.save_record_if_absent(
