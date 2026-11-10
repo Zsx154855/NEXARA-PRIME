@@ -1,0 +1,30 @@
+name: NEXARA Mac private reference guard (offline)
+
+on:
+  pull_request:
+    paths:
+      - integrations/private_channel_transport_v1.py
+      - tests/integrations/test_private_channel_transport_v1.py
+      - .github/workflows/mac-private-reference-guard.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-transport-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout isolated PR source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile transport guard and tests
+        run: python -m py_compile integrations/private_channel_transport_v1.py tests/integrations/test_private_channel_transport_v1.py
+      - name: Offline negative and positive reference checks
+        run: python -m unittest discover -s tests/integrations -p 'test_private_channel_transport_v1.py' -v
