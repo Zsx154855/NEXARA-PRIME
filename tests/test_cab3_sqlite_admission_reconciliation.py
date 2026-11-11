@@ -32,17 +32,22 @@ def _store(
     store = SQLiteStore(tmp_path / "cab-3-integration.sqlite3")
     approvals = ApprovalEngine(store, EventBus(store))
     pending_approval_id = "missing-approval"
-    if approval_kind in {"approved", "pending"}:
+    if approval_kind in {"approved", "pending", "single_action"}:
+        mission_wide = approval_kind != "single_action"
         requested = approvals.request(
-            approval_mission, "file_write_report", RiskLevel.R2,
+            approval_mission,
+            "execute_mission" if mission_wide else "file_write_report",
+            RiskLevel.R2,
             "Bounded test approval", ["Test-only report"], "trace-cab3",
+            approval_scope="mission" if mission_wide else "single_action",
             expires_in_seconds=expires_in_seconds,
         )
         pending_approval_id = requested.approval_id
-        if approval_kind == "approved":
+        if approval_kind in {"approved", "single_action"}:
             approvals.decide(
                 pending_approval_id, True, "fixture_operator",
                 "Test harness approval", "trace-cab3",
+                decision="approve_mission" if mission_wide else "approve_once",
             )
     elif approval_kind == "synthetic":
         # Deliberately bypass ApprovalEngine origin/decision events.
@@ -86,7 +91,8 @@ def test_real_approval_engine_and_embedded_contract_are_accepted(tmp_path):
 
 @pytest.mark.parametrize("variant", [
     "no_mission", "no_contract", "unapproved_contract", "no_approval",
-    "pending_approval", "other_mission_approval", "false_authorizer",
+    "pending_approval", "other_mission_approval", "single_action",
+    "false_authorizer",
     "missing_authorizer", "approval_store_mismatch",
 ])
 def test_untrusted_or_missing_evidence_is_denied(tmp_path, variant):
@@ -101,6 +107,8 @@ def test_untrusted_or_missing_evidence_is_denied(tmp_path, variant):
         kwargs["approval_kind"] = "absent"
     elif variant == "pending_approval":
         kwargs["approval_kind"] = "pending"
+    elif variant == "single_action":
+        kwargs["approval_kind"] = "single_action"
     elif variant == "other_mission_approval":
         kwargs["approval_mission"] = "some-other-mission"
     store, approvals = _store(tmp_path, **kwargs)
