@@ -73,6 +73,9 @@ class KernelExecutionGuard:
             raise ExecutionBoundaryViolation(
                 "Admission context for {} does not match requested {}".format(
                     self._active_context.mission_id, mission_id))
+        # The context is mutable: revalidate its gates at execution time,
+        # not only when admit() first stores the object.
+        self._active_context.assert_complete()
         return self._active_context
 
     def clear(self) -> None:
