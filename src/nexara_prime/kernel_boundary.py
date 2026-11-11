@@ -21,7 +21,7 @@ class ExecutionBoundaryViolation(KernelBoundaryViolation):
     """Raised when runtime execution is attempted without kernel admission."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class KernelAdmissionContext:
     """Proof that a mission has passed all kernel admission gates.
 
@@ -73,8 +73,8 @@ class KernelExecutionGuard:
             raise ExecutionBoundaryViolation(
                 "Admission context for {} does not match requested {}".format(
                     self._active_context.mission_id, mission_id))
-        # The context is mutable: revalidate its gates at execution time,
-        # not only when admit() first stores the object.
+        # Always recheck at execution, including unusual Python-level mutation.
+        # This does not authenticate the original issuer or revocation status.
         self._active_context.assert_complete()
         return self._active_context
 
