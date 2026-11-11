@@ -1,8 +1,8 @@
 """CAB-01 regression cases for the remote PR #62 KernelExecutionGuard.
 
 Evidence: kernel_boundary.py blob 05a1249df8fdf0854c7d9f59888181f7f4f4258d.
-These xfails are *open defects*, not passing security controls. Remove xfail
-only after fixing the trusted issuance/guard boundary and re-running tests.
+This test suite distinguishes explicit default-deny from genuine host identity.
+A test-injected lambda is only an isolated fixture, never an OS identity proof.
 """
 from __future__ import annotations
 
@@ -30,7 +30,6 @@ def _all_true_context() -> KernelAdmissionContext:
     )
 
 
-@pytest.mark.xfail(strict=True, reason="Open finding: guard.admit checks caller-controlled booleans, not trusted issuer")
 def test_guard_rejects_untrusted_caller_constructed_context() -> None:
     guard = KernelExecutionGuard()
     with pytest.raises(KernelBoundaryViolation):
@@ -38,7 +37,7 @@ def test_guard_rejects_untrusted_caller_constructed_context() -> None:
 
 
 def test_guard_rejects_mutated_context_after_admission() -> None:
-    guard = KernelExecutionGuard()
+    guard = KernelExecutionGuard(_live_admission_validator=lambda _ctx: True)
     ctx = _all_true_context()
     guard.admit(ctx)
     try:
@@ -77,7 +76,7 @@ def test_admission_critical_fields_are_frozen(field_name, replacement) -> None:
 
 def test_guard_revalidates_even_if_frozen_protection_is_bypassed() -> None:
     """A frozen dataclass is not a Python process security boundary."""
-    guard = KernelExecutionGuard()
+    guard = KernelExecutionGuard(_live_admission_validator=lambda _ctx: True)
     ctx = _all_true_context()
     guard.admit(ctx)
     object.__setattr__(ctx, "authority_verified", False)
