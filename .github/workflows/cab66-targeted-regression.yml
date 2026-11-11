@@ -1,12 +1,9 @@
 name: CAB66 isolated targeted acceptance (free Linux)
 
-# One-branch, bounded source tests. Never run on the disk-blocked Mac runner.
+# GitHub-hosted runner failed before ANY job steps on run 43066380046.
+# Retain this test definition for inspection; no further auto retries.
+# workflow_dispatch may require the workflow on the default branch.
 on:
-  push:
-    branches:
-      - integration/cab3-openminis-trusted-admission-20261111
-    paths:
-      - .github/workflows/cab66-targeted-regression.yml
   workflow_dispatch:
 
 permissions:
