@@ -14,7 +14,7 @@ from nexara_prime.brain.kernel import ChiefBrainKernel
 from nexara_prime.db import SQLiteStore
 from nexara_prime.events import EventBus
 from nexara_prime.governance import ApprovalEngine
-from nexara_prime.kernel_boundary import KernelBoundaryViolation
+from nexara_prime.kernel_boundary import ExecutionBoundaryViolation, KernelBoundaryViolation
 from nexara_prime.models import RiskLevel, now_iso
 
 MISSION = "cab-real-storage-mission"
@@ -153,5 +153,82 @@ def test_expired_genuine_approval_is_denied(tmp_path):
         time.sleep(1.2)
         with pytest.raises(KernelBoundaryViolation, match="governance_claim_not_persisted"):
             _submit(store, approvals)
+    finally:
+        store.close()
+
+
+def test_guard_rechecks_real_sqlite_contract_after_admission(tmp_path):
+    """Previously admitted contexts must not survive durable contract revocation."""
+    store, approvals = _store(tmp_path)
+    try:
+        kernel = ChiefBrainKernel(
+            store=store, approvals=approvals,
+            trusted_authorizer=lambda _mission_id, _caller: True,
+        )
+        kernel.submit(
+            MISSION, "trusted-host-fixture",
+            contract_verified=True, governance_approved=True,
+            state_valid=True, evidence_initialized=True,
+        )
+        assert kernel.guard.assert_admitted(MISSION)
+        mission = store.get_record(MISSION)
+        mission["contract"]["status"] = "validated"
+        store.save_record(
+            MISSION, "mission", mission, now_iso(), MISSION,
+        )
+        with pytest.raises(ExecutionBoundaryViolation, match="no longer valid"):
+            kernel.guard.assert_admitted(MISSION)
+        with pytest.raises(ExecutionBoundaryViolation, match="No kernel admission"):
+            kernel.guard.assert_admitted(MISSION)
+    finally:
+        store.close()
+
+
+def test_guard_rechecks_authorizer_after_admission(tmp_path):
+    """Host identity revocation must invalidate cached mission admission."""
+    store, approvals = _store(tmp_path)
+    allowed = {"live": True}
+    try:
+        kernel = ChiefBrainKernel(
+            store=store, approvals=approvals,
+            trusted_authorizer=lambda _mission_id, _caller: allowed["live"],
+        )
+        kernel.submit(
+            MISSION, "trusted-host-fixture",
+            contract_verified=True, governance_approved=True,
+            state_valid=True, evidence_initialized=True,
+        )
+        assert kernel.guard.assert_admitted(MISSION)
+        allowed["live"] = False
+        with pytest.raises(ExecutionBoundaryViolation, match="no longer valid"):
+            kernel.guard.assert_admitted(MISSION)
+    finally:
+        store.close()
+
+
+def test_guard_fails_closed_if_sqlite_lookup_breaks_after_admission(
+    tmp_path, monkeypatch,
+):
+    store, approvals = _store(tmp_path)
+    try:
+        kernel = ChiefBrainKernel(
+            store=store, approvals=approvals,
+            trusted_authorizer=lambda _mission_id, _caller: True,
+        )
+        kernel.submit(
+            MISSION, "trusted-host-fixture",
+            contract_verified=True, governance_approved=True,
+            state_valid=True, evidence_initialized=True,
+        )
+        assert kernel.guard.assert_admitted(MISSION)
+
+        def fail_store(_mission_id):
+            raise RuntimeError("simulated SQLite read failure")
+
+        monkeypatch.setattr(store, "get_record_envelope", fail_store)
+        with pytest.raises(ExecutionBoundaryViolation, match="freshness check failed"):
+            kernel.guard.assert_admitted(MISSION)
+        with pytest.raises(ExecutionBoundaryViolation, match="No kernel admission"):
+            kernel.guard.assert_admitted(MISSION)
     finally:
         store.close()
