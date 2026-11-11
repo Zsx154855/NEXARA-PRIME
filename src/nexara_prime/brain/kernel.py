@@ -120,7 +120,7 @@ class ChiefBrainKernel:
         self._approvals = approvals
         self._store = store
         self._trusted_authorizer = trusted_authorizer
-        self._guard = KernelExecutionGuard()
+        self._guard = KernelExecutionGuard(_live_admission_validator=self._admission_is_current)
         self._memory_layer_manager = memory_layer_manager
 
     def health(self) -> dict[str, Any]:
@@ -152,6 +152,20 @@ class ChiefBrainKernel:
     # ═══════════════════════════════════════════════════════════════════════
     # Admission Boundary (F2 consolidation from chief_brain_kernel.py)
     # ═══════════════════════════════════════════════════════════════════════
+
+    def _admission_is_current(self, ctx: KernelAdmissionContext) -> bool:
+        """Recheck issuer and persisted mission authorization immediately before use.
+
+        This is freshness validation, not proof that an arbitrary user-supplied
+        authorizer is a real authenticated host principal. The latter remains a
+        separate CAB ingress gate.
+        """
+        if self._trusted_authorizer is None or self._store is None:
+            return False
+        if self._trusted_authorizer(ctx.mission_id, ctx.caller) is not True:
+            return False
+        facts = self._persisted_facts(ctx.mission_id)
+        return facts["contract"] is True and facts["governance"] is True
 
     def _persisted_facts(self, mission_id: str) -> dict[str, bool]:
         """Check storage layout in the actual Runtime, not a test-only stub.
