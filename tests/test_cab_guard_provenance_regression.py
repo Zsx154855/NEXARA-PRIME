@@ -54,3 +54,32 @@ def test_guard_blocks_when_no_context_was_admitted() -> None:
     guard = KernelExecutionGuard()
     with pytest.raises(KernelBoundaryViolation):
         guard.assert_admitted("mission-untrusted")
+
+
+@pytest.mark.parametrize(
+    "field_name, replacement",
+    [
+        ("mission_id", "other-mission"),
+        ("caller", "other-caller"),
+        ("contract_verified", False),
+        ("authority_verified", False),
+        ("state_valid", False),
+        ("governance_approved", False),
+        ("evidence_chain_initialized", False),
+    ],
+)
+def test_admission_critical_fields_are_frozen(field_name, replacement) -> None:
+    """Normal attribute assignment must not change an admitted decision."""
+    ctx = _all_true_context()
+    with pytest.raises(FrozenInstanceError):
+        setattr(ctx, field_name, replacement)
+
+
+def test_guard_revalidates_even_if_frozen_protection_is_bypassed() -> None:
+    """A frozen dataclass is not a Python process security boundary."""
+    guard = KernelExecutionGuard()
+    ctx = _all_true_context()
+    guard.admit(ctx)
+    object.__setattr__(ctx, "authority_verified", False)
+    with pytest.raises(KernelBoundaryViolation):
+        guard.assert_admitted(ctx.mission_id)
