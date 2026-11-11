@@ -2,17 +2,12 @@ name: CAB-01 isolated regression (PR 65)
 
 # Never use the disk-blocked self-hosted Mac runner for this branch.
 # Scope: test-only Linux job; no deployment, no secrets, no model calls.
+# GitHub-hosted job allocation failed before runner startup on four pushes.
+# Do not repeatedly trigger jobs while that infrastructure gate is unresolved.
+# workflow_dispatch becomes available only when GitHub recognizes this workflow
+# on its default branch; no deployment or main-branch change is authorized here.
 on:
-  push:
-    branches:
-      - audit/cab-guard-provenance-regressions-20261111
-    paths:
-      - ".github/workflows/cab65-isolated.yml"
-      - "src/nexara_prime/kernel_boundary.py"
-      - "src/nexara_prime/runtime.py"
-      - "tests/test_cab_guard_provenance_regression.py"
-      - "tests/test_cab_runtime_ingress_regression.py"
-      - "pyproject.toml"
+  workflow_dispatch:
 
 permissions:
   contents: read
