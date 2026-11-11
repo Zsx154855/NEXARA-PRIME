@@ -1,0 +1,39 @@
+name: CAB-01 isolated regression (PR 65)
+
+# Never use the disk-blocked self-hosted Mac runner for this branch.
+# Scope: test-only Linux job; no deployment, no secrets, no model calls.
+# GitHub-hosted job allocation failed before runner startup on four pushes.
+# Do not repeatedly trigger jobs while that infrastructure gate is unresolved.
+# workflow_dispatch becomes available only when GitHub recognizes this workflow
+# on its default branch; no deployment or main-branch change is authorized here.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cab65-isolated-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cab-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install only declared Python test dependencies
+        run: python -m pip install --disable-pip-version-check -e ".[test]"
+      - name: Run isolated CAB boundary tests
+        run: |
+          python -m pytest \
+            tests/test_cab_guard_provenance_regression.py \
+            tests/test_cab_runtime_ingress_regression.py \
+            -q --tb=short --strict-markers

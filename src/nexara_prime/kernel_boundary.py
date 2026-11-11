@@ -21,7 +21,7 @@ class ExecutionBoundaryViolation(KernelBoundaryViolation):
     """Raised when runtime execution is attempted without kernel admission."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class KernelAdmissionContext:
     """Proof that a mission has passed all kernel admission gates.
 
@@ -45,7 +45,7 @@ class KernelAdmissionContext:
             "governance_approved": self.governance_approved,
             "evidence_chain_initialized": self.evidence_chain_initialized,
         }
-        missing = [k for k, v in gates.items() if not v]
+        missing = [k for k, v in gates.items() if v is not True]
         if missing:
             raise KernelBoundaryViolation(
                 "Kernel admission incomplete for mission {}: missing {}".format(
@@ -73,6 +73,9 @@ class KernelExecutionGuard:
             raise ExecutionBoundaryViolation(
                 "Admission context for {} does not match requested {}".format(
                     self._active_context.mission_id, mission_id))
+        # Always recheck at execution, including unusual Python-level mutation.
+        # This does not authenticate the original issuer or revocation status.
+        self._active_context.assert_complete()
         return self._active_context
 
     def clear(self) -> None:

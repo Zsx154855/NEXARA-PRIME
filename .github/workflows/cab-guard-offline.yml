@@ -1,0 +1,45 @@
+name: CAB Guard isolated offline regression
+
+# Job allocation has repeatedly failed before a runner was assigned.
+# Keep the test definition for future review, but prevent repeated auto-failures.
+# workflow_dispatch requires registration on the default branch; no main change here.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cab-guard-offline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install a bounded offline-test dependency
+        run: python -m pip install "pytest==9.0.2"
+      - name: Validate exact source and negative Guard tests without full runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f src/nexara_prime/kernel_boundary.py
+          test -f tests/test_cab_guard_provenance_regression.py
+          mkdir -p "$RUNNER_TEMP/nexara_prime"
+          cp src/nexara_prime/kernel_boundary.py "$RUNNER_TEMP/nexara_prime/kernel_boundary.py"
+          touch "$RUNNER_TEMP/nexara_prime/__init__.py"
+          echo "Source blob: $(git hash-object src/nexara_prime/kernel_boundary.py)"
+          PYTHONPATH="$RUNNER_TEMP" python -m pytest -q tests/test_cab_guard_provenance_regression.py
+      - name: Check runtime test syntax (execution remains separately gated)
+        run: python -m py_compile tests/test_cab_runtime_ingress_regression.py
+
+# No macOS runner, credentials, networked NEXARA tools, API model provider,
+# persistent service, production dataset, or repository write permission.
+# XFAIL means the issuer provenance defect is still unresolved.
