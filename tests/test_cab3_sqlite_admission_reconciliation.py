@@ -1,51 +1,71 @@
-"""CAB-3 bridge: real SQLite record layout, not the OpenMinis stub.
+"""CAB-3: exercise the real SQLite + ApprovalEngine contract.
 
-These prove only storage structure / fail-closed checks. They DO NOT establish
-host OS principal, approval-origin authenticity or execution ingress coverage.
+These tests use genuine pending/decision transitions, NOT hand-written
+approved rows. They remain local-only tests; host principal authenticity and
+runtime dispatch coverage have separate open regression cases.
 """
 from __future__ import annotations
+
+import time
 
 import pytest
 
 from nexara_prime.brain.kernel import ChiefBrainKernel
 from nexara_prime.db import SQLiteStore
+from nexara_prime.events import EventBus
+from nexara_prime.governance import ApprovalEngine
 from nexara_prime.kernel_boundary import KernelBoundaryViolation
-from nexara_prime.models import now_iso
+from nexara_prime.models import RiskLevel, now_iso
 
 MISSION = "cab-real-storage-mission"
-APPROVAL = "cab-real-storage-approval"
 
 
-def _store(tmp_path, *, contract_status="approved", approval_status="approved",
-           approval_mission=MISSION, has_mission=True, has_approval=True):
+def _store(
+    tmp_path,
+    *,
+    has_mission=True,
+    contract_status="approved",
+    approval_kind="approved",
+    approval_mission=MISSION,
+    expires_in_seconds=900,
+):
     store = SQLiteStore(tmp_path / "cab-3-integration.sqlite3")
-    stamp = now_iso()
+    approvals = ApprovalEngine(store, EventBus(store))
+    pending_approval_id = "missing-approval"
+    if approval_kind in {"approved", "pending"}:
+        requested = approvals.request(
+            approval_mission, "file_write_report", RiskLevel.R2,
+            "Bounded test approval", ["Test-only report"], "trace-cab3",
+            expires_in_seconds=expires_in_seconds,
+        )
+        pending_approval_id = requested.approval_id
+        if approval_kind == "approved":
+            approvals.decide(
+                pending_approval_id, True, "fixture_operator",
+                "Test harness approval", "trace-cab3",
+            )
+    elif approval_kind == "synthetic":
+        # Deliberately bypass ApprovalEngine origin/decision events.
+        pending_approval_id = "synthetic-approval"
+        store.save_record(
+            pending_approval_id, "approval",
+            {"approval_id": pending_approval_id, "mission_id": MISSION,
+             "status": "approved"}, now_iso(), MISSION,
+        )
     if has_mission:
         store.save_record(
             MISSION, "mission",
-            {
-                "mission_id": MISSION,
-                "contract": {
-                    "contract_id": "cab-storage-contract",
-                    "mission_id": MISSION,
-                    "status": contract_status,
-                },
-            },
-            stamp, MISSION,
+            {"mission_id": MISSION, "pending_approval_id": pending_approval_id,
+             "contract": {"contract_id": "cab-storage-contract",
+                          "mission_id": MISSION, "status": contract_status}},
+            now_iso(), MISSION,
         )
-    if has_approval:
-        store.save_record(
-            APPROVAL, "approval",
-            {"approval_id": APPROVAL, "mission_id": approval_mission,
-             "status": approval_status},
-            stamp, approval_mission,
-        )
-    return store
+    return store, approvals
 
 
-def _submit(store, *, trusted_authorizer=lambda mission_id, caller: True):
+def _submit(store, approvals=None, *, authorizer=lambda mission_id, caller: True):
     return ChiefBrainKernel(
-        store=store, trusted_authorizer=trusted_authorizer,
+        store=store, approvals=approvals, trusted_authorizer=authorizer,
     ).submit(
         MISSION, "trusted-host-fixture",
         contract_verified=True, governance_approved=True,
@@ -53,66 +73,77 @@ def _submit(store, *, trusted_authorizer=lambda mission_id, caller: True):
     )
 
 
-def test_persisted_embedded_contract_is_visible_to_kernel(tmp_path):
-    """Storage-layout proof only; fixture approval was not authentically issued."""
-    store = _store(tmp_path)
+def test_real_approval_engine_and_embedded_contract_are_accepted(tmp_path):
+    """Proves persisted state + origin/transition, not OS principal identity."""
+    store, approvals = _store(tmp_path)
     try:
-        ctx = _submit(store)
-        assert ctx.mission_id == MISSION
+        ctx = _submit(store, approvals)
         assert ctx.contract_verified is True
+        assert ctx.mission_id == MISSION
     finally:
         store.close()
 
 
 @pytest.mark.parametrize("variant", [
-    "unconfigured", "absent_mission", "missing_contract",
-    "unapproved_contract", "absent_approval", "wrong_mission_approval",
-    "pending_approval", "consumed_approval", "false_host",
+    "no_mission", "no_contract", "unapproved_contract", "no_approval",
+    "pending_approval", "other_mission_approval", "false_authorizer",
+    "missing_authorizer", "approval_store_mismatch",
 ])
-def test_structural_admission_deny_paths(tmp_path, variant):
+def test_untrusted_or_missing_evidence_is_denied(tmp_path, variant):
     kwargs = {}
-    if variant == "absent_mission":
+    if variant == "no_mission":
         kwargs["has_mission"] = False
-    elif variant == "missing_contract":
+    elif variant == "no_contract":
         kwargs["contract_status"] = None
     elif variant == "unapproved_contract":
         kwargs["contract_status"] = "validated"
-    elif variant == "absent_approval":
-        kwargs["has_approval"] = False
-    elif variant == "wrong_mission_approval":
-        kwargs["approval_mission"] = "other-mission"
+    elif variant == "no_approval":
+        kwargs["approval_kind"] = "absent"
     elif variant == "pending_approval":
-        kwargs["approval_status"] = "pending"
-    elif variant == "consumed_approval":
-        kwargs["approval_status"] = "consumed"
-    store = _store(tmp_path, **kwargs)
+        kwargs["approval_kind"] = "pending"
+    elif variant == "other_mission_approval":
+        kwargs["approval_mission"] = "some-other-mission"
+    store, approvals = _store(tmp_path, **kwargs)
     try:
-        if variant == "unconfigured":
-            with pytest.raises(KernelBoundaryViolation, match="trusted_authorizer_not_configured"):
-                _submit(store, trusted_authorizer=None)
-        elif variant == "false_host":
+        if variant == "false_authorizer":
             with pytest.raises(KernelBoundaryViolation, match="caller_not_authorised"):
-                _submit(store, trusted_authorizer=lambda _m, _c: False)
+                _submit(store, approvals, authorizer=lambda _m, _c: False)
+        elif variant == "missing_authorizer":
+            with pytest.raises(KernelBoundaryViolation, match="trusted_authorizer_not_configured"):
+                _submit(store, approvals, authorizer=None)
+        elif variant == "approval_store_mismatch":
+            other_store = SQLiteStore(tmp_path / "other.sqlite3")
+            try:
+                with pytest.raises(KernelBoundaryViolation, match="governance_claim_not_persisted"):
+                    _submit(store, ApprovalEngine(other_store, EventBus(other_store)))
+            finally:
+                other_store.close()
         else:
             with pytest.raises(KernelBoundaryViolation, match="claim_not_persisted"):
-                _submit(store)
+                _submit(store, approvals)
     finally:
         store.close()
 
 
-def test_store_absence_always_denies_even_with_host_callback():
+def test_store_absence_is_denied_even_if_authorizer_says_yes():
     with pytest.raises(KernelBoundaryViolation, match="persisted_state_unavailable"):
         _submit(None)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="OPEN: synthetically inserted approved record lacks ApprovalEngine origin and issuer proof",
-)
-def test_fabricated_approval_record_must_not_grant_authority(tmp_path):
-    store = _store(tmp_path)  # self-issued approval without ApprovalEngine.request/decide
+def test_fabricated_approved_record_without_origin_is_denied(tmp_path):
+    store, approvals = _store(tmp_path, approval_kind="synthetic")
     try:
         with pytest.raises(KernelBoundaryViolation):
-            _submit(store)
+            _submit(store, approvals)
+    finally:
+        store.close()
+
+
+def test_expired_genuine_approval_is_denied(tmp_path):
+    store, approvals = _store(tmp_path, expires_in_seconds=1)
+    try:
+        time.sleep(1.2)
+        with pytest.raises(KernelBoundaryViolation, match="governance_claim_not_persisted"):
+            _submit(store, approvals)
     finally:
         store.close()
