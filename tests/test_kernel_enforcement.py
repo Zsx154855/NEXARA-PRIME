@@ -5,6 +5,8 @@ Phase 3: Kernel is the sole Mission Admission Boundary.
 from __future__ import annotations
 
 import pytest
+from types import SimpleNamespace
+from nexara_prime.models import ApprovalStatus
 
 from nexara_prime.chief_brain_kernel import ChiefBrainKernel
 from nexara_prime.contract_engine import ContractEngine
@@ -44,6 +46,7 @@ def kernel() -> ChiefBrainKernel:
     approvals = ApprovalEngine(store, events)  # type: ignore[arg-type]
     sm = MissionStateMachine(events, evidence)
 
+    persisted = _PersistedStub()
     return ChiefBrainKernel(
         triage=MissionTriageEngine(),
         compiler=MissionCompiler(),
@@ -52,7 +55,9 @@ def kernel() -> ChiefBrainKernel:
         orchestrator=None,  # type: ignore[arg-type]
         scheduler=None,  # type: ignore[arg-type]
         policy=policy,
-        approvals=approvals,
+        approvals=_OriginTestApproval(persisted),
+        trusted_authorizer=lambda mission_id, caller: bool(mission_id and caller),
+        store=persisted,
     )
 
 
@@ -195,3 +200,55 @@ class TestBoundaryTypes:
 
     def test_execution_violation_is_kernel_violation(self) -> None:
         assert issubclass(ExecutionBoundaryViolation, KernelBoundaryViolation)
+
+
+class _PersistedStub:
+    """Structural records for legacy Kernel tests, NOT actual host identity."""
+
+    def get_record_envelope(self, mission_id):
+        self.last_mission_id = mission_id
+        return {
+            "record_type": "mission",
+            "mission_id": mission_id,
+            "payload": {
+                "mission_id": mission_id,
+                "pending_approval_id": "approval_fixture",
+                "contract": {
+                    "contract_id": "contract_fixture",
+                    "mission_id": mission_id,
+                    "status": "approved",
+                },
+            },
+        }
+
+    def list_record_envelopes(self, kind, mission_id=None):
+        if kind != "approval":
+            return []
+        return [{
+            "record_id": "approval_fixture",
+            "record_type": "approval",
+            "mission_id": mission_id,
+            "payload": {
+                "approval_id": "approval_fixture",
+                "mission_id": mission_id,
+                "status": "approved",
+            },
+        }]
+
+
+class _OriginTestApproval:
+    """Explicit test-only origin stub; does not model authenticated humans."""
+
+    def __init__(self, store):
+        self.store = store
+
+    def get(self, approval_id):
+        return SimpleNamespace(
+            approval_id=approval_id,
+            mission_id=self.store.last_mission_id,
+            status=ApprovalStatus.APPROVED,
+            action="execute_mission",
+            approval_scope="mission",
+            decision_action="approve_mission",
+            expires_at=None,
+        )

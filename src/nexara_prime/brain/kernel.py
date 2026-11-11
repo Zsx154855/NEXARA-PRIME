@@ -13,9 +13,10 @@ Architecture:
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from datetime import datetime, timezone
+from typing import Any, Callable, TYPE_CHECKING
 
-from ..models import KnowledgeRecall, Mission, RiskLevel
+from ..models import ApprovalStatus, KnowledgeRecall, Mission, RiskLevel
 
 from .decision_engine import DecisionEngine
 from .goal_manager import GoalManager
@@ -89,6 +90,8 @@ class ChiefBrainKernel:
         policy: PolicyEngine | None = None,
         approvals: ApprovalEngine | None = None,
         *,
+        store: Any | None = None,
+        trusted_authorizer: Callable[[str, str], bool] | None = None,
         memory_layer_manager: "MemoryLayerManager | None" = None,
         # ── Cognitive governance params (keyword-only) ──
         model_policy: ModelPolicyEngine | None = None,
@@ -115,7 +118,9 @@ class ChiefBrainKernel:
         self._scheduler = scheduler
         self._policy = policy
         self._approvals = approvals
-        self._guard = KernelExecutionGuard()
+        self._store = store
+        self._trusted_authorizer = trusted_authorizer
+        self._guard = KernelExecutionGuard(_live_admission_validator=self._admission_is_current)
         self._memory_layer_manager = memory_layer_manager
 
     def health(self) -> dict[str, Any]:
@@ -148,6 +153,83 @@ class ChiefBrainKernel:
     # Admission Boundary (F2 consolidation from chief_brain_kernel.py)
     # ═══════════════════════════════════════════════════════════════════════
 
+    def _admission_is_current(self, ctx: KernelAdmissionContext) -> bool:
+        """Recheck issuer and persisted mission authorization immediately before use.
+
+        This is freshness validation, not proof that an arbitrary user-supplied
+        authorizer is a real authenticated host principal. The latter remains a
+        separate CAB ingress gate.
+        """
+        if self._trusted_authorizer is None or self._store is None:
+            return False
+        if self._trusted_authorizer(ctx.mission_id, ctx.caller) is not True:
+            return False
+        facts = self._persisted_facts(ctx.mission_id)
+        return facts["contract"] is True and facts["governance"] is True
+
+    def _persisted_facts(self, mission_id: str) -> dict[str, bool]:
+        """Check storage layout in the actual Runtime, not a test-only stub.
+
+        WorkContract is embedded in the durable `mission` record. The Runtime
+        does NOT write an independent `work_contract` record. These checks
+        establish structural persisted facts, not a human identity signature.
+        """
+        facts = {"contract": False, "governance": False}
+        if self._store is None:
+            return facts
+        try:
+            envelope = self._store.get_record_envelope(mission_id)
+            if not isinstance(envelope, dict):
+                return facts
+            if envelope.get("record_type") != "mission" or envelope.get("mission_id") != mission_id:
+                return facts
+            payload = envelope.get("payload")
+            if not isinstance(payload, dict) or payload.get("mission_id") != mission_id:
+                return facts
+            contract = payload.get("contract")
+            facts["contract"] = (
+                isinstance(contract, dict)
+                and contract.get("mission_id") == mission_id
+                and isinstance(contract.get("contract_id"), str)
+                and bool(contract.get("contract_id"))
+                and contract.get("status") == "approved"
+            )
+            # Reuse the existing ApprovalEngine origin and transition proof.
+            # Mere presence of an "approved" JSON row is NOT an approval.
+            approval_id = payload.get("pending_approval_id")
+            if (
+                not isinstance(approval_id, str)
+                or not approval_id
+                or self._approvals is None
+                or getattr(self._approvals, "store", None) is not self._store
+            ):
+                return facts
+            approval = self._approvals.get(approval_id)
+            if approval is None:
+                return facts
+            not_expired = True
+            if approval.expires_at:
+                expiry = datetime.fromisoformat(approval.expires_at)
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+                not_expired = expiry > datetime.now(timezone.utc)
+            facts["governance"] = (
+                approval.approval_id == approval_id
+                and approval.mission_id == mission_id
+                and approval.status == ApprovalStatus.APPROVED
+                # This Kernel gate authorizes a mission, not a single R2 tool.
+                # A file_write_report/approve_once receipt grants only that tool.
+                and approval.action == "execute_mission"
+                and approval.approval_scope == "mission"
+                and approval.decision_action == "approve_mission"
+                and not_expired
+            )
+        except Exception as exc:
+            # Corrupt records, DB failures and broken adapters must never
+            # become a successful admission.
+            raise KernelBoundaryViolation("persisted_facts_unavailable") from exc
+        return facts
+
     def submit(
         self,
         mission_id: str,
@@ -162,6 +244,26 @@ class ChiefBrainKernel:
         The admission context is the PROOF that all gates have been checked.
         Runtime execution requires this context via KernelExecutionGuard.
         """
+        # The four boolean inputs remain compatibility claims only. Their
+        # truth values cannot substitute for a trusted host and durable facts.
+        if not mission_id or not isinstance(caller, str) or not caller.strip():
+            raise KernelBoundaryViolation("mission_or_caller_required")
+        if self._trusted_authorizer is None:
+            raise KernelBoundaryViolation("trusted_authorizer_not_configured")
+        try:
+            authorised = self._trusted_authorizer(mission_id, caller)
+        except Exception as exc:
+            raise KernelBoundaryViolation("caller_authorization_unavailable") from exc
+        if authorised is not True:
+            raise KernelBoundaryViolation("caller_not_authorised")
+        if self._store is None:
+            raise KernelBoundaryViolation("persisted_state_unavailable")
+        persisted = self._persisted_facts(mission_id)
+        if contract_verified and not persisted["contract"]:
+            raise KernelBoundaryViolation("contract_claim_not_persisted")
+        if governance_approved and not persisted["governance"]:
+            raise KernelBoundaryViolation("governance_claim_not_persisted")
+
         ctx = KernelAdmissionContext(
             mission_id=mission_id,
             caller=caller,

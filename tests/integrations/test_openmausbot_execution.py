@@ -185,7 +185,13 @@ def authorized_cognitive_dispatch(proposal, *, contract_status="approved", contr
         status=contract_status, approved_at=approved_at, risk_level=RiskLevel.R2,
         boundaries=["Only inside a disposable test directory"],
     )
-    guard = KernelExecutionGuard()
+    # TEST-ONLY claimed issuer for adapter contract tests. This is not
+    # authenticated host authority; end-to-end CAB checks live separately
+    # in test_cab01_admission.py. Keep deliberately invalid mission/contract
+    # scenarios reachable so the adapter itself rejects them.
+    guard = KernelExecutionGuard(
+        _live_admission_validator=lambda ctx: ctx.caller == "trusted_test_controller"
+    )
     ctx = KernelAdmissionContext(
         mission_id=mission_id if admitted_mission is None else admitted_mission,
         caller="trusted_test_controller", contract_verified=True,
@@ -250,8 +256,10 @@ def test_cognitive_goal_rejects_incomplete_admission(probe):
     proposal = {"proposal_id": "coggoal-42", "status": "HYPOTHESIS",
                 "objective": "Analyze synthetic failing test"}
     contract, _ = authorized_cognitive_dispatch(proposal)
-    guard = KernelExecutionGuard()
-    with pytest.raises(KernelBoundaryViolation):
+    # Test the *missing governance gate*, not the unrelated missing issuer.
+    # This is an isolated fixture, not a production host credential.
+    guard = KernelExecutionGuard(_live_admission_validator=lambda _ctx: True)
+    with pytest.raises(KernelBoundaryViolation, match="incomplete"):
         guard.admit(KernelAdmissionContext(
             mission_id=contract.mission_id, caller="test",
             contract_verified=True, authority_verified=True,

@@ -12,7 +12,7 @@ from nexara_prime.governance import ApprovalEngine, PolicyEngine
 from nexara_prime.memory import MemoryKernel, MemoryLayerManager
 from nexara_prime.mission_compiler import MissionCompiler
 from nexara_prime.mission_triage import MissionTriageEngine
-from nexara_prime.models import KnowledgeRecall, MemoryKind
+from nexara_prime.models import KnowledgeRecall, MemoryKind, RiskLevel
 from nexara_prime.orchestration import RuntimeOrchestrator
 from nexara_prime.state_machine import MissionStateMachine
 from nexara_prime.adaptive_scheduler import AdaptiveMultiAgentScheduler
@@ -35,6 +35,25 @@ def kernel_with_recall(kernel_deps):
     store, events, evidence = kernel_deps
     memory = MemoryKernel(store, events, evidence)
     mlm = MemoryLayerManager(memory, rag=None, enable_patch_review=False)
+    # Real approval lifecycle, unlike the original OpenMinis permissive stub.
+    from nexara_prime.models import now_iso
+    approval_engine = ApprovalEngine(store, events)
+    request = approval_engine.request(
+        "mission-1", "execute_mission", RiskLevel.R2,
+        "Bounded test approval", ["Test-only report"], "trace-fixture",
+        approval_scope="mission",
+    )
+    approval_engine.decide(
+        request.approval_id, True, "fixture_operator",
+        "Test harness approval", "trace-fixture",
+        decision="approve_mission",
+    )
+    stamp = now_iso()
+    store.save_record("mission-1", "mission", {
+        "mission_id": "mission-1",
+        "pending_approval_id": request.approval_id,
+        "contract": {"contract_id": "fixture-contract", "mission_id": "mission-1", "status": "approved"},
+    }, stamp, "mission-1")
     return ChiefBrainKernel(
         MissionTriageEngine(),
         MissionCompiler(),
@@ -43,8 +62,10 @@ def kernel_with_recall(kernel_deps):
         RuntimeOrchestrator(store, events, evidence),
         AdaptiveMultiAgentScheduler(),
         PolicyEngine(),
-        ApprovalEngine(store, events),
+        approval_engine,
         memory_layer_manager=mlm,
+        store=store,
+        trusted_authorizer=lambda mission_id, caller: mission_id == "mission-1" and caller == "api",
     )
 
 

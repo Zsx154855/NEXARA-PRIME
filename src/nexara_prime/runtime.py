@@ -146,6 +146,12 @@ def _ensure_adapters(runtime):
                 scheduler=AdaptiveMultiAgentScheduler(),
                 policy=runtime.policy,
                 approvals=runtime.approvals,
+                store=runtime.store,
+                # Deliberately omit trusted_authorizer. Looking up a mission
+                # and accepting any nonempty caller is NOT host authentication.
+                # Kernel.submit() must fail closed until an authenticated
+                # host service injects a verified principal-bound authorizer.
+                # Existing Runtime.run_mission() ingress is separately open.
                 memory_layer_manager=_memory_layer_manager,
             )
         except ImportError:
