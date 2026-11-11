@@ -203,6 +203,11 @@ class ChiefBrainKernel:
                 approval.approval_id == approval_id
                 and approval.mission_id == mission_id
                 and approval.status == ApprovalStatus.APPROVED
+                # This Kernel gate authorizes a mission, not a single R2 tool.
+                # A file_write_report/approve_once receipt grants only that tool.
+                and approval.action == "execute_mission"
+                and approval.approval_scope == "mission"
+                and approval.decision_action == "approve_mission"
                 and not_expired
             )
         except Exception as exc:
