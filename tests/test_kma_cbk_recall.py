@@ -39,12 +39,14 @@ def kernel_with_recall(kernel_deps):
     from nexara_prime.models import now_iso
     approval_engine = ApprovalEngine(store, events)
     request = approval_engine.request(
-        "mission-1", "file_write_report", RiskLevel.R2,
+        "mission-1", "execute_mission", RiskLevel.R2,
         "Bounded test approval", ["Test-only report"], "trace-fixture",
+        approval_scope="mission",
     )
     approval_engine.decide(
         request.approval_id, True, "fixture_operator",
         "Test harness approval", "trace-fixture",
+        decision="approve_mission",
     )
     stamp = now_iso()
     store.save_record("mission-1", "mission", {
