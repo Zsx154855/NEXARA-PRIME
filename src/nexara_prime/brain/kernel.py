@@ -13,9 +13,10 @@ Architecture:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Callable, TYPE_CHECKING
 
-from ..models import KnowledgeRecall, Mission, RiskLevel
+from ..models import ApprovalStatus, KnowledgeRecall, Mission, RiskLevel
 
 from .decision_engine import DecisionEngine
 from .goal_manager import GoalManager
@@ -179,16 +180,30 @@ class ChiefBrainKernel:
                 and bool(contract.get("contract_id"))
                 and contract.get("status") == "approved"
             )
-            approvals = self._store.list_record_envelopes("approval", mission_id)
-            facts["governance"] = any(
-                isinstance(a, dict)
-                and a.get("record_type") == "approval"
-                and a.get("mission_id") == mission_id
-                and isinstance(a.get("payload"), dict)
-                and a["payload"].get("approval_id") == a.get("record_id")
-                and a["payload"].get("mission_id") == mission_id
-                and a["payload"].get("status") == "approved"
-                for a in approvals
+            # Reuse the existing ApprovalEngine origin and transition proof.
+            # Mere presence of an "approved" JSON row is NOT an approval.
+            approval_id = payload.get("pending_approval_id")
+            if (
+                not isinstance(approval_id, str)
+                or not approval_id
+                or self._approvals is None
+                or getattr(self._approvals, "store", None) is not self._store
+            ):
+                return facts
+            approval = self._approvals.get(approval_id)
+            if approval is None:
+                return facts
+            not_expired = True
+            if approval.expires_at:
+                expiry = datetime.fromisoformat(approval.expires_at)
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+                not_expired = expiry > datetime.now(timezone.utc)
+            facts["governance"] = (
+                approval.approval_id == approval_id
+                and approval.mission_id == mission_id
+                and approval.status == ApprovalStatus.APPROVED
+                and not_expired
             )
         except Exception as exc:
             # Corrupt records, DB failures and broken adapters must never
