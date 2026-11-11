@@ -247,5 +247,8 @@ class _OriginTestApproval:
             approval_id=approval_id,
             mission_id=self.store.last_mission_id,
             status=ApprovalStatus.APPROVED,
+            action="execute_mission",
+            approval_scope="mission",
+            decision_action="approve_mission",
             expires_at=None,
         )
