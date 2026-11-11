@@ -53,6 +53,8 @@ def kernel() -> ChiefBrainKernel:
         scheduler=None,  # type: ignore[arg-type]
         policy=policy,
         approvals=approvals,
+        trusted_authorizer=lambda mission_id, caller: bool(mission_id and caller),
+        store=_PersistedStub(),
     )
 
 
@@ -195,3 +197,35 @@ class TestBoundaryTypes:
 
     def test_execution_violation_is_kernel_violation(self) -> None:
         assert issubclass(ExecutionBoundaryViolation, KernelBoundaryViolation)
+
+
+class _PersistedStub:
+    """Structural records for legacy Kernel tests, NOT actual host identity."""
+
+    def get_record_envelope(self, mission_id):
+        return {
+            "record_type": "mission",
+            "mission_id": mission_id,
+            "payload": {
+                "mission_id": mission_id,
+                "contract": {
+                    "contract_id": "contract_fixture",
+                    "mission_id": mission_id,
+                    "status": "approved",
+                },
+            },
+        }
+
+    def list_record_envelopes(self, kind, mission_id=None):
+        if kind != "approval":
+            return []
+        return [{
+            "record_id": "approval_fixture",
+            "record_type": "approval",
+            "mission_id": mission_id,
+            "payload": {
+                "approval_id": "approval_fixture",
+                "mission_id": mission_id,
+                "status": "approved",
+            },
+        }]
