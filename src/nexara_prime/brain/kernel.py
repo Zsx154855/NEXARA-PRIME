@@ -187,7 +187,7 @@ class ChiefBrainKernel:
                 and isinstance(a.get("payload"), dict)
                 and a["payload"].get("approval_id") == a.get("record_id")
                 and a["payload"].get("mission_id") == mission_id
-                and a["payload"].get("status") in {"approved", "consumed"}
+                and a["payload"].get("status") == "approved"
                 for a in approvals
             )
         except Exception as exc:
