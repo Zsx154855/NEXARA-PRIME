@@ -93,7 +93,12 @@ def lab(tmp_path, *, engine=ENGINE, expires_seconds=900,
         approvals.decide(approval.approval_id, approved=True, actor=OWNER,
                          note="Approved only for this temporary lab", trace_id="cab01-test")
         approval_id = approval.approval_id
-    guard = KernelExecutionGuard()
+    # This is a TEST-ONLY trusted controller claim. It does not authenticate
+    # a real host principal; CAB01TrustedAdmission still validates canonical
+    # SQLite contract, ApprovalEngine transitions, scope and revocation.
+    guard = KernelExecutionGuard(
+        _live_admission_validator=lambda ctx: ctx.caller == "trusted_cab_controller"
+    )
     guard.admit(KernelAdmissionContext(
         mission_id=MISSION, caller="trusted_cab_controller",
         contract_verified=True, authority_verified=True,
@@ -277,7 +282,12 @@ def test_approved_hypothesis_remains_non_executable_by_itself(tmp_path):
 def test_fake_full_kernel_context_cannot_invent_missing_durable_approval(tmp_path):
     s = lab(tmp_path, approval_present=False)
     contract = s["contract"]
-    guard = KernelExecutionGuard()
+    # Explicitly admit a forged model context ONLY inside this isolated
+    # negative fixture to prove that it cannot create a missing durable
+    # CAB approval. This lambda must never be wired into product Runtime.
+    guard = KernelExecutionGuard(
+        _live_admission_validator=lambda ctx: ctx.caller == "model_supplied"
+    )
     guard.admit(KernelAdmissionContext(
         mission_id=MISSION, caller="model_supplied", contract_verified=True,
         authority_verified=True, state_valid=True, governance_approved=True,
