@@ -45,7 +45,7 @@ class KernelAdmissionContext:
             "governance_approved": self.governance_approved,
             "evidence_chain_initialized": self.evidence_chain_initialized,
         }
-        missing = [k for k, v in gates.items() if not v]
+        missing = [k for k, v in gates.items() if v is not True]
         if missing:
             raise KernelBoundaryViolation(
                 "Kernel admission incomplete for mission {}: missing {}".format(
