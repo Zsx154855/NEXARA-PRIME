@@ -76,11 +76,11 @@ def test_cross_mission_reuse_stays_denied():
         guard.assert_admitted("mission-two")
 
 
-def test_backward_compatible_standalone_guard():
-    """Legacy direct Guard users keep old structural contract, NOT issuer proof."""
+def test_standalone_guard_requires_explicit_live_validator():
+    """A constructed all-True context alone cannot grant execution authority."""
     guard = KernelExecutionGuard()
-    guard.admit(_admitted())
-    assert guard.assert_admitted("mission-one").mission_id == "mission-one"
+    with pytest.raises(ExecutionBoundaryViolation, match="Trusted issuer validator required"):
+        guard.admit(_admitted())
 
 
 def test_mutated_gate_is_denied_and_cleared():
