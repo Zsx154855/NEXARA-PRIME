@@ -146,6 +146,17 @@ def _ensure_adapters(runtime):
                 scheduler=AdaptiveMultiAgentScheduler(),
                 policy=runtime.policy,
                 approvals=runtime.approvals,
+                store=runtime.store,
+                # Transitional persistence gate from OpenMinis CAB patches:
+                # this confirms a mission exists in an integrity-checked store.
+                # It does NOT authenticate an OS/user principal or P3 signature.
+                trusted_authorizer=lambda mission_id, caller: bool(
+                    isinstance(caller, str)
+                    and caller.strip()
+                    and (envelope := runtime.store.get_record_envelope(mission_id))
+                    and envelope.get("record_type") == "mission"
+                    and envelope.get("mission_id") == mission_id
+                ),
                 memory_layer_manager=_memory_layer_manager,
             )
         except ImportError:
