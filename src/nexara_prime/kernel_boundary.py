@@ -6,7 +6,7 @@ NexaraRuntime owns execution. Neither can operate without the other.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 
 class KernelBoundaryViolation(RuntimeError):
@@ -60,6 +60,7 @@ class KernelExecutionGuard:
     Without it, execution is blocked.
     """
     _active_context: KernelAdmissionContext | None = None
+    _live_admission_validator: Callable[[KernelAdmissionContext], bool] | None = None
 
     def admit(self, ctx: KernelAdmissionContext) -> None:
         ctx.assert_complete()
@@ -76,6 +77,15 @@ class KernelExecutionGuard:
         # Always recheck at execution, including unusual Python-level mutation.
         # This does not authenticate the original issuer or revocation status.
         self._active_context.assert_complete()
+        if self._live_admission_validator is not None:
+            try:
+                currently_valid = self._live_admission_validator(self._active_context)
+            except Exception as exc:
+                self.clear()
+                raise ExecutionBoundaryViolation("Admission freshness check failed") from exc
+            if currently_valid is not True:
+                self.clear()
+                raise ExecutionBoundaryViolation("Admission no longer valid")
         return self._active_context
 
     def clear(self) -> None:
