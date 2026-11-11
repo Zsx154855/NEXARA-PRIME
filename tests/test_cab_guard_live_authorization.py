@@ -81,3 +81,16 @@ def test_backward_compatible_standalone_guard():
     guard = KernelExecutionGuard()
     guard.admit(_admitted())
     assert guard.assert_admitted("mission-one").mission_id == "mission-one"
+
+
+def test_mutated_gate_is_denied_and_cleared():
+    guard = KernelExecutionGuard(_live_admission_validator=lambda ctx: True)
+    context = _admitted()
+    guard.admit(context)
+    # Frozen dataclass is not a Python process privilege boundary.
+    object.__setattr__(context, "authority_verified", False)
+    from nexara_prime.kernel_boundary import KernelBoundaryViolation
+    with pytest.raises(KernelBoundaryViolation, match="incomplete"):
+        guard.assert_admitted("mission-one")
+    with pytest.raises(ExecutionBoundaryViolation, match="No kernel admission"):
+        guard.assert_admitted("mission-one")
