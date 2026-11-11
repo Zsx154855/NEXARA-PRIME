@@ -35,6 +35,17 @@ def kernel_with_recall(kernel_deps):
     store, events, evidence = kernel_deps
     memory = MemoryKernel(store, events, evidence)
     mlm = MemoryLayerManager(memory, rag=None, enable_patch_review=False)
+    # Actual SQLiteStore contract layout is an embedded mission.contract,
+    # not a stand-alone work_contract record. Synthetic test-only approval.
+    from nexara_prime.models import now_iso
+    stamp = now_iso()
+    store.save_record("mission-1", "mission", {
+        "mission_id": "mission-1",
+        "contract": {"contract_id": "fixture-contract", "mission_id": "mission-1", "status": "approved"},
+    }, stamp, "mission-1")
+    store.save_record("fixture-approval", "approval", {
+        "approval_id": "fixture-approval", "mission_id": "mission-1", "status": "approved",
+    }, stamp, "mission-1")
     return ChiefBrainKernel(
         MissionTriageEngine(),
         MissionCompiler(),
@@ -45,6 +56,8 @@ def kernel_with_recall(kernel_deps):
         PolicyEngine(),
         ApprovalEngine(store, events),
         memory_layer_manager=mlm,
+        store=store,
+        trusted_authorizer=lambda mission_id, caller: mission_id == "mission-1" and caller == "api",
     )
 
 
