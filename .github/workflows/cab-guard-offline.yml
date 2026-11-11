@@ -1,14 +1,10 @@
 name: CAB Guard isolated offline regression
 
+# Job allocation has repeatedly failed before a runner was assigned.
+# Keep the test definition for future review, but prevent repeated auto-failures.
+# workflow_dispatch requires registration on the default branch; no main change here.
 on:
-  push:
-    branches:
-      - audit/cab-guard-provenance-regressions-20261111
-    paths:
-      - src/nexara_prime/kernel_boundary.py
-      - tests/test_cab_guard_provenance_regression.py
-      - tests/test_cab_runtime_ingress_regression.py
-      - .github/workflows/cab-guard-offline.yml
+  workflow_dispatch:
 
 permissions:
   contents: read
