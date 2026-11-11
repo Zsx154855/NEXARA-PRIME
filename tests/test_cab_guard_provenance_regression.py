@@ -37,7 +37,6 @@ def test_guard_rejects_untrusted_caller_constructed_context() -> None:
         guard.admit(_all_true_context())
 
 
-@pytest.mark.xfail(strict=True, reason="Open finding: active context is mutable and not revalidated at execution")
 def test_guard_rejects_mutated_context_after_admission() -> None:
     guard = KernelExecutionGuard()
     ctx = _all_true_context()
