@@ -76,7 +76,11 @@ class KernelExecutionGuard:
                     self._active_context.mission_id, mission_id))
         # Always recheck at execution, including unusual Python-level mutation.
         # This does not authenticate the original issuer or revocation status.
-        self._active_context.assert_complete()
+        try:
+            self._active_context.assert_complete()
+        except KernelBoundaryViolation:
+            self.clear()
+            raise
         if self._live_admission_validator is not None:
             try:
                 currently_valid = self._live_admission_validator(self._active_context)
