@@ -63,6 +63,10 @@ class KernelExecutionGuard:
     _live_admission_validator: Callable[[KernelAdmissionContext], bool] | None = None
 
     def admit(self, ctx: KernelAdmissionContext) -> None:
+        # Standalone guards must not accept a self-issued all-True context.
+        # The owning Kernel provides a mission-bound live validator.
+        if self._live_admission_validator is None:
+            raise ExecutionBoundaryViolation("Trusted issuer validator required")
         ctx.assert_complete()
         self._active_context = ctx
 
@@ -76,6 +80,9 @@ class KernelExecutionGuard:
                     self._active_context.mission_id, mission_id))
         # Always recheck at execution, including unusual Python-level mutation.
         # This does not authenticate the original issuer or revocation status.
+        if self._live_admission_validator is None:
+            self.clear()
+            raise ExecutionBoundaryViolation("Trusted issuer validator required")
         try:
             self._active_context.assert_complete()
         except KernelBoundaryViolation:
