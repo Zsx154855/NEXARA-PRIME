@@ -533,9 +533,7 @@ class MemoryLayerManager:
         for r in all_records:
             # Deny candidate/pending/conflict/cleared/archived from SQL fallback.
             # Preserve both committed MemoryKernel records and active MemoryOS entries.
-            if _lifecycle_of(r.get("status")) not in (
-                MemoryLifecycle.ACTIVE, MemoryLifecycle.VALIDATED
-            ):
+            if _lifecycle_of(r.get("status")) is not MemoryLifecycle.ACTIVE:
                 continue
             # Filter by mission_id when supplied
             if mission_id and r.get("mission_id") != mission_id:
