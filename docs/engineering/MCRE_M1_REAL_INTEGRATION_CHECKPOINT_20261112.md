@@ -117,3 +117,67 @@ The existing repository workflows target self-hosted macOS ARM64 on PRs to
 main and work/* pushes. This branch uses `[skip ci]` commit messages while
 the resource gate is unverified. CI_NOT_RUN != CI_PASS; no manual reruns
 without explicit runner resource check and authorization.
+
+
+## Gate A–C incremental numerical integrity audit (2026-11-13 Asia/Bangkok)
+
+**Environment verified in current execution container:** Python 3.13.5,
+pytest 9.0.2, Git 2.47.3; ~30 GiB free. No existing full NEXARA
+checkout in inspected accessible paths. The direct
+`git ls-remote https://github.com/Zsx154855/NEXARA-PRIME.git HEAD`
+returned exit 128 (`Could not resolve host: github.com`). GitHub
+connector can read canonical remote commits and files but cannot
+materialize an executable complete repository into this container.
+This is **A=PARTIAL**, not A PASS.
+
+**Verified remote baseline before write:**
+main `f4a5400d73391280fa9c19e128edcea03cf608f1`,
+PR #68 `58652b587d1e58fffd097b3b50a838e049953071`;
+PR #66 and #67 remain separate Draft PRs. Git blob SHA for original
+`verified_skill_evolution.py` was
+`367f54d09cbaade93bea0db9a6cfa4cba8e39e9d`.
+Original 14-case test source blob:
+`1e4ded291a889bd4837f696b64fd52e5f226eef7`.
+Both original file bytes were reproduced bit-for-bit in isolated
+scratch before testing; this is real source-level testing, but NOT
+a full checkout or real SQLite EvidenceStore integration.
+
+**New deterministic RED evidence:**
+`PYTHONPATH=src python3 -m pytest -q tests/test_mcre_numeric_contract_red.py --tb=short`
+on *unchanged* verified source => exit 1, 7 failed, 1 passed.
+RED log SHA256 `c209183d14556368f78e208ab7805e66231acf3d71d4c6555694b45b3553abb7`.
+False `ELIGIBLE_FOR_REVIEW` returned for boolean `passed`, boolean/float
+`turns`, boolean/float `input_tokens` and NaN cost. Infinity was
+incorrectly typed as ordinary cost regression rather than invalid trial.
+
+**Minimal fix:** strict boolean pass, strict nonnegative integer turns
+and token counts, only finite nonnegative numeric cost (no bool),
+integer non-bool holdout threshold. No changes to Runtime, worker,
+Trusted Gate, authorization, memory schema, or existing 14 tests.
+Patched source blob `a8992ef0b0447f312597bbdc84a79fd183ce66f0`.
+New adversarial test file blob
+`14d6384b1d7434227bd5cfb203f26dfc6cd1d11d`.
+All code/test blobs match the locally tested bytes.
+
+**GREEN evidence:** `PYTHONPATH=src python3 -m pytest -q
+tests/brain/test_verified_skill_evolution.py
+tests/brain/test_verified_skill_evolution_numeric_contract.py --tb=short`
+=> 25 passed, 0 failed, exit 0, log SHA256
+`782c3e83fb9f85e8a02e0ed951cedd94cdc3acb7f424d1ca52fc52d9d7923a56`.
+`python3 -m compileall -q src tests` exit 0 for isolated scratch.
+Ruff not installed: LINT_NOT_RUN. New tests use a deliberately
+permissive verifier to isolate numeric contract; **not** actual
+EvidenceStore, real QA identity, or Task A→B learning evidence.
+
+**Gates:** A PARTIAL; B BLOCKED (full package missing); C PARTIAL
+(25 localized PASS; real whole-repo regression NOT_RUN). Independent
+QA NOT_VERIFIED; PR #66/#67 runtime compatibility NOT_VERIFIED;
+D–F NOT_STARTED. Do not count these tests as full regression.
+Do not enable self-hosted Mac Runner, merge main, deploy services or
+invoke paid models. No external writes except isolated Draft PR.
+
+**Next actual gate:** acquire genuine complete checkout in trusted
+isolated execution environment. Then run the checked-in real SQLite
+tests with actual `SQLiteStore/EventBus/EvidenceStore`, full pytest
+and independent QA, compare against pinned main without disturbing
+Draft PR #66/#67. Preserve exact exit codes and logs.

@@ -8,6 +8,7 @@ authority remains with the existing AutonomousBoundary and Runtime.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from typing import Callable
 
 
@@ -47,7 +48,7 @@ class VerifiedSkillEvolution:
 
     def __init__(self, verify_evidence: Callable[[Trial], bool] | None = None,
                  min_holdout_pairs: int = 3) -> None:
-        if min_holdout_pairs < 2:
+        if type(min_holdout_pairs) is not int or min_holdout_pairs < 2:
             raise ValueError("at least two holdout pairs required")
         self._verify_evidence = verify_evidence
         self._min_pairs = min_holdout_pairs
@@ -65,10 +66,17 @@ class VerifiedSkillEvolution:
             return verdict("NOT_VERIFIED", "EVIDENCESTORE_UNAVAILABLE")
         groups: dict[str, dict[str, Trial]] = {}
         for trial in trials:
-            if (not trial.task_id or trial.variant not in ("treatment", "control")
-                    or not trial.evidence_id or not trial.reviewer_id
-                    or trial.turns < 0 or trial.input_tokens is not None and trial.input_tokens < 0
-                    or trial.cost_usd is not None and trial.cost_usd < 0):
+            if (not isinstance(trial.task_id, str) or not trial.task_id
+                    or trial.variant not in ("treatment", "control")
+                    or not isinstance(trial.evidence_id, str) or not trial.evidence_id
+                    or not isinstance(trial.reviewer_id, str) or not trial.reviewer_id
+                    or type(trial.passed) is not bool
+                    or type(trial.turns) is not int or trial.turns < 0
+                    or (trial.input_tokens is not None and
+                        (type(trial.input_tokens) is not int or trial.input_tokens < 0))
+                    or (trial.cost_usd is not None and
+                        (type(trial.cost_usd) not in (int, float)
+                         or not isfinite(trial.cost_usd) or trial.cost_usd < 0))):
                 return verdict("NOT_VERIFIED", "INVALID_TRIAL")
             if trial.task_id in candidate.development_task_ids:
                 return verdict("NOT_VERIFIED", "HOLDOUT_LEAKAGE")
