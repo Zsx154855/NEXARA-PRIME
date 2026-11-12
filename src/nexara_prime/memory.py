@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from .db import SQLiteStore
 from .events import EventBus
 from .models import MemoryKind, MemoryRecord, new_id, now_iso
+from .memory_archive import MemoryLifecycle, _lifecycle_of
 
 if TYPE_CHECKING:
     from .evidence import EvidenceStore
@@ -17,6 +18,7 @@ EVIDENCE_REQUIRED_KINDS = {
     MemoryKind.FAILURE,
     MemoryKind.FAILURE_EXPERIENCE,
     MemoryKind.PATCH,
+    MemoryKind.LESSON,
 }
 
 
@@ -39,6 +41,7 @@ class MemoryLayer:
             MemoryKind.FAILURE: cls.EPISODIC,
             MemoryKind.FAILURE_EXPERIENCE: cls.SEMANTIC,
             MemoryKind.PATCH: cls.PROCEDURAL,
+            MemoryKind.LESSON: cls.PROCEDURAL,
             MemoryKind.SKILL_IMPROVEMENT: cls.PROCEDURAL,
             MemoryKind.SYSTEM_RULE: cls.PROCEDURAL,
             MemoryKind.USER_FACT: cls.SEMANTIC,
@@ -528,8 +531,11 @@ class MemoryLayerManager:
         all_records = self.kernel.inspect(None)
         scored: list[tuple[dict[str, Any], int]] = []
         for r in all_records:
-            # Skip superseded records by default
-            if r.get("status") == "superseded":
+            # Deny candidate/pending/conflict/cleared/archived from SQL fallback.
+            # Preserve both committed MemoryKernel records and active MemoryOS entries.
+            if _lifecycle_of(r.get("status")) not in (
+                MemoryLifecycle.ACTIVE, MemoryLifecycle.VALIDATED
+            ):
                 continue
             # Filter by mission_id when supplied
             if mission_id and r.get("mission_id") != mission_id:
