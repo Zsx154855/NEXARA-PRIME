@@ -137,6 +137,27 @@ def test_active_memoryos_entry_not_hidden_by_fallback_filter(tmp_path):
     assert manager.search("runbook")
 
 
+
+def test_validated_but_not_activated_record_is_not_visible(tmp_path):
+    # VALIDATED is not yet ACTIVE in the MemoryOS/archive lifecycle.
+    store, kernel = _canonical(tmp_path)
+    store.save_record(
+        "mem-validated-only", "memory",
+        {
+            "memory_id": "mem-validated-only",
+            "mission_id": "mission-A",
+            "key": "draft:validation",
+            "kind": "fact",
+            "content": "validated only, not activated",
+            "status": "validated",
+        },
+        "2026-11-12T00:00:00+00:00", "mission-A",
+    )
+    manager = MemoryLayerManager(kernel, rag=None)
+    assert manager.search("validated only", mission_id="mission-A") == []
+
+
+
 def test_no_evidence_action_experience_is_rejected(tmp_path):
     learner = ExperienceLearner(_controller(tmp_path))
     with pytest.raises(ValueError, match="memory_evidence_required"):
