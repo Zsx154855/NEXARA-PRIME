@@ -81,6 +81,7 @@ class MemoryKind(str, Enum):
     USER_FACT = "user_fact"
     PROJECT_FACT = "project_fact"
     EXPERIENCE = "experience"
+    LESSON = "lesson"
     PREFERENCE = "preference"
     TEMPORARY_CONTEXT = "temporary_context"
     FAILURE_EXPERIENCE = "failure_experience"
