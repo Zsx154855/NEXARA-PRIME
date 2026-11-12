@@ -63,17 +63,17 @@ class ExperienceLearner:
         return self._mc.commit(
             mission_id=mission_id, key=f"lesson:{mission_id}:{new_id('lesson')}",
             content=json.dumps({"lesson": lesson, "created_at": now_iso()}),
-            kind="procedural", evidence_id=evidence_id, confidence=0.5,
+            kind="lesson", evidence_id=evidence_id, confidence=0.5,
         )
 
     def extract_patterns(self, limit: int = 50) -> list[Pattern]:
-        records = self._mc.rank_retrieve(query="outcome success failure", top_k=limit, layers=["episodic"], min_confidence=0.1)
+        records = self._mc.rank_retrieve(query="exp:", top_k=limit, layers=["semantic"], min_confidence=0.1)
         action_results: dict[str, list[bool]] = {}
         for r in records:
-            if r.get("kind") != "experience":
+            data = self._action_payload(r)
+            if data is None:
                 continue
-            data = json.loads(r.get("content", "{}")) if isinstance(r.get("content"), str) else r.get("content", {})
-            action = data.get("action", "unknown")
+            action = data["action"]
             action_results.setdefault(action, []).append(data.get("success", False))
 
         patterns: list[Pattern] = []
@@ -91,10 +91,10 @@ class ExperienceLearner:
         return sorted(patterns, key=lambda p: p.confidence * p.success_rate, reverse=True)
 
     def rank_experiences(self, keywords: str, top_k: int = 10) -> list[ExperienceRecord]:
-        records = self._mc.rank_retrieve(query=keywords, top_k=top_k * 2, layers=["episodic"], min_confidence=0.1)
+        records = self._mc.rank_retrieve(query=keywords, top_k=top_k * 10, layers=["semantic"], min_confidence=0.1)
         exps: list[ExperienceRecord] = []
         for r in records:
-            if r.get("kind") == "experience":
+            if self._action_payload(r) is not None:
                 exp = self._deserialize_exp(r)
                 if exp:
                     exp.confidence *= 1.0 + (0.1 if exp.success else -0.05)
@@ -106,18 +106,46 @@ class ExperienceLearner:
         records = self._mc.rank_retrieve(query=query or "lesson", top_k=top_k, layers=["procedural"], min_confidence=0.1)
         lessons: list[str] = []
         for r in records:
-            if r.get("kind") == "procedural":
+            if r.get("kind") == "lesson" and str(r.get("key", "")).startswith("lesson:"):
                 data = json.loads(r.get("content", "{}")) if isinstance(r.get("content"), str) else r.get("content", {})
                 lessons.append(data.get("lesson", ""))
         return [x for x in lessons if x]
 
     def count_low_confidence(self, threshold: float = 0.2) -> int:
-        records = self._mc.rank_retrieve(query="experience", top_k=200, layers=["episodic"], min_confidence=0.0)
-        return sum(1 for r in records if float(r.get("confidence", 0.5)) < threshold)
+        records = self._mc.rank_retrieve(query="exp:", top_k=200, layers=["semantic"], min_confidence=0.0)
+        return sum(1 for r in records if self._action_payload(r) is not None and float(r.get("confidence", 0.5)) < threshold)
 
     def summarize(self) -> dict[str, Any]:
         patterns = self.extract_patterns(limit=20)
         return {"patterns_found": len(patterns), "top_patterns": [(p.description, p.success_rate) for p in patterns[:5]], "success_actions": len([p for p in patterns if p.success_rate > 0.7]), "failure_actions": len([p for p in patterns if p.success_rate < 0.3])}
+
+    @staticmethod
+    def _action_payload(record: dict[str, Any]) -> dict[str, Any] | None:
+        """Distinguish action-level experience from N01 mission summaries.
+
+        Both historically use kind='experience' in the semantic layer.
+        An N01 MissionExperience must never become a failed action sample.
+        """
+        if record.get("kind") != "experience":
+            return None
+        if not str(record.get("key", "")).startswith("exp:"):
+            return None
+        try:
+            value = record.get("content", "{}")
+            data = json.loads(value) if isinstance(value, str) else value
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        if not all(k in data for k in ("mission_id", "outcome", "action", "result", "success", "evidence_id")):
+            return None
+        if not isinstance(data["success"], bool) or not isinstance(data["action"], str) or not data["action"]:
+            return None
+        if data["mission_id"] != record.get("mission_id"):
+            return None
+        if data["evidence_id"] != record.get("evidence_id") or not data["evidence_id"]:
+            return None
+        return data
 
     @staticmethod
     def _serialize_exp(exp: ExperienceRecord) -> str:
