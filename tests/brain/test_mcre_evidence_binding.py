@@ -1,17 +1,16 @@
 """Fixture-only adapter contract tests; NOT actual SQLite EvidenceStore E2E."""
 import hashlib
-import importlib.util
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
-import sys
 sys.path.insert(0, str(ROOT / "src"))
 # Import package requiring no production services.
-from nexara_prime.brain.mcre_shadow import ContextRef
-from nexara_prime.brain.verified_skill_evolution import Trial
-from nexara_prime.brain.mcre_evidence_binding import EvidenceStoreBinding
+from nexara_prime.brain.mcre_shadow import ContextRef  # noqa: E402
+from nexara_prime.brain.verified_skill_evolution import Trial  # noqa: E402
+from nexara_prime.brain.mcre_evidence_binding import EvidenceStoreBinding  # noqa: E402
 
 
 class Reader:

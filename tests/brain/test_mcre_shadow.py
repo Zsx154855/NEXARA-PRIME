@@ -1,4 +1,5 @@
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -6,7 +7,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("mcre_shadow", ROOT / "src/nexara_prime/brain/mcre_shadow.py")
 module = importlib.util.module_from_spec(spec)
-import sys
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 ContextRef, DecisionRequest, MCREShadow = module.ContextRef, module.DecisionRequest, module.MCREShadow
