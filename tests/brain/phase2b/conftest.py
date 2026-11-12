@@ -1,7 +1,7 @@
 """Shared pytest fixtures for Phase 2B brain tests."""
 import pytest
 
-_LAYER_MAP = {"preference": "semantic", "experience": "episodic", "procedural": "procedural"}
+from src.nexara_prime.brain.consolidation_rules import classify_layer
 
 
 class MockMC:
@@ -19,7 +19,7 @@ class MockMC:
         confidence = kw.get("confidence", a[5] if len(a) > 5 else 1.0)
         self.store.setdefault(mission_id, []).append({
             "mission_id": mission_id, "key": key, "content": content,
-            "kind": kind, "layer": _LAYER_MAP.get(kind, kind),
+            "kind": kind, "layer": classify_layer(kind),
             "evidence_id": evidence_id or "", "confidence": confidence,
             "status": "active", "weight": confidence,
         })
