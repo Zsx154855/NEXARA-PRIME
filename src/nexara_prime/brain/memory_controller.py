@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from ..models import new_id, now_iso
+from ..models import MemoryKind, new_id, now_iso
 
 from .db import BrainDB
 from .decay_config import (
@@ -306,8 +306,9 @@ class MemoryController:
         }
         kind_dist = self._db.count_by_kind() if self._persist else {}
 
-        # Coverage: how many of 13 kinds have at least 1 active record
-        coverage = sum(1 for k in kind_dist if kind_dist[k] > 0) / 13.0 if kind_dist else 0.0
+        # Coverage denominator follows the canonical enum as kinds evolve.
+        coverage = (sum(1 for k in kind_dist if k in {m.value for m in MemoryKind} and kind_dist[k] > 0)
+                    / len(MemoryKind)) if kind_dist else 0.0
 
         # Freshness: ratio of active to total (including archived)
         total = active + stale + archived
