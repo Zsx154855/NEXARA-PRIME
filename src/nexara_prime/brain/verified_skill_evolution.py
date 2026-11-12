@@ -99,6 +99,10 @@ class VerifiedSkillEvolution:
             return verdict("NOT_VERIFIED", "TOKEN_METRICS_UNKNOWN", len(pairs))
         if any(p["treatment"].input_tokens > p["control"].input_tokens for p in pairs):
             return verdict("REJECTED", "TOKEN_REGRESSION", len(pairs))
+        if any(p["treatment"].cost_usd is None or p["control"].cost_usd is None for p in pairs):
+            return verdict("NOT_VERIFIED", "COST_METRICS_UNKNOWN", len(pairs))
+        if any(p["treatment"].cost_usd > p["control"].cost_usd for p in pairs):
+            return verdict("REJECTED", "COST_REGRESSION", len(pairs))
         saved = any(p["treatment"].turns < p["control"].turns
                     or p["treatment"].input_tokens < p["control"].input_tokens for p in pairs)
         if not saved:

@@ -22,7 +22,7 @@ def trials(turns=4, ctrl=6, tokens=80, ctrl_tokens=100, count=3):
     for n in range(count):
         for variant, steps, tok in (("treatment", turns, tokens), ("control", ctrl, ctrl_tokens)):
             t.append(Trial(f"holdout-{n}", variant, True, steps, f"ev-{n}-{variant}",
-                           "independent-qa", tok))
+                           "independent-qa", tok, 0.0))
     return tuple(t)
 
 
@@ -84,3 +84,17 @@ def test_missing_rollback_prevents_eligibility():
 def test_duplicate_trial_not_counted_twice():
     both = trials() + (trials()[0],)
     assert gate().assess(candidate(), both).reason == "DUPLICATE_TRIAL"
+
+
+def test_cost_regression_rejects_even_when_tokens_fall():
+    t = list(trials())
+    x = t[0]
+    t[0] = Trial(x.task_id, x.variant, x.passed, x.turns, x.evidence_id, x.reviewer_id, x.input_tokens, 3.0)
+    assert gate().assess(candidate(), tuple(t)).reason == "COST_REGRESSION"
+
+
+def test_missing_cost_metrics_not_claimed_as_savings():
+    t = list(trials())
+    x = t[0]
+    t[0] = Trial(x.task_id, x.variant, x.passed, x.turns, x.evidence_id, x.reviewer_id, x.input_tokens, None)
+    assert gate().assess(candidate(), tuple(t)).reason == "COST_METRICS_UNKNOWN"

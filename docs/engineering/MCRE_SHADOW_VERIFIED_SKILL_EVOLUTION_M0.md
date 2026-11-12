@@ -9,7 +9,7 @@ Status: ISOLATED_SOURCE + ISOLATED_TESTS; NO RUNTIME ADOPTION / NO PROD ACCEPTAN
 Do not replace `brain.meta_cognition.MetaCognitionController`, `brain.reasoning_budget.ReasoningBudgetManager`,
 `resource_budget.ResourceBudgetManager`, `cost_governor.TokenGovernor`, `brain.evolution_engine.EvolutionController`,
 `brain.memory_controller.MemoryController`, `runtime.NexaraRuntime`, Scheduler/Workers, ApprovalEngine,
-Trusted Gate, or existing EvidenceStore. This branch adds two passive helpers only; no imports
+Trusted Gate, or existing EvidenceStore. This branch adds three passive helpers only; no imports
 into active Runtime, no model calls, databases, network, timers, workers or external side effects.
 
 ## Implementation and interfaces
@@ -37,9 +37,9 @@ into active Runtime, no model calls, databases, network, timers, workers or exte
 ## Executed isolated tests
 
 Command: `python -m pytest -q --tb=short` from an isolated directory containing
-exactly the two new standard-library-only modules and their tests.
-Observed: `27 passed in 0.11s`, Python 3.13.5, pytest 9.0.2; no paid model calls.
-See `tests/brain/test_mcre_shadow.py` and `tests/brain/test_verified_skill_evolution.py`.
+the three new standard-library-only modules and their tests.
+Observed after the incremental binding repair: `38 passed in 0.13s`, Python 3.13.5, pytest 9.0.2; no paid model calls.
+See `tests/brain/test_mcre_shadow.py`, `tests/brain/test_verified_skill_evolution.py`, and `tests/brain/test_mcre_evidence_binding.py`.
 Git object SHA readback must match the local files before this result can be
 associated with the committed branch. This is NOT a full-repo test.
 
@@ -65,7 +65,26 @@ associated with the committed branch. This is NOT a full-repo test.
 ## Evidence labels
 
 VERIFIED: GitHub main/PR existence and source structure read through connected GitHub;
-          27 isolated pytest tests on the candidate file bytes.
+          38 isolated pytest tests on the candidate file bytes.
 NOT_VERIFIED: full repository import, real GitHub CI, Mac Relay execution, integration
               with durable job recovery, live safety checks, real cost savings, genuine
               independent transfer and skill promotion.
+
+## Incremental evidence-binding improvement
+
+Added `mcre_evidence_binding.EvidenceStoreBinding`, a read-only adapter to the
+existing `EvidenceStore.is_preverified_and_integrity_bound` and
+`EvidenceStore.verify_artifact` public methods. Context manifests use kind
+`mcre_context` and bind project, HEAD, environment, scope and SHA-256 of
+stored content. Trial receipts use kind `skill_eval_trial`, binding reviewer,
+variant, pass/fail, step count, tokens and observed cost. These are proposed
+future receipt *types*, not claimed existing production writers.
+
+Trust caveat: integrity of a stored receipt is not independent validation of
+its issuer, independent QA role or external repository HEAD. Until a trusted
+issuer and version resolver are wired through the existing CAB and EvidenceStore,
+these methods can support only shadow recommendations, never authorization.
+
+Skill comparison now refuses cost regression and treats missing cost measurements
+as `COST_METRICS_UNKNOWN`; no cost may be inferred from an absent field.
+The positive test fixture is synthetic, not proof of actual skill improvement.
