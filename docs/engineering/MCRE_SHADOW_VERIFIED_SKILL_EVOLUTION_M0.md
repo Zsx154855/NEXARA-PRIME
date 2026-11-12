@@ -88,3 +88,21 @@ these methods can support only shadow recommendations, never authorization.
 Skill comparison now refuses cost regression and treats missing cost measurements
 as `COST_METRICS_UNKNOWN`; no cost may be inferred from an absent field.
 The positive test fixture is synthetic, not proof of actual skill improvement.
+
+
+## CI resource gate and review authorization
+
+Repository default `.github/workflows/ci.yml` triggers on `work/*` pushes
+and PRs to `main`, using a self-hosted macOS ARM64 runner. Historical Mac
+disk/runtime prerequisites remain NOT_VERIFIED in this turn. Accordingly this
+checkpoint commit explicitly carries `[skip ci]` to prevent accidental
+automatic resource-consuming Mac checks when opening the Draft PR.
+This is CI_NOT_RUN, **never CI_PASS**; skip directives may leave required checks
+pending and must be lifted only after authorized runner resource inspection.
+Do not rerun existing blocked CI or dispatch workflows to bypass this gate.
+
+Engineering quality remains isolated-test PASS / integrated regression NOT_RUN.
+No merge authorization is implied. The independent review should first compare
+blobs and pin current parent base, then run real SQLite and full repository
+tests in a verified isolated runner. Keep the rollout as a read-only Shadow Mode
+proposal until separate QA and human authorization.
