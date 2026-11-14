@@ -1,8 +1,21 @@
-"""ExperienceLearner — records mission outcomes, extracts patterns, ranks experiences."""
+"""ExperienceLearner — records mission outcomes, extracts patterns, ranks experiences.
+
+Trusted admission (task-2):
+- action experiences and lessons require authentic, mission-bound evidence;
+- the canonical EvidenceStore path also requires the experience content to be
+  consistent with a verifiable receipt (tool receipt or experience receipt);
+- caller-asserted ``verification_status="verified"`` is not sufficient unless the
+  EvidenceStore produced a verification transition event or the creating actor is
+  explicitly allowlisted by the assembly path;
+- rejected admissions are counted/logged without mission ids or evidence content.
+"""
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Callable, TYPE_CHECKING
 
@@ -12,21 +25,37 @@ if TYPE_CHECKING:
     from .memory_controller import MemoryController
     from ..evidence import EvidenceStore
 
+_log = logging.getLogger("nexara_prime.brain.experience_learner")
+
+# Coarse trust boundary: actors whose direct "verified" evidence is admissible.
+# This is NOT an identity proof; a real verifier identity/authz layer is still
+# required before production trust in multi-tenant or adversarial settings.
+TRUSTED_VERIFIER_ACTORS: frozenset[str] = frozenset({
+    "tool_runtime",
+    "reviewer",
+    "auditor",
+    "verification_engine",
+})
+
+_TOOL_STATUS_SUCCESS: dict[str, bool] = {"completed": True, "failed": False}
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
 
 def _read_only_evidence_validator(
     evidence_store: EvidenceStore,
+    trusted_actors: frozenset[str],
 ) -> Callable[[str, str], bool]:
-    """Build a read-only authenticity check from the canonical EvidenceStore.
-
-    Uses only side-effect-free read APIs: ``is_preverified_and_integrity_bound``
-    and ``get_by_id``. ``EvidenceStore.verify()`` mutates verification state and
-    must never be used on the recall path.
-    """
+    """Read-only authenticity check over the canonical EvidenceStore."""
 
     def _check(mission_id: str, evidence_id: str) -> bool:
         if not mission_id or not evidence_id:
             return False
-        if evidence_store.is_preverified_and_integrity_bound(evidence_id) is not True:
+        if evidence_store.is_trusted_verified(
+            evidence_id, trusted_actors=trusted_actors
+        ) is not True:
             return False
         return evidence_store.get_by_id(evidence_id).mission_id == mission_id
 
@@ -46,6 +75,8 @@ class ExperienceRecord:
     confidence: float = 0.5
     trace_id: str = ""
     created_at: str = ""
+    evidence_sha256: str = ""
+    evidence_kind: str = ""
 
 
 @dataclass
@@ -60,14 +91,7 @@ class Pattern:
 
 
 class ExperienceLearner:
-    """Records mission outcomes, extracts success/failure patterns, ranks experiences.
-
-    Action-level experiences are only trusted when their evidence is authentic:
-    existence, integrity, pre-verified verification state and mission ownership
-    are checked through the canonical EvidenceStore read APIs. Without a
-    verifier the learner fails closed — no evidence-bound action experience is
-    written, recalled or turned into a pattern.
-    """
+    """Records mission outcomes, extracts patterns, ranks experiences safely."""
 
     def __init__(
         self,
@@ -75,29 +99,133 @@ class ExperienceLearner:
         *,
         evidence_store: EvidenceStore | None = None,
         evidence_validator: Callable[[str, str], bool] | None = None,
+        trusted_verifier_actors: frozenset[str] | None = None,
     ) -> None:
         self._mc = memory_controller
+        self._store = evidence_store
+        self._trusted_actors = (
+            TRUSTED_VERIFIER_ACTORS
+            if trusted_verifier_actors is None
+            else frozenset(trusted_verifier_actors)
+        )
         if evidence_validator is not None:
-            self._evidence_validator: Callable[[str, str], bool] | None = evidence_validator
+            self._validator: Callable[[str, str], bool] | None = evidence_validator
         elif evidence_store is not None:
-            self._evidence_validator = _read_only_evidence_validator(evidence_store)
+            self._validator = _read_only_evidence_validator(
+                evidence_store, self._trusted_actors
+            )
         else:
-            self._evidence_validator = None
+            self._validator = None
+        self._rejections: Counter[str] = Counter()
+        self._logged_reasons: set[str] = set()
+
+    # ── Observability (no mission ids, evidence ids or content in logs) ──
+
+    def rejection_stats(self) -> dict[str, int]:
+        return dict(self._rejections)
+
+    def _reject(self, reason: str) -> None:
+        self._rejections[reason] += 1
+        if reason not in self._logged_reasons:
+            self._logged_reasons.add(reason)
+            _log.warning(
+                "experience_rejected reason=%s count=%d",
+                reason,
+                self._rejections[reason],
+            )
 
     def _evidence_is_authentic(self, mission_id: str, evidence_id: str) -> bool:
         """Fail closed on missing verifier, missing ids or verifier errors."""
-        if not mission_id or not evidence_id or self._evidence_validator is None:
+        if not mission_id or not evidence_id:
+            self._reject("missing_evidence_ids")
+            return False
+        if self._validator is None:
+            self._reject("no_verifier")
             return False
         try:
-            return bool(self._evidence_validator(mission_id, evidence_id))
+            ok = bool(self._validator(mission_id, evidence_id))
+        except Exception:
+            self._reject("verifier_error")
+            return False
+        if not ok:
+            self._reject("evidence_untrusted")
+        return ok
+
+    # ── Receipt consistency (canonical EvidenceStore path only) ──
+
+    def _receipt_for(
+        self,
+        mission_id: str,
+        evidence_id: str,
+        action: str,
+        result: str,
+        success: bool,
+    ) -> dict[str, str]:
+        if self._store is None:
+            return {}
+        artifact = self._store.get_by_id(evidence_id)
+        if artifact.mission_id != mission_id:
+            raise ValueError("experience_evidence_cross_mission")
+        try:
+            receipt = json.loads(artifact.content)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("experience_evidence_receipt_invalid") from exc
+        if not isinstance(receipt, dict):
+            raise ValueError("experience_evidence_receipt_invalid")
+        if artifact.kind == "execution_receipt":
+            if (
+                receipt.get("mission_id") != mission_id
+                or receipt.get("tool_name") != action
+            ):
+                raise ValueError("experience_receipt_action_mismatch")
+            mapped = _TOOL_STATUS_SUCCESS.get(str(receipt.get("status")))
+            if mapped is None or mapped != success:
+                raise ValueError("experience_receipt_status_mismatch")
+        else:
+            if (
+                receipt.get("mission_id") != mission_id
+                or receipt.get("action") != action
+                or receipt.get("result") != result
+                or receipt.get("success") is not success
+            ):
+                raise ValueError("experience_receipt_mismatch")
+        return {
+            "evidence_sha256": artifact.sha256,
+            "evidence_kind": artifact.kind,
+        }
+
+    def _receipt_matches(self, record: dict[str, Any], data: dict[str, Any]) -> bool:
+        if self._store is None:
+            return True  # explicit validator seam (unit-test / non-canonical)
+        stored_sha = str(data.get("evidence_sha256") or "")
+        if not stored_sha:
+            return False
+        evidence_id = str(record.get("evidence_id", ""))
+        try:
+            artifact = self._store.get_by_id(evidence_id)
+            if artifact.sha256 != stored_sha:
+                return False
+            if artifact.kind != str(data.get("evidence_kind", "")):
+                return False
+            self._receipt_for(
+                str(record.get("mission_id", "")),
+                evidence_id,
+                str(data.get("action", "")),
+                str(data.get("result", "")),
+                bool(data.get("success")),
+            )
         except Exception:
             return False
+        return True
+
+    # ── Write paths ──
 
     def record_outcome(
         self, mission_id: str, outcome: str, action: str, result: str,
         success: bool, evidence_id: str | None = None, trace_id: str = "",
     ) -> str:
         if not evidence_id:
+            self._reject("missing_evidence")
             raise ValueError(
                 "memory_evidence_required: kind=experience requires evidence_id"
             )
@@ -106,10 +234,19 @@ class ExperienceLearner:
                 "experience_evidence_unverified: "
                 f"mission_id={mission_id} evidence_id={evidence_id}"
             )
+        try:
+            binding = self._receipt_for(
+                mission_id, evidence_id, action, result, success
+            )
+        except Exception as exc:
+            self._reject("receipt_mismatch")
+            raise ValueError(f"experience_receipt_invalid: {exc}") from exc
         exp = ExperienceRecord(
             mission_id=mission_id, outcome=outcome, action=action,
             result=result, success=success, evidence_id=evidence_id,
             trace_id=trace_id, created_at=now_iso(), confidence=0.5,
+            evidence_sha256=binding.get("evidence_sha256", ""),
+            evidence_kind=binding.get("evidence_kind", ""),
         )
         return self._mc.commit(
             mission_id=mission_id, key=f"exp:{mission_id}:{new_id('exp')}",
@@ -118,11 +255,23 @@ class ExperienceLearner:
         )
 
     def record_lesson(self, mission_id: str, lesson: str, evidence_id: str | None = None) -> str:
+        if not evidence_id:
+            self._reject("missing_evidence")
+            raise ValueError(
+                "memory_evidence_required: kind=lesson requires evidence_id"
+            )
+        if not self._evidence_is_authentic(mission_id, evidence_id):
+            raise ValueError(
+                "lesson_evidence_unverified: "
+                f"mission_id={mission_id} evidence_id={evidence_id}"
+            )
         return self._mc.commit(
             mission_id=mission_id, key=f"lesson:{mission_id}:{new_id('lesson')}",
             content=json.dumps({"lesson": lesson, "created_at": now_iso()}),
             kind="lesson", evidence_id=evidence_id, confidence=0.5,
         )
+
+    # ── Read paths (must stay read-only and re-verify per row) ──
 
     def extract_patterns(self, limit: int = 50) -> list[Pattern]:
         records = self._mc.rank_retrieve(
@@ -173,9 +322,14 @@ class ExperienceLearner:
         )
         lessons: list[str] = []
         for r in records:
-            if r.get("kind") == "lesson" and str(r.get("key", "")).startswith("lesson:"):
-                data = json.loads(r.get("content", "{}")) if isinstance(r.get("content"), str) else r.get("content", {})
-                lessons.append(data.get("lesson", ""))
+            if r.get("kind") != "lesson" or not str(r.get("key", "")).startswith("lesson:"):
+                continue
+            if not self._evidence_is_authentic(
+                str(r.get("mission_id", "")), str(r.get("evidence_id", ""))
+            ):
+                continue
+            data = json.loads(r.get("content", "{}")) if isinstance(r.get("content"), str) else r.get("content", {})
+            lessons.append(data.get("lesson", ""))
         return [x for x in lessons if x]
 
     def count_low_confidence(self, threshold: float = 0.2) -> int:
@@ -190,13 +344,7 @@ class ExperienceLearner:
         return {"patterns_found": len(patterns), "top_patterns": [(p.description, p.success_rate) for p in patterns[:5]], "success_actions": len([p for p in patterns if p.success_rate > 0.7]), "failure_actions": len([p for p in patterns if p.success_rate < 0.3])}
 
     def _action_payload(self, record: dict[str, Any]) -> dict[str, Any] | None:
-        """Return a trusted action payload or None.
-
-        Combines the shape contract (action-level vs N01 mission summaries)
-        with a read-only authenticity check on the bound evidence. The check is
-        repeated on recall so poisoned rows written before this contract are
-        excluded, not merely blocked at write time.
-        """
+        """Return a trusted action payload or None."""
         data = self._shape_action_payload(record)
         if data is None:
             return None
@@ -204,6 +352,9 @@ class ExperienceLearner:
             str(record.get("mission_id", "")),
             str(record.get("evidence_id", "")),
         ):
+            return None
+        if not self._receipt_matches(record, data):
+            self._reject("receipt_mismatch")
             return None
         return data
 
@@ -233,7 +384,15 @@ class ExperienceLearner:
 
     @staticmethod
     def _serialize_exp(exp: ExperienceRecord) -> str:
-        return json.dumps({"mission_id": exp.mission_id, "outcome": exp.outcome, "action": exp.action, "result": exp.result, "success": exp.success, "evidence_id": exp.evidence_id, "patterns": exp.patterns, "lessons": exp.lessons, "confidence": exp.confidence, "trace_id": exp.trace_id, "created_at": exp.created_at})
+        return json.dumps({
+            "mission_id": exp.mission_id, "outcome": exp.outcome,
+            "action": exp.action, "result": exp.result, "success": exp.success,
+            "evidence_id": exp.evidence_id, "patterns": exp.patterns,
+            "lessons": exp.lessons, "confidence": exp.confidence,
+            "trace_id": exp.trace_id, "created_at": exp.created_at,
+            "evidence_sha256": exp.evidence_sha256,
+            "evidence_kind": exp.evidence_kind,
+        })
 
     @staticmethod
     def _deserialize_exp(record: dict) -> ExperienceRecord | None:
@@ -246,6 +405,8 @@ class ExperienceLearner:
                 patterns=data.get("patterns", []), lessons=data.get("lessons", []),
                 confidence=float(data.get("confidence", 0.5)), trace_id=data.get("trace_id", ""),
                 created_at=data.get("created_at", ""),
+                evidence_sha256=data.get("evidence_sha256", ""),
+                evidence_kind=data.get("evidence_kind", ""),
             )
         except (json.JSONDecodeError, KeyError):
             return None
