@@ -151,3 +151,39 @@ class TestEvidenceIdempotency:
                 evidence_id=receipt.evidence_id,
             )
         assert _experience_count(brain) == 1
+
+
+def test_duplicate_lesson_is_idempotent(tmp_path):
+    from nexara_prime.brain.db import BrainDB
+    from nexara_prime.brain.experience_learner import ExperienceLearner
+    from nexara_prime.brain.memory_controller import MemoryController
+    from nexara_prime.db import SQLiteStore
+    from nexara_prime.events import EventBus
+    from nexara_prime.evidence import EvidenceStore
+    from nexara_prime.models import ToolInvocation
+
+    brain = BrainDB(tmp_path / "brain.db")
+    core = SQLiteStore(tmp_path / "core.db")
+    evidence = EvidenceStore(core, EventBus(core))
+    learner = ExperienceLearner(MemoryController(db=brain), evidence_store=evidence)
+    invocation = ToolInvocation(
+        mission_id="mission-A", tool_name="run_pytest", status="completed",
+        result={"ok": True}, trace_id="trace-A",
+    )
+    receipt = evidence.add(
+        "mission-A", "execution_receipt", "r", invocation.model_dump_json(),
+        "trace-A", tool_invocation_id=invocation.invocation_id,
+        actor="tool_runtime", source="tool_runtime", verification_status="verified",
+    )
+    first = learner.record_lesson("mission-A", "always test", receipt.evidence_id)
+    second = learner.record_lesson("mission-A", "always test", receipt.evidence_id)
+    assert first == second
+    with brain._lock:
+        rows = brain._conn.execute(
+            "SELECT COUNT(*) FROM brain_memories WHERE kind='lesson'"
+        ).fetchone()[0]
+    assert rows == 1
+    other = learner.record_lesson("mission-A", "always lint", receipt.evidence_id)
+    assert other != first
+    brain.close()
+    core.close()

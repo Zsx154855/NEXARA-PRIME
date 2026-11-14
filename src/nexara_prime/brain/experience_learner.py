@@ -411,11 +411,28 @@ class ExperienceLearner:
                 self._reject("lesson_digest_unavailable")
                 raise ValueError("lesson_evidence_digest_unavailable") from exc
         lesson_slug = hashlib.sha256(lesson.encode("utf-8")).hexdigest()[:12]
-        return self._mc.commit(
-            mission_id=mission_id, key=f"lesson:{mission_id}:{evidence_id}:{lesson_slug}",
-            content=json.dumps(payload),
-            kind="lesson", evidence_id=evidence_id, confidence=0.5,
-        )
+        key = f"lesson:{mission_id}:{evidence_id}:{lesson_slug}"
+        content = json.dumps(payload)
+        payload_sha = hashlib.sha256(
+            json.dumps(
+                {
+                    "mission_id": mission_id, "key": key, "kind": "lesson",
+                    "evidence_id": evidence_id, "lesson": lesson,
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        try:
+            return self._mc.commit(
+                mission_id=mission_id, key=key, content=content,
+                kind="lesson", evidence_id=evidence_id, confidence=0.5,
+                idempotency_key=key, idempotency_payload_sha256=payload_sha,
+            )
+        except ValueError as exc:
+            if "idempotency_conflict" in str(exc):
+                self._reject("idempotency_conflict")
+                raise ValueError("lesson_idempotency_conflict") from exc
+            raise
 
     # ── Read paths (must stay read-only and re-verify per row) ──
 
