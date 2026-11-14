@@ -214,8 +214,14 @@ class MemoryController:
         top_k: int = 10,
         layers: list[str] | None = None,
         min_confidence: float = 0.3,
+        *,
+        record_access: bool = True,
     ) -> list[dict[str, Any]]:
-        """Ranked retrieval with relevance + recency + confidence scoring."""
+        """Ranked retrieval with relevance + recency + confidence scoring.
+
+        record_access=False is a strict read-only projection for independent
+        evidence and trusted-outcome checks. Normal recall keeps access logs.
+        """
         records = self._db.recall() if self._persist else (
             self._working + self._episodic + self._semantic + self._procedural
         )
@@ -260,8 +266,8 @@ class MemoryController:
             entry = dict(r)
             entry["relevance_score"] = score
             results.append(entry)
-            # Log access
-            self._db.log_access(r.get("memory_id", ""), "rank_retrieve", query)
+            if record_access:
+                self._db.log_access(r.get("memory_id", ""), "rank_retrieve", query)
 
         return results
 
