@@ -39,9 +39,10 @@ TRUSTED_VERIFIER_ACTORS: frozenset[str] = frozenset({
 
 _TOOL_STATUS_SUCCESS: dict[str, bool] = {"completed": True, "failed": False}
 
-
-def _sha256_text(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+# Conservative decision policy: no recommendation from a single sample or a
+# known-failing action.
+_MIN_DECISION_SAMPLES = 2
+_MIN_DECISION_SUCCESS_RATE = 0.5
 
 
 def _read_only_evidence_validator(
@@ -77,6 +78,7 @@ class ExperienceRecord:
     created_at: str = ""
     evidence_sha256: str = ""
     evidence_kind: str = ""
+    result_sha256: str = ""
 
 
 @dataclass
@@ -100,9 +102,13 @@ class ExperienceLearner:
         evidence_store: EvidenceStore | None = None,
         evidence_validator: Callable[[str, str], bool] | None = None,
         trusted_verifier_actors: frozenset[str] | None = None,
+        allow_test_seam: bool = False,
     ) -> None:
         self._mc = memory_controller
         self._store = evidence_store
+        self._seam = evidence_validator is not None and allow_test_seam
+        if evidence_validator is not None and not allow_test_seam:
+            raise ValueError("evidence_validator_requires_allow_test_seam")
         self._trusted_actors = (
             TRUSTED_VERIFIER_ACTORS
             if trusted_verifier_actors is None
@@ -172,6 +178,8 @@ class ExperienceLearner:
             raise ValueError("experience_evidence_receipt_invalid") from exc
         if not isinstance(receipt, dict):
             raise ValueError("experience_evidence_receipt_invalid")
+        if artifact.kind not in {"execution_receipt", "experience_receipt"}:
+            raise ValueError("experience_receipt_kind_unsupported")
         if artifact.kind == "execution_receipt":
             if (
                 receipt.get("mission_id") != mission_id
@@ -181,6 +189,9 @@ class ExperienceLearner:
             mapped = _TOOL_STATUS_SUCCESS.get(str(receipt.get("status")))
             if mapped is None or mapped != success:
                 raise ValueError("experience_receipt_status_mismatch")
+            summary = receipt.get("result_summary")
+            if summary is not None and str(summary) != result:
+                raise ValueError("experience_receipt_result_mismatch")
         else:
             if (
                 receipt.get("mission_id") != mission_id
@@ -189,21 +200,30 @@ class ExperienceLearner:
                 or receipt.get("success") is not success
             ):
                 raise ValueError("experience_receipt_mismatch")
-        return {
+        binding = {
             "evidence_sha256": artifact.sha256,
             "evidence_kind": artifact.kind,
         }
+        if artifact.kind == "execution_receipt":
+            binding["result_sha256"] = hashlib.sha256(
+                json.dumps(
+                    receipt.get("result", {}), sort_keys=True, default=str
+                ).encode("utf-8")
+            ).hexdigest()
+        return binding
 
     def _receipt_matches(self, record: dict[str, Any], data: dict[str, Any]) -> bool:
         if self._store is None:
-            return True  # explicit validator seam (unit-test / non-canonical)
+            return self._seam  # explicit, flagged test seam only
         stored_sha = str(data.get("evidence_sha256") or "")
         if not stored_sha:
+            self._reject("receipt_digest_missing")
             return False
         evidence_id = str(record.get("evidence_id", ""))
         try:
             artifact = self._store.get_by_id(evidence_id)
             if artifact.sha256 != stored_sha:
+                self._reject("receipt_digest_mismatch")
                 return False
             if artifact.kind != str(data.get("evidence_kind", "")):
                 return False
@@ -214,9 +234,79 @@ class ExperienceLearner:
                 str(data.get("result", "")),
                 bool(data.get("success")),
             )
+            if str(data.get("evidence_kind", "")) == "execution_receipt":
+                stored_result = str(data.get("result_sha256") or "")
+                if not stored_result:
+                    return False
+                receipt = json.loads(artifact.content)
+                actual = hashlib.sha256(
+                    json.dumps(
+                        receipt.get("result", {}), sort_keys=True, default=str
+                    ).encode("utf-8")
+                ).hexdigest()
+                if actual != stored_result:
+                    return False
         except Exception:
+            self._reject("receipt_validation_error")
             return False
         return True
+
+    @staticmethod
+    def _relevant(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Drop zero-relevance rows from the real controller; keep legacy mocks."""
+        kept = []
+        for record in records:
+            if "relevance" in record and float(record.get("relevance") or 0.0) <= 0.0:
+                continue
+            kept.append(record)
+        return kept
+
+    # ── Idempotency (single-writer best effort) ──
+
+    def _db(self):
+        return getattr(self._mc, "_db", None)
+
+    def _existing_experience_id(
+        self, mission_id: str, evidence_id: str, action: str, success: bool,
+        outcome: str, result: str,
+    ) -> str | None:
+        db = self._db()
+        if db is None:
+            return None
+        for row in db.recall(mission_id=mission_id, kind="experience"):
+            try:
+                data = json.loads(row.get("content", "{}"))
+            except (TypeError, ValueError):
+                continue
+            if (
+                isinstance(data, dict)
+                and data.get("evidence_id") == evidence_id
+                and data.get("action") == action
+                and data.get("success") is success
+            ):
+                if data.get("outcome") != outcome or data.get("result") != result:
+                    raise ValueError("experience_idempotency_conflict")
+                return str(row.get("memory_id", "")) or None
+        return None
+
+    def _existing_lesson_id(
+        self, mission_id: str, evidence_id: str, lesson: str
+    ) -> str | None:
+        db = self._db()
+        if db is None:
+            return None
+        for row in db.recall(mission_id=mission_id, kind="lesson"):
+            try:
+                data = json.loads(row.get("content", "{}"))
+            except (TypeError, ValueError):
+                continue
+            if (
+                isinstance(data, dict)
+                and data.get("lesson") == lesson
+                and row.get("evidence_id") == evidence_id
+            ):
+                return str(row.get("memory_id", "")) or None
+        return None
 
     # ── Write paths ──
 
@@ -239,19 +329,64 @@ class ExperienceLearner:
                 mission_id, evidence_id, action, result, success
             )
         except Exception as exc:
-            self._reject("receipt_mismatch")
+            reason = str(exc).strip() or "receipt_mismatch"
+            self._reject(reason)
             raise ValueError(f"experience_receipt_invalid: {exc}") from exc
+        try:
+            existing = self._existing_experience_id(
+                mission_id, evidence_id, action, success, outcome, result
+            )
+        except ValueError:
+            self._reject("idempotency_conflict")
+            raise
+        if existing:
+            return existing
         exp = ExperienceRecord(
             mission_id=mission_id, outcome=outcome, action=action,
             result=result, success=success, evidence_id=evidence_id,
             trace_id=trace_id, created_at=now_iso(), confidence=0.5,
             evidence_sha256=binding.get("evidence_sha256", ""),
             evidence_kind=binding.get("evidence_kind", ""),
+            result_sha256=binding.get("result_sha256", ""),
         )
+        content = self._serialize_exp(exp)
+        confidence = 0.5 if success else 0.3
+        key = f"exp:{mission_id}:{evidence_id}"
+        db = self._db()
+        memory_id = new_id("mem")
+        if db is not None and hasattr(db, "insert_memory_with_idempotency"):
+            payload_sha = hashlib.sha256(
+                json.dumps(
+                    {
+                        "mission_id": mission_id,
+                        "key": key,
+                        "kind": "experience",
+                        "evidence_id": evidence_id,
+                        "action": action,
+                        "outcome": outcome,
+                        "result": result,
+                        "success": success,
+                    },
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            try:
+                return self._mc.commit(
+                    mission_id=mission_id, key=key, content=content,
+                    kind="experience", evidence_id=evidence_id,
+                    confidence=confidence, memory_id=memory_id,
+                    idempotency_key=key,
+                    idempotency_payload_sha256=payload_sha,
+                )
+            except ValueError as exc:
+                if "idempotency_conflict" in str(exc):
+                    self._reject("idempotency_conflict")
+                    raise ValueError("experience_idempotency_conflict") from exc
+                raise
         return self._mc.commit(
-            mission_id=mission_id, key=f"exp:{mission_id}:{new_id('exp')}",
-            content=self._serialize_exp(exp), kind="experience",
-            evidence_id=evidence_id, confidence=0.5 if success else 0.3,
+            mission_id=mission_id, key=key, content=content,
+            kind="experience", evidence_id=evidence_id, confidence=confidence,
+            memory_id=memory_id,
         )
 
     def record_lesson(self, mission_id: str, lesson: str, evidence_id: str | None = None) -> str:
@@ -265,19 +400,47 @@ class ExperienceLearner:
                 "lesson_evidence_unverified: "
                 f"mission_id={mission_id} evidence_id={evidence_id}"
             )
-        return self._mc.commit(
-            mission_id=mission_id, key=f"lesson:{mission_id}:{new_id('lesson')}",
-            content=json.dumps({"lesson": lesson, "created_at": now_iso()}),
-            kind="lesson", evidence_id=evidence_id, confidence=0.5,
-        )
+        existing = self._existing_lesson_id(mission_id, evidence_id, lesson)
+        if existing:
+            return existing
+        payload: dict[str, str] = {"lesson": lesson, "created_at": now_iso()}
+        if self._store is not None:
+            try:
+                payload["evidence_sha256"] = self._store.get_by_id(evidence_id).sha256
+            except Exception as exc:
+                self._reject("lesson_digest_unavailable")
+                raise ValueError("lesson_evidence_digest_unavailable") from exc
+        lesson_slug = hashlib.sha256(lesson.encode("utf-8")).hexdigest()[:12]
+        key = f"lesson:{mission_id}:{evidence_id}:{lesson_slug}"
+        content = json.dumps(payload)
+        payload_sha = hashlib.sha256(
+            json.dumps(
+                {
+                    "mission_id": mission_id, "key": key, "kind": "lesson",
+                    "evidence_id": evidence_id, "lesson": lesson,
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        try:
+            return self._mc.commit(
+                mission_id=mission_id, key=key, content=content,
+                kind="lesson", evidence_id=evidence_id, confidence=0.5,
+                idempotency_key=key, idempotency_payload_sha256=payload_sha,
+            )
+        except ValueError as exc:
+            if "idempotency_conflict" in str(exc):
+                self._reject("idempotency_conflict")
+                raise ValueError("lesson_idempotency_conflict") from exc
+            raise
 
     # ── Read paths (must stay read-only and re-verify per row) ──
 
     def extract_patterns(self, limit: int = 50) -> list[Pattern]:
-        records = self._mc.rank_retrieve(
+        records = self._relevant(self._mc.rank_retrieve(
             query="exp:", top_k=limit, layers=["semantic"], min_confidence=0.1,
             record_access=False,
-        )
+        ))
         action_results: dict[str, list[bool]] = {}
         for r in records:
             data = self._action_payload(r)
@@ -301,10 +464,10 @@ class ExperienceLearner:
         return sorted(patterns, key=lambda p: p.confidence * p.success_rate, reverse=True)
 
     def rank_experiences(self, keywords: str, top_k: int = 10) -> list[ExperienceRecord]:
-        records = self._mc.rank_retrieve(
+        records = self._relevant(self._mc.rank_retrieve(
             query=keywords, top_k=top_k * 10, layers=["semantic"],
             min_confidence=0.1, record_access=False,
-        )
+        ))
         exps: list[ExperienceRecord] = []
         for r in records:
             if self._action_payload(r) is not None:
@@ -315,11 +478,70 @@ class ExperienceLearner:
                     exps.append(exp)
         return sorted(exps, key=lambda e: e.confidence * (1.5 if e.success else 0.5), reverse=True)[:top_k]
 
+    def recommend_action(self, keywords: str, top_k: int = 20) -> dict[str, Any]:
+        """Recommend an action from verified experiences (decision use, not just recall).
+
+        Uses only rows that pass recall admission (authentic evidence, receipt
+        consistency, active lifecycle). Returns provenance so a caller can audit
+        which experiences influenced the choice. Cold start returns action=None.
+        """
+        records = self.rank_experiences(keywords, top_k=top_k)
+        stats: dict[str, dict[str, Any]] = {}
+        for record in records:
+            entry = stats.setdefault(
+                record.action, {"successes": 0, "total": 0, "evidence_ids": []}
+            )
+            entry["total"] += 1
+            if record.success:
+                entry["successes"] += 1
+            if record.evidence_id and record.evidence_id not in entry["evidence_ids"]:
+                entry["evidence_ids"].append(record.evidence_id)
+        if not stats:
+            return {
+                "action": None,
+                "confidence": 0.0,
+                "based_on": 0,
+                "evidence_ids": [],
+            }
+        ranked = sorted(
+            stats.items(),
+            key=lambda item: (
+                item[1]["successes"] / max(item[1]["total"], 1),
+                item[1]["total"],
+                item[0],
+            ),
+            reverse=True,
+        )
+        for action, entry in ranked:
+            rate = round(entry["successes"] / max(entry["total"], 1), 4)
+            if entry["total"] < _MIN_DECISION_SAMPLES:
+                continue
+            if rate < _MIN_DECISION_SUCCESS_RATE:
+                continue
+            return {
+                "action": action,
+                "confidence": rate,
+                "based_on": entry["total"],
+                "evidence_ids": entry["evidence_ids"][:3],
+            }
+        max_total = max((entry["total"] for entry in stats.values()), default=0)
+        return {
+            "action": None,
+            "confidence": 0.0,
+            "based_on": 0,
+            "evidence_ids": [],
+            "reason": (
+                "insufficient_evidence"
+                if max_total < _MIN_DECISION_SAMPLES
+                else "low_success_rate"
+            ),
+        }
+
     def get_lessons(self, query: str = "", top_k: int = 10) -> list[str]:
-        records = self._mc.rank_retrieve(
+        records = self._relevant(self._mc.rank_retrieve(
             query=query or "lesson", top_k=top_k, layers=["procedural"],
             min_confidence=0.1, record_access=False,
-        )
+        ))
         lessons: list[str] = []
         for r in records:
             if r.get("kind") != "lesson" or not str(r.get("key", "")).startswith("lesson:"):
@@ -329,14 +551,27 @@ class ExperienceLearner:
             ):
                 continue
             data = json.loads(r.get("content", "{}")) if isinstance(r.get("content"), str) else r.get("content", {})
+            if self._store is not None:
+                digest = str(data.get("evidence_sha256") or "")
+                if not digest:
+                    self._reject("lesson_digest_missing")
+                    continue
+                try:
+                    artifact = self._store.get_by_id(str(r.get("evidence_id", "")))
+                except Exception:
+                    self._reject("lesson_digest_mismatch")
+                    continue
+                if artifact.sha256 != digest:
+                    self._reject("lesson_digest_mismatch")
+                    continue
             lessons.append(data.get("lesson", ""))
         return [x for x in lessons if x]
 
     def count_low_confidence(self, threshold: float = 0.2) -> int:
-        records = self._mc.rank_retrieve(
+        records = self._relevant(self._mc.rank_retrieve(
             query="exp:", top_k=200, layers=["semantic"], min_confidence=0.0,
             record_access=False,
-        )
+        ))
         return sum(1 for r in records if self._action_payload(r) is not None and float(r.get("confidence", 0.5)) < threshold)
 
     def summarize(self) -> dict[str, Any]:
@@ -392,6 +627,7 @@ class ExperienceLearner:
             "trace_id": exp.trace_id, "created_at": exp.created_at,
             "evidence_sha256": exp.evidence_sha256,
             "evidence_kind": exp.evidence_kind,
+            "result_sha256": exp.result_sha256,
         })
 
     @staticmethod
@@ -407,6 +643,7 @@ class ExperienceLearner:
                 created_at=data.get("created_at", ""),
                 evidence_sha256=data.get("evidence_sha256", ""),
                 evidence_kind=data.get("evidence_kind", ""),
+                result_sha256=data.get("result_sha256", ""),
             )
         except (json.JSONDecodeError, KeyError):
             return None

@@ -69,9 +69,12 @@ class MemoryController:
         confidence: float = 1.0,
         provenance_source_file: str = "",
         provenance_commit_sha: str = "",
+        memory_id: str | None = None,
+        idempotency_key: str | None = None,
+        idempotency_payload_sha256: str | None = None,
     ) -> str:
         """Commit a memory with mandatory evidence binding for non-working layers."""
-        memory_id = new_id("mem")
+        memory_id = memory_id or new_id("mem")
         layer = self._classify_layer(kind)
         half_life = get_half_life(kind) if kind in EVIDENCE_REQUIRED_KINDS else None
         now = now_iso()
@@ -103,9 +106,23 @@ class MemoryController:
             "updated_at": now,
         }
 
-        # Persist to DB
+        if idempotency_key and not idempotency_payload_sha256:
+            raise ValueError("idempotency_payload_sha256_required")
+        # Persist to DB (claim + row atomically when idempotency is requested)
         if self._persist:
-            self._db.insert_memory(entry)
+            if idempotency_key and idempotency_payload_sha256:
+                created, existing_id, existing_sha = (
+                    self._db.insert_memory_with_idempotency(
+                        entry, mission_id, idempotency_key,
+                        idempotency_payload_sha256,
+                    )
+                )
+                if not created:
+                    if existing_sha != idempotency_payload_sha256:
+                        raise ValueError("memory_idempotency_conflict")
+                    return existing_id or memory_id
+            else:
+                self._db.insert_memory(entry)
 
         # Record provenance if evidence-bound
         if evidence_id:
@@ -264,6 +281,7 @@ class MemoryController:
         for r, score in scored[:top_k]:
             entry = dict(r)
             entry["relevance_score"] = score
+            entry["relevance"] = round(relevance, 4)
             results.append(entry)
             # Log access (telemetry) unless the caller needs a read-only recall.
             if record_access:

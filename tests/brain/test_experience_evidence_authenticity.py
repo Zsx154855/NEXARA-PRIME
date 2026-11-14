@@ -135,7 +135,7 @@ class TestCommitPath:
         def boom(_mission_id, _evidence_id):
             raise RuntimeError("validator unavailable")
 
-        learner = ExperienceLearner(mc, evidence_validator=boom)
+        learner = ExperienceLearner(mc, evidence_validator=boom, allow_test_seam=True)
         with pytest.raises(ValueError):
             _record(learner, "mission-A", "run_pytest", "ev-any")
         assert learner.rank_experiences("run_pytest") == []
