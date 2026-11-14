@@ -76,6 +76,8 @@ export type MemoryKind =
   | "patch"
   | "user_fact"
   | "project_fact"
+  | "experience"
+  | "lesson"
   | "preference"
   | "temporary_context"
   | "failure_experience"

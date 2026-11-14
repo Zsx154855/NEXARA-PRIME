@@ -10,16 +10,16 @@ def mc(mock_mc):
 
 @pytest.fixture
 def learner(mc):
-    return ExperienceLearner(mc)
+    return ExperienceLearner(mc, evidence_validator=lambda _mission, _evidence: True)
 
 
 class TestExperienceRecord:
     def test_record_outcome_commits(self, learner):
-        cid = learner.record_outcome("m1", "success", "tool_call", "done", True)
+        cid = learner.record_outcome("m1", "success", "tool_call", "done", True, evidence_id="ev-1")
         assert cid is not None
 
     def test_record_failure(self, learner):
-        cid = learner.record_outcome("m2", "failure", "tool_call", "error", False)
+        cid = learner.record_outcome("m2", "failure", "tool_call", "error", False, evidence_id="ev-2")
         assert cid is not None
 
     def test_record_lesson(self, learner):
@@ -30,15 +30,21 @@ class TestExperienceRecord:
 class TestPatternExtraction:
     def test_extract_from_multiple_experiences(self, learner):
         for i in range(5):
-            learner.record_outcome("m1", "success", "tool_a", f"ok_{i}", True)
+            learner.record_outcome(
+                "m1", "success", "tool_a", f"ok_{i}", True, evidence_id=f"ev-a-{i}"
+            )
         for i in range(3):
-            learner.record_outcome("m2", "failure", "tool_b", f"err_{i}", False)
+            learner.record_outcome(
+                "m2", "failure", "tool_b", f"err_{i}", False, evidence_id=f"ev-b-{i}"
+            )
         patterns = learner.extract_patterns(20)
         assert len(patterns) >= 1
 
     def test_extract_success_pattern(self, learner):
         for i in range(5):
-            learner.record_outcome("m1", "success", "fast_tool", f"ok_{i}", True)
+            learner.record_outcome(
+                "m1", "success", "fast_tool", f"ok_{i}", True, evidence_id=f"ev-fast-{i}"
+            )
         patterns = learner.extract_patterns(10)
         assert len(patterns) >= 1, "Should find at least one pattern for fast_tool"
         fast = [p for p in patterns if "fast_tool" in p.description]
@@ -49,7 +55,9 @@ class TestPatternExtraction:
 
     def test_extract_failure_pattern(self, learner):
         for i in range(8):
-            learner.record_outcome("m1", "failure", "slow_tool", f"err_{i}", False)
+            learner.record_outcome(
+                "m1", "failure", "slow_tool", f"err_{i}", False, evidence_id=f"ev-slow-{i}"
+            )
         patterns = learner.extract_patterns(10)
         assert len(patterns) >= 1, "Should find at least one pattern for slow_tool"
         slow = [p for p in patterns if "slow_tool" in p.description]
@@ -59,8 +67,8 @@ class TestPatternExtraction:
         assert slow[0].frequency == 8
 
     def test_few_samples_no_pattern(self, learner):
-        learner.record_outcome("m1", "success", "rare_tool", "ok", True)
-        learner.record_outcome("m2", "success", "rare_tool", "ok", True)
+        learner.record_outcome("m1", "success", "rare_tool", "ok", True, evidence_id="ev-rare-1")
+        learner.record_outcome("m2", "success", "rare_tool", "ok", True, evidence_id="ev-rare-2")
         patterns = learner.extract_patterns(10)
         assert all(p.frequency < 3 for p in patterns)
 
@@ -68,9 +76,9 @@ class TestPatternExtraction:
 class TestExperienceRanking:
     def test_rank_returns_sorted(self, learner):
         for i in range(3):
-            learner.record_outcome("m1", "success", "good_tool", f"ok_{i}", True)
+            learner.record_outcome("m1", "success", "good_tool", f"ok_{i}", True, evidence_id=f"ev-good-{i}")
         for i in range(2):
-            learner.record_outcome("m2", "failure", "bad_tool", f"err_{i}", False)
+            learner.record_outcome("m2", "failure", "bad_tool", f"err_{i}", False, evidence_id=f"ev-bad-{i}")
         ranked = learner.rank_experiences("good bad tool", top_k=10)
         assert isinstance(ranked, list)
 
@@ -85,7 +93,7 @@ class TestLessons:
 
 class TestPruning:
     def test_count_low_confidence(self, learner):
-        learner.record_outcome("m1", "success", "test", "ok", True)
+        learner.record_outcome("m1", "success", "test", "ok", True, evidence_id="ev-prune-1")
         pruned = learner.count_low_confidence(0.9)
         assert isinstance(pruned, int)
 
@@ -93,6 +101,6 @@ class TestPruning:
 class TestSummary:
     def test_summarize(self, learner):
         for i in range(4):
-            learner.record_outcome(f"m{i}", "success", "tool_a", f"ok_{i}", True)
+            learner.record_outcome(f"m{i}", "success", "tool_a", f"ok_{i}", True, evidence_id=f"ev-sum-{i}")
         s = learner.summarize()
         assert "patterns_found" in s

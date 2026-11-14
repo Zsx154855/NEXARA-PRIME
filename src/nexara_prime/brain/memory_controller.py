@@ -214,8 +214,13 @@ class MemoryController:
         top_k: int = 10,
         layers: list[str] | None = None,
         min_confidence: float = 0.3,
+        record_access: bool = True,
     ) -> list[dict[str, Any]]:
-        """Ranked retrieval with relevance + recency + confidence scoring."""
+        """Ranked retrieval with relevance + recency + confidence scoring.
+
+        ``record_access=False`` keeps trusted recall read-only (no access-log
+        writes); default remains the historical logged behavior for telemetry.
+        """
         records = self._db.recall() if self._persist else (
             self._working + self._episodic + self._semantic + self._procedural
         )
@@ -260,8 +265,9 @@ class MemoryController:
             entry = dict(r)
             entry["relevance_score"] = score
             results.append(entry)
-            # Log access
-            self._db.log_access(r.get("memory_id", ""), "rank_retrieve", query)
+            # Log access (telemetry) unless the caller needs a read-only recall.
+            if record_access:
+                self._db.log_access(r.get("memory_id", ""), "rank_retrieve", query)
 
         return results
 

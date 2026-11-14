@@ -33,17 +33,18 @@ def _record_action(learner, n=1):
 
 
 def test_action_experience_is_semantic_and_recalled_after_restart(tmp_path):
-    learner = ExperienceLearner(_controller(tmp_path))
+    # Taxonomy test: authenticity is covered by test_experience_evidence_authenticity.py.
+    learner = ExperienceLearner(_controller(tmp_path), evidence_validator=lambda _m, _e: True)
     _record_action(learner)
     assert _controller(tmp_path)._db.recall(mission_id="mission-A")[0]["layer"] == "semantic"
-    restarted = ExperienceLearner(_controller(tmp_path))
+    restarted = ExperienceLearner(_controller(tmp_path), evidence_validator=lambda _m, _e: True)
     hits = restarted.rank_experiences("run_pytest")
     assert len(hits) == 1
     assert hits[0].action == "run_pytest" and hits[0].success is True
 
 
 def test_action_experience_extracts_real_pattern(tmp_path):
-    learner = ExperienceLearner(_controller(tmp_path))
+    learner = ExperienceLearner(_controller(tmp_path), evidence_validator=lambda _m, _e: True)
     _record_action(learner, n=3)
     patterns = learner.extract_patterns()
     matches = [p for p in patterns if "run_pytest" in p.description]

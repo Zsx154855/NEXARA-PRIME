@@ -4,12 +4,33 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING
 
 from ..models import new_id, now_iso
 
 if TYPE_CHECKING:
     from .memory_controller import MemoryController
+    from ..evidence import EvidenceStore
+
+
+def _read_only_evidence_validator(
+    evidence_store: EvidenceStore,
+) -> Callable[[str, str], bool]:
+    """Build a read-only authenticity check from the canonical EvidenceStore.
+
+    Uses only side-effect-free read APIs: ``is_preverified_and_integrity_bound``
+    and ``get_by_id``. ``EvidenceStore.verify()`` mutates verification state and
+    must never be used on the recall path.
+    """
+
+    def _check(mission_id: str, evidence_id: str) -> bool:
+        if not mission_id or not evidence_id:
+            return False
+        if evidence_store.is_preverified_and_integrity_bound(evidence_id) is not True:
+            return False
+        return evidence_store.get_by_id(evidence_id).mission_id == mission_id
+
+    return _check
 
 
 @dataclass
@@ -39,18 +60,55 @@ class Pattern:
 
 
 class ExperienceLearner:
-    """Records mission outcomes, extracts success/failure patterns, ranks experiences."""
+    """Records mission outcomes, extracts success/failure patterns, ranks experiences.
 
-    def __init__(self, memory_controller: MemoryController) -> None:
+    Action-level experiences are only trusted when their evidence is authentic:
+    existence, integrity, pre-verified verification state and mission ownership
+    are checked through the canonical EvidenceStore read APIs. Without a
+    verifier the learner fails closed — no evidence-bound action experience is
+    written, recalled or turned into a pattern.
+    """
+
+    def __init__(
+        self,
+        memory_controller: MemoryController,
+        *,
+        evidence_store: EvidenceStore | None = None,
+        evidence_validator: Callable[[str, str], bool] | None = None,
+    ) -> None:
         self._mc = memory_controller
+        if evidence_validator is not None:
+            self._evidence_validator: Callable[[str, str], bool] | None = evidence_validator
+        elif evidence_store is not None:
+            self._evidence_validator = _read_only_evidence_validator(evidence_store)
+        else:
+            self._evidence_validator = None
+
+    def _evidence_is_authentic(self, mission_id: str, evidence_id: str) -> bool:
+        """Fail closed on missing verifier, missing ids or verifier errors."""
+        if not mission_id or not evidence_id or self._evidence_validator is None:
+            return False
+        try:
+            return bool(self._evidence_validator(mission_id, evidence_id))
+        except Exception:
+            return False
 
     def record_outcome(
         self, mission_id: str, outcome: str, action: str, result: str,
         success: bool, evidence_id: str | None = None, trace_id: str = "",
     ) -> str:
+        if not evidence_id:
+            raise ValueError(
+                "memory_evidence_required: kind=experience requires evidence_id"
+            )
+        if not self._evidence_is_authentic(mission_id, evidence_id):
+            raise ValueError(
+                "experience_evidence_unverified: "
+                f"mission_id={mission_id} evidence_id={evidence_id}"
+            )
         exp = ExperienceRecord(
             mission_id=mission_id, outcome=outcome, action=action,
-            result=result, success=success, evidence_id=evidence_id or "",
+            result=result, success=success, evidence_id=evidence_id,
             trace_id=trace_id, created_at=now_iso(), confidence=0.5,
         )
         return self._mc.commit(
@@ -67,7 +125,10 @@ class ExperienceLearner:
         )
 
     def extract_patterns(self, limit: int = 50) -> list[Pattern]:
-        records = self._mc.rank_retrieve(query="exp:", top_k=limit, layers=["semantic"], min_confidence=0.1)
+        records = self._mc.rank_retrieve(
+            query="exp:", top_k=limit, layers=["semantic"], min_confidence=0.1,
+            record_access=False,
+        )
         action_results: dict[str, list[bool]] = {}
         for r in records:
             data = self._action_payload(r)
@@ -91,7 +152,10 @@ class ExperienceLearner:
         return sorted(patterns, key=lambda p: p.confidence * p.success_rate, reverse=True)
 
     def rank_experiences(self, keywords: str, top_k: int = 10) -> list[ExperienceRecord]:
-        records = self._mc.rank_retrieve(query=keywords, top_k=top_k * 10, layers=["semantic"], min_confidence=0.1)
+        records = self._mc.rank_retrieve(
+            query=keywords, top_k=top_k * 10, layers=["semantic"],
+            min_confidence=0.1, record_access=False,
+        )
         exps: list[ExperienceRecord] = []
         for r in records:
             if self._action_payload(r) is not None:
@@ -103,7 +167,10 @@ class ExperienceLearner:
         return sorted(exps, key=lambda e: e.confidence * (1.5 if e.success else 0.5), reverse=True)[:top_k]
 
     def get_lessons(self, query: str = "", top_k: int = 10) -> list[str]:
-        records = self._mc.rank_retrieve(query=query or "lesson", top_k=top_k, layers=["procedural"], min_confidence=0.1)
+        records = self._mc.rank_retrieve(
+            query=query or "lesson", top_k=top_k, layers=["procedural"],
+            min_confidence=0.1, record_access=False,
+        )
         lessons: list[str] = []
         for r in records:
             if r.get("kind") == "lesson" and str(r.get("key", "")).startswith("lesson:"):
@@ -112,20 +179,37 @@ class ExperienceLearner:
         return [x for x in lessons if x]
 
     def count_low_confidence(self, threshold: float = 0.2) -> int:
-        records = self._mc.rank_retrieve(query="exp:", top_k=200, layers=["semantic"], min_confidence=0.0)
+        records = self._mc.rank_retrieve(
+            query="exp:", top_k=200, layers=["semantic"], min_confidence=0.0,
+            record_access=False,
+        )
         return sum(1 for r in records if self._action_payload(r) is not None and float(r.get("confidence", 0.5)) < threshold)
 
     def summarize(self) -> dict[str, Any]:
         patterns = self.extract_patterns(limit=20)
         return {"patterns_found": len(patterns), "top_patterns": [(p.description, p.success_rate) for p in patterns[:5]], "success_actions": len([p for p in patterns if p.success_rate > 0.7]), "failure_actions": len([p for p in patterns if p.success_rate < 0.3])}
 
-    @staticmethod
-    def _action_payload(record: dict[str, Any]) -> dict[str, Any] | None:
-        """Distinguish action-level experience from N01 mission summaries.
+    def _action_payload(self, record: dict[str, Any]) -> dict[str, Any] | None:
+        """Return a trusted action payload or None.
 
-        Both historically use kind='experience' in the semantic layer.
-        An N01 MissionExperience must never become a failed action sample.
+        Combines the shape contract (action-level vs N01 mission summaries)
+        with a read-only authenticity check on the bound evidence. The check is
+        repeated on recall so poisoned rows written before this contract are
+        excluded, not merely blocked at write time.
         """
+        data = self._shape_action_payload(record)
+        if data is None:
+            return None
+        if not self._evidence_is_authentic(
+            str(record.get("mission_id", "")),
+            str(record.get("evidence_id", "")),
+        ):
+            return None
+        return data
+
+    @staticmethod
+    def _shape_action_payload(record: dict[str, Any]) -> dict[str, Any] | None:
+        """Shape-only contract: action-level experience vs N01 mission summary."""
         if record.get("kind") != "experience":
             return None
         if not str(record.get("key", "")).startswith("exp:"):
