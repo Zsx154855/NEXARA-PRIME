@@ -443,11 +443,14 @@ class ExperienceLearner:
         mission_id: str | None = None,
         evidence_id: str | None = None,
         reason: str = "",
+        actor: str = "system",
+        audit: Callable[[dict[str, Any]], None] | None = None,
     ) -> int:
         """Archive matching experience/lesson rows so they leave trusted recall.
 
         At least one selector is required. This is an explicit revocation path,
         not a silent expiry; the caller owns the policy and must record why.
+        ``audit`` receives a payload with mission/evidence/reason/actor/count.
         """
         if not mission_id and not evidence_id:
             raise ValueError("retire_criteria_required")
@@ -463,6 +466,15 @@ class ExperienceLearner:
                     continue
                 if db.update_status(str(row.get("memory_id", "")), "archived"):
                     retired += 1
+        if audit is not None:
+            audit({
+                "mission_id": mission_id or "",
+                "evidence_id": evidence_id or "",
+                "retired": retired,
+                "reason": reason,
+                "actor": actor,
+                "retired_at": now_iso(),
+            })
         return retired
 
     # ── Read paths (must stay read-only and re-verify per row) ──

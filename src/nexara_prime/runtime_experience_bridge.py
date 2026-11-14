@@ -31,6 +31,7 @@ class RuntimeExperienceBridge:
     controller: MemoryController
     learner: ExperienceLearner
     rejected_receipts: int = 0
+    already_retired: int = 0
 
 
 def build_runtime_bridge(runtime: NexaraRuntime) -> RuntimeExperienceBridge:
@@ -61,16 +62,18 @@ def capture_mission(bridge: RuntimeExperienceBridge, mission_id: str) -> list[st
         status = str(invocation.get("status", ""))
         success = status == "completed"
         try:
-            created.append(
-                bridge.learner.record_outcome(
-                    mission_id,
-                    "success" if success else "failure",
-                    str(invocation.get("tool_name", "")),
-                    _result_summary(invocation),
-                    success,
-                    evidence_id=str(evidence_id),
-                )
+            memory_id = bridge.learner.record_outcome(
+                mission_id,
+                "success" if success else "failure",
+                str(invocation.get("tool_name", "")),
+                _result_summary(invocation),
+                success,
+                evidence_id=str(evidence_id),
             )
+            if _is_archived(bridge, memory_id):
+                bridge.already_retired += 1
+            else:
+                created.append(memory_id)
         except ValueError:
             # One bad receipt must not abort capture of the remaining verified
             # receipts; it is counted for observability and skipped fail-closed.
@@ -78,9 +81,37 @@ def capture_mission(bridge: RuntimeExperienceBridge, mission_id: str) -> list[st
     return created
 
 
-def retire_mission(bridge: RuntimeExperienceBridge, mission_id: str) -> int:
-    """Archive all experiences/lessons captured for a mission (revocation)."""
-    return bridge.learner.retire_experiences(mission_id=mission_id)
+def _is_archived(bridge: RuntimeExperienceBridge, memory_id: str) -> bool:
+    return any(
+        row.get("memory_id") == memory_id
+        for row in bridge.brain.recall(status="archived")
+    )
+
+
+def retire_mission(
+    bridge: RuntimeExperienceBridge,
+    mission_id: str,
+    *,
+    reason: str = "",
+    actor: str = "operator",
+) -> int:
+    """Archive captured experiences/lessons and emit a durable audit event."""
+    def _audit(payload: dict[str, Any]) -> None:
+        bridge.runtime.events.publish(
+            "experience.retired",
+            mission_id,
+            "mission",
+            actor,
+            f"retire:{mission_id}",
+            payload,
+            idempotency_key=(
+                f"experience-retired:{mission_id}:{payload.get('retired', 0)}"
+            ),
+        )
+
+    return bridge.learner.retire_experiences(
+        mission_id=mission_id, reason=reason, actor=actor, audit=_audit
+    )
 
 
 def close_bridge(bridge: RuntimeExperienceBridge) -> None:

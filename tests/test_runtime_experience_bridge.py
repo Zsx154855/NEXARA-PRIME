@@ -9,6 +9,7 @@ from nexara_prime.runtime_experience_bridge import (
     capture_mission,
     close_bridge,
     experience_count,
+    retire_mission,
     select_objective,
 )
 from nexara_prime.config import Settings
@@ -149,6 +150,35 @@ def test_capture_skips_one_tampered_receipt_and_counts(tmp_path):
         created = capture_mission(bridge, mission_id)
         assert len(created) == len(invocations) - 1
         assert bridge.rejected_receipts == 1
+    finally:
+        rt.telemetry.stop()
+        rt.store.close()
+
+
+def test_retire_mission_emits_audit_and_replay_is_not_created(tmp_path):
+    rt = _runtime(tmp_path)
+    try:
+        mission_id = _run(rt, "Write a local repository report")
+        bridge = build_runtime_bridge(rt)
+        ids = capture_mission(bridge, mission_id)
+        assert ids
+
+        retired = retire_mission(
+            bridge, mission_id, reason="wrong tool for objective", actor="qa"
+        )
+        assert retired == len(ids)
+        events = [
+            event for event in rt.store.list_events(mission_id)
+            if event.get("event_type") == "experience.retired"
+        ]
+        assert events
+        payload = events[-1]["payload"]
+        assert payload["reason"] == "wrong tool for objective"
+        assert payload["actor"] == "qa"
+
+        bridge.already_retired = 0
+        assert capture_mission(bridge, mission_id) == []
+        assert bridge.already_retired == len(ids)
     finally:
         rt.telemetry.stop()
         rt.store.close()
