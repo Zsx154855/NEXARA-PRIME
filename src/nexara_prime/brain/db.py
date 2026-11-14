@@ -137,11 +137,17 @@ class BrainDB:
     (recall, consolidation, decay, provenance, health).
     """
 
-    def __init__(self, path: Path | None = None) -> None:
-        self.path = Path(path) if path else BRAIN_STATE_PATH
-        # Delegate ALL connection/threading/schema management to canonical
-        # SQLiteStore — the single DB authority for the project.
-        self._store = SQLiteStore(self.path)
+    def __init__(self, path: Path | None = None, *, store: SQLiteStore | None = None) -> None:
+        if store is not None:
+            if path is not None and Path(path) != store.path:
+                raise ValueError("brain_store_path_mismatch")
+            self.path = store.path
+            self._store = store
+        else:
+            self.path = Path(path) if path else BRAIN_STATE_PATH
+            # Delegate ALL connection/threading/schema management to canonical
+            # SQLiteStore — the single DB authority for the project.
+            self._store = SQLiteStore(self.path)
         # Add brain-specific tables on top of SQLiteStore's base schema.
         # SQLiteStore._init_schema() already created records + events tables;
         # brain tables are additive and use separate namespace.
