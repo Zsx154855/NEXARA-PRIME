@@ -182,7 +182,9 @@ def _is_expected_child(lock: dict[str, Any], pid: int) -> bool:
     return executable in command_line or os.path.basename(executable) in command_line
 
 
-def _terminate_orphan(lock: dict[str, Any]) -> bool:
+def _terminate_orphan(
+    lock: dict[str, Any], *, allow_unverified: bool = False
+) -> bool:
     """Terminate the dsh process group left behind by a SIGKILLed dispatcher."""
     pid = lock.get("child_pid")
     pgid = lock.get("child_pgid")
@@ -190,7 +192,7 @@ def _terminate_orphan(lock: dict[str, Any]) -> bool:
         return False
     if pid == os.getpid():
         return False
-    if not _is_expected_child(lock, pid):
+    if not _is_expected_child(lock, pid) and not allow_unverified:
         return False
     try:
         if os.getpgid(pid) != pgid:
@@ -347,7 +349,10 @@ def dispatch(
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
-            _terminate_orphan({"child_pid": proc.pid, "child_pgid": proc.pid})
+            _terminate_orphan(
+                {"child_pid": proc.pid, "child_pgid": proc.pid, "command": command},
+                allow_unverified=True,
+            )
         if release_error:
             def settle_gate_failure() -> None:
                 current = _read_lock(lock_path)
@@ -371,10 +376,18 @@ def dispatch(
         elif returncode == 126:
             error = "PermissionError"
     except subprocess.TimeoutExpired:
-        _terminate_orphan({"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid)})
+        _terminate_orphan(
+            {"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid),
+             "command": command},
+            allow_unverified=True,
+        )
         returncode, error = 124, "timeout"
     except (OSError, KeyboardInterrupt) as exc:
-        _terminate_orphan({"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid)})
+        _terminate_orphan(
+            {"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid),
+             "command": command},
+            allow_unverified=True,
+        )
         returncode, error = None, type(exc).__name__
 
     def settle() -> str:

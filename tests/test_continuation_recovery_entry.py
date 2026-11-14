@@ -540,7 +540,7 @@ def test_sigkill_before_child_pid_recorded_does_not_run_dsh(tmp_path):
         assert not (tmp_path / "dsh-args.json").exists()
         os.kill(dispatcher.pid, 9)
         dispatcher.wait(timeout=5)
-        time.sleep(0.3)
+        time.sleep(1.2)
         assert not (tmp_path / "dsh-args.json").exists()
         # Reclaiming stale owner runs the task only once, not concurrently
         # with an orphan from the killed dispatcher.
@@ -578,3 +578,33 @@ def test_pid_reuse_is_not_killed_on_takeover(tmp_path):
     finally:
         unrelated.kill()
         unrelated.wait(timeout=5)
+
+
+def test_timeout_terminates_child_before_retry(tmp_path):
+    """A timed-out DSH must be dead before the lock allows a retry."""
+    module = _load_module()
+    slow = _stub(tmp_path, returncode=0, sleep=10)
+    task = {"id": "task-timeout", "prompt": "x"}
+    state = tmp_path / "state"
+    result = module.dispatch(
+        task, state, dsh_bin=str(slow), execute=True, timeout_seconds=0.2
+    )
+    assert result["status"] == "failed"
+    assert result["returncode"] == 124
+    lock = json.loads((state / "task-task-timeout.lock").read_text())
+    child = lock.get("child_pid")
+    assert isinstance(child, int)
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("timed-out DSH child was left alive")
+
+    retry = module.dispatch(
+        task, state, dsh_bin=str(_stub(tmp_path)), execute=True
+    )
+    assert retry["status"] == "awaiting_verification"
