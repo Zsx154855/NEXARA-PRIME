@@ -12,6 +12,7 @@ Trusted admission (task-2):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from collections import Counter
@@ -77,6 +78,7 @@ class ExperienceRecord:
     created_at: str = ""
     evidence_sha256: str = ""
     evidence_kind: str = ""
+    result_sha256: str = ""
 
 
 @dataclass
@@ -198,10 +200,17 @@ class ExperienceLearner:
                 or receipt.get("success") is not success
             ):
                 raise ValueError("experience_receipt_mismatch")
-        return {
+        binding = {
             "evidence_sha256": artifact.sha256,
             "evidence_kind": artifact.kind,
         }
+        if artifact.kind == "execution_receipt":
+            binding["result_sha256"] = hashlib.sha256(
+                json.dumps(
+                    receipt.get("result", {}), sort_keys=True, default=str
+                ).encode("utf-8")
+            ).hexdigest()
+        return binding
 
     def _receipt_matches(self, record: dict[str, Any], data: dict[str, Any]) -> bool:
         if self._store is None:
@@ -225,6 +234,18 @@ class ExperienceLearner:
                 str(data.get("result", "")),
                 bool(data.get("success")),
             )
+            if str(data.get("evidence_kind", "")) == "execution_receipt":
+                stored_result = str(data.get("result_sha256") or "")
+                if not stored_result:
+                    return False
+                receipt = json.loads(artifact.content)
+                actual = hashlib.sha256(
+                    json.dumps(
+                        receipt.get("result", {}), sort_keys=True, default=str
+                    ).encode("utf-8")
+                ).hexdigest()
+                if actual != stored_result:
+                    return False
         except Exception:
             self._reject("receipt_validation_error")
             return False
@@ -239,6 +260,50 @@ class ExperienceLearner:
                 continue
             kept.append(record)
         return kept
+
+    # ── Idempotency (single-writer best effort) ──
+
+    def _db(self):
+        return getattr(self._mc, "_db", None)
+
+    def _existing_experience_id(
+        self, mission_id: str, evidence_id: str, action: str, success: bool
+    ) -> str | None:
+        db = self._db()
+        if db is None:
+            return None
+        for row in db.recall(mission_id=mission_id, kind="experience"):
+            try:
+                data = json.loads(row.get("content", "{}"))
+            except (TypeError, ValueError):
+                continue
+            if (
+                isinstance(data, dict)
+                and data.get("evidence_id") == evidence_id
+                and data.get("action") == action
+                and data.get("success") is success
+            ):
+                return str(row.get("memory_id", "")) or None
+        return None
+
+    def _existing_lesson_id(
+        self, mission_id: str, evidence_id: str, lesson: str
+    ) -> str | None:
+        db = self._db()
+        if db is None:
+            return None
+        for row in db.recall(mission_id=mission_id, kind="lesson"):
+            try:
+                data = json.loads(row.get("content", "{}"))
+            except (TypeError, ValueError):
+                continue
+            if (
+                isinstance(data, dict)
+                and data.get("lesson") == lesson
+                and row.get("evidence_id") == evidence_id
+            ):
+                return str(row.get("memory_id", "")) or None
+        return None
 
     # ── Write paths ──
 
@@ -264,15 +329,21 @@ class ExperienceLearner:
             reason = str(exc).strip() or "receipt_mismatch"
             self._reject(reason)
             raise ValueError(f"experience_receipt_invalid: {exc}") from exc
+        existing = self._existing_experience_id(
+            mission_id, evidence_id, action, success
+        )
+        if existing:
+            return existing
         exp = ExperienceRecord(
             mission_id=mission_id, outcome=outcome, action=action,
             result=result, success=success, evidence_id=evidence_id,
             trace_id=trace_id, created_at=now_iso(), confidence=0.5,
             evidence_sha256=binding.get("evidence_sha256", ""),
             evidence_kind=binding.get("evidence_kind", ""),
+            result_sha256=binding.get("result_sha256", ""),
         )
         return self._mc.commit(
-            mission_id=mission_id, key=f"exp:{mission_id}:{new_id('exp')}",
+            mission_id=mission_id, key=f"exp:{mission_id}:{evidence_id}",
             content=self._serialize_exp(exp), kind="experience",
             evidence_id=evidence_id, confidence=0.5 if success else 0.3,
         )
@@ -288,6 +359,9 @@ class ExperienceLearner:
                 "lesson_evidence_unverified: "
                 f"mission_id={mission_id} evidence_id={evidence_id}"
             )
+        existing = self._existing_lesson_id(mission_id, evidence_id, lesson)
+        if existing:
+            return existing
         payload: dict[str, str] = {"lesson": lesson, "created_at": now_iso()}
         if self._store is not None:
             try:
@@ -295,8 +369,9 @@ class ExperienceLearner:
             except Exception as exc:
                 self._reject("lesson_digest_unavailable")
                 raise ValueError("lesson_evidence_digest_unavailable") from exc
+        lesson_slug = hashlib.sha256(lesson.encode("utf-8")).hexdigest()[:12]
         return self._mc.commit(
-            mission_id=mission_id, key=f"lesson:{mission_id}:{new_id('lesson')}",
+            mission_id=mission_id, key=f"lesson:{mission_id}:{evidence_id}:{lesson_slug}",
             content=json.dumps(payload),
             kind="lesson", evidence_id=evidence_id, confidence=0.5,
         )
@@ -494,6 +569,7 @@ class ExperienceLearner:
             "trace_id": exp.trace_id, "created_at": exp.created_at,
             "evidence_sha256": exp.evidence_sha256,
             "evidence_kind": exp.evidence_kind,
+            "result_sha256": exp.result_sha256,
         })
 
     @staticmethod
@@ -509,6 +585,7 @@ class ExperienceLearner:
                 created_at=data.get("created_at", ""),
                 evidence_sha256=data.get("evidence_sha256", ""),
                 evidence_kind=data.get("evidence_kind", ""),
+                result_sha256=data.get("result_sha256", ""),
             )
         except (json.JSONDecodeError, KeyError):
             return None
