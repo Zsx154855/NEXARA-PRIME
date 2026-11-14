@@ -7,12 +7,15 @@ NEVER imports brain.db.
 
 from __future__ import annotations
 
+import json
+from dataclasses import asdict
 from typing import Any, TYPE_CHECKING
 
 from .models import AssembledContext, MissionContext
 
 if TYPE_CHECKING:
     from ...memory_controller import MemoryController
+    from ...experience_store import ExperienceStore
 
 
 class MemoryRetrievalAdapter:
@@ -31,11 +34,82 @@ class MemoryRetrievalAdapter:
         "procedural_rules": {"layers": ["procedural"], "top_k": 10, "min_conf": 0.7},
     }
 
-    def __init__(self, memory: "MemoryController | None" = None) -> None:
+    def __init__(
+        self,
+        memory: "MemoryController | None" = None,
+        *,
+        verified_experiences: "ExperienceStore | None" = None,
+    ) -> None:
         self._memory = memory
+        self._verified_experiences = verified_experiences
 
     def bind(self, memory: "MemoryController") -> None:
         self._memory = memory
+
+    def bind_verified_experiences(self, store: "ExperienceStore") -> None:
+        """Bind canonical outcome verification, never an untrusted raw memory list."""
+        self._verified_experiences = store
+
+    def _filter_unverified_success(
+        self, records: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Fail closed for experience-derived success entering reasoning.
+
+        Read-only generic memory may contain older integrity-checked records
+        that do not establish independent business success. Failures remain
+        visible. Successful experience can enter only via the existing
+        ExperienceStore trusted-success view, and record identity must match.
+        """
+        candidates = [
+            row for row in records
+            if row.get("kind") == "experience"
+            or str(row.get("key", "")).startswith("mission_experience:")
+        ]
+        allowed: dict[str, Any] = {}
+        if candidates and self._verified_experiences is not None:
+            try:
+                allowed = {
+                    exp.experience_id: exp
+                    for exp in self._verified_experiences.list_trusted_successes()
+                }
+            except (KeyError, TypeError, ValueError, RuntimeError, AttributeError, OSError):
+                allowed = {}
+
+        filtered: list[dict[str, Any]] = []
+        for row in records:
+            if (
+                row.get("kind") != "experience"
+                and not str(row.get("key", "")).startswith("mission_experience:")
+            ):
+                filtered.append(row)
+                continue
+            try:
+                payload = json.loads(str(row.get("content", "")))
+                if not isinstance(payload, dict):
+                    continue
+                status = payload.get("status")
+                if status == "success":
+                    experience_id = payload.get("experience_id")
+                    if not isinstance(experience_id, str):
+                        continue
+                    verified = allowed.get(experience_id)
+                    if (
+                        verified is None
+                        or row.get("kind") != "experience"
+                        or row.get("key") != f"mission_experience:{experience_id}"
+                        or row.get("mission_id") != verified.mission_id
+                        or row.get("evidence_id") != verified.evidence_refs[0]
+                        or payload != asdict(verified)
+                    ):
+                        continue
+                elif status not in {"failed", "partial", "blocked", "OUTCOME_UNKNOWN"}:
+                    # Unknown, mixed-case or malformed statuses cannot be
+                    # smuggled in as a successful training signal.
+                    continue
+                filtered.append(row)
+            except (KeyError, TypeError, ValueError, IndexError):
+                continue
+        return filtered
 
     def retrieve(
         self,
@@ -51,12 +125,13 @@ class MemoryRetrievalAdapter:
 
         if self._memory is not None:
             try:
-                return self._memory.rank_retrieve(
+                records = self._memory.rank_retrieve(
                     query=query,
                     top_k=k,
                     layers=cfg["layers"],
                     min_confidence=min_c,
                 )
+                return self._filter_unverified_success(records)
             except Exception:
                 pass  # fall through to empty
 
