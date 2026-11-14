@@ -157,14 +157,12 @@ class EvidenceStore:
         origin["envelope_sha256"] = self._envelope_sha256(origin)
         return origin
 
-    def _verification_transition_is_valid(
+    def _has_verified_transition_event(
         self,
         evidence_id: str,
         payload: dict[str, Any],
-        origin_status: str,
     ) -> bool:
-        if origin_status == "verified":
-            return True
+        """True when the canonical ``verify()`` transition event exists."""
         digest = str(payload.get("sha256"))
         idempotency_key = f"evidence.verify:{evidence_id}:{digest}"
         expected_event_id = self._idempotent_event_id(idempotency_key)
@@ -188,6 +186,16 @@ class EvidenceStore:
             ):
                 return True
         return False
+
+    def _verification_transition_is_valid(
+        self,
+        evidence_id: str,
+        payload: dict[str, Any],
+        origin_status: str,
+    ) -> bool:
+        if origin_status == "verified":
+            return True
+        return self._has_verified_transition_event(evidence_id, payload)
 
     def _replay_artifact(
         self,
@@ -535,6 +543,30 @@ class EvidenceStore:
             return False
         envelope_digest = raw.get("envelope_sha256")
         return bool(envelope_digest) and envelope_digest == self._envelope_sha256(raw)
+
+    def is_trusted_verified(
+        self,
+        evidence_id: str,
+        *,
+        trusted_actors: frozenset[str] = frozenset(),
+    ) -> bool:
+        """Stricter trust check for evidence admission.
+
+        ``is_preverified_and_integrity_bound`` accepts evidence created with a
+        caller-asserted ``verification_status="verified"``. This method additionally
+        requires either the canonical ``verify()`` transition event or an explicitly
+        allowlisted creating actor. Allowlisting an actor is a coarse boundary, not
+        an identity proof.
+        """
+        if not self.is_preverified_and_integrity_bound(evidence_id):
+            return False
+        envelope = self.store.get_record_envelope(evidence_id)
+        if not envelope:
+            return False
+        payload = envelope["payload"]
+        if str(payload.get("actor", "")) in trusted_actors:
+            return True
+        return self._has_verified_transition_event(evidence_id, payload)
 
     def verify_receipt_chain(self, mission_id: str) -> dict[str, Any]:
         """Verify the complete receipt chain for a mission.

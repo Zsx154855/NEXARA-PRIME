@@ -17,7 +17,6 @@ from nexara_prime.events import EventBus
 from nexara_prime.evidence import EvidenceStore
 from nexara_prime.memory import MemoryKernel, MemoryLayerManager
 from nexara_prime.memory_os import MemoryOS, MemoryType
-from nexara_prime.models import MemoryKind
 
 
 def _controller(tmp_path):
@@ -91,14 +90,17 @@ def test_action_payload_with_conflicting_evidence_is_not_learned(tmp_path):
 
 
 def test_lesson_is_procedural_and_requires_evidence(tmp_path):
-    learner = ExperienceLearner(_controller(tmp_path))
+    # Taxonomy test: authenticity is covered by test_trusted_experience_task2.py.
+    learner = ExperienceLearner(_controller(tmp_path), evidence_validator=lambda _m, _e: True)
     with pytest.raises(ValueError, match="memory_evidence_required"):
         learner.record_lesson("mission-A", "reject forged receipts")
     learner.record_lesson("mission-A", "reject forged receipts", "ev-lesson-1")
     data = _controller(tmp_path)._db.recall(mission_id="mission-A")
     assert len(data) == 1
     assert data[0]["kind"] == "lesson" and data[0]["layer"] == "procedural"
-    assert ExperienceLearner(_controller(tmp_path)).get_lessons("forged") == ["reject forged receipts"]
+    assert ExperienceLearner(
+        _controller(tmp_path), evidence_validator=lambda _m, _e: True
+    ).get_lessons("forged") == ["reject forged receipts"]
 
 
 def test_legacy_procedural_kind_is_not_silently_promoted(tmp_path):

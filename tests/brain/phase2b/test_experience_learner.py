@@ -23,7 +23,7 @@ class TestExperienceRecord:
         assert cid is not None
 
     def test_record_lesson(self, learner):
-        cid = learner.record_lesson("m1", "use batch operations")
+        cid = learner.record_lesson("m1", "use batch operations", "ev-lesson-1")
         assert cid is not None
 
 
@@ -85,8 +85,8 @@ class TestExperienceRanking:
 
 class TestLessons:
     def test_get_lessons_returns_list(self, learner):
-        learner.record_lesson("m1", "always validate inputs")
-        learner.record_lesson("m2", "use idempotent operations")
+        learner.record_lesson("m1", "always validate inputs", "ev-lesson-2")
+        learner.record_lesson("m2", "use idempotent operations", "ev-lesson-3")
         lessons = learner.get_lessons("validate", top_k=5)
         assert isinstance(lessons, list)
 

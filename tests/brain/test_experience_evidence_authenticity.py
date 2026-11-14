@@ -36,10 +36,15 @@ def _runtime(tmp_path):
     return brain, core, evidence, mc
 
 
-def _verified(evidence, mission_id, content="verified proof"):
+def _verified(evidence, mission_id, action="run_pytest", result="ok", success=True):
+    content = json.dumps({
+        "mission_id": mission_id, "action": action,
+        "result": result, "success": success,
+    })
     return evidence.add(
-        mission_id, "verification", "proof", content,
-        f"trace-{mission_id}", verification_status="verified",
+        mission_id, "experience_receipt", "experience receipt", content,
+        f"trace-{mission_id}", actor="verification_engine", source="verification",
+        verification_status="verified",
     )
 
 
@@ -176,11 +181,11 @@ class TestRecallAndExtractionPaths:
 
     def test_mixed_rows_only_authentic_ones_are_learned(self, tmp_path):
         _, _, evidence, mc = _runtime(tmp_path)
-        good = _verified(evidence, "mission-A")
-        for _ in range(3):
-            _poisoned_row(mc, "mission-A", "good_tool", good.evidence_id)
-        _poisoned_row(mc, "mission-A", "bad_tool", "ev-FORGED")
         learner = ExperienceLearner(mc, evidence_store=evidence)
+        for _ in range(3):
+            good = _verified(evidence, "mission-A", "good_tool")
+            _record(learner, "mission-A", "good_tool", good.evidence_id)
+        _poisoned_row(mc, "mission-A", "bad_tool", "ev-FORGED")
         ranked = learner.rank_experiences("tool")
         assert [r.action for r in ranked] == ["good_tool"] * 3
         patterns = learner.extract_patterns()
