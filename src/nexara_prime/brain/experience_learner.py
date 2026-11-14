@@ -12,7 +12,6 @@ Trusted admission (task-2):
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 from collections import Counter
@@ -38,10 +37,6 @@ TRUSTED_VERIFIER_ACTORS: frozenset[str] = frozenset({
 })
 
 _TOOL_STATUS_SUCCESS: dict[str, bool] = {"completed": True, "failed": False}
-
-
-def _sha256_text(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _read_only_evidence_validator(
@@ -100,9 +95,13 @@ class ExperienceLearner:
         evidence_store: EvidenceStore | None = None,
         evidence_validator: Callable[[str, str], bool] | None = None,
         trusted_verifier_actors: frozenset[str] | None = None,
+        allow_test_seam: bool = False,
     ) -> None:
         self._mc = memory_controller
         self._store = evidence_store
+        self._seam = evidence_validator is not None and allow_test_seam
+        if evidence_validator is not None and not allow_test_seam:
+            raise ValueError("evidence_validator_requires_allow_test_seam")
         self._trusted_actors = (
             TRUSTED_VERIFIER_ACTORS
             if trusted_verifier_actors is None
@@ -172,6 +171,8 @@ class ExperienceLearner:
             raise ValueError("experience_evidence_receipt_invalid") from exc
         if not isinstance(receipt, dict):
             raise ValueError("experience_evidence_receipt_invalid")
+        if artifact.kind not in {"execution_receipt", "experience_receipt"}:
+            raise ValueError("experience_receipt_kind_unsupported")
         if artifact.kind == "execution_receipt":
             if (
                 receipt.get("mission_id") != mission_id
@@ -181,6 +182,9 @@ class ExperienceLearner:
             mapped = _TOOL_STATUS_SUCCESS.get(str(receipt.get("status")))
             if mapped is None or mapped != success:
                 raise ValueError("experience_receipt_status_mismatch")
+            summary = receipt.get("result_summary")
+            if summary is not None and str(summary) != result:
+                raise ValueError("experience_receipt_result_mismatch")
         else:
             if (
                 receipt.get("mission_id") != mission_id
@@ -196,14 +200,16 @@ class ExperienceLearner:
 
     def _receipt_matches(self, record: dict[str, Any], data: dict[str, Any]) -> bool:
         if self._store is None:
-            return True  # explicit validator seam (unit-test / non-canonical)
+            return self._seam  # explicit, flagged test seam only
         stored_sha = str(data.get("evidence_sha256") or "")
         if not stored_sha:
+            self._reject("receipt_digest_missing")
             return False
         evidence_id = str(record.get("evidence_id", ""))
         try:
             artifact = self._store.get_by_id(evidence_id)
             if artifact.sha256 != stored_sha:
+                self._reject("receipt_digest_mismatch")
                 return False
             if artifact.kind != str(data.get("evidence_kind", "")):
                 return False
@@ -215,6 +221,7 @@ class ExperienceLearner:
                 bool(data.get("success")),
             )
         except Exception:
+            self._reject("receipt_validation_error")
             return False
         return True
 
@@ -239,7 +246,8 @@ class ExperienceLearner:
                 mission_id, evidence_id, action, result, success
             )
         except Exception as exc:
-            self._reject("receipt_mismatch")
+            reason = str(exc).strip() or "receipt_mismatch"
+            self._reject(reason)
             raise ValueError(f"experience_receipt_invalid: {exc}") from exc
         exp = ExperienceRecord(
             mission_id=mission_id, outcome=outcome, action=action,
@@ -265,9 +273,16 @@ class ExperienceLearner:
                 "lesson_evidence_unverified: "
                 f"mission_id={mission_id} evidence_id={evidence_id}"
             )
+        payload: dict[str, str] = {"lesson": lesson, "created_at": now_iso()}
+        if self._store is not None:
+            try:
+                payload["evidence_sha256"] = self._store.get_by_id(evidence_id).sha256
+            except Exception as exc:
+                self._reject("lesson_digest_unavailable")
+                raise ValueError("lesson_evidence_digest_unavailable") from exc
         return self._mc.commit(
             mission_id=mission_id, key=f"lesson:{mission_id}:{new_id('lesson')}",
-            content=json.dumps({"lesson": lesson, "created_at": now_iso()}),
+            content=json.dumps(payload),
             kind="lesson", evidence_id=evidence_id, confidence=0.5,
         )
 
@@ -329,6 +344,19 @@ class ExperienceLearner:
             ):
                 continue
             data = json.loads(r.get("content", "{}")) if isinstance(r.get("content"), str) else r.get("content", {})
+            if self._store is not None:
+                digest = str(data.get("evidence_sha256") or "")
+                if not digest:
+                    self._reject("lesson_digest_missing")
+                    continue
+                try:
+                    artifact = self._store.get_by_id(str(r.get("evidence_id", "")))
+                except Exception:
+                    self._reject("lesson_digest_mismatch")
+                    continue
+                if artifact.sha256 != digest:
+                    self._reject("lesson_digest_mismatch")
+                    continue
             lessons.append(data.get("lesson", ""))
         return [x for x in lessons if x]
 

@@ -10,7 +10,7 @@ def mc(mock_mc):
 
 @pytest.fixture
 def learner(mc):
-    return ExperienceLearner(mc, evidence_validator=lambda _mission, _evidence: True)
+    return ExperienceLearner(mc, evidence_validator=lambda _mission, _evidence: True, allow_test_seam=True)
 
 
 class TestExperienceRecord:
