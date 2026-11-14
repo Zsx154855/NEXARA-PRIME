@@ -192,8 +192,20 @@ class ExperienceStore:
             lessons=lessons or [],
             evidence_refs=evidence_refs or [],
         )
+        refs = list(exp.evidence_refs)
+        # Canonical success admission applies even to an in-memory instance.
+        # The pre-existing callback-only mode remains a legacy compatibility
+        # surface; it is NOT an independent business outcome authority.
+        if status == "success" and self._evidence_store is not None:
+            if (
+                not refs
+                or not isinstance(refs[0], str)
+                or self._evidence_validator is None
+                or self._evidence_validator(mission_id, refs[0]) is not True
+                or not self._canonical_business_outcome_verified(mission_id, refs[0])
+            ):
+                raise ValueError("mission_outcome_not_independently_verified")
         if self._mc is not None:
-            refs = list(exp.evidence_refs)
             if (
                 not refs
                 or not isinstance(refs[0], str)
@@ -201,12 +213,6 @@ class ExperienceStore:
                 or self._evidence_validator(mission_id, refs[0]) is not True
             ):
                 raise ValueError("experience_verified_evidence_required")
-            if (
-                status == "success"
-                and self._evidence_store is not None
-                and not self._canonical_business_outcome_verified(mission_id, refs[0])
-            ):
-                raise ValueError("mission_outcome_not_independently_verified")
             self._mc.commit(
                 mission_id=mission_id,
                 key=f"mission_experience:{exp_id}",
