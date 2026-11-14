@@ -30,15 +30,21 @@ class TestExperienceRecord:
 class TestPatternExtraction:
     def test_extract_from_multiple_experiences(self, learner):
         for i in range(5):
-            learner.record_outcome("m1", "success", "tool_a", f"ok_{i}", True)
+            learner.record_outcome(
+                "m1", "success", "tool_a", f"ok_{i}", True, evidence_id=f"ev-a-{i}"
+            )
         for i in range(3):
-            learner.record_outcome("m2", "failure", "tool_b", f"err_{i}", False)
+            learner.record_outcome(
+                "m2", "failure", "tool_b", f"err_{i}", False, evidence_id=f"ev-b-{i}"
+            )
         patterns = learner.extract_patterns(20)
         assert len(patterns) >= 1
 
     def test_extract_success_pattern(self, learner):
         for i in range(5):
-            learner.record_outcome("m1", "success", "fast_tool", f"ok_{i}", True)
+            learner.record_outcome(
+                "m1", "success", "fast_tool", f"ok_{i}", True, evidence_id=f"ev-fast-{i}"
+            )
         patterns = learner.extract_patterns(10)
         assert len(patterns) >= 1, "Should find at least one pattern for fast_tool"
         fast = [p for p in patterns if "fast_tool" in p.description]
@@ -49,7 +55,9 @@ class TestPatternExtraction:
 
     def test_extract_failure_pattern(self, learner):
         for i in range(8):
-            learner.record_outcome("m1", "failure", "slow_tool", f"err_{i}", False)
+            learner.record_outcome(
+                "m1", "failure", "slow_tool", f"err_{i}", False, evidence_id=f"ev-slow-{i}"
+            )
         patterns = learner.extract_patterns(10)
         assert len(patterns) >= 1, "Should find at least one pattern for slow_tool"
         slow = [p for p in patterns if "slow_tool" in p.description]
