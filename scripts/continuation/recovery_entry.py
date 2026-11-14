@@ -421,12 +421,96 @@ def dispatch(
     }
 
 
+_EVIDENCE_ID = re.compile(r"^evidence_[A-Za-z0-9_-]{4,}$")
+
+
+def _evidence_proof(
+    evidence: list[Any],
+    *,
+    base_dir: Path,
+    allow_opaque_evidence_ids: bool = False,
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    proofs: list[dict[str, Any]] = []
+
+    def _path(value: str) -> Path:
+        candidate = Path(value).expanduser()
+        return candidate if candidate.is_absolute() else (base_dir / candidate)
+
+    def _evidence_id(value: str) -> dict[str, Any] | None:
+        if not _EVIDENCE_ID.fullmatch(value):
+            return None
+        if not allow_opaque_evidence_ids:
+            return None
+        return {"evidence_id": value}
+
+    for item in evidence:
+        if isinstance(item, str):
+            value = item.strip()
+            if not value:
+                return None, "missing_evidence"
+            if "/" in value or value.startswith("."):
+                path = _path(value)
+                if not path.is_file():
+                    return None, "missing_evidence_file"
+                proofs.append({
+                    "path": str(path.resolve()),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                })
+            else:
+                entry = _evidence_id(value)
+                if entry is None:
+                    return None, "evidence_id_unverified"
+                proofs.append(entry)
+            continue
+        if isinstance(item, dict):
+            path_value = item.get("path")
+            evidence_id = item.get("evidence_id")
+            if path_value:
+                path = _path(str(path_value))
+                if not path.is_file():
+                    return None, "missing_evidence_file"
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                declared = item.get("sha256")
+                if declared is not None and str(declared) != digest:
+                    return None, "evidence_hash_mismatch"
+                proofs.append({"path": str(path.resolve()), "sha256": digest})
+            elif evidence_id:
+                entry = _evidence_id(str(evidence_id))
+                if entry is None:
+                    return None, "evidence_id_unverified"
+                proofs.append(entry)
+            else:
+                return None, "missing_evidence"
+            continue
+        return None, "missing_evidence"
+    if not proofs:
+        return None, "missing_evidence"
+    return proofs, None
+
+
+def _qa_proof(qa: Any) -> tuple[dict[str, Any] | None, str | None]:
+    if not isinstance(qa, dict):
+        return None, "qa_identity_missing"
+    reviewer = str(qa.get("reviewer") or "").strip()
+    verdict = str(qa.get("verdict") or qa.get("status") or "").strip().lower()
+    if not reviewer:
+        return None, "qa_identity_missing"
+    if verdict not in {"passed", "approved", "pass"}:
+        return None, "missing_qa"
+    proof = {"reviewer": reviewer, "verdict": "passed"}
+    reviewed_at = qa.get("reviewed_at")
+    if reviewed_at:
+        proof["reviewed_at"] = str(reviewed_at)
+    return proof, None
+
+
 def verify_completion(
     checkpoint_path: Path,
     task_id: str,
     state_dir: Path,
     *,
     require_qa: bool = True,
+    allow_opaque_evidence_ids: bool = False,
 ) -> dict[str, Any]:
     if not _TASK_ID.fullmatch(task_id):
         raise ValueError("task_id_must_match_[A-Za-z0-9._-]{1,128}")
@@ -435,19 +519,21 @@ def verify_completion(
     if not isinstance(record, dict) or record.get("status") != "completed":
         return {"status": "not_completed", "task_id": task_id}
     evidence = record.get("evidence") or []
-    if not isinstance(evidence, list) or not any(str(item).strip() for item in evidence):
+    if not isinstance(evidence, list) or not evidence:
         return {"status": "missing_evidence", "task_id": task_id}
-    path_like = [
-        item for item in evidence
-        if isinstance(item, str) and ("/" in item or item.startswith("."))
-    ]
-    if path_like and not any(Path(item).expanduser().exists() for item in path_like):
-        return {"status": "missing_evidence_file", "task_id": task_id}
+    proofs, evidence_error = _evidence_proof(
+        evidence,
+        base_dir=checkpoint_path.parent,
+        allow_opaque_evidence_ids=allow_opaque_evidence_ids,
+    )
+    if evidence_error:
+        return {"status": evidence_error, "task_id": task_id}
+    qa_proof: dict[str, Any] | None = None
     if require_qa:
         qa = record.get("qa") or (data.get("qa") or {}).get(task_id)
-        qa_status = qa.get("status") if isinstance(qa, dict) else qa
-        if qa_status not in {"passed", "approved", "pass"}:
-            return {"status": "missing_qa", "task_id": task_id}
+        qa_proof, qa_error = _qa_proof(qa)
+        if qa_error:
+            return {"status": qa_error, "task_id": task_id}
 
     def mark() -> dict[str, Any]:
         lock_path = _lock_path(state_dir, task_id)
@@ -458,14 +544,26 @@ def verify_completion(
             return {"status": "already_verified", "task_id": task_id}
         if lock.get("state") != "awaiting_verification":
             return {"status": "not_awaiting_verification", "task_id": task_id}
+        verification = {
+            "verified_at": _now(),
+            "evidence": proofs,
+            "qa": qa_proof,
+            "qa_exemption": None if qa_proof else "cli_no_require_qa",
+        }
         lock.update(
             state="done",
-            verified_at=_now(),
+            verified_at=verification["verified_at"],
             verification_evidence=evidence,
+            verification_proof=verification,
             qa_status="passed" if require_qa else "not_required",
         )
         _write_lock(lock_path, lock)
-        return {"status": "verified", "task_id": task_id, "evidence": evidence}
+        return {
+            "status": "verified",
+            "task_id": task_id,
+            "evidence": evidence,
+            "proof": verification,
+        }
 
     return _guarded(state_dir, mark)
 
@@ -487,6 +585,7 @@ def advance(
     timeout_seconds: int = 1800,
     session_id: str | None = None,
     require_qa: bool = True,
+    allow_opaque_evidence_ids: bool = False,
 ) -> list[dict[str, Any]]:
     """Dispatch+verify tasks until the checkpoint stops advancing.
 
@@ -509,7 +608,8 @@ def advance(
         if dispatched["status"] != "awaiting_verification":
             break
         verified = verify_completion(
-            checkpoint_path, task["id"], state_dir, require_qa=require_qa
+            checkpoint_path, task["id"], state_dir, require_qa=require_qa,
+            allow_opaque_evidence_ids=allow_opaque_evidence_ids,
         )
         results.append(verified)
         if verified["status"] not in {"verified", "already_verified"}:
@@ -538,6 +638,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--task-id", default=None)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--no-require-qa", action="store_true")
+    parser.add_argument("--allow-unverified-evidence-ids", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -561,7 +662,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.verify:
         target = args.task_id or task["id"]
         result = verify_completion(
-            checkpoint, target, state_dir, require_qa=not args.no_require_qa
+            checkpoint, target, state_dir,
+            require_qa=not args.no_require_qa,
+            allow_opaque_evidence_ids=args.allow_unverified_evidence_ids,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["status"] in {"verified", "already_verified"} else 1
@@ -570,6 +673,7 @@ def main(argv: list[str] | None = None) -> int:
         results = advance(
             checkpoint, state_dir, dsh_bin=args.dsh_bin, max_tasks=args.max_tasks,
             session_id=args.session_id, require_qa=not args.no_require_qa,
+            allow_opaque_evidence_ids=args.allow_unverified_evidence_ids,
         )
         print(json.dumps(results, indent=2, sort_keys=True))
         last = results[-1] if results else {"status": "no_task"}
