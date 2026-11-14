@@ -66,6 +66,7 @@ class MemoryKind(str, Enum):
     DECISION = "decision"
     FAILURE = "failure"
     EXPERIENCE = "experience"
+    LESSON = "lesson"
     FAILURE_EXPERIENCE = "failure_experience"
     PATCH = "patch"
     SKILL_IMPROVEMENT = "skill_improvement"

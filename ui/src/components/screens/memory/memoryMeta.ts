@@ -1,4 +1,4 @@
-// ─── 记忆区元数据：14 种 MemoryKind 中文映射 + 四层分类 ───
+// ─── 记忆区元数据：15 种 MemoryKind 中文映射 + 四层分类 ───
 // 四层分类镜像后端 MemoryLayer.from_kind（src/nexara_prime/memory.py），
 // 本文件不引入任何象限/轮盘隐喻。
 
@@ -7,7 +7,7 @@ import type { MemoryKind, MemoryStats } from "@/types";
 /** 四层记忆（与后端 MemoryLayer 常量一致）。 */
 export type MemoryLayerKey = keyof MemoryStats["layers"];
 
-/** 14 种记忆种类的中文映射（含后端枚举中的 experience）。 */
+/** 15 种记忆种类的中文映射（含后端枚举中的 experience 与 lesson）。 */
 const MEMORY_KIND_LABELS: Record<string, string> = {
   short_term: "短期记忆",
   fact: "事实",
@@ -17,6 +17,7 @@ const MEMORY_KIND_LABELS: Record<string, string> = {
   user_fact: "用户事实",
   project_fact: "项目事实",
   experience: "经验",
+  lesson: "经验教训",
   preference: "偏好",
   temporary_context: "临时上下文",
   failure_experience: "失败经验",
@@ -42,6 +43,7 @@ const LAYER_BY_KIND: Record<string, MemoryLayerKey> = {
   project_fact: "semantic",
   preference: "semantic",
   experience: "semantic",
+  lesson: "procedural",
   patch: "procedural",
   skill_improvement: "procedural",
   system_rule: "procedural",
