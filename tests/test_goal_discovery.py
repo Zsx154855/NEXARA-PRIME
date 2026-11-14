@@ -6,7 +6,6 @@ import json
 import subprocess
 import sys
 import textwrap
-from pathlib import Path
 
 from nexara_prime.goal_discovery import (
     propose_goals,
