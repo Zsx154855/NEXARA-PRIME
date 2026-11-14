@@ -66,6 +66,7 @@ def test_no_signals_means_no_fabricated_goal(tmp_path):
 
 def test_runtime_failure_signal_from_real_runtime_store(tmp_path):
     from nexara_prime.config import Settings
+    from nexara_prime.models import MissionState
     from nexara_prime.runtime import NexaraRuntime
 
     settings = Settings(
@@ -77,7 +78,7 @@ def test_runtime_failure_signal_from_real_runtime_store(tmp_path):
     rt = NexaraRuntime(settings)
     try:
         mission = rt.create_mission("Real failed mission signal")
-        mission.state = "Failed"
+        mission.state = MissionState.FAILED
         mission.result["error"] = "approval_missing"
         rt._save_mission(mission)
         signals = signals_from_runtime_missions(rt.list_missions())
