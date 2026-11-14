@@ -151,3 +151,19 @@ class TestDecisionInfluence:
         decision = learner.recommend_action("adapter")
         assert decision["action"] is None
         assert decision["confidence"] == 0.0
+
+
+class TestRelevancePerRecord:
+    def test_relevance_is_not_shared_across_rows(self, tmp_path):
+        _, evidence, mc = _runtime(tmp_path)
+        learner = ExperienceLearner(mc, evidence_store=evidence)
+        _record(learner, evidence, "mission-A", "report_tool", True, n=2)
+        _record(learner, evidence, "mission-A", "other_tool", True, n=2)
+
+        rows = mc.rank_retrieve(
+            query="report", top_k=10, layers=["semantic"],
+            min_confidence=0.1, record_access=False,
+        )
+        by_action = {json.loads(row["content"])["action"]: row for row in rows}
+        assert by_action["report_tool"]["relevance"] > 0
+        assert by_action["other_tool"]["relevance"] == 0
