@@ -152,6 +152,57 @@ def test_failed_experience_with_verified_failure_evidence_survives(stack):
         "reconcile vendor invoices")["recommended_adapter"] == "claude"
 
 
+def test_failed_experience_survives_actual_sqlite_reopen(stack):
+    core, brain, ev, mc = stack
+    mid = "m-failed-durable"
+    eid = artifact(ev, mid, kind="failure", content="independent failure evidence")
+    first = ExperienceStore(mc, evidence_store=ev)
+    written = record(first, mid, eid, status="failed", score=0.3)
+    second_core = SQLiteStore(core.path)
+    second_brain = BrainDB(brain.path)
+    try:
+        second_evidence = EvidenceStore(second_core, EventBus(second_core))
+        second_memory = MemoryController(db=second_brain, persist=True)
+        restored = ExperienceStore(second_memory, evidence_store=second_evidence)
+        items = restored.get_by_mission(mid)
+        assert [item.experience_id for item in items] == [written.experience_id]
+        assert restored.stats().success_rate == 0.0
+    finally:
+        second_brain.close()
+        second_core.close()
+
+
+def test_qualified_success_persists_across_reopen_with_trusted_test_seam(stack, monkeypatch):
+    core, brain, ev, mc = stack
+    mid = "m-success-durable-seam"
+    eid = complete_mission(core, ev, mid)
+    monkeypatch.setattr(ev, "receipt_status", lambda _mid: {"status": "present"})
+    first = ExperienceStore(
+        mc, evidence_store=ev,
+        outcome_validator=lambda _mid, _eid: True,
+    )
+    written = record(first, mid, eid)
+    second_core = SQLiteStore(core.path)
+    second_brain = BrainDB(brain.path)
+    try:
+        second_evidence = EvidenceStore(second_core, EventBus(second_core))
+        monkeypatch.setattr(
+            second_evidence, "receipt_status",
+            lambda _mid: {"status": "present"},
+        )
+        second_memory = MemoryController(db=second_brain, persist=True)
+        restored = ExperienceStore(
+            second_memory, evidence_store=second_evidence,
+            outcome_validator=lambda _mid, _eid: True,
+        )
+        assert [e.experience_id for e in restored.get_by_mission(mid)] == [
+            written.experience_id
+        ]
+    finally:
+        second_brain.close()
+        second_core.close()
+
+
 def test_complete_mission_without_independent_outcome_callback_is_rejected(stack, monkeypatch):
     core, _, ev, mc = stack
     eid = complete_mission(core, ev, "m-no-outcome")
