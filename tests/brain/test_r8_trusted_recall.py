@@ -76,7 +76,7 @@ def test_real_sqlite_verified_success_can_enter_trusted_reasoning_then_be_revoke
         )
         monkeypatch.setattr(
             evidence, "receipt_status",
-            lambda _mid: {"status": "present"},
+            lambda _mid, **_kwargs: {"status": "present"},
         )
         allowed = {"value": True}
         experiences = ExperienceStore(
