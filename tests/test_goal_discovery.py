@@ -88,3 +88,11 @@ def test_runtime_failure_signal_from_real_runtime_store(tmp_path):
     finally:
         rt.telemetry.stop()
         rt.store.close()
+
+
+def test_qa_keywords_use_boundaries_not_substrings(tmp_path):
+    qa = tmp_path / "QA.md"
+    qa.write_text("- unit test below definition immediate\n- MED: real risk\n")
+    signals = signals_from_qa_markdown(qa)
+    assert len(signals) == 1
+    assert signals[0].severity == "medium"

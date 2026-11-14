@@ -9,12 +9,16 @@ decision artifact. No model calls and no second SQLite authority.
 from __future__ import annotations
 
 import json
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-_QA_KEYWORDS = ("nit", "risk", "blocked", "med", "high", "low", "未决", "风险", "阻塞")
+_QA_PATTERN = re.compile(
+    r"(?:^|[\s\[(])(nit|risk|blocked|med|high|low)(?=[\s:.,\]\)]|$)|未决|风险|阻塞",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -69,9 +73,9 @@ def signals_from_qa_markdown(path: Path, *, max_signals: int = 50) -> list[Signa
         if not text.startswith(("-", "*")):
             continue
         lowered = text.lower()
-        if not any(keyword in lowered for keyword in _QA_KEYWORDS):
+        if not _QA_PATTERN.search(lowered):
             continue
-        severity = "high" if any(k in lowered for k in ("block", "high", "阻塞")) else "medium"
+        severity = "high" if ("block" in lowered or "high" in lowered or "阻塞" in lowered) else "medium"
         signals.append(Signal(
             source=str(path), kind="qa_finding",
             subject=text[:140], detail=text[:500], severity=severity,

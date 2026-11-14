@@ -25,9 +25,11 @@ class ExecutionOutcome:
     state: str
     evidence_ids: list[str]
     tool_invocations: list[str]
+    completed_invocations: list[str]
     report_path: str
     error: str
     mode: str
+    approval_actor: str
 
 
 def execute_goal(goal: GoalCandidate, settings: Settings) -> ExecutionOutcome:
@@ -36,7 +38,8 @@ def execute_goal(goal: GoalCandidate, settings: Settings) -> ExecutionOutcome:
     try:
         mission = runtime.create_mission(goal.objective)
         runtime.plan_mission(mission.mission_id)
-        runtime.approve_mission(mission.mission_id, approved=True)
+        approval_actor = "cognitive_loop:auto"
+        runtime.approve_mission(mission.mission_id, approved=True, actor=approval_actor)
         error = ""
         try:
             runtime.run_mission(mission.mission_id)
@@ -44,9 +47,11 @@ def execute_goal(goal: GoalCandidate, settings: Settings) -> ExecutionOutcome:
             error = f"{type(exc).__name__}: {exc}"
         final = runtime.get_mission(mission.mission_id)
         evidence_ids = [e["evidence_id"] for e in runtime.evidence.list(mission.mission_id)]
-        invocations = [
+        invocations_raw = runtime.tools.list_invocations(mission.mission_id)
+        invocations = [str(inv.get("invocation_id", "")) for inv in invocations_raw]
+        completed = [
             str(inv.get("invocation_id", ""))
-            for inv in runtime.tools.list_invocations(mission.mission_id)
+            for inv in invocations_raw if str(inv.get("status", "")) == "completed"
         ]
         return ExecutionOutcome(
             goal_id=goal.goal_id,
@@ -55,9 +60,11 @@ def execute_goal(goal: GoalCandidate, settings: Settings) -> ExecutionOutcome:
             state=final.state.value if hasattr(final.state, "value") else str(final.state),
             evidence_ids=evidence_ids,
             tool_invocations=invocations,
+            completed_invocations=completed,
             report_path=str(final.result.get("report_path", "")),
             error=error,
             mode="MOCK_INTEGRATION" if runtime.settings.mock_model else "LIVE",
+            approval_actor=approval_actor,
         )
     finally:
         runtime.telemetry.stop()
@@ -73,6 +80,10 @@ def verify_outcome(outcome: ExecutionOutcome) -> dict[str, Any]:
         reasons.append("no_evidence")
     if not outcome.tool_invocations:
         reasons.append("no_tool_invocations")
+    if not outcome.completed_invocations:
+        reasons.append("no_completed_tool_invocation")
+    if outcome.approval_actor == "human":
+        reasons.append("unattributed_human_approval")
     if not outcome.report_path or not Path(outcome.report_path).exists():
         reasons.append("report_missing")
     if outcome.error:
@@ -106,4 +117,5 @@ def transfer_control(workdir: Path) -> dict[str, Any]:
         "revocation_effective": result["revocation_effective"],
         "mode": "SYNTHETIC_CONTROL",
         "model_calls": result["cost"]["model_calls"],
+        "limits": result["limits"],
     }

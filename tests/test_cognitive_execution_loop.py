@@ -51,11 +51,14 @@ def test_selected_goal_executes_and_is_independently_verified(tmp_path):
     goal = select_goal(propose_goals(signals))["selected"]
     assert goal is not None
 
-    outcome = execute_goal(GoalCandidate(**goal), _settings(tmp_path))
+    settings = _settings(tmp_path)
+    outcome = execute_goal(GoalCandidate(**goal), settings)
     verification = verify_outcome(outcome)
     assert outcome.state == "Completed"
     assert outcome.evidence_ids
     assert outcome.tool_invocations
+    assert outcome.completed_invocations
+    assert outcome.approval_actor == "cognitive_loop:auto"
     assert verification["passed"], verification["reasons"]
     assert outcome.mode == "MOCK_INTEGRATION"
 
@@ -63,19 +66,34 @@ def test_selected_goal_executes_and_is_independently_verified(tmp_path):
     stored = json.loads(artifact.read_text())
     assert stored["verification"]["passed"] is True
 
+    from nexara_prime.db import SQLiteStore
+    store = SQLiteStore(settings.db_path)
+    try:
+        approvals = [
+            entry for entry in store.list_records("audit_entry")
+            if entry.get("event_type") == "approval.decided"
+        ]
+        assert approvals
+        assert approvals[-1]["actor_id"] == "cognitive_loop:auto"
+        assert approvals[-1]["actor_type"] == "system"
+    finally:
+        store.close()
+
 
 def test_verification_rejects_incomplete_outcome(tmp_path):
     from nexara_prime.cognitive_loop import ExecutionOutcome
 
     outcome = ExecutionOutcome(
         goal_id="G001", objective="x", mission_id="m", state="Failed",
-        evidence_ids=[], tool_invocations=[], report_path="", error="boom",
-        mode="MOCK_INTEGRATION",
+        evidence_ids=[], tool_invocations=[], completed_invocations=[],
+        report_path="", error="boom", mode="MOCK_INTEGRATION",
+        approval_actor="human",
     )
     verification = verify_outcome(outcome)
     assert verification["passed"] is False
     assert "state_not_completed:Failed" in verification["reasons"]
     assert "no_evidence" in verification["reasons"]
+    assert "unattributed_human_approval" in verification["reasons"]
 
 
 def test_transfer_control_reports_three_arms(tmp_path):
