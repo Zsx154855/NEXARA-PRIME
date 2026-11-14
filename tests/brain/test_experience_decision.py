@@ -125,3 +125,11 @@ class TestDecisionInfluence:
 
         decision = learner.recommend_action("adapter")
         assert decision["action"] == "python_adapter"
+
+    def test_unrelated_query_does_not_recommend(self, tmp_path):
+        _, evidence, mc = _runtime(tmp_path)
+        learner = ExperienceLearner(mc, evidence_store=evidence)
+        _record(learner, evidence, "mission-A", "python_adapter", True, n=3)
+        decision = learner.recommend_action("zzz quantum banana")
+        assert decision["action"] is None
+        assert decision["based_on"] == 0

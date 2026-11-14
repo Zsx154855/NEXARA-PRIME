@@ -20,6 +20,7 @@ class TestTransferExperiment:
         assert result["experienced"]["influenced_decisions"] == 6
         assert result["cost"]["model_calls"] == 0
         assert result["cost"]["network_calls"] == 0
+        assert result["experienced"]["evidence_ids_used"]
 
     def test_revocation_removes_the_effect(self, tmp_path):
         result = run_experiment(tmp_path)
@@ -42,6 +43,7 @@ class TestTransferExperiment:
             experiment.close()
         assert {*result["cold_start"]["actions"]} == {"claude_adapter"}
         assert {*result["experienced"]["actions"]} == {"claude_adapter"}
+        assert result["experienced"]["influenced_decisions"] == 0
         assert result["delta_success_rate"] == 0.0
 
     def test_revoked_experiences_are_not_recalled(self, tmp_path):
@@ -54,11 +56,27 @@ class TestTransferExperiment:
         finally:
             experiment.close()
 
+    def test_second_run_on_same_instance_is_rejected(self, tmp_path):
+        experiment = ExperienceTransferExperiment(tmp_path)
+        try:
+            experiment.run()
+            try:
+                experiment.run()
+            except RuntimeError as exc:
+                assert "already_ran" in str(exc)
+            else:
+                raise AssertionError("second run should be rejected")
+        finally:
+            experiment.close()
+
     def test_result_is_deterministic_and_writable(self, tmp_path):
         first = run_experiment(tmp_path / "one")
         second = run_experiment(tmp_path / "two")
-        keys = ("cold_start", "experienced", "delta_success_rate", "after_revocation")
-        assert {key: first[key] for key in keys} == {key: second[key] for key in keys}
+        assert first["delta_success_rate"] == second["delta_success_rate"]
+        for key in ("cold_start", "experienced", "after_revocation"):
+            assert first[key]["success_rate"] == second[key]["success_rate"]
+            assert first[key]["influenced_decisions"] == second[key]["influenced_decisions"]
+            assert first[key]["actions"] == second[key]["actions"]
 
         target = tmp_path / "result.json"
         write_result(first, target)

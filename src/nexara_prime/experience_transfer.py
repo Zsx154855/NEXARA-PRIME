@@ -74,6 +74,7 @@ class ExperienceTransferExperiment:
         self.learner = ExperienceLearner(self.mc, evidence_store=self.evidence)
         self._training_memory_ids: list[str] = []
         self._success_memory_ids: list[str] = []
+        self._ran = False
 
     # ── setup ──
 
@@ -133,13 +134,17 @@ class ExperienceTransferExperiment:
         successes = 0
         influenced = 0
         actions: list[str] = []
+        evidence_used: list[str] = []
         for episode in episodes:
             action = DEFAULT_ACTION
             if policy == "experienced":
                 decision = self.learner.recommend_action(episode.keywords)
-                if decision.get("action"):
-                    action = decision["action"]
-                    influenced += 1
+                recommended = decision.get("action")
+                if recommended:
+                    action = recommended
+                    if action != DEFAULT_ACTION:
+                        influenced += 1
+                    evidence_used.extend(decision.get("evidence_ids", []))
             actions.append(action)
             if simulate_action(action, environment=self.task_b_environment):
                 successes += 1
@@ -153,6 +158,7 @@ class ExperienceTransferExperiment:
             "tool_calls": total,
             "influenced_decisions": influenced,
             "actions": actions,
+            "evidence_ids_used": sorted(set(evidence_used)),
         }
 
     def revoke(self) -> dict[str, Any]:
@@ -166,6 +172,9 @@ class ExperienceTransferExperiment:
     # ── run ──
 
     def run(self, *, train: bool = True) -> dict[str, Any]:
+        if self._ran:
+            raise RuntimeError("experiment_already_ran")
+        self._ran = True
         if train:
             self.record_training()
         episodes = self._episodes()

@@ -264,6 +264,7 @@ class MemoryController:
         for r, score in scored[:top_k]:
             entry = dict(r)
             entry["relevance_score"] = score
+            entry["relevance"] = round(relevance, 4)
             results.append(entry)
             # Log access (telemetry) unless the caller needs a read-only recall.
             if record_access:

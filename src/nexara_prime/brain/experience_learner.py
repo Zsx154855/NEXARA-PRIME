@@ -230,6 +230,16 @@ class ExperienceLearner:
             return False
         return True
 
+    @staticmethod
+    def _relevant(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Drop zero-relevance rows from the real controller; keep legacy mocks."""
+        kept = []
+        for record in records:
+            if "relevance" in record and float(record.get("relevance") or 0.0) <= 0.0:
+                continue
+            kept.append(record)
+        return kept
+
     # ── Write paths ──
 
     def record_outcome(
@@ -294,10 +304,10 @@ class ExperienceLearner:
     # ── Read paths (must stay read-only and re-verify per row) ──
 
     def extract_patterns(self, limit: int = 50) -> list[Pattern]:
-        records = self._mc.rank_retrieve(
+        records = self._relevant(self._mc.rank_retrieve(
             query="exp:", top_k=limit, layers=["semantic"], min_confidence=0.1,
             record_access=False,
-        )
+        ))
         action_results: dict[str, list[bool]] = {}
         for r in records:
             data = self._action_payload(r)
@@ -321,10 +331,10 @@ class ExperienceLearner:
         return sorted(patterns, key=lambda p: p.confidence * p.success_rate, reverse=True)
 
     def rank_experiences(self, keywords: str, top_k: int = 10) -> list[ExperienceRecord]:
-        records = self._mc.rank_retrieve(
+        records = self._relevant(self._mc.rank_retrieve(
             query=keywords, top_k=top_k * 10, layers=["semantic"],
             min_confidence=0.1, record_access=False,
-        )
+        ))
         exps: list[ExperienceRecord] = []
         for r in records:
             if self._action_payload(r) is not None:
@@ -395,10 +405,10 @@ class ExperienceLearner:
         }
 
     def get_lessons(self, query: str = "", top_k: int = 10) -> list[str]:
-        records = self._mc.rank_retrieve(
+        records = self._relevant(self._mc.rank_retrieve(
             query=query or "lesson", top_k=top_k, layers=["procedural"],
             min_confidence=0.1, record_access=False,
-        )
+        ))
         lessons: list[str] = []
         for r in records:
             if r.get("kind") != "lesson" or not str(r.get("key", "")).startswith("lesson:"):
@@ -425,10 +435,10 @@ class ExperienceLearner:
         return [x for x in lessons if x]
 
     def count_low_confidence(self, threshold: float = 0.2) -> int:
-        records = self._mc.rank_retrieve(
+        records = self._relevant(self._mc.rank_retrieve(
             query="exp:", top_k=200, layers=["semantic"], min_confidence=0.0,
             record_access=False,
-        )
+        ))
         return sum(1 for r in records if self._action_payload(r) is not None and float(r.get("confidence", 0.5)) < threshold)
 
     def summarize(self) -> dict[str, Any]:
