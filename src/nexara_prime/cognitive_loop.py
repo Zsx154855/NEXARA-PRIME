@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -91,7 +92,7 @@ def _verify_persisted(outcome: ExecutionOutcome, settings: Settings) -> list[str
     if not settings.db_path.is_file():
         return ["independent_store_missing"]
     try:
-        with sqlite3.connect(settings.db_path.resolve().as_uri() + "?mode=ro", uri=True) as conn:
+        with closing(sqlite3.connect(settings.db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
             rows = conn.execute(
                 "SELECT record_id, record_type, mission_id, payload, created_at, "
                 "integrity_sha256, origin_sha256 FROM records "
@@ -133,6 +134,8 @@ def _verify_persisted(outcome: ExecutionOutcome, settings: Settings) -> list[str
     else:
         if mission.get("state") != "Completed" or mission.get("state") != outcome.state:
             problems.append("persisted_state_mismatch")
+        if str((mission.get("spec") or {}).get("objective") or "") != outcome.objective:
+            problems.append("persisted_objective_mismatch")
         stored_report = str((mission.get("result") or {}).get("report_path") or "")
         if stored_report != outcome.report_path:
             problems.append("persisted_report_mismatch")
