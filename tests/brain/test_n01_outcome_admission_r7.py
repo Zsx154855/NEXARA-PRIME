@@ -180,7 +180,7 @@ def test_qualified_success_persists_across_reopen_with_trusted_test_seam(stack, 
     core, brain, ev, mc = stack
     mid = "m-success-durable-seam"
     eid = complete_mission(core, ev, mid)
-    monkeypatch.setattr(ev, "receipt_status", lambda _mid: {"status": "present"})
+    monkeypatch.setattr(ev, "receipt_status", lambda _mid, **_kwargs: {"status": "present"})
     first = ExperienceStore(
         mc, evidence_store=ev,
         outcome_validator=lambda _mid, _eid: True,
@@ -192,7 +192,7 @@ def test_qualified_success_persists_across_reopen_with_trusted_test_seam(stack, 
         second_evidence = EvidenceStore(second_core, EventBus(second_core))
         monkeypatch.setattr(
             second_evidence, "receipt_status",
-            lambda _mid: {"status": "present"},
+            lambda _mid, **_kwargs: {"status": "present"},
         )
         second_memory = MemoryController(db=second_brain, persist=True)
         restored = ExperienceStore(
@@ -210,7 +210,7 @@ def test_qualified_success_persists_across_reopen_with_trusted_test_seam(stack, 
 def test_complete_mission_without_independent_outcome_callback_is_rejected(stack, monkeypatch):
     core, _, ev, mc = stack
     eid = complete_mission(core, ev, "m-no-outcome")
-    monkeypatch.setattr(ev, "receipt_status", lambda mid: {"status": "present"})
+    monkeypatch.setattr(ev, "receipt_status", lambda mid, **_kwargs: {"status": "present"})
     s = ExperienceStore(mc, evidence_store=ev)
     with pytest.raises(ValueError, match="mission_outcome_not_independently_verified"):
         record(s, "m-no-outcome", eid)
@@ -230,7 +230,7 @@ def test_completed_mission_without_real_receipt_is_rejected(stack):
 def test_nonterminal_or_failed_mission_never_promotes_success(stack, monkeypatch, state):
     core, _, ev, mc = stack
     eid = complete_mission(core, ev, f"m-state-{state.value}", state=state)
-    monkeypatch.setattr(ev, "receipt_status", lambda mid: {"status": "present"})
+    monkeypatch.setattr(ev, "receipt_status", lambda mid, **_kwargs: {"status": "present"})
     s = ExperienceStore(mc, evidence_store=ev, outcome_validator=lambda mid, e: True)
     with pytest.raises(ValueError, match="mission_outcome_not_independently_verified"):
         record(s, f"m-state-{state.value}", eid)
@@ -243,7 +243,7 @@ def test_independent_verdict_must_pass(stack, monkeypatch, reviewer, auditor):
     eid = complete_mission(
         core, ev, mission, reviewer_passed=reviewer, auditor_passed=auditor
     )
-    monkeypatch.setattr(ev, "receipt_status", lambda mid: {"status": "present"})
+    monkeypatch.setattr(ev, "receipt_status", lambda mid, **_kwargs: {"status": "present"})
     s = ExperienceStore(mc, evidence_store=ev, outcome_validator=lambda mid, e: True)
     with pytest.raises(ValueError, match="mission_outcome_not_independently_verified"):
         record(s, mission, eid)
@@ -254,7 +254,7 @@ def test_validated_verification_report_is_required_not_health_probe(stack, monke
     mid = "m-verification-id"
     complete_mission(core, ev, mid)
     eid = artifact(ev, mid, kind="environment", content="health probe only")
-    monkeypatch.setattr(ev, "receipt_status", lambda _mid: {"status": "present"})
+    monkeypatch.setattr(ev, "receipt_status", lambda _mid, **_kwargs: {"status": "present"})
     s = ExperienceStore(mc, evidence_store=ev, outcome_validator=lambda mid, e: True)
     with pytest.raises(ValueError, match="mission_outcome_not_independently_verified"):
         record(s, mid, eid)
@@ -264,7 +264,7 @@ def test_legacy_validator_cannot_override_unverified_canonical_evidence(stack, m
     core, _, ev, mc = stack
     mid = "m-unverified-report"
     eid = complete_mission(core, ev, mid, verify_report=False)
-    monkeypatch.setattr(ev, "receipt_status", lambda _mid: {"status": "present"})
+    monkeypatch.setattr(ev, "receipt_status", lambda _mid, **_kwargs: {"status": "present"})
     store = ExperienceStore(
         mc, evidence_store=ev,
         evidence_validator=lambda _mid, _eid: True,
@@ -278,7 +278,7 @@ def test_outcome_callback_error_fails_closed(stack, monkeypatch):
     core, _, ev, mc = stack
     mid = "m-outcome-exception"
     eid = complete_mission(core, ev, mid)
-    monkeypatch.setattr(ev, "receipt_status", lambda _mid: {"status": "present"})
+    monkeypatch.setattr(ev, "receipt_status", lambda _mid, **_kwargs: {"status": "present"})
     def unavailable(mid, eid):
         raise RuntimeError("independent QA offline")
     s = ExperienceStore(mc, evidence_store=ev, outcome_validator=unavailable)
@@ -292,7 +292,7 @@ def test_canonical_positive_dependency_seam_and_revocation(stack, monkeypatch):
     core, _, ev, mc = stack
     mid = "m-verified-seam"
     eid = complete_mission(core, ev, mid)
-    monkeypatch.setattr(ev, "receipt_status", lambda _mid: {"status": "present"})
+    monkeypatch.setattr(ev, "receipt_status", lambda _mid, **_kwargs: {"status": "present"})
     accepted = {"value": True}
     s = ExperienceStore(
         mc, evidence_store=ev,
