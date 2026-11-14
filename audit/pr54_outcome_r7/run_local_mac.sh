@@ -8,7 +8,9 @@ REPO="$ROOT/repo"
 WORK="$ROOT/pr54-outcome-r7"
 BRANCH="audit/pr54-business-outcome-admission-r1-20261114"
 BASE="103c79f500c522492815f9b86dfa0fb80dd07e30"
-EXPECTED="fb2f60e65a60f6c3a90cc3475c6a82685ab4240e"
+EXPECTED_SOURCE_BLOB="467d5ed5727941e622a65441be9b58f1f7156ce5"
+EXPECTED_TEST_BLOB="78b2cc23b4d7474dd0f634c646628617ab512e31"
+EXPECTED_N01_BLOB="6e0e1e25b19c1ad5cd843db1ddae33adcce68c59"
 PY="$ROOT/venv/bin/python"
 
 echo "=== NEXARA PR54 R7 READONLY TEST GATE ==="
@@ -29,18 +31,25 @@ git -C "$REPO" fetch --no-tags --depth=1 origin "$BRANCH" || {
 }
 ACTUAL="$(git -C "$REPO" rev-parse FETCH_HEAD)" || exit 2
 echo "FIX_BRANCH_HEAD=$ACTUAL"
-if [ "$ACTUAL" != "$EXPECTED" ]; then
-  echo "BLOCKED: unexpected patch SHA (requires re-review)"; exit 2
-fi
+for pair in \
+  "src/nexara_prime/brain/experience_store.py:$EXPECTED_SOURCE_BLOB" \
+  "tests/brain/test_n01_outcome_admission_r7.py:$EXPECTED_TEST_BLOB" \
+  "tests/brain/test_n01_experience_persistence.py:$EXPECTED_N01_BLOB"; do
+  file="${pair%%:*}"; expected_blob="${pair#*:}"
+  actual_blob="$(git -C "$REPO" rev-parse "FETCH_HEAD:$file" 2>/dev/null)" || exit 2
+  if [ "$actual_blob" != "$expected_blob" ]; then
+    echo "BLOCKED: unexpected source/test blob: $file"; exit 2
+  fi
+done
 
 if [ -d "$WORK" ]; then
-  [ "$(git -C "$WORK" rev-parse HEAD 2>/dev/null)" = "$EXPECTED" ] || {
-    echo "BLOCKED: existing worktree is not the approved SHA"; exit 2;
+  [ "$(git -C "$WORK" rev-parse HEAD 2>/dev/null)" = "$ACTUAL" ] || {
+    echo "BLOCKED: existing worktree is not the verified branch SHA"; exit 2;
   }
 else
-  git -C "$REPO" worktree add -q --detach "$WORK" "$EXPECTED" || exit 2
+  git -C "$REPO" worktree add -q --detach "$WORK" "$ACTUAL" || exit 2
 fi
-[ "$(git -C "$WORK" rev-parse HEAD)" = "$EXPECTED" ] || exit 2
+[ "$(git -C "$WORK" rev-parse HEAD)" = "$ACTUAL" ] || exit 2
 cd "$WORK" || exit 2
 export PYTHONPATH="$WORK/src"
 export PYTHONDONTWRITEBYTECODE=1
@@ -66,7 +75,7 @@ R6_RC=0
   -q -ra --tb=short > "$ROOT/r7-original-r6.log" 2>&1 || R6_RC=$?
 
 echo "=== REAL MAC TEST OUTPUT ==="
-echo "PR54_FIX_HEAD=$EXPECTED"
+echo "PR54_FIX_HEAD=$ACTUAL"
 echo "N01_9_REGRESSION_EXIT=$N01_RC"
 echo "R7_OUTCOME_CONTRACT_EXIT=$R7_RC"
 echo "UNCHANGED_R6_CONTRACT_EXIT=$R6_RC"
