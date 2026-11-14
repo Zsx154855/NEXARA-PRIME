@@ -114,6 +114,14 @@ CREATE TABLE IF NOT EXISTS memory_provenance_chain (
 );
 CREATE INDEX IF NOT EXISTS idx_provenance_memory ON memory_provenance_chain(memory_id);
 CREATE INDEX IF NOT EXISTS idx_provenance_evidence ON memory_provenance_chain(evidence_id);
+CREATE TABLE IF NOT EXISTS brain_memory_idempotency (
+    mission_id TEXT NOT NULL,
+    mem_key TEXT NOT NULL,
+    memory_id TEXT NOT NULL,
+    payload_sha256 TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (mission_id, mem_key)
+);
 """
 
 
@@ -212,6 +220,44 @@ class BrainDB:
         query += " ORDER BY created_at DESC"
         rows = self._conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
+
+    def claim_idempotency(
+        self, mission_id: str, mem_key: str, memory_id: str, payload_sha256: str
+    ) -> tuple[bool, str | None, str | None]:
+        """Atomically claim (mission, key); returns (created, existing_id, existing_sha)."""
+        with self._lock:
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO brain_memory_idempotency"
+                "(mission_id, mem_key, memory_id, payload_sha256, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (mission_id, mem_key, memory_id, payload_sha256, now_iso()),
+            )
+            self._conn.commit()
+            if cursor.rowcount == 1:
+                return True, None, None
+            row = self._conn.execute(
+                "SELECT memory_id, payload_sha256 FROM brain_memory_idempotency "
+                "WHERE mission_id = ? AND mem_key = ?",
+                (mission_id, mem_key),
+            ).fetchone()
+            if row is None:
+                return False, None, None
+            return False, row["memory_id"], row["payload_sha256"]
+
+    def has_memory(self, memory_id: str) -> bool:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM brain_memories WHERE memory_id = ?", (memory_id,)
+            ).fetchone()
+        return bool(row)
+
+    def release_idempotency(self, mission_id: str, mem_key: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM brain_memory_idempotency WHERE mission_id = ? AND mem_key = ?",
+                (mission_id, mem_key),
+            )
+            self._conn.commit()
 
     def update_memory(self, memory_id: str, updates: dict[str, Any]) -> bool:
         if not updates:

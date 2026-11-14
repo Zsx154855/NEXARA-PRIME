@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Callable, TYPE_CHECKING
@@ -308,6 +309,29 @@ class ExperienceLearner:
                 return str(row.get("memory_id", "")) or None
         return None
 
+    @staticmethod
+    def _await_memory(db: Any, memory_id: str, timeout: float = 2.0) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if db.has_memory(memory_id):
+                return True
+            time.sleep(0.01)
+        return db.has_memory(memory_id)
+
+    def _commit_claimed_experience(
+        self, mission_id: str, key: str, content: str, evidence_id: str,
+        confidence: float, memory_id: str, db: Any,
+    ) -> str:
+        try:
+            return self._mc.commit(
+                mission_id=mission_id, key=key, content=content,
+                kind="experience", evidence_id=evidence_id,
+                confidence=confidence, memory_id=memory_id,
+            )
+        except Exception:
+            db.release_idempotency(mission_id, key)
+            raise
+
     # ── Write paths ──
 
     def record_outcome(
@@ -349,10 +373,61 @@ class ExperienceLearner:
             evidence_kind=binding.get("evidence_kind", ""),
             result_sha256=binding.get("result_sha256", ""),
         )
+        content = self._serialize_exp(exp)
+        confidence = 0.5 if success else 0.3
+        key = f"exp:{mission_id}:{evidence_id}"
+        db = self._db()
+        memory_id = new_id("mem")
+        if db is not None and hasattr(db, "claim_idempotency"):
+            payload_sha = hashlib.sha256(
+                json.dumps(
+                    {
+                        "mission_id": mission_id,
+                        "key": key,
+                        "kind": "experience",
+                        "evidence_id": evidence_id,
+                        "action": action,
+                        "outcome": outcome,
+                        "result": result,
+                        "success": success,
+                    },
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            claimed, existing_id, existing_sha = db.claim_idempotency(
+                mission_id, key, memory_id, payload_sha
+            )
+            if not claimed:
+                if existing_id and self._await_memory(db, existing_id):
+                    if existing_sha != payload_sha:
+                        self._reject("idempotency_conflict")
+                        raise ValueError("experience_idempotency_conflict")
+                    return existing_id
+                if existing_sha != payload_sha:
+                    self._reject("idempotency_conflict")
+                    raise ValueError("experience_idempotency_conflict")
+                # Orphaned claim (crash between claim and insert): recover once.
+                db.release_idempotency(mission_id, key)
+                claimed, existing_id, existing_sha = db.claim_idempotency(
+                    mission_id, key, memory_id, payload_sha
+                )
+                if not claimed:
+                    if existing_sha != payload_sha:
+                        self._reject("idempotency_conflict")
+                        raise ValueError("experience_idempotency_conflict")
+                    if existing_id and db.has_memory(existing_id):
+                        return existing_id
+                    raise ValueError("experience_idempotency_pending")
+                return self._commit_claimed_experience(
+                    mission_id, key, content, evidence_id, confidence, memory_id, db
+                )
+            return self._commit_claimed_experience(
+                mission_id, key, content, evidence_id, confidence, memory_id, db
+            )
         return self._mc.commit(
-            mission_id=mission_id, key=f"exp:{mission_id}:{evidence_id}",
-            content=self._serialize_exp(exp), kind="experience",
-            evidence_id=evidence_id, confidence=0.5 if success else 0.3,
+            mission_id=mission_id, key=key, content=content,
+            kind="experience", evidence_id=evidence_id, confidence=confidence,
+            memory_id=memory_id,
         )
 
     def record_lesson(self, mission_id: str, lesson: str, evidence_id: str | None = None) -> str:

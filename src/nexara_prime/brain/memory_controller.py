@@ -69,9 +69,10 @@ class MemoryController:
         confidence: float = 1.0,
         provenance_source_file: str = "",
         provenance_commit_sha: str = "",
+        memory_id: str | None = None,
     ) -> str:
         """Commit a memory with mandatory evidence binding for non-working layers."""
-        memory_id = new_id("mem")
+        memory_id = memory_id or new_id("mem")
         layer = self._classify_layer(kind)
         half_life = get_half_life(kind) if kind in EVIDENCE_REQUIRED_KINDS else None
         now = now_iso()
