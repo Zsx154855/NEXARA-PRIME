@@ -48,7 +48,10 @@ _GATE_CHILD = (
     "    os.close(fd)\n"
     "if permit != b'1':\n"
     "    sys.exit(125)\n"
-    "os.execvp(sys.argv[2], sys.argv[2:])\n"
+    "try:\n"
+    "    os.execvp(sys.argv[2], sys.argv[2:])\n"
+    "except OSError as exc:\n"
+    "    os._exit(127 if getattr(exc, 'errno', None) == 2 else 126)\n"
 )
 
 
@@ -335,6 +338,10 @@ def dispatch(
     try:
         returncode: int | None = proc.wait(timeout=timeout_seconds)
         error = None
+        if returncode == 127:
+            error = "FileNotFoundError"
+        elif returncode == 126:
+            error = "PermissionError"
     except subprocess.TimeoutExpired:
         _terminate_orphan({"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid)})
         returncode, error = 124, "timeout"
