@@ -138,20 +138,34 @@ class ReportMissionContractVerifier:
                 event_ids.append(str(event["event_id"]))
                 state = to_state
             state_evidence = self._evidence.list(mission_id)
-            bound = {
-                item.get("source_event_id")
-                for item in state_evidence
-                if item.get("kind") == "state_transition"
-                and item.get("evidence_id")
-                and self._verified(item["evidence_id"], mission_id, "state_transition")
-            }
+            bound: dict[str, Any] = {}
+            for item in state_evidence:
+                if item.get("kind") != "state_transition":
+                    continue
+                artifact = self._verified(item.get("evidence_id"), mission_id, "state_transition")
+                if (
+                    artifact is not None
+                    and artifact.actor == "state_machine"
+                    and artifact.source == "mission.state_changed"
+                    and artifact.source_event_id
+                ):
+                    bound[artifact.source_event_id] = artifact
+            traces_bound = all(
+                event["event_id"] in bound
+                and bound[event["event_id"]].content == (
+                    f"Mission {mission_id} transitioned from "
+                    f"{event['payload']['from']} to {event['payload']['to']}."
+                )
+                for event in transitions
+            ) if valid_trace else False
             checks["full state machine trace exists"] = (
                 valid_trace
                 and state == MissionState.COMPLETED
                 and mission.state == MissionState.COMPLETED
                 and bool(event_ids)
                 and len(event_ids) == len(transitions)
-                and set(event_ids).issubset(bound)
+                and len(event_ids) == len(set(event_ids))
+                and traces_bound
             )
             if not checks["full state machine trace exists"]:
                 failures.append("state_event_or_evidence_chain_invalid")
