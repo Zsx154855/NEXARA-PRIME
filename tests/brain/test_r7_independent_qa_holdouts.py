@@ -131,7 +131,7 @@ def test_in_memory_outcome_revocation_removes_success_from_recall(tmp_path, monk
         # Injection only exercises a component contract. Not a valid business
         # verdict or real receipt producer.
         monkeypatch.setattr(
-            evidence, "receipt_status", lambda _mid: {"status": "present"}
+            evidence, "receipt_status", lambda _mid, **_kwargs: {"status": "present"}
         )
         allowed = {"value": True}
         store = ExperienceStore(
