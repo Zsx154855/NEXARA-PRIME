@@ -78,6 +78,11 @@ def capture_mission(bridge: RuntimeExperienceBridge, mission_id: str) -> list[st
     return created
 
 
+def retire_mission(bridge: RuntimeExperienceBridge, mission_id: str) -> int:
+    """Archive all experiences/lessons captured for a mission (revocation)."""
+    return bridge.learner.retire_experiences(mission_id=mission_id)
+
+
 def close_bridge(bridge: RuntimeExperienceBridge) -> None:
     """Detach semantically only; the Runtime owns the shared connection."""
     # Deliberately does not call brain.close(): it would close runtime.store.

@@ -435,6 +435,36 @@ class ExperienceLearner:
                 raise ValueError("lesson_idempotency_conflict") from exc
             raise
 
+    # ── Retirement (wrong/stale experience must stop influencing decisions) ──
+
+    def retire_experiences(
+        self,
+        *,
+        mission_id: str | None = None,
+        evidence_id: str | None = None,
+        reason: str = "",
+    ) -> int:
+        """Archive matching experience/lesson rows so they leave trusted recall.
+
+        At least one selector is required. This is an explicit revocation path,
+        not a silent expiry; the caller owns the policy and must record why.
+        """
+        if not mission_id and not evidence_id:
+            raise ValueError("retire_criteria_required")
+        db = self._db()
+        if db is None:
+            return 0
+        retired = 0
+        for kind in ("experience", "lesson"):
+            for row in db.recall(kind=kind):
+                if mission_id and row.get("mission_id") != mission_id:
+                    continue
+                if evidence_id and row.get("evidence_id") != evidence_id:
+                    continue
+                if db.update_status(str(row.get("memory_id", "")), "archived"):
+                    retired += 1
+        return retired
+
     # ── Read paths (must stay read-only and re-verify per row) ──
 
     def extract_patterns(self, limit: int = 50) -> list[Pattern]:

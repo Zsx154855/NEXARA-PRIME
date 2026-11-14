@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from nexara_prime.brain.db import BrainDB
 from nexara_prime.brain.experience_learner import ExperienceLearner
 from nexara_prime.brain.memory_controller import MemoryController
@@ -184,3 +186,33 @@ class TestRelevancePerRecord:
         decision = learner.recommend_action("adapter")
         assert decision["action"] is None
         assert decision["reason"] == "insufficient_independent_missions"
+
+
+class TestRetirement:
+    def test_retired_mission_stops_influencing_decisions(self, tmp_path):
+        _, evidence, mc = _runtime(tmp_path)
+        learner = ExperienceLearner(mc, evidence_store=evidence)
+        _record(learner, evidence, "mission-A", "python_adapter", True, n=2)
+        _record(learner, evidence, "mission-B", "python_adapter", True, n=2)
+        assert learner.recommend_action("adapter")["based_on_missions"] == 2
+
+        retired = learner.retire_experiences(mission_id="mission-A")
+        assert retired == 2
+        decision = learner.recommend_action("adapter")
+        assert decision["action"] is None
+        assert decision["reason"] == "insufficient_independent_missions"
+
+    def test_retire_requires_a_selector(self, tmp_path):
+        _, evidence, mc = _runtime(tmp_path)
+        learner = ExperienceLearner(mc, evidence_store=evidence)
+        with pytest.raises(ValueError, match="retire_criteria_required"):
+            learner.retire_experiences()
+
+    def test_retired_lessons_are_not_returned(self, tmp_path):
+        _, evidence, mc = _runtime(tmp_path)
+        receipt = _receipt(evidence, "mission-A", "run_pytest")
+        learner = ExperienceLearner(mc, evidence_store=evidence)
+        learner.record_lesson("mission-A", "retire me", receipt.evidence_id)
+        assert learner.get_lessons("retire") == ["retire me"]
+        learner.retire_experiences(mission_id="mission-A")
+        assert learner.get_lessons("retire") == []
