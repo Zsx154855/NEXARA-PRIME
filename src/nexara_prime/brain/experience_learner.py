@@ -267,7 +267,8 @@ class ExperienceLearner:
         return getattr(self._mc, "_db", None)
 
     def _existing_experience_id(
-        self, mission_id: str, evidence_id: str, action: str, success: bool
+        self, mission_id: str, evidence_id: str, action: str, success: bool,
+        outcome: str, result: str,
     ) -> str | None:
         db = self._db()
         if db is None:
@@ -283,6 +284,8 @@ class ExperienceLearner:
                 and data.get("action") == action
                 and data.get("success") is success
             ):
+                if data.get("outcome") != outcome or data.get("result") != result:
+                    raise ValueError("experience_idempotency_conflict")
                 return str(row.get("memory_id", "")) or None
         return None
 
@@ -329,9 +332,13 @@ class ExperienceLearner:
             reason = str(exc).strip() or "receipt_mismatch"
             self._reject(reason)
             raise ValueError(f"experience_receipt_invalid: {exc}") from exc
-        existing = self._existing_experience_id(
-            mission_id, evidence_id, action, success
-        )
+        try:
+            existing = self._existing_experience_id(
+                mission_id, evidence_id, action, success, outcome, result
+            )
+        except ValueError:
+            self._reject("idempotency_conflict")
+            raise
         if existing:
             return existing
         exp = ExperienceRecord(

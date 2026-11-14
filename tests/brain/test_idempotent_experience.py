@@ -136,3 +136,18 @@ class TestEvidenceIdempotency:
         )
         assert first.evidence_id == second.evidence_id
         assert len(core.list_records("evidence", "mission-A")) == 1
+
+    def test_same_receipt_different_payload_is_a_conflict(self, tmp_path):
+        brain, _, evidence, mc = _runtime(tmp_path)
+        receipt = _receipt(evidence)
+        learner = ExperienceLearner(mc, evidence_store=evidence)
+        learner.record_outcome(
+            "mission-A", "success", "run_pytest", "first result", True,
+            evidence_id=receipt.evidence_id,
+        )
+        with pytest.raises(ValueError, match="idempotency_conflict"):
+            learner.record_outcome(
+                "mission-A", "success", "run_pytest", "different result", True,
+                evidence_id=receipt.evidence_id,
+            )
+        assert _experience_count(brain) == 1
