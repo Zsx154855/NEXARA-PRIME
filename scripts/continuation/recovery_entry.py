@@ -66,7 +66,12 @@ def load_next_task(checkpoint_path: Path) -> dict[str, str]:
     prompt = str(task.get("prompt") or "")
     if not _TASK_ID.fullmatch(task_id) or not prompt:
         raise ValueError("next_task_requires_safe_id_and_prompt")
-    return {"id": task_id, "prompt": prompt}
+    result = {"id": task_id, "prompt": prompt}
+    status = str(task.get("status") or "")
+    if status:
+        result["status"] = status
+        result["reason"] = str(task.get("reason") or "")
+    return result
 
 
 def task_digest(task: dict[str, str]) -> str:
@@ -139,6 +144,12 @@ def dispatch(
 ) -> dict[str, Any]:
     if not _TASK_ID.fullmatch(task["id"]):
         raise ValueError("task_id_must_match_[A-Za-z0-9._-]{1,128}")
+    if task.get("status") == "blocked":
+        return {
+            "status": "blocked",
+            "task_id": task["id"],
+            "reason": task.get("reason", ""),
+        }
     digest = task_digest(task)
     lock_path = _lock_path(state_dir, task["id"])
     command = plan_dispatch(task, dsh_bin, session_id)

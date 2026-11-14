@@ -386,6 +386,57 @@ def test_advance_stops_without_checkpoint_advance(tmp_path):
     assert (tmp_path / "dsh-args.json").read_text() == before
 
 
+def test_sigkill_owner_lock_is_recovered(tmp_path):
+    checkpoint = _checkpoint(tmp_path)
+    slow = _stub(tmp_path, returncode=0, sleep=1.5)
+    state = tmp_path / "state"
+    proc = subprocess.Popen(
+        [sys.executable, str(MODULE), str(checkpoint), "--execute", "--json",
+         "--state-dir", str(state), "--dsh-bin", str(slow)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    lock_path = state / "task-task-1.lock"
+    deadline = time.time() + 10
+    while time.time() < deadline and not lock_path.exists():
+        time.sleep(0.05)
+    assert lock_path.exists(), "dispatch never wrote its lock"
+    owner_pid = json.loads(lock_path.read_text())["pid"]
+    os.kill(owner_pid, 9)
+    proc.wait(timeout=10)
+    assert not module_owner_alive(lock_path)
+
+    module = _load_module()
+    fast = _stub(tmp_path, returncode=0)
+    result = module.dispatch({"id": "task-1", "prompt": "do the next task"}, state,
+                             dsh_bin=str(fast), execute=True)
+    assert result["status"] == "awaiting_verification"
+    recovered = json.loads(lock_path.read_text())
+    assert recovered["previous_owner"] != recovered["owner"]
+
+
+def module_owner_alive(lock_path: Path) -> bool:
+    module = _load_module()
+    return module._owner_alive(json.loads(lock_path.read_text()))
+
+
+def test_blocked_next_task_is_not_dispatched(tmp_path):
+    module = _load_module()
+    checkpoint = tmp_path / "checkpoint.json"
+    checkpoint.write_text(json.dumps({"next_task": {
+        "id": "blocked-1", "prompt": "needs approval",
+        "status": "blocked", "reason": "requires user approval",
+    }}), encoding="utf-8")
+    stub = _stub(tmp_path, returncode=0)
+    proc = subprocess.run(
+        [sys.executable, str(MODULE), str(checkpoint), "--execute", "--json",
+         "--state-dir", str(tmp_path / "state"), "--dsh-bin", str(stub)],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert proc.returncode == 1
+    assert json.loads(proc.stdout)["status"] == "blocked"
+    assert not (tmp_path / "dsh-args.json").exists()
+
+
 def test_concurrent_execute_runs_exactly_once(tmp_path):
     stub, runs = _counting_stub(tmp_path)
     checkpoint = _checkpoint(tmp_path)
