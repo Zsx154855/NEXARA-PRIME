@@ -202,8 +202,9 @@ class ExperienceStore:
                 or not isinstance(refs[0], str)
                 or self._evidence_validator is None
                 or self._evidence_validator(mission_id, refs[0]) is not True
-                or not self._canonical_business_outcome_verified(mission_id, refs[0])
             ):
+                raise ValueError("experience_verified_evidence_required")
+            if not self._canonical_business_outcome_verified(mission_id, refs[0]):
                 raise ValueError("mission_outcome_not_independently_verified")
         if self._mc is not None:
             if (
