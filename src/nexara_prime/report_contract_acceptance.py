@@ -196,7 +196,8 @@ class ReportMissionContractVerifier:
                 and writer.get("status") == "completed"
                 and writer.get("idempotency_key") == f"{mission_id}:report-write"
                 and writer.get("arguments", {}).get("path") == f"{mission_id}/mission-report.md"
-                and writer.get("result", {}).get("path") == str(expected)
+                and isinstance(writer.get("result", {}).get("path"), str)
+                and Path(writer["result"]["path"]).resolve() == expected.resolve()
                 and writer.get("result", {}).get("sha256") == digest
                 and writer.get("result", {}).get("bytes") == len(raw)
                 and hashlib.sha256(
