@@ -134,14 +134,30 @@ def test_real_failure_experience_remains_in_reasoning_context(tmp_path):
             ev, "r8-failure", "execution_failure", "reviewer",
             "Parser failed independently observed",
         )
-        ExperienceStore(mc, evidence_store=ev).record(
+        experiences = ExperienceStore(mc, evidence_store=ev)
+        exp = experiences.record(
             mission_id="r8-failure", objective="reconcile vendor invoices",
             risk_level="R1", adapter="broken-parser", model="none",
             status="failed", score=0.1, evidence_refs=[proof],
         )
-        matches = MemoryRetrievalAdapter(mc).retrieve("reconcile vendor invoices")
+        assert experiences.get_by_mission("r8-failure") == [exp]
+
+        adapter = MemoryRetrievalAdapter(mc)
+        # Default broad_semantic has min_confidence=0.3. The stored
+        # outcome score is 0.1 and is reused as MemoryController confidence,
+        # so the low-score row must be filtered by the EXISTING policy.
+        # This is not an R8 success-trust filter rejection.
+        assert adapter.retrieve("reconcile vendor invoices") == []
+
+        # Querying the same real SQLite memory with the caller's explicit
+        # low-confidence budget proves R8 does not discard failure status.
+        # The core one-row and status assertions below remain unchanged.
+        matches = adapter.retrieve(
+            "reconcile vendor invoices", min_confidence=0.0,
+        )
         assert len(matches) == 1
         assert json.loads(matches[0]["content"])["status"] == "failed"
+        assert matches[0]["confidence"] == 0.1
     finally:
         brain.close()
         core.close()
