@@ -151,3 +151,42 @@ def test_session_id_is_forwarded(tmp_path):
         {"id": "task-5", "prompt": "resume me"}, "dsh", session_id="sess-1"
     )
     assert command == ["dsh", "headless", "resume me", "--session-id", "sess-1"]
+
+
+def test_missing_dsh_marks_failed_and_allows_retry(tmp_path):
+    module = _load_module()
+    task = {"id": "task-6", "prompt": "x"}
+    result = module.dispatch(
+        task, tmp_path / "state", dsh_bin=str(tmp_path / "missing-dsh"), execute=True
+    )
+    assert result["status"] == "failed"
+    assert result["error"] in {"FileNotFoundError", "PermissionError"}
+    retry = module.dispatch(
+        task, tmp_path / "state", dsh_bin=str(_stub(tmp_path)), execute=True
+    )
+    assert retry["status"] == "done"
+
+
+def test_cli_rejects_unsafe_task_id_without_traceback(tmp_path):
+    checkpoint = tmp_path / "checkpoint.json"
+    checkpoint.write_text(
+        json.dumps({"next_task": {"id": "../evil", "prompt": "x"}}), encoding="utf-8"
+    )
+    proc = subprocess.run(
+        [sys.executable, str(MODULE), str(checkpoint), "--state-dir", str(tmp_path / "state")],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert proc.returncode == 2
+    assert "recovery_entry_error" in proc.stderr
+    assert "Traceback" not in proc.stderr
+
+
+def test_force_clears_done_lock(tmp_path):
+    module = _load_module()
+    stub = _stub(tmp_path)
+    task = {"id": "task-7", "prompt": "x"}
+    module.dispatch(task, tmp_path / "state", dsh_bin=str(stub), execute=True)
+    forced = module.dispatch(
+        task, tmp_path / "state", dsh_bin=str(stub), execute=True, force=True
+    )
+    assert forced["status"] == "done"

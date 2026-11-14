@@ -354,7 +354,7 @@ class ExperienceLearner:
         key = f"exp:{mission_id}:{evidence_id}"
         db = self._db()
         memory_id = new_id("mem")
-        if db is not None and hasattr(db, "claim_idempotency"):
+        if db is not None and hasattr(db, "insert_memory_with_idempotency"):
             payload_sha = hashlib.sha256(
                 json.dumps(
                     {

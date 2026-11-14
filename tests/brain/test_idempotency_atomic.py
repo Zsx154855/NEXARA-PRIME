@@ -277,8 +277,8 @@ def test_claim_and_memory_insert_are_one_transaction(tmp_path):
             brain.insert_memory_with_idempotency(
                 conflicting, "mission-A", "exp:new", "sha-new"
             )
-        except Exception:
-            pass
+        except RuntimeError as exc:
+            assert "idempotency_memory_insert_conflict" in str(exc)
         else:
             raise AssertionError("duplicate memory_id must fail")
         with brain._lock:

@@ -82,10 +82,13 @@ def dispatch(
     execute: bool = False,
     timeout_seconds: int = 1800,
     session_id: str | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     _safe_task_id(task["id"])
     digest = task_digest(task)
     lock_path = state_dir / f"task-{task['id']}.lock"
+    if force and lock_path.exists():
+        lock_path.unlink(missing_ok=True)
     if lock_path.exists():
         try:
             existing = json.loads(lock_path.read_text(encoding="utf-8"))
@@ -116,6 +119,11 @@ def dispatch(
         returncode = proc.returncode
     except subprocess.TimeoutExpired:
         returncode = 124
+    except (OSError, KeyboardInterrupt) as exc:
+        result["status"] = "failed"
+        result["error"] = type(exc).__name__
+        _write_lock_atomic(lock_path, {**result, "state": "failed"})
+        return result
     result["returncode"] = returncode
     result["status"] = "done" if returncode == 0 else "failed"
     _write_lock_atomic(lock_path, {**result, "state": result["status"]})
@@ -129,6 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dsh-bin", default="dsh")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--session-id", default=None)
+    parser.add_argument("--force", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -137,10 +146,14 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"recovery_entry_error: {exc}", file=sys.stderr)
         return 2
-    result = dispatch(
-        task, args.state_dir, dsh_bin=args.dsh_bin, execute=args.execute,
-        session_id=args.session_id,
-    )
+    try:
+        result = dispatch(
+            task, args.state_dir, dsh_bin=args.dsh_bin, execute=args.execute,
+            session_id=args.session_id, force=args.force,
+        )
+    except ValueError as exc:
+        print(f"recovery_entry_error: {exc}", file=sys.stderr)
+        return 2
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else result["command"])
     return 0 if result["status"] in {"planned", "done", "already_completed"} else 1
 

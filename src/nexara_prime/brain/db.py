@@ -263,7 +263,7 @@ class BrainDB:
                 except Exception:
                     self._conn.rollback()
                     raise
-            raise RuntimeError("idempotency_claim_unresolved")
+            raise RuntimeError("idempotency_memory_insert_conflict")
 
     def get_memory(self, memory_id: str) -> dict[str, Any] | None:
         row = self._conn.execute(
