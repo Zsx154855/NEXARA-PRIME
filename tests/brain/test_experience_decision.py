@@ -133,3 +133,21 @@ class TestDecisionInfluence:
         decision = learner.recommend_action("zzz quantum banana")
         assert decision["action"] is None
         assert decision["based_on"] == 0
+
+    def test_falls_back_to_next_best_reliable_action(self, tmp_path):
+        _, evidence, mc = _runtime(tmp_path)
+        learner = ExperienceLearner(mc, evidence_store=evidence)
+        _record(learner, evidence, "mission-A", "broken_adapter", False, n=3)
+        _record(learner, evidence, "mission-A", "python_adapter", True, n=3)
+
+        decision = learner.recommend_action("adapter")
+        assert decision["action"] == "python_adapter"
+        assert decision["confidence"] == 1.0
+
+    def test_negative_decision_reports_zero_confidence(self, tmp_path):
+        _, evidence, mc = _runtime(tmp_path)
+        learner = ExperienceLearner(mc, evidence_store=evidence)
+        _record(learner, evidence, "mission-A", "broken_adapter", False, n=3)
+        decision = learner.recommend_action("adapter")
+        assert decision["action"] is None
+        assert decision["confidence"] == 0.0

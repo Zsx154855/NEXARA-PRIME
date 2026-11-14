@@ -461,29 +461,29 @@ class ExperienceLearner:
             ),
             reverse=True,
         )
-        action, entry = ranked[0]
-        rate = round(entry["successes"] / max(entry["total"], 1), 4)
-        if entry["total"] < _MIN_DECISION_SAMPLES:
+        for action, entry in ranked:
+            rate = round(entry["successes"] / max(entry["total"], 1), 4)
+            if entry["total"] < _MIN_DECISION_SAMPLES:
+                continue
+            if rate < _MIN_DECISION_SUCCESS_RATE:
+                continue
             return {
-                "action": None,
+                "action": action,
                 "confidence": rate,
                 "based_on": entry["total"],
-                "evidence_ids": [],
-                "reason": "insufficient_evidence",
+                "evidence_ids": entry["evidence_ids"][:3],
             }
-        if rate < _MIN_DECISION_SUCCESS_RATE:
-            return {
-                "action": None,
-                "confidence": rate,
-                "based_on": entry["total"],
-                "evidence_ids": [],
-                "reason": "low_success_rate",
-            }
+        max_total = max((entry["total"] for entry in stats.values()), default=0)
         return {
-            "action": action,
-            "confidence": rate,
-            "based_on": entry["total"],
-            "evidence_ids": entry["evidence_ids"][:3],
+            "action": None,
+            "confidence": 0.0,
+            "based_on": 0,
+            "evidence_ids": [],
+            "reason": (
+                "insufficient_evidence"
+                if max_total < _MIN_DECISION_SAMPLES
+                else "low_success_rate"
+            ),
         }
 
     def get_lessons(self, query: str = "", top_k: int = 10) -> list[str]:
