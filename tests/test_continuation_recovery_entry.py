@@ -397,11 +397,15 @@ def test_sigkill_owner_lock_is_recovered(tmp_path):
     )
     lock_path = state / "task-task-1.lock"
     deadline = time.time() + 10
-    while time.time() < deadline and not lock_path.exists():
+    lock = {}
+    while time.time() < deadline:
+        if lock_path.exists():
+            lock = json.loads(lock_path.read_text())
+            if lock.get("pid") and lock.get("child_pid"):
+                break
         time.sleep(0.05)
-    assert lock_path.exists(), "dispatch never wrote its lock"
-    owner_pid = json.loads(lock_path.read_text())["pid"]
-    os.kill(owner_pid, 9)
+    assert lock.get("child_pid"), "dispatch never recorded its child"
+    os.kill(lock["pid"], 9)
     proc.wait(timeout=10)
     assert not module_owner_alive(lock_path)
 
@@ -412,6 +416,13 @@ def test_sigkill_owner_lock_is_recovered(tmp_path):
     assert result["status"] == "awaiting_verification"
     recovered = json.loads(lock_path.read_text())
     assert recovered["previous_owner"] != recovered["owner"]
+    time.sleep(0.1)
+    try:
+        os.kill(lock["child_pid"], 0)
+    except ProcessLookupError:
+        pass
+    else:
+        raise AssertionError("orphaned dsh process was not terminated")
 
 
 def module_owner_alive(lock_path: Path) -> bool:

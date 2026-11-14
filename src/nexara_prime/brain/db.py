@@ -229,6 +229,7 @@ class BrainDB:
             "status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
         )
         with self._lock:
+            last_error: Exception | None = None
             for _ in range(2):
                 try:
                     self._conn.execute(
@@ -242,7 +243,8 @@ class BrainDB:
                     )
                     self._conn.commit()
                     return True, None, None
-                except sqlite3.IntegrityError:
+                except sqlite3.IntegrityError as exc:
+                    last_error = exc
                     self._conn.rollback()
                     row = self._conn.execute(
                         "SELECT memory_id, payload_sha256 FROM brain_memory_idempotency "
@@ -269,7 +271,7 @@ class BrainDB:
                 except Exception:
                     self._conn.rollback()
                     raise
-            raise RuntimeError("idempotency_memory_insert_conflict")
+            raise RuntimeError("idempotency_memory_insert_conflict") from last_error
 
     def get_memory(self, memory_id: str) -> dict[str, Any] | None:
         row = self._conn.execute(

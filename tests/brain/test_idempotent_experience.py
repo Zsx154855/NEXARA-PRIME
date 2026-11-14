@@ -187,3 +187,16 @@ def test_duplicate_lesson_is_idempotent(tmp_path):
     assert other != first
     brain.close()
     core.close()
+
+
+def test_idempotency_key_requires_payload_sha(tmp_path):
+    import pytest
+    from nexara_prime.brain.db import BrainDB
+    from nexara_prime.brain.memory_controller import MemoryController
+
+    controller = MemoryController(db=BrainDB(tmp_path / "brain.db"))
+    with pytest.raises(ValueError, match="idempotency_payload_sha256_required"):
+        controller.commit(
+            mission_id="m", key="k", content="c", kind="short_term",
+            idempotency_key="k",
+        )

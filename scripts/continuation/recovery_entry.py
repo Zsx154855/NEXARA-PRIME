@@ -23,9 +23,11 @@ import hashlib
 import json
 import os
 import re
+import signal
 import socket
 import subprocess
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -121,6 +123,37 @@ def _owner_alive(lock: dict[str, Any]) -> bool:
     return True
 
 
+def _terminate_orphan(lock: dict[str, Any]) -> bool:
+    """Terminate the dsh process group left behind by a SIGKILLed dispatcher."""
+    pid = lock.get("child_pid")
+    pgid = lock.get("child_pgid")
+    if not isinstance(pid, int) or not isinstance(pgid, int) or pid <= 0 or pgid <= 0:
+        return False
+    if pid == os.getpid():
+        return False
+    try:
+        if os.getpgid(pid) != pgid:
+            return False
+    except ProcessLookupError:
+        return False
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    return True
+
+
 def _guarded(state_dir: Path, operation: Callable[[], Any]) -> Any:
     state_dir.mkdir(parents=True, exist_ok=True)
     guard = state_dir / ".lock.guard"
@@ -174,7 +207,8 @@ def dispatch(
             if state == "running":
                 if _owner_alive(existing):
                     return "already_running", existing
-                # dead owner: stale lock, takeover is the recovery protocol
+                # dead owner: terminate its orphaned dsh before takeover
+                _terminate_orphan(existing)
             elif state == "done" and not force:
                 return "already_completed", existing
             elif state == "awaiting_verification" and not force:
@@ -207,12 +241,39 @@ def dispatch(
 
     owner = payload["owner"]
     try:
-        proc = subprocess.run(command, timeout=timeout_seconds)
-        returncode: int | None = proc.returncode
+        proc = subprocess.Popen(command, start_new_session=True)
+    except (OSError, KeyboardInterrupt) as exc:
+        def settle_spawn_failure() -> None:
+            current = _read_lock(lock_path)
+            if current and current.get("owner") == owner:
+                current.update(state="failed", error=type(exc).__name__, finished_at=_now())
+                _write_lock(lock_path, current)
+
+        _guarded(state_dir, settle_spawn_failure)
+        return {
+            "status": "failed",
+            "task_id": task["id"],
+            "returncode": None,
+            "error": type(exc).__name__,
+            "lock": str(lock_path),
+        }
+
+    def record_child() -> None:
+        current = _read_lock(lock_path)
+        if not current or current.get("owner") != owner:
+            return
+        current.update(child_pid=proc.pid, child_pgid=os.getpgid(proc.pid))
+        _write_lock(lock_path, current)
+
+    _guarded(state_dir, record_child)
+    try:
+        returncode: int | None = proc.wait(timeout=timeout_seconds)
         error = None
     except subprocess.TimeoutExpired:
+        _terminate_orphan({"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid)})
         returncode, error = 124, "timeout"
     except (OSError, KeyboardInterrupt) as exc:
+        _terminate_orphan({"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid)})
         returncode, error = None, type(exc).__name__
 
     def settle() -> str:

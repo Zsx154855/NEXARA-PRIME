@@ -106,6 +106,8 @@ class MemoryController:
             "updated_at": now,
         }
 
+        if idempotency_key and not idempotency_payload_sha256:
+            raise ValueError("idempotency_payload_sha256_required")
         # Persist to DB (claim + row atomically when idempotency is requested)
         if self._persist:
             if idempotency_key and idempotency_payload_sha256:
