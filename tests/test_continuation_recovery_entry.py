@@ -548,7 +548,7 @@ def test_sigkill_before_child_pid_recorded_does_not_run_dsh(tmp_path):
         assert not (tmp_path / "dsh-args.json").exists()
         os.kill(dispatcher.pid, 9)
         dispatcher.wait(timeout=5)
-        time.sleep(0.3)
+        time.sleep(1.2)
         assert not (tmp_path / "dsh-args.json").exists()
         # Reclaiming stale owner runs the task only once, not concurrently
         # with an orphan from the killed dispatcher.
@@ -586,6 +586,36 @@ def test_pid_reuse_is_not_killed_on_takeover(tmp_path):
     finally:
         unrelated.kill()
         unrelated.wait(timeout=5)
+
+
+def test_timeout_terminates_child_before_retry(tmp_path):
+    """A timed-out DSH must be dead before the lock allows a retry."""
+    module = _load_module()
+    slow = _stub(tmp_path, returncode=0, sleep=10)
+    task = {"id": "task-timeout", "prompt": "x"}
+    state = tmp_path / "state"
+    result = module.dispatch(
+        task, state, dsh_bin=str(slow), execute=True, timeout_seconds=0.2
+    )
+    assert result["status"] == "failed"
+    assert result["returncode"] == 124
+    lock = json.loads((state / "task-task-timeout.lock").read_text())
+    child = lock.get("child_pid")
+    assert isinstance(child, int)
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("timed-out DSH child was left alive")
+
+    retry = module.dispatch(
+        task, state, dsh_bin=str(_stub(tmp_path)), execute=True
+    )
+    assert retry["status"] == "awaiting_verification"
 
 
 def test_verify_requires_named_qa_and_hashes_evidence(tmp_path):
@@ -641,3 +671,48 @@ def test_verify_rejects_qa_string_and_bad_hash(tmp_path):
     assert module.verify_completion(
         checkpoint, "task-1", state
     )["status"] == "evidence_hash_mismatch"
+
+
+def test_verification_rejects_free_text_and_unverified_ids(tmp_path):
+    module = _load_module()
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "task-task-1.lock").write_text(json.dumps({
+        "version": 2, "state": "awaiting_verification", "pid": os.getpid(),
+        "host": socket.gethostname(), "owner": "o",
+    }), encoding="utf-8")
+    qa = {"reviewer": "qa", "verdict": "passed"}
+    checkpoint = _checkpoint(tmp_path, tasks={
+        "task-1": {"status": "completed", "evidence": ["LGTM ship it"], "qa": qa},
+    })
+    assert module.verify_completion(
+        checkpoint, "task-1", state
+    )["status"] == "evidence_id_unverified"
+    checkpoint = _checkpoint(tmp_path, tasks={
+        "task-1": {"status": "completed",
+                   "evidence": [{"evidence_id": "evidence_abc123"}], "qa": qa},
+    })
+    assert module.verify_completion(
+        checkpoint, "task-1", state
+    )["status"] == "evidence_id_unverified"
+    assert module.verify_completion(
+        checkpoint, "task-1", state, allow_opaque_evidence_ids=True
+    )["status"] == "verified"
+
+
+def test_relative_evidence_path_resolves_against_checkpoint(tmp_path):
+    module = _load_module()
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "task-task-1.lock").write_text(json.dumps({
+        "version": 2, "state": "awaiting_verification", "pid": os.getpid(),
+        "host": socket.gethostname(), "owner": "o",
+    }), encoding="utf-8")
+    (tmp_path / "evidence.txt").write_text("done", encoding="utf-8")
+    checkpoint = _checkpoint(tmp_path, tasks={
+        "task-1": {"status": "completed", "evidence": ["./evidence.txt"],
+                   "qa": {"reviewer": "qa", "verdict": "passed"}},
+    })
+    result = module.verify_completion(checkpoint, "task-1", state)
+    assert result["status"] == "verified"
+    assert result["proof"]["evidence"][0]["path"].endswith("evidence.txt")

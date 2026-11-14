@@ -182,7 +182,9 @@ def _is_expected_child(lock: dict[str, Any], pid: int) -> bool:
     return executable in command_line or os.path.basename(executable) in command_line
 
 
-def _terminate_orphan(lock: dict[str, Any]) -> bool:
+def _terminate_orphan(
+    lock: dict[str, Any], *, allow_unverified: bool = False
+) -> bool:
     """Terminate the dsh process group left behind by a SIGKILLed dispatcher."""
     pid = lock.get("child_pid")
     pgid = lock.get("child_pgid")
@@ -190,7 +192,7 @@ def _terminate_orphan(lock: dict[str, Any]) -> bool:
         return False
     if pid == os.getpid():
         return False
-    if not _is_expected_child(lock, pid):
+    if not _is_expected_child(lock, pid) and not allow_unverified:
         return False
     try:
         if os.getpgid(pid) != pgid:
@@ -347,7 +349,10 @@ def dispatch(
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
-            _terminate_orphan({"child_pid": proc.pid, "child_pgid": proc.pid})
+            _terminate_orphan(
+                {"child_pid": proc.pid, "child_pgid": proc.pid, "command": command},
+                allow_unverified=True,
+            )
         if release_error:
             def settle_gate_failure() -> None:
                 current = _read_lock(lock_path)
@@ -371,10 +376,18 @@ def dispatch(
         elif returncode == 126:
             error = "PermissionError"
     except subprocess.TimeoutExpired:
-        _terminate_orphan({"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid)})
+        _terminate_orphan(
+            {"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid),
+             "command": command},
+            allow_unverified=True,
+        )
         returncode, error = 124, "timeout"
     except (OSError, KeyboardInterrupt) as exc:
-        _terminate_orphan({"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid)})
+        _terminate_orphan(
+            {"child_pid": proc.pid, "child_pgid": os.getpgid(proc.pid),
+             "command": command},
+            allow_unverified=True,
+        )
         returncode, error = None, type(exc).__name__
 
     def settle() -> str:
@@ -408,15 +421,35 @@ def dispatch(
     }
 
 
-def _evidence_proof(evidence: list[Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
+_EVIDENCE_ID = re.compile(r"^evidence_[A-Za-z0-9_-]{4,}$")
+
+
+def _evidence_proof(
+    evidence: list[Any],
+    *,
+    base_dir: Path,
+    allow_opaque_evidence_ids: bool = False,
+) -> tuple[list[dict[str, Any]] | None, str | None]:
     proofs: list[dict[str, Any]] = []
+
+    def _path(value: str) -> Path:
+        candidate = Path(value).expanduser()
+        return candidate if candidate.is_absolute() else (base_dir / candidate)
+
+    def _evidence_id(value: str) -> dict[str, Any] | None:
+        if not _EVIDENCE_ID.fullmatch(value):
+            return None
+        if not allow_opaque_evidence_ids:
+            return None
+        return {"evidence_id": value}
+
     for item in evidence:
         if isinstance(item, str):
             value = item.strip()
             if not value:
                 return None, "missing_evidence"
             if "/" in value or value.startswith("."):
-                path = Path(value).expanduser()
+                path = _path(value)
                 if not path.is_file():
                     return None, "missing_evidence_file"
                 proofs.append({
@@ -424,13 +457,16 @@ def _evidence_proof(evidence: list[Any]) -> tuple[list[dict[str, Any]] | None, s
                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                 })
             else:
-                proofs.append({"evidence_id": value})
+                entry = _evidence_id(value)
+                if entry is None:
+                    return None, "evidence_id_unverified"
+                proofs.append(entry)
             continue
         if isinstance(item, dict):
             path_value = item.get("path")
             evidence_id = item.get("evidence_id")
             if path_value:
-                path = Path(str(path_value)).expanduser()
+                path = _path(str(path_value))
                 if not path.is_file():
                     return None, "missing_evidence_file"
                 digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -439,7 +475,10 @@ def _evidence_proof(evidence: list[Any]) -> tuple[list[dict[str, Any]] | None, s
                     return None, "evidence_hash_mismatch"
                 proofs.append({"path": str(path.resolve()), "sha256": digest})
             elif evidence_id:
-                proofs.append({"evidence_id": str(evidence_id)})
+                entry = _evidence_id(str(evidence_id))
+                if entry is None:
+                    return None, "evidence_id_unverified"
+                proofs.append(entry)
             else:
                 return None, "missing_evidence"
             continue
@@ -471,6 +510,7 @@ def verify_completion(
     state_dir: Path,
     *,
     require_qa: bool = True,
+    allow_opaque_evidence_ids: bool = False,
 ) -> dict[str, Any]:
     if not _TASK_ID.fullmatch(task_id):
         raise ValueError("task_id_must_match_[A-Za-z0-9._-]{1,128}")
@@ -481,7 +521,11 @@ def verify_completion(
     evidence = record.get("evidence") or []
     if not isinstance(evidence, list) or not evidence:
         return {"status": "missing_evidence", "task_id": task_id}
-    proofs, evidence_error = _evidence_proof(evidence)
+    proofs, evidence_error = _evidence_proof(
+        evidence,
+        base_dir=checkpoint_path.parent,
+        allow_opaque_evidence_ids=allow_opaque_evidence_ids,
+    )
     if evidence_error:
         return {"status": evidence_error, "task_id": task_id}
     qa_proof: dict[str, Any] | None = None
@@ -504,6 +548,7 @@ def verify_completion(
             "verified_at": _now(),
             "evidence": proofs,
             "qa": qa_proof,
+            "qa_exemption": None if qa_proof else "cli_no_require_qa",
         }
         lock.update(
             state="done",
@@ -540,6 +585,7 @@ def advance(
     timeout_seconds: int = 1800,
     session_id: str | None = None,
     require_qa: bool = True,
+    allow_opaque_evidence_ids: bool = False,
 ) -> list[dict[str, Any]]:
     """Dispatch+verify tasks until the checkpoint stops advancing.
 
@@ -562,7 +608,8 @@ def advance(
         if dispatched["status"] != "awaiting_verification":
             break
         verified = verify_completion(
-            checkpoint_path, task["id"], state_dir, require_qa=require_qa
+            checkpoint_path, task["id"], state_dir, require_qa=require_qa,
+            allow_opaque_evidence_ids=allow_opaque_evidence_ids,
         )
         results.append(verified)
         if verified["status"] not in {"verified", "already_verified"}:
@@ -591,6 +638,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--task-id", default=None)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--no-require-qa", action="store_true")
+    parser.add_argument("--allow-unverified-evidence-ids", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -614,7 +662,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.verify:
         target = args.task_id or task["id"]
         result = verify_completion(
-            checkpoint, target, state_dir, require_qa=not args.no_require_qa
+            checkpoint, target, state_dir,
+            require_qa=not args.no_require_qa,
+            allow_opaque_evidence_ids=args.allow_unverified_evidence_ids,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["status"] in {"verified", "already_verified"} else 1
@@ -623,6 +673,7 @@ def main(argv: list[str] | None = None) -> int:
         results = advance(
             checkpoint, state_dir, dsh_bin=args.dsh_bin, max_tasks=args.max_tasks,
             session_id=args.session_id, require_qa=not args.no_require_qa,
+            allow_opaque_evidence_ids=args.allow_unverified_evidence_ids,
         )
         print(json.dumps(results, indent=2, sort_keys=True))
         last = results[-1] if results else {"status": "no_task"}
