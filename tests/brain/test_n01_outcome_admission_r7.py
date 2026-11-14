@@ -32,7 +32,8 @@ def stack(tmp_path):
     core.close()
 
 
-def artifact(evidence, mission, *, kind="environment", actor="system", content="host online"):
+def artifact(evidence, mission, *, kind="environment", actor="system",
+             content="host online", verify=True):
     item = evidence.add(
         mission_id=mission,
         kind=kind,
@@ -42,8 +43,9 @@ def artifact(evidence, mission, *, kind="environment", actor="system", content="
         actor=actor,
         source="isolated-n01-test",
     )
-    assert evidence.verify(item.evidence_id)
-    assert evidence.is_preverified_and_integrity_bound(item.evidence_id)
+    if verify:
+        assert evidence.verify(item.evidence_id)
+        assert evidence.is_preverified_and_integrity_bound(item.evidence_id)
     return item.evidence_id
 
 
@@ -62,10 +64,12 @@ def record(store, mission, evidence_id, *, status="success", score=1.0):
 
 
 def complete_mission(core, evidence, mission, *, state=MissionState.COMPLETED,
-                     reviewer_passed=True, auditor_passed=True, evaluation_passed=True):
+                     reviewer_passed=True, auditor_passed=True,
+                     evaluation_passed=True, verify_report=True):
     evidence_id = artifact(
         evidence, mission, kind="verification_report", actor="reviewer",
         content=json.dumps({"exists": True, "non_empty": True, "sha256": "test-report"}),
+        verify=verify_report,
     )
     reviewer_id = artifact(
         evidence, mission, kind="reviewer_verdict", actor="reviewer",
@@ -254,6 +258,20 @@ def test_validated_verification_report_is_required_not_health_probe(stack, monke
     s = ExperienceStore(mc, evidence_store=ev, outcome_validator=lambda mid, e: True)
     with pytest.raises(ValueError, match="mission_outcome_not_independently_verified"):
         record(s, mid, eid)
+
+
+def test_legacy_validator_cannot_override_unverified_canonical_evidence(stack, monkeypatch):
+    core, _, ev, mc = stack
+    mid = "m-unverified-report"
+    eid = complete_mission(core, ev, mid, verify_report=False)
+    monkeypatch.setattr(ev, "receipt_status", lambda _mid: {"status": "present"})
+    store = ExperienceStore(
+        mc, evidence_store=ev,
+        evidence_validator=lambda _mid, _eid: True,
+        outcome_validator=lambda _mid, _eid: True,
+    )
+    with pytest.raises(ValueError, match="mission_outcome_not_independently_verified"):
+        record(store, mid, eid)
 
 
 def test_outcome_callback_error_fails_closed(stack, monkeypatch):
