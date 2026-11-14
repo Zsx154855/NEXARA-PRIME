@@ -38,6 +38,11 @@ TRUSTED_VERIFIER_ACTORS: frozenset[str] = frozenset({
 
 _TOOL_STATUS_SUCCESS: dict[str, bool] = {"completed": True, "failed": False}
 
+# Conservative decision policy: no recommendation from a single sample or a
+# known-failing action.
+_MIN_DECISION_SAMPLES = 2
+_MIN_DECISION_SUCCESS_RATE = 0.5
+
 
 def _read_only_evidence_validator(
     evidence_store: EvidenceStore,
@@ -329,6 +334,65 @@ class ExperienceLearner:
                     exp.confidence = max(0.1, min(1.0, exp.confidence))
                     exps.append(exp)
         return sorted(exps, key=lambda e: e.confidence * (1.5 if e.success else 0.5), reverse=True)[:top_k]
+
+    def recommend_action(self, keywords: str, top_k: int = 20) -> dict[str, Any]:
+        """Recommend an action from verified experiences (decision use, not just recall).
+
+        Uses only rows that pass recall admission (authentic evidence, receipt
+        consistency, active lifecycle). Returns provenance so a caller can audit
+        which experiences influenced the choice. Cold start returns action=None.
+        """
+        records = self.rank_experiences(keywords, top_k=top_k)
+        stats: dict[str, dict[str, Any]] = {}
+        for record in records:
+            entry = stats.setdefault(
+                record.action, {"successes": 0, "total": 0, "evidence_ids": []}
+            )
+            entry["total"] += 1
+            if record.success:
+                entry["successes"] += 1
+            if record.evidence_id and record.evidence_id not in entry["evidence_ids"]:
+                entry["evidence_ids"].append(record.evidence_id)
+        if not stats:
+            return {
+                "action": None,
+                "confidence": 0.0,
+                "based_on": 0,
+                "evidence_ids": [],
+            }
+        ranked = sorted(
+            stats.items(),
+            key=lambda item: (
+                item[1]["successes"] / max(item[1]["total"], 1),
+                item[1]["total"],
+                item[0],
+            ),
+            reverse=True,
+        )
+        action, entry = ranked[0]
+        rate = round(entry["successes"] / max(entry["total"], 1), 4)
+        if entry["total"] < _MIN_DECISION_SAMPLES:
+            return {
+                "action": None,
+                "confidence": rate,
+                "based_on": entry["total"],
+                "evidence_ids": [],
+                "reason": "insufficient_evidence",
+            }
+        if rate < _MIN_DECISION_SUCCESS_RATE:
+            return {
+                "action": None,
+                "confidence": rate,
+                "based_on": entry["total"],
+                "evidence_ids": [],
+                "reason": "low_success_rate",
+            }
+        return {
+            "action": action,
+            "confidence": rate,
+            "based_on": entry["total"],
+            "evidence_ids": entry["evidence_ids"][:3],
+        }
 
     def get_lessons(self, query: str = "", top_k: int = 10) -> list[str]:
         records = self._mc.rank_retrieve(
