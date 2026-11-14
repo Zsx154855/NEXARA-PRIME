@@ -226,11 +226,10 @@ def test_canonical_state_dir_is_checkpoint_relative(tmp_path):
 
 
 def test_cli_uses_same_state_from_a_different_cwd(tmp_path):
-    module = _load_module()
     stub = _stub(tmp_path, returncode=0)
     nested = tmp_path / "nested"
     nested.mkdir()
-    checkpoint = _checkpoint(tmp_path)
+    _checkpoint(tmp_path)
     proc = subprocess.run(
         [sys.executable, str(MODULE), "../checkpoint.json", "--execute", "--json",
          "--dsh-bin", str(stub)],
@@ -431,7 +430,6 @@ def module_owner_alive(lock_path: Path) -> bool:
 
 
 def test_blocked_next_task_is_not_dispatched(tmp_path):
-    module = _load_module()
     checkpoint = tmp_path / "checkpoint.json"
     checkpoint.write_text(json.dumps({"next_task": {
         "id": "blocked-1", "prompt": "needs approval",
@@ -488,3 +486,95 @@ def test_cli_status_reports_lock_state(tmp_path):
     payload = json.loads(proc.stdout)
     assert payload["task_id"] == "task-1"
     assert payload["lock"]["state"] == "awaiting_verification"
+
+
+def test_gate_pipe_closing_without_grant_never_runs_command(tmp_path):
+    """A child never execs DSH unless its dispatcher explicitly permits it."""
+    module = _load_module()
+    marker = tmp_path / "unapproved-ran"
+    command = [
+        sys.executable, "-c",
+        f"from pathlib import Path; Path({str(marker)!r}).write_text('ran')",
+    ]
+    proc, permit_fd = module._spawn_gated(command)
+    try:
+        time.sleep(0.1)
+        assert not marker.exists()
+    finally:
+        os.close(permit_fd)  # dispatcher died before persisting child pid
+    assert proc.wait(timeout=5) == 125
+    time.sleep(0.8)  # allow any erroneously ungated child to execute
+    assert not marker.exists()
+
+
+def test_sigkill_before_child_pid_recorded_does_not_run_dsh(tmp_path):
+    """Real SIGKILL in the Popen -> lock-write gap cannot execute DSH."""
+    _checkpoint(tmp_path)
+    stub = _stub(tmp_path, returncode=0)
+    state = tmp_path / "state"
+    paused = tmp_path / "child_spawned_waiting_for_registration"
+    launcher = (
+        "import importlib.util, time\n"
+        "from pathlib import Path\n"
+        f"spec = importlib.util.spec_from_file_location('gated_recovery', {str(MODULE)!r})\n"
+        "mod = importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(mod)\n"
+        "original = mod._guarded\n"
+        "def pause_before_register(state_dir, operation):\n"
+        "    if operation.__name__ == 'record_child':\n"
+        f"        Path({str(paused)!r}).write_text('spawned')\n"
+        "        time.sleep(30)\n"
+        "    return original(state_dir, operation)\n"
+        "mod._guarded = pause_before_register\n"
+        f"mod.dispatch({{'id': 'task-1', 'prompt': 'do the next task'}}, "
+        f"Path({str(state)!r}), dsh_bin={str(stub)!r}, execute=True)\n"
+    )
+    dispatcher = subprocess.Popen([sys.executable, "-c", launcher])
+    try:
+        deadline = time.monotonic() + 10
+        while not paused.exists() and time.monotonic() < deadline:
+            if dispatcher.poll() is not None:
+                raise AssertionError("dispatcher exited before the injection point")
+            time.sleep(0.02)
+        assert paused.exists(), "dispatcher never reached post-spawn injection"
+        assert not (tmp_path / "dsh-args.json").exists()
+        os.kill(dispatcher.pid, 9)
+        dispatcher.wait(timeout=5)
+        time.sleep(0.3)
+        assert not (tmp_path / "dsh-args.json").exists()
+        # Reclaiming stale owner runs the task only once, not concurrently
+        # with an orphan from the killed dispatcher.
+        module = _load_module()
+        outcome = module.dispatch(
+            {"id": "task-1", "prompt": "do the next task"},
+            state, dsh_bin=str(stub), execute=True,
+        )
+        assert outcome["status"] == "awaiting_verification"
+        assert (tmp_path / "dsh-args.json").exists()
+    finally:
+        if dispatcher.poll() is None:
+            dispatcher.kill()
+            dispatcher.wait(timeout=5)
+
+
+def test_pid_reuse_is_not_killed_on_takeover(tmp_path):
+    module = _load_module()
+    unrelated = subprocess.Popen(["sleep", "5"])
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "task-task-9.lock").write_text(json.dumps({
+        "version": 2, "state": "running", "pid": 999999,
+        "host": socket.gethostname(), "owner": "dead-owner",
+        "child_pid": unrelated.pid, "child_pgid": os.getpgid(unrelated.pid),
+        "command": ["/definitely-not-this-process"],
+    }), encoding="utf-8")
+    try:
+        result = module.dispatch(
+            {"id": "task-9", "prompt": "x"}, state,
+            dsh_bin=str(_stub(tmp_path)), execute=True,
+        )
+        assert result["status"] == "awaiting_verification"
+        assert unrelated.poll() is None, "unrelated PID was killed"
+    finally:
+        unrelated.kill()
+        unrelated.wait(timeout=5)
