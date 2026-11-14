@@ -117,20 +117,29 @@ class MemoryRetrievalAdapter:
         strategy: str = "broad_semantic",
         top_k: int | None = None,
         min_confidence: float | None = None,
+        *,
+        read_only: bool = False,
     ) -> list[dict[str, Any]]:
-        """Retrieve memories using specified strategy. Falls back to keyword filter if no memory bound."""
+        """Retrieve memories using the configured strategy.
+
+        An explicit read_only=True suppresses access-log writes during a
+        trusted-experience audit. Normal runtime recall is still observable.
+        """
         cfg = self.STRATEGIES.get(strategy, self.STRATEGIES["broad_semantic"])
         k = top_k if top_k is not None else cfg["top_k"]
         min_c = min_confidence if min_confidence is not None else cfg["min_conf"]
 
         if self._memory is not None:
             try:
-                records = self._memory.rank_retrieve(
-                    query=query,
-                    top_k=k,
-                    layers=cfg["layers"],
-                    min_confidence=min_c,
-                )
+                kwargs: dict[str, Any] = {
+                    "query": query,
+                    "top_k": k,
+                    "layers": cfg["layers"],
+                    "min_confidence": min_c,
+                }
+                if read_only:
+                    kwargs["record_access"] = False
+                records = self._memory.rank_retrieve(**kwargs)
                 return self._filter_unverified_success(records)
             except Exception:
                 pass  # fall through to empty
