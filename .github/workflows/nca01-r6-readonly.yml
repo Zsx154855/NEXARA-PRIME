@@ -1,0 +1,74 @@
+name: NCA01-R6-true-source-readonly
+on:
+  push:
+    branches:
+      - audit/nca01-r6-true-stack-20261114
+permissions:
+  contents: read
+concurrency:
+  group: nca01-r6-true-stack
+  cancel-in-progress: false
+jobs:
+  main_fixed_sha:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      NEXARA_MOCK_MODEL: 'false'
+      NEXARA_RESUME_BACKGROUND_MISSIONS: 'false'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: ${{ github.workspace }}/src
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify fixed main source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=f4a5400d73391280fa9c19e128edcea03cf608f1
+          git cat-file -e "$BASE^{commit}"
+          test "$(git merge-base HEAD "$BASE")" = "$BASE"
+          git diff --exit-code "$BASE" HEAD -- src
+          echo "TRUE_SOURCE_MAIN_BASE=$BASE"
+          echo "AUDIT_HEAD=$(git rev-parse HEAD)"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install product's declared runtime dependencies and pytest
+        run: python -m pip install -e . 'pytest>=9,<10'
+      - name: Run real main SQLite integration contracts
+        run: python -m pytest -q audit/nca01_r6/test_nca01_main_true_stack.py -ra --tb=short
+  pr54_fixed_sha:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      NEXARA_MOCK_MODEL: 'false'
+      NEXARA_RESUME_BACKGROUND_MISSIONS: 'false'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: audit-harness
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 103c79f500c522492815f9b86dfa0fb80dd07e30
+          path: pr54-source
+          persist-credentials: false
+      - name: Verify exact PR54 source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pr54-source
+          test "$(git rev-parse HEAD)" = 103c79f500c522492815f9b86dfa0fb80dd07e30
+          echo "TRUE_SOURCE_PR54_HEAD=$(git rev-parse HEAD)"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual PR54 product runtime deps and pytest
+        run: python -m pip install -e ./pr54-source 'pytest>=9,<10'
+      - name: Run real PR54 SQLite Memory Evidence Experience contracts
+        env:
+          PYTHONPATH: ${{ github.workspace }}/pr54-source/src
+        run: python -m pytest -q audit-harness/audit/nca01_r6/test_nca01_pr54_true_stack.py -ra --tb=short
