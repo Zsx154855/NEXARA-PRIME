@@ -261,3 +261,31 @@ def test_legacy_row_is_reused_instead_of_duplicated(tmp_path):
     finally:
         brain.close()
         core.close()
+
+
+def test_claim_and_memory_insert_are_one_transaction(tmp_path):
+    brain, core, controller = _open(tmp_path)
+    try:
+        existing = {
+            "memory_id": "mem-existing", "mission_id": "mission-A",
+            "key": "exp:existing", "content": "{}", "kind": "experience",
+            "layer": "semantic", "created_at": "2026-01-01T00:00:00+00:00",
+        }
+        brain.insert_memory(existing)
+        conflicting = dict(existing, key="exp:new")
+        try:
+            brain.insert_memory_with_idempotency(
+                conflicting, "mission-A", "exp:new", "sha-new"
+            )
+        except Exception:
+            pass
+        else:
+            raise AssertionError("duplicate memory_id must fail")
+        with brain._lock:
+            claim = brain._conn.execute(
+                "SELECT 1 FROM brain_memory_idempotency WHERE mem_key='exp:new'"
+            ).fetchone()
+        assert claim is None
+    finally:
+        brain.close()
+        core.close()

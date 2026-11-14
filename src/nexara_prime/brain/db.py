@@ -13,6 +13,7 @@ use SQLiteStore from nexara_prime.db.
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -185,6 +186,84 @@ class BrainDB:
             )
             self._conn.commit()
         return memory_id
+
+    def insert_memory_with_idempotency(
+        self,
+        record: dict[str, Any],
+        mission_id: str,
+        mem_key: str,
+        payload_sha256: str,
+    ) -> tuple[bool, str | None, str | None]:
+        """Insert memory + claim in ONE transaction; returns (created, existing_id, existing_sha)."""
+        memory_id = record.get("memory_id") or new_id("mem")
+        values = (
+            memory_id,
+            record.get("mission_id", "global"),
+            record.get("key", ""),
+            record.get("content", ""),
+            record.get("kind", "fact"),
+            record.get("layer", "semantic"),
+            record.get("confidence", 1.0),
+            record.get("decay_rate", 0.0),
+            record.get("half_life_seconds"),
+            record.get("evidence_id"),
+            record.get("provenance_chain"),
+            record.get("access_count", 0),
+            record.get("last_accessed"),
+            record.get("consolidated_from"),
+            record.get("superseded_by"),
+            record.get("status", "active"),
+            record.get("created_at", now_iso()),
+            record.get("updated_at"),
+        )
+        columns = (
+            "(memory_id, mission_id, key, content, kind, layer, confidence, "
+            "decay_rate, half_life_seconds, evidence_id, provenance_chain, "
+            "access_count, last_accessed, consolidated_from, superseded_by, "
+            "status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        )
+        with self._lock:
+            for _ in range(2):
+                try:
+                    self._conn.execute(
+                        "INSERT INTO brain_memory_idempotency"
+                        "(mission_id, mem_key, memory_id, payload_sha256, created_at) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (mission_id, mem_key, memory_id, payload_sha256, now_iso()),
+                    )
+                    self._conn.execute(
+                        f"INSERT INTO brain_memories {columns}", values
+                    )
+                    self._conn.commit()
+                    return True, None, None
+                except sqlite3.IntegrityError:
+                    self._conn.rollback()
+                    row = self._conn.execute(
+                        "SELECT memory_id, payload_sha256 FROM brain_memory_idempotency "
+                        "WHERE mission_id = ? AND mem_key = ?",
+                        (mission_id, mem_key),
+                    ).fetchone()
+                    if row is None:
+                        continue
+                    existing_id, existing_sha = row["memory_id"], row["payload_sha256"]
+                    memory_row = self._conn.execute(
+                        "SELECT 1 FROM brain_memories WHERE memory_id = ?",
+                        (existing_id,),
+                    ).fetchone()
+                    if memory_row:
+                        return False, existing_id, existing_sha
+                    # Legacy orphan claim from the pre-transaction implementation.
+                    self._conn.execute(
+                        "DELETE FROM brain_memory_idempotency "
+                        "WHERE mission_id = ? AND mem_key = ?",
+                        (mission_id, mem_key),
+                    )
+                    self._conn.commit()
+                    continue
+                except Exception:
+                    self._conn.rollback()
+                    raise
+            raise RuntimeError("idempotency_claim_unresolved")
 
     def get_memory(self, memory_id: str) -> dict[str, Any] | None:
         row = self._conn.execute(

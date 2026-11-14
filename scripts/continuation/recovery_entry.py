@@ -13,6 +13,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -31,21 +33,45 @@ def load_next_task(checkpoint_path: Path) -> dict[str, str]:
     return {"id": task_id, "prompt": prompt}
 
 
+_TASK_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
+
+
+def _safe_task_id(task_id: str) -> str:
+    if not _TASK_ID.fullmatch(task_id):
+        raise ValueError("task_id_must_match_[A-Za-z0-9._-]{1,128}")
+    return task_id
+
+
+def _write_lock_atomic(path: Path, payload: dict[str, Any], *, exclusive: bool = False) -> bool:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+    if exclusive:
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            return False
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        return True
+    tmp = path.with_suffix(".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+    return True
+
+
 def task_digest(task: dict[str, str]) -> str:
     return hashlib.sha256(
         json.dumps(task, sort_keys=True).encode("utf-8")
     ).hexdigest()
 
 
-def _write_lock(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    tmp.replace(path)
-
-
-def plan_dispatch(task: dict[str, str], dsh_bin: str) -> list[str]:
-    return [dsh_bin, "headless", task["prompt"]]
+def plan_dispatch(
+    task: dict[str, str], dsh_bin: str, session_id: str | None = None
+) -> list[str]:
+    command = [dsh_bin, "headless", task["prompt"]]
+    if session_id:
+        command.extend(["--session-id", session_id])
+    return command
 
 
 def dispatch(
@@ -55,14 +81,26 @@ def dispatch(
     dsh_bin: str = "dsh",
     execute: bool = False,
     timeout_seconds: int = 1800,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
+    _safe_task_id(task["id"])
     digest = task_digest(task)
     lock_path = state_dir / f"task-{task['id']}.lock"
     if lock_path.exists():
-        existing = json.loads(lock_path.read_text(encoding="utf-8"))
-        if existing.get("digest") == digest and existing.get("state") == "done":
-            return {"status": "already_completed", "task_id": task["id"], "lock": str(lock_path)}
-    command = plan_dispatch(task, dsh_bin)
+        try:
+            existing = json.loads(lock_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"status": "invalid_lock", "task_id": task["id"], "lock": str(lock_path)}
+        state = existing.get("state")
+        if existing.get("digest") == digest and state in {"done", "running"}:
+            return {
+                "status": "already_completed" if state == "done" else "already_running",
+                "task_id": task["id"],
+                "lock": str(lock_path),
+            }
+        if state == "failed":
+            lock_path.unlink(missing_ok=True)
+    command = plan_dispatch(task, dsh_bin, session_id)
     result: dict[str, Any] = {
         "status": "planned" if not execute else "unknown",
         "task_id": task["id"],
@@ -71,7 +109,8 @@ def dispatch(
     }
     if not execute:
         return result
-    _write_lock(lock_path, {**result, "state": "running"})
+    if not _write_lock_atomic(lock_path, {**result, "state": "running"}, exclusive=True):
+        return {"status": "already_running", "task_id": task["id"], "lock": str(lock_path)}
     try:
         proc = subprocess.run(command, timeout=timeout_seconds)
         returncode = proc.returncode
@@ -79,7 +118,7 @@ def dispatch(
         returncode = 124
     result["returncode"] = returncode
     result["status"] = "done" if returncode == 0 else "failed"
-    _write_lock(lock_path, {**result, "state": result["status"]})
+    _write_lock_atomic(lock_path, {**result, "state": result["status"]})
     return result
 
 
@@ -89,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state-dir", type=Path, default=Path(".nexara/continuation"))
     parser.add_argument("--dsh-bin", default="dsh")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--session-id", default=None)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -98,7 +138,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"recovery_entry_error: {exc}", file=sys.stderr)
         return 2
     result = dispatch(
-        task, args.state_dir, dsh_bin=args.dsh_bin, execute=args.execute
+        task, args.state_dir, dsh_bin=args.dsh_bin, execute=args.execute,
+        session_id=args.session_id,
     )
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else result["command"])
     return 0 if result["status"] in {"planned", "done", "already_completed"} else 1

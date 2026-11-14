@@ -111,3 +111,43 @@ def test_cli_dry_run_json(tmp_path):
     payload = json.loads(proc.stdout)
     assert payload["status"] == "planned"
     assert payload["command"][:2] == ["dsh", "headless"]
+
+
+def test_task_id_path_traversal_is_rejected(tmp_path):
+    module = _load_module()
+    try:
+        module.dispatch({"id": "../evil", "prompt": "x"}, tmp_path / "state")
+    except ValueError as exc:
+        assert "task_id" in str(exc)
+    else:
+        raise AssertionError("unsafe task id must be rejected")
+
+
+def test_running_lock_blocks_second_dispatch(tmp_path):
+    module = _load_module()
+    task = {"id": "task-3", "prompt": "x"}
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "task-task-3.lock").write_text(
+        json.dumps({"state": "running", "digest": module.task_digest(task)}),
+        encoding="utf-8",
+    )
+    result = module.dispatch(task, state, dsh_bin="dsh", execute=True)
+    assert result["status"] == "already_running"
+
+
+def test_corrupted_lock_is_reported_not_crashed(tmp_path):
+    module = _load_module()
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "task-task-4.lock").write_text("{broken", encoding="utf-8")
+    result = module.dispatch({"id": "task-4", "prompt": "x"}, state)
+    assert result["status"] == "invalid_lock"
+
+
+def test_session_id_is_forwarded(tmp_path):
+    module = _load_module()
+    command = module.plan_dispatch(
+        {"id": "task-5", "prompt": "resume me"}, "dsh", session_id="sess-1"
+    )
+    assert command == ["dsh", "headless", "resume me", "--session-id", "sess-1"]

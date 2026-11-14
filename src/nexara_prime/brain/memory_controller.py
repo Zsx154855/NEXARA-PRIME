@@ -70,6 +70,8 @@ class MemoryController:
         provenance_source_file: str = "",
         provenance_commit_sha: str = "",
         memory_id: str | None = None,
+        idempotency_key: str | None = None,
+        idempotency_payload_sha256: str | None = None,
     ) -> str:
         """Commit a memory with mandatory evidence binding for non-working layers."""
         memory_id = memory_id or new_id("mem")
@@ -104,9 +106,21 @@ class MemoryController:
             "updated_at": now,
         }
 
-        # Persist to DB
+        # Persist to DB (claim + row atomically when idempotency is requested)
         if self._persist:
-            self._db.insert_memory(entry)
+            if idempotency_key and idempotency_payload_sha256:
+                created, existing_id, existing_sha = (
+                    self._db.insert_memory_with_idempotency(
+                        entry, mission_id, idempotency_key,
+                        idempotency_payload_sha256,
+                    )
+                )
+                if not created:
+                    if existing_sha != idempotency_payload_sha256:
+                        raise ValueError("memory_idempotency_conflict")
+                    return existing_id or memory_id
+            else:
+                self._db.insert_memory(entry)
 
         # Record provenance if evidence-bound
         if evidence_id:
