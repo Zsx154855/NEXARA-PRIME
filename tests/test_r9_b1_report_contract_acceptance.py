@@ -136,3 +136,28 @@ def test_completion_state_without_full_event_chain_does_not_pass(completed_repor
     )
     assert verdict.status != "CONTRACT_PASS", verdict
     assert verdict.checks["full state machine trace exists"] is False
+
+
+def test_consumed_approval_identity_is_required(completed_report):
+    runtime, mission, verifier = completed_report
+    changed = runtime.get_mission(mission.mission_id)
+    changed.pending_approval_id = None
+    runtime._save_mission(changed)
+    verdict = verifier.evaluate(
+        mission.mission_id, mission.result["verification_evidence_id"],
+    )
+    assert verdict.status != "CONTRACT_PASS", verdict
+    assert verdict.checks["report is written only after approval"] is False
+
+
+def test_evaluation_id_must_exist_in_authoritative_sqlite(completed_report):
+    runtime, mission, verifier = completed_report
+    changed = runtime.get_mission(mission.mission_id)
+    changed.result["evaluation_id"] = "eval_missing_from_store"
+    changed.result["evaluation_passed"] = True
+    runtime._save_mission(changed)
+    verdict = verifier.evaluate(
+        mission.mission_id, mission.result["verification_evidence_id"],
+    )
+    assert verdict.status != "CONTRACT_PASS", verdict
+    assert verdict.checks["evaluation passes safety and evidence gates"] is False
