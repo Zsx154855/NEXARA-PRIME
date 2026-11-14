@@ -408,6 +408,63 @@ def dispatch(
     }
 
 
+def _evidence_proof(evidence: list[Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
+    proofs: list[dict[str, Any]] = []
+    for item in evidence:
+        if isinstance(item, str):
+            value = item.strip()
+            if not value:
+                return None, "missing_evidence"
+            if "/" in value or value.startswith("."):
+                path = Path(value).expanduser()
+                if not path.is_file():
+                    return None, "missing_evidence_file"
+                proofs.append({
+                    "path": str(path.resolve()),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                })
+            else:
+                proofs.append({"evidence_id": value})
+            continue
+        if isinstance(item, dict):
+            path_value = item.get("path")
+            evidence_id = item.get("evidence_id")
+            if path_value:
+                path = Path(str(path_value)).expanduser()
+                if not path.is_file():
+                    return None, "missing_evidence_file"
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                declared = item.get("sha256")
+                if declared is not None and str(declared) != digest:
+                    return None, "evidence_hash_mismatch"
+                proofs.append({"path": str(path.resolve()), "sha256": digest})
+            elif evidence_id:
+                proofs.append({"evidence_id": str(evidence_id)})
+            else:
+                return None, "missing_evidence"
+            continue
+        return None, "missing_evidence"
+    if not proofs:
+        return None, "missing_evidence"
+    return proofs, None
+
+
+def _qa_proof(qa: Any) -> tuple[dict[str, Any] | None, str | None]:
+    if not isinstance(qa, dict):
+        return None, "qa_identity_missing"
+    reviewer = str(qa.get("reviewer") or "").strip()
+    verdict = str(qa.get("verdict") or qa.get("status") or "").strip().lower()
+    if not reviewer:
+        return None, "qa_identity_missing"
+    if verdict not in {"passed", "approved", "pass"}:
+        return None, "missing_qa"
+    proof = {"reviewer": reviewer, "verdict": "passed"}
+    reviewed_at = qa.get("reviewed_at")
+    if reviewed_at:
+        proof["reviewed_at"] = str(reviewed_at)
+    return proof, None
+
+
 def verify_completion(
     checkpoint_path: Path,
     task_id: str,
@@ -422,19 +479,17 @@ def verify_completion(
     if not isinstance(record, dict) or record.get("status") != "completed":
         return {"status": "not_completed", "task_id": task_id}
     evidence = record.get("evidence") or []
-    if not isinstance(evidence, list) or not any(str(item).strip() for item in evidence):
+    if not isinstance(evidence, list) or not evidence:
         return {"status": "missing_evidence", "task_id": task_id}
-    path_like = [
-        item for item in evidence
-        if isinstance(item, str) and ("/" in item or item.startswith("."))
-    ]
-    if path_like and not any(Path(item).expanduser().exists() for item in path_like):
-        return {"status": "missing_evidence_file", "task_id": task_id}
+    proofs, evidence_error = _evidence_proof(evidence)
+    if evidence_error:
+        return {"status": evidence_error, "task_id": task_id}
+    qa_proof: dict[str, Any] | None = None
     if require_qa:
         qa = record.get("qa") or (data.get("qa") or {}).get(task_id)
-        qa_status = qa.get("status") if isinstance(qa, dict) else qa
-        if qa_status not in {"passed", "approved", "pass"}:
-            return {"status": "missing_qa", "task_id": task_id}
+        qa_proof, qa_error = _qa_proof(qa)
+        if qa_error:
+            return {"status": qa_error, "task_id": task_id}
 
     def mark() -> dict[str, Any]:
         lock_path = _lock_path(state_dir, task_id)
@@ -445,14 +500,25 @@ def verify_completion(
             return {"status": "already_verified", "task_id": task_id}
         if lock.get("state") != "awaiting_verification":
             return {"status": "not_awaiting_verification", "task_id": task_id}
+        verification = {
+            "verified_at": _now(),
+            "evidence": proofs,
+            "qa": qa_proof,
+        }
         lock.update(
             state="done",
-            verified_at=_now(),
+            verified_at=verification["verified_at"],
             verification_evidence=evidence,
+            verification_proof=verification,
             qa_status="passed" if require_qa else "not_required",
         )
         _write_lock(lock_path, lock)
-        return {"status": "verified", "task_id": task_id, "evidence": evidence}
+        return {
+            "status": "verified",
+            "task_id": task_id,
+            "evidence": evidence,
+            "proof": verification,
+        }
 
     return _guarded(state_dir, mark)
 

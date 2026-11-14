@@ -255,10 +255,13 @@ def test_verify_requires_completed_evidence_and_qa(tmp_path):
     checkpoint = _checkpoint(tmp_path, tasks={
         "task-1": {"status": "completed", "evidence": [str(evidence)]},
     })
-    assert module.verify_completion(checkpoint, "task-1", state)["status"] == "missing_qa"
+    assert module.verify_completion(
+        checkpoint, "task-1", state
+    )["status"] == "qa_identity_missing"
 
     checkpoint = _checkpoint(tmp_path, tasks={
-        "task-1": {"status": "completed", "evidence": [str(evidence)], "qa": "passed"},
+        "task-1": {"status": "completed", "evidence": [str(evidence)],
+                   "qa": {"reviewer": "qa-bot", "verdict": "passed"}},
     })
     result = module.verify_completion(checkpoint, "task-1", state)
     assert result["status"] == "verified"
@@ -276,12 +279,14 @@ def test_verify_rejects_missing_or_absent_evidence(tmp_path):
         "host": socket.gethostname(), "owner": "o",
     }), encoding="utf-8")
     checkpoint = _checkpoint(tmp_path, tasks={
-        "task-1": {"status": "completed", "evidence": [], "qa": "passed"},
+        "task-1": {"status": "completed", "evidence": [],
+                   "qa": {"reviewer": "qa-bot", "verdict": "passed"}},
     })
     assert module.verify_completion(checkpoint, "task-1", state)["status"] == "missing_evidence"
     checkpoint = _checkpoint(tmp_path, tasks={
         "task-1": {"status": "completed",
-                   "evidence": [str(tmp_path / "nope.txt")], "qa": "passed"},
+                   "evidence": [str(tmp_path / "nope.txt")],
+                   "qa": {"reviewer": "qa-bot", "verdict": "passed"}},
     })
     assert module.verify_completion(
         checkpoint, "task-1", state
@@ -297,7 +302,8 @@ def test_cli_blocks_dispatch_when_next_task_not_advanced(tmp_path):
     evidence = tmp_path / "evidence.txt"
     evidence.write_text("done", encoding="utf-8")
     _checkpoint(tmp_path, tasks={
-        "task-1": {"status": "completed", "evidence": [str(evidence)], "qa": "passed"},
+        "task-1": {"status": "completed", "evidence": [str(evidence)],
+                   "qa": {"reviewer": "qa-bot", "verdict": "passed"}},
     })
     proc = subprocess.run(
         [sys.executable, str(MODULE), str(tmp_path / "checkpoint.json"),
@@ -334,7 +340,8 @@ def test_cli_advance_claims_new_next_task_only_after_verification(tmp_path):
         "counter.write_text(str(n))\n"
         "data = json.loads(checkpoint.read_text())\n"
         "data.setdefault('tasks', {})[f'task-{n}'] = {\n"
-        "    'status': 'completed', 'evidence': [evidence], 'qa': 'passed'}\n"
+        "    'status': 'completed', 'evidence': [evidence], "
+        "'qa': {'reviewer': 'stub-qa', 'verdict': 'passed'}}\n"
         "data['next_task'] = {'id': f'task-{n + 1}', 'prompt': f'next {n + 1}'}\n"
         "checkpoint.write_text(json.dumps(data))\n",
         encoding="utf-8",
@@ -365,7 +372,8 @@ def test_advance_stops_without_checkpoint_advance(tmp_path):
     evidence = tmp_path / "evidence.txt"
     evidence.write_text("done", encoding="utf-8")
     _checkpoint(tmp_path, tasks={
-        "task-1": {"status": "completed", "evidence": [str(evidence)], "qa": "passed"},
+        "task-1": {"status": "completed", "evidence": [str(evidence)],
+                   "qa": {"reviewer": "qa-bot", "verdict": "passed"}},
     })
     proc = subprocess.run(
         [sys.executable, str(MODULE), str(checkpoint), "--verify", "--json",
@@ -578,3 +586,58 @@ def test_pid_reuse_is_not_killed_on_takeover(tmp_path):
     finally:
         unrelated.kill()
         unrelated.wait(timeout=5)
+
+
+def test_verify_requires_named_qa_and_hashes_evidence(tmp_path):
+    module = _load_module()
+    state = tmp_path / "state"
+    evidence = tmp_path / "evidence.txt"
+    evidence.write_text("done", encoding="utf-8")
+    import hashlib
+    digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+    (state / "task-task-1.lock").parent.mkdir(parents=True, exist_ok=True)
+    (state / "task-task-1.lock").write_text(json.dumps({
+        "version": 2, "state": "awaiting_verification", "pid": os.getpid(),
+        "host": socket.gethostname(), "owner": "o",
+    }), encoding="utf-8")
+    checkpoint = _checkpoint(tmp_path, tasks={
+        "task-1": {
+            "status": "completed",
+            "evidence": [{"path": str(evidence), "sha256": digest}],
+            "qa": {"reviewer": "independent-qa", "verdict": "approved"},
+        },
+    })
+    result = module.verify_completion(checkpoint, "task-1", state)
+    assert result["status"] == "verified"
+    lock = json.loads((state / "task-task-1.lock").read_text())
+    proof = lock["verification_proof"]
+    assert proof["qa"]["reviewer"] == "independent-qa"
+    assert proof["evidence"][0]["sha256"] == digest
+
+
+def test_verify_rejects_qa_string_and_bad_hash(tmp_path):
+    module = _load_module()
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "task-task-1.lock").write_text(json.dumps({
+        "version": 2, "state": "awaiting_verification", "pid": os.getpid(),
+        "host": socket.gethostname(), "owner": "o",
+    }), encoding="utf-8")
+    evidence = tmp_path / "evidence.txt"
+    evidence.write_text("done", encoding="utf-8")
+    checkpoint = _checkpoint(tmp_path, tasks={
+        "task-1": {"status": "completed", "evidence": [str(evidence)], "qa": "passed"},
+    })
+    assert module.verify_completion(
+        checkpoint, "task-1", state
+    )["status"] == "qa_identity_missing"
+    checkpoint = _checkpoint(tmp_path, tasks={
+        "task-1": {
+            "status": "completed",
+            "evidence": [{"path": str(evidence), "sha256": "0" * 64}],
+            "qa": {"reviewer": "qa", "verdict": "passed"},
+        },
+    })
+    assert module.verify_completion(
+        checkpoint, "task-1", state
+    )["status"] == "evidence_hash_mismatch"
