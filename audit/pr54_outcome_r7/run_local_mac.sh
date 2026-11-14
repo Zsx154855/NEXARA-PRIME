@@ -85,3 +85,9 @@ for name in r7-n01 r7-outcome r7-original-r6; do
   tail -n 70 "$ROOT/$name.log"
 done
 echo "=== END R7 LOCAL GATE ==="
+if [ "$N01_RC" -ne 0 ] || [ "$R7_RC" -ne 0 ]; then
+  echo "R7_REQUIRED_COMPONENT_TESTS=FAIL"
+  exit 1
+fi
+echo "R7_REQUIRED_COMPONENT_TESTS=PASS"
+echo "TRUSTED_INDEPENDENT_QA=NOT_VERIFIED"
