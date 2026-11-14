@@ -101,3 +101,54 @@ def test_close_bridge_leaves_runtime_store_open(tmp_path):
     finally:
         rt.telemetry.stop()
         rt.store.close()
+
+
+class _FixedDecisionLearner:
+    def __init__(self):
+        self.calls: list[str] = []
+
+    def recommend_action(self, objective: str):
+        self.calls.append(objective)
+        return {
+            "action": "report_tool",
+            "confidence": 1.0,
+            "based_on": 2,
+            "based_on_missions": 2,
+            "evidence_ids": ["e1", "e2"],
+        }
+
+
+def test_select_objective_tie_keeps_caller_priority():
+    from types import SimpleNamespace
+
+    learner = _FixedDecisionLearner()
+    bridge = SimpleNamespace(learner=learner)
+    first = select_objective(bridge, ["first objective", "second objective"])
+    second = select_objective(bridge, ["second objective", "first objective"])
+    # Explicit contract: ties keep caller order, so each call returns its first.
+    assert first["objective"] == "first objective"
+    assert second["objective"] == "second objective"
+
+
+def test_capture_skips_one_tampered_receipt_and_counts(tmp_path):
+    rt = _runtime(tmp_path)
+    try:
+        mission_id = _run(rt, "Write a local repository report")
+        bridge = build_runtime_bridge(rt)
+        invocations = [
+            inv for inv in rt.tools.list_invocations(mission_id)
+            if inv.get("receipt_evidence_id")
+        ]
+        assert len(invocations) >= 2
+        bad = invocations[0]["receipt_evidence_id"]
+        with rt.store._lock, rt.store._conn:
+            rt.store._conn.execute(
+                "UPDATE records SET payload=? WHERE record_id=?", ("{}", bad)
+            )
+
+        created = capture_mission(bridge, mission_id)
+        assert len(created) == len(invocations) - 1
+        assert bridge.rejected_receipts == 1
+    finally:
+        rt.telemetry.stop()
+        rt.store.close()

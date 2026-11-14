@@ -88,7 +88,12 @@ def select_objective(
     bridge: RuntimeExperienceBridge,
     candidates: list[str],
 ) -> dict[str, Any]:
-    """Choose the candidate with the strongest verified experience support."""
+    """Choose the candidate with the strongest verified experience support.
+
+    Ties keep the caller's candidate order on purpose: the caller owns priority,
+    and select_objective must not invent a hidden secondary ranking. The chosen
+    decision is returned unchanged so its evidence can be audited.
+    """
     best: tuple[str, float, dict[str, Any]] | None = None
     for objective in candidates:
         decision = bridge.learner.recommend_action(objective)
