@@ -57,8 +57,13 @@ class ExperienceStore:
         *,
         evidence_validator: Callable[[str, str], bool] | None = None,
         evidence_store: Any | None = None,
+        outcome_validator: Callable[[str, str], bool] | None = None,
     ) -> None:
         self._mc = memory_controller
+        self._evidence_store = evidence_store
+        # Must be a trusted, independent Mission/Contract acceptance authority,
+        # NOT an agent-provided status, score, or evidence-integrity check.
+        self._outcome_validator = outcome_validator
         self._evidence_validator = evidence_validator
         if self._evidence_validator is None and evidence_store is not None:
             def _canonical_evidence_check(mission_id: str, evidence_id: str) -> bool:
@@ -74,6 +79,87 @@ class ExperienceStore:
         # Persisted records must always be read from the canonical memory
         # layer, so a stale local cache cannot resurrect an invalidated record.
         self._persisted_ids: set[str] = set()
+
+    def _canonical_business_outcome_verified(
+        self, mission_id: str, evidence_id: str,
+    ) -> bool:
+        """Read existing Mission/Evidence/Receipt authorities; never create new state.
+
+        Canonical success requires a terminal approved Mission with acceptance
+        criteria, evaluation, receipt chain, verification evidence, independently
+        issued reviewer/auditor verdicts, AND a trusted business outcome check.
+        The injected outcome_validator is the integration seam to the existing
+        independent business-acceptance runner. Without it, fail closed.
+        """
+        if self._evidence_store is None or self._outcome_validator is None:
+            return False
+        try:
+            envelope = self._evidence_store.store.get_record_envelope(mission_id)
+            if (
+                not envelope
+                or envelope.get("record_type") != "mission"
+                or envelope.get("record_id") != mission_id
+                or envelope.get("mission_id") != mission_id
+            ):
+                return False
+            mission = envelope.get("payload")
+            if not isinstance(mission, dict):
+                return False
+            result = mission.get("result")
+            contract = mission.get("contract")
+            spec = mission.get("spec")
+            if (
+                mission.get("mission_id") != mission_id
+                or mission.get("state") != "Completed"
+                or not isinstance(result, dict)
+                or not isinstance(contract, dict)
+                or contract.get("mission_id") != mission_id
+                or contract.get("status") != "approved"
+                or not isinstance(spec, dict)
+                or spec.get("mission_id") != mission_id
+                or not isinstance(contract.get("acceptance_criteria"), list)
+                or not contract["acceptance_criteria"]
+                or not result.get("evaluation_id")
+                or result.get("evaluation_passed") is not True
+                or result.get("verification_evidence_id") != evidence_id
+            ):
+                return False
+
+            verification = self._evidence_store.get_by_id(evidence_id)
+            if (
+                verification.mission_id != mission_id
+                or verification.kind != "verification_report"
+            ):
+                return False
+            if self._evidence_store.receipt_status(mission_id).get("status") != "present":
+                return False
+
+            for field, kind, actor in (
+                ("reviewer_evidence_id", "reviewer_verdict", "reviewer"),
+                ("auditor_evidence_id", "auditor_verdict", "auditor"),
+            ):
+                verdict_id = result.get(field)
+                if not isinstance(verdict_id, str) or not verdict_id:
+                    return False
+                if self._evidence_store.is_preverified_and_integrity_bound(verdict_id) is not True:
+                    return False
+                artifact = self._evidence_store.get_by_id(verdict_id)
+                if artifact.mission_id != mission_id or artifact.kind != kind or artifact.actor != actor:
+                    return False
+                verdict = json.loads(artifact.content)
+                if (
+                    not isinstance(verdict, dict)
+                    or verdict.get("mission_id") != mission_id
+                    or verdict.get("actor") != actor
+                    or verdict.get("passed") is not True
+                ):
+                    return False
+
+            # This must validate actual acceptance results, not just the
+            # structurally valid completion chain above.
+            return self._outcome_validator(mission_id, evidence_id) is True
+        except (KeyError, TypeError, ValueError, RuntimeError, AttributeError, OSError):
+            return False
 
     def record(
         self,
@@ -115,6 +201,12 @@ class ExperienceStore:
                 or self._evidence_validator(mission_id, refs[0]) is not True
             ):
                 raise ValueError("experience_verified_evidence_required")
+            if (
+                status == "success"
+                and self._evidence_store is not None
+                and not self._canonical_business_outcome_verified(mission_id, refs[0])
+            ):
+                raise ValueError("mission_outcome_not_independently_verified")
             self._mc.commit(
                 mission_id=mission_id,
                 key=f"mission_experience:{exp_id}",
@@ -162,7 +254,16 @@ class ExperienceStore:
                 and self._evidence_validator is not None
                 and self._evidence_validator(exp.mission_id, exp.evidence_refs[0]) is True
             ):
-                active[exp.experience_id] = exp
+                # Existing canonical success records without a current
+                # independent business outcome are quarantined from learning.
+                # Legacy test-only validators are preserved for old callers;
+                # their results must not be considered production assurance.
+                if (
+                    exp.status != "success"
+                    or self._evidence_store is None
+                    or self._canonical_business_outcome_verified(exp.mission_id, exp.evidence_refs[0])
+                ):
+                    active[exp.experience_id] = exp
         return list(active.values())
 
     def list_by_risk(self, risk_level: str) -> list[MissionExperience]:
