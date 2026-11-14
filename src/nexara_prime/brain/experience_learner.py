@@ -43,6 +43,7 @@ _TOOL_STATUS_SUCCESS: dict[str, bool] = {"completed": True, "failed": False}
 # known-failing action.
 _MIN_DECISION_SAMPLES = 2
 _MIN_DECISION_SUCCESS_RATE = 0.5
+_MIN_DECISION_MISSIONS = 2
 
 
 def _read_only_evidence_validator(
@@ -489,9 +490,11 @@ class ExperienceLearner:
         stats: dict[str, dict[str, Any]] = {}
         for record in records:
             entry = stats.setdefault(
-                record.action, {"successes": 0, "total": 0, "evidence_ids": []}
+                record.action,
+                {"successes": 0, "total": 0, "evidence_ids": [], "missions": set()},
             )
             entry["total"] += 1
+            entry["missions"].add(record.mission_id)
             if record.success:
                 entry["successes"] += 1
             if record.evidence_id and record.evidence_id not in entry["evidence_ids"]:
@@ -501,6 +504,7 @@ class ExperienceLearner:
                 "action": None,
                 "confidence": 0.0,
                 "based_on": 0,
+                "based_on_missions": 0,
                 "evidence_ids": [],
             }
         ranked = sorted(
@@ -516,25 +520,32 @@ class ExperienceLearner:
             rate = round(entry["successes"] / max(entry["total"], 1), 4)
             if entry["total"] < _MIN_DECISION_SAMPLES:
                 continue
+            if len(entry["missions"]) < _MIN_DECISION_MISSIONS:
+                continue
             if rate < _MIN_DECISION_SUCCESS_RATE:
                 continue
             return {
                 "action": action,
                 "confidence": rate,
                 "based_on": entry["total"],
+                "based_on_missions": len(entry["missions"]),
                 "evidence_ids": entry["evidence_ids"][:3],
             }
         max_total = max((entry["total"] for entry in stats.values()), default=0)
+        max_missions = max((len(entry["missions"]) for entry in stats.values()), default=0)
+        if max_total < _MIN_DECISION_SAMPLES:
+            reason = "insufficient_evidence"
+        elif max_missions < _MIN_DECISION_MISSIONS:
+            reason = "insufficient_independent_missions"
+        else:
+            reason = "low_success_rate"
         return {
             "action": None,
             "confidence": 0.0,
             "based_on": 0,
+            "based_on_missions": 0,
             "evidence_ids": [],
-            "reason": (
-                "insufficient_evidence"
-                if max_total < _MIN_DECISION_SAMPLES
-                else "low_success_rate"
-            ),
+            "reason": reason,
         }
 
     def get_lessons(self, query: str = "", top_k: int = 10) -> list[str]:

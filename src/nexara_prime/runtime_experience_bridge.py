@@ -30,6 +30,7 @@ class RuntimeExperienceBridge:
     brain: BrainDB
     controller: MemoryController
     learner: ExperienceLearner
+    rejected_receipts: int = 0
 
 
 def build_runtime_bridge(runtime: NexaraRuntime) -> RuntimeExperienceBridge:
@@ -59,17 +60,28 @@ def capture_mission(bridge: RuntimeExperienceBridge, mission_id: str) -> list[st
             continue
         status = str(invocation.get("status", ""))
         success = status == "completed"
-        created.append(
-            bridge.learner.record_outcome(
-                mission_id,
-                "success" if success else "failure",
-                str(invocation.get("tool_name", "")),
-                _result_summary(invocation),
-                success,
-                evidence_id=str(evidence_id),
+        try:
+            created.append(
+                bridge.learner.record_outcome(
+                    mission_id,
+                    "success" if success else "failure",
+                    str(invocation.get("tool_name", "")),
+                    _result_summary(invocation),
+                    success,
+                    evidence_id=str(evidence_id),
+                )
             )
-        )
+        except ValueError:
+            # One bad receipt must not abort capture of the remaining verified
+            # receipts; it is counted for observability and skipped fail-closed.
+            bridge.rejected_receipts += 1
     return created
+
+
+def close_bridge(bridge: RuntimeExperienceBridge) -> None:
+    """Detach semantically only; the Runtime owns the shared connection."""
+    # Deliberately does not call brain.close(): it would close runtime.store.
+    return None
 
 
 def select_objective(

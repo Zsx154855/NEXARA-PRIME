@@ -7,6 +7,7 @@ from pathlib import Path
 from nexara_prime.runtime_experience_bridge import (
     build_runtime_bridge,
     capture_mission,
+    close_bridge,
     experience_count,
     select_objective,
 )
@@ -85,6 +86,18 @@ def test_experience_selects_the_next_objective_and_is_reused(tmp_path):
         # The second, unseen mission is also recallable for the next choice.
         choice_again = select_objective(bridge, ["write a third report"])
         assert choice_again["decision"]["action"] == "file_write_report"
+    finally:
+        rt.telemetry.stop()
+        rt.store.close()
+
+def test_close_bridge_leaves_runtime_store_open(tmp_path):
+    rt = _runtime(tmp_path)
+    try:
+        _run(rt, "Write a local repository report")
+        bridge = build_runtime_bridge(rt)
+        close_bridge(bridge)
+        row = rt.store._conn.execute("SELECT 1").fetchone()
+        assert row[0] == 1
     finally:
         rt.telemetry.stop()
         rt.store.close()

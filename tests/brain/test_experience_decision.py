@@ -55,6 +55,11 @@ def _record(learner, evidence, mission_id, tool_name, success, n=1):
     return ids
 
 
+def _spread(learner, evidence, tool_name, success):
+    for mission in ("mission-A", "mission-B"):
+        _record(learner, evidence, mission, tool_name, success, n=1)
+
+
 def _poisoned_row(mc, action, evidence_id):
     content = json.dumps({
         "mission_id": "mission-A", "outcome": "success", "action": action,
@@ -79,29 +84,33 @@ class TestDecisionInfluence:
     def test_verified_experiences_drive_recommendation(self, tmp_path):
         _, evidence, mc = _runtime(tmp_path)
         learner = ExperienceLearner(mc, evidence_store=evidence)
-        good_ids = _record(learner, evidence, "mission-A", "python_adapter", True, n=3)
+        good_ids = []
+        for mission in ("mission-A", "mission-B"):
+            good_ids += _record(learner, evidence, mission, "python_adapter", True, n=1)
         _record(learner, evidence, "mission-A", "claude_adapter", False, n=2)
 
         decision = learner.recommend_action("adapter")
         assert decision["action"] == "python_adapter"
         assert decision["confidence"] == 1.0
-        assert decision["based_on"] == 3
+        assert decision["based_on"] == 2
+        assert decision["based_on_missions"] == 2
         assert set(decision["evidence_ids"]).issubset(set(good_ids))
 
     def test_decision_reuses_experience_for_unseen_task_keywords(self, tmp_path):
         _, evidence, mc = _runtime(tmp_path)
         learner = ExperienceLearner(mc, evidence_store=evidence)
-        _record(learner, evidence, "mission-A", "python_adapter", True, n=3)
+        _spread(learner, evidence, "python_adapter", True)
 
         # No mission-scoped filter: an unseen caller query reuses verified lessons.
         decision = learner.recommend_action("adapter for a new mission")
         assert decision["action"] == "python_adapter"
-        assert decision["based_on"] == 3
+        assert decision["based_on"] == 2
 
     def test_known_failing_action_is_not_recommended(self, tmp_path):
         _, evidence, mc = _runtime(tmp_path)
         learner = ExperienceLearner(mc, evidence_store=evidence)
-        _record(learner, evidence, "mission-A", "broken_adapter", False, n=3)
+        _record(learner, evidence, "mission-A", "broken_adapter", False, n=2)
+        _record(learner, evidence, "mission-B", "broken_adapter", False, n=1)
 
         decision = learner.recommend_action("adapter")
         assert decision["action"] is None
@@ -119,7 +128,7 @@ class TestDecisionInfluence:
     def test_poisoned_rows_do_not_influence_decision(self, tmp_path):
         _, evidence, mc = _runtime(tmp_path)
         learner = ExperienceLearner(mc, evidence_store=evidence)
-        _record(learner, evidence, "mission-A", "python_adapter", True, n=3)
+        _spread(learner, evidence, "python_adapter", True)
         for _ in range(5):
             _poisoned_row(mc, "evil_adapter", "ev-FORGED")
 
@@ -129,7 +138,7 @@ class TestDecisionInfluence:
     def test_unrelated_query_does_not_recommend(self, tmp_path):
         _, evidence, mc = _runtime(tmp_path)
         learner = ExperienceLearner(mc, evidence_store=evidence)
-        _record(learner, evidence, "mission-A", "python_adapter", True, n=3)
+        _spread(learner, evidence, "python_adapter", True)
         decision = learner.recommend_action("zzz quantum banana")
         assert decision["action"] is None
         assert decision["based_on"] == 0
@@ -138,7 +147,7 @@ class TestDecisionInfluence:
         _, evidence, mc = _runtime(tmp_path)
         learner = ExperienceLearner(mc, evidence_store=evidence)
         _record(learner, evidence, "mission-A", "broken_adapter", False, n=3)
-        _record(learner, evidence, "mission-A", "python_adapter", True, n=3)
+        _spread(learner, evidence, "python_adapter", True)
 
         decision = learner.recommend_action("adapter")
         assert decision["action"] == "python_adapter"
@@ -167,3 +176,11 @@ class TestRelevancePerRecord:
         by_action = {json.loads(row["content"])["action"]: row for row in rows}
         assert by_action["report_tool"]["relevance"] > 0
         assert by_action["other_tool"]["relevance"] == 0
+
+    def test_samples_from_one_mission_are_not_enough(self, tmp_path):
+        _, evidence, mc = _runtime(tmp_path)
+        learner = ExperienceLearner(mc, evidence_store=evidence)
+        _record(learner, evidence, "mission-A", "python_adapter", True, n=5)
+        decision = learner.recommend_action("adapter")
+        assert decision["action"] is None
+        assert decision["reason"] == "insufficient_independent_missions"
