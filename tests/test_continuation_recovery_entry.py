@@ -226,11 +226,10 @@ def test_canonical_state_dir_is_checkpoint_relative(tmp_path):
 
 
 def test_cli_uses_same_state_from_a_different_cwd(tmp_path):
-    module = _load_module()
     stub = _stub(tmp_path, returncode=0)
     nested = tmp_path / "nested"
     nested.mkdir()
-    checkpoint = _checkpoint(tmp_path)
+    _checkpoint(tmp_path)
     proc = subprocess.run(
         [sys.executable, str(MODULE), "../checkpoint.json", "--execute", "--json",
          "--dsh-bin", str(stub)],
@@ -431,7 +430,6 @@ def module_owner_alive(lock_path: Path) -> bool:
 
 
 def test_blocked_next_task_is_not_dispatched(tmp_path):
-    module = _load_module()
     checkpoint = tmp_path / "checkpoint.json"
     checkpoint.write_text(json.dumps({"next_task": {
         "id": "blocked-1", "prompt": "needs approval",

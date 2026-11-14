@@ -279,10 +279,12 @@ def dispatch(
     try:
         proc, gate_write = _spawn_gated(command)
     except (OSError, KeyboardInterrupt) as exc:
+        error_name = type(exc).__name__
+
         def settle_spawn_failure() -> None:
             current = _read_lock(lock_path)
             if current and current.get("owner") == owner:
-                current.update(state="failed", error=type(exc).__name__, finished_at=_now())
+                current.update(state="failed", error=error_name, finished_at=_now())
                 _write_lock(lock_path, current)
 
         _guarded(state_dir, settle_spawn_failure)
@@ -290,7 +292,7 @@ def dispatch(
             "status": "failed",
             "task_id": task["id"],
             "returncode": None,
-            "error": type(exc).__name__,
+            "error": error_name,
             "lock": str(lock_path),
         }
 
