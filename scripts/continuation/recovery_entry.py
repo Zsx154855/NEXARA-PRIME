@@ -36,6 +36,39 @@ from typing import Any, Callable
 _TASK_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
 
+# The child must not execute DSH until its pid/pgid have been saved durably.
+# If the dispatcher is SIGKILLed before granting the gate, its pipe closes
+# and the unapproved child exits without running any tool or model command.
+_GATE_CHILD = (
+    "import os, sys\n"
+    "fd = int(sys.argv[1])\n"
+    "try:\n"
+    "    permit = os.read(fd, 1)\n"
+    "finally:\n"
+    "    os.close(fd)\n"
+    "if permit != b'1':\n"
+    "    sys.exit(125)\n"
+    "os.execvp(sys.argv[2], sys.argv[2:])\n"
+)
+
+
+def _spawn_gated(command: list[str]) -> tuple[subprocess.Popen, int]:
+    """Start a new process group but hold DSH execution behind a parent pipe."""
+    read_fd, write_fd = os.pipe()
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-c", _GATE_CHILD, str(read_fd), *command],
+            pass_fds=(read_fd,),
+            start_new_session=True,
+        )
+    except BaseException:
+        os.close(write_fd)
+        raise
+    finally:
+        os.close(read_fd)
+    return proc, write_fd
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -241,7 +274,7 @@ def dispatch(
 
     owner = payload["owner"]
     try:
-        proc = subprocess.Popen(command, start_new_session=True)
+        proc, gate_write = _spawn_gated(command)
     except (OSError, KeyboardInterrupt) as exc:
         def settle_spawn_failure() -> None:
             current = _read_lock(lock_path)
@@ -258,14 +291,47 @@ def dispatch(
             "lock": str(lock_path),
         }
 
-    def record_child() -> None:
+    def record_child() -> bool:
         current = _read_lock(lock_path)
         if not current or current.get("owner") != owner:
-            return
+            return False
         current.update(child_pid=proc.pid, child_pgid=os.getpgid(proc.pid))
         _write_lock(lock_path, current)
+        return True
 
-    _guarded(state_dir, record_child)
+    # Persist ownership before allowing the child to exec DSH. A dispatcher
+    # SIGKILL before this point closes gate_write; the child exits on EOF.
+    registered = False
+    release_error = None
+    try:
+        registered = _guarded(state_dir, record_child)
+        if registered:
+            os.write(gate_write, b"1")
+    except (OSError, KeyboardInterrupt) as exc:
+        release_error = type(exc).__name__
+    finally:
+        os.close(gate_write)
+
+    if not registered or release_error:
+        # EOF terminates the still-gated child without running the command.
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            _terminate_orphan({"child_pid": proc.pid, "child_pgid": proc.pid})
+        if release_error:
+            def settle_gate_failure() -> None:
+                current = _read_lock(lock_path)
+                if current and current.get("owner") == owner:
+                    current.update(state="failed", error=release_error, finished_at=_now())
+                    _write_lock(lock_path, current)
+            _guarded(state_dir, settle_gate_failure)
+        return {
+            "status": "failed" if release_error else "owner_lost",
+            "task_id": task["id"],
+            "error": release_error,
+            "lock": str(lock_path),
+        }
+
     try:
         returncode: int | None = proc.wait(timeout=timeout_seconds)
         error = None
