@@ -536,11 +536,17 @@ class EvidenceStore:
         envelope_digest = raw.get("envelope_sha256")
         return bool(envelope_digest) and envelope_digest == self._envelope_sha256(raw)
 
-    def verify_receipt_chain(self, mission_id: str) -> dict[str, Any]:
+    def verify_receipt_chain(
+        self, mission_id: str, *, read_only: bool = False,
+    ) -> dict[str, Any]:
         """Verify the complete receipt chain for a mission.
 
         Every tool invocation must have a linked evidence receipt.
         Returns a structured report with chain integrity status.
+
+        When read_only=True, only receipts already validated and bound by
+        the existing EvidenceStore authority qualify. The verifier never
+        repairs or promotes evidence status; legacy mode remains unchanged.
         """
 
         tool_envelopes, corrupt_tool_records = self.store.audit_record_envelopes(
@@ -576,7 +582,10 @@ class EvidenceStore:
             receipt_verifiable = False
             if receipt_id:
                 try:
-                    receipt_verifiable = self.verify(str(receipt_id))
+                    receipt_verifiable = (
+                        self.is_preverified_and_integrity_bound(str(receipt_id))
+                        if read_only else self.verify(str(receipt_id))
+                    )
                 except (KeyError, ValueError, RuntimeError):
                     receipt_verifiable = False
 
@@ -711,6 +720,7 @@ class EvidenceStore:
         mission_id: str,
         *,
         tool_names: list[str] | None = None,
+        read_only: bool = False,
     ) -> dict[str, Any]:
         """Single authority for receipt presence judgment.
 
@@ -723,12 +733,13 @@ class EvidenceStore:
         report receipt requirements.
 
         Prohibits any other code path from independently judging receipt
-        presence.
+        presence. read_only=True rejects evidence that requires a verification
+        repair/write, instead of mutating it during assessment.
         """
         if tool_names is None:
             tool_names = ["file_write_report", "write_workspace_file"]
 
-        chain = self.verify_receipt_chain(mission_id)
+        chain = self.verify_receipt_chain(mission_id, read_only=read_only)
         receipt_ids: list[str] = []
 
         # Filter chain to only relevant tool names
