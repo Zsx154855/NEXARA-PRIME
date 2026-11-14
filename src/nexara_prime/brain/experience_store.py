@@ -136,7 +136,11 @@ class ExperienceStore:
                 or verification.actor != "reviewer"
             ):
                 return False
-            if self._evidence_store.receipt_status(mission_id).get("status") != "present":
+            # Treat trusted-success admission and recall as non-mutating
+            # verification. Receipt repair is a separate explicit operation.
+            if self._evidence_store.receipt_status(
+                mission_id, read_only=True,
+            ).get("status") != "present":
                 return False
 
             for field, kind, actor in (
@@ -267,6 +271,7 @@ class ExperienceStore:
         records = self._mc.rank_retrieve(
             query="mission_experience:", top_k=10000,
             layers=["semantic"], min_confidence=0.0,
+            record_access=False,
         )
         active: dict[str, MissionExperience] = {}
         for record in records:
