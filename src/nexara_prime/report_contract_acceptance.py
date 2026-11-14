@@ -46,10 +46,9 @@ class ReportContractCheck:
 class ReportMissionContractVerifier:
     """Recompute four known process criteria using existing authorities.
 
-    No DB writes or evidence creation are performed by this class. Be aware
-    the canonical EvidenceStore.receipt_status() delegates to receipt-chain
-    verification, which can repair evidence verification state in some cases.
-    Run it in a bounded test DB if strictly zero mutations are required.
+    This evaluator opts into EvidenceStore's read-only receipt verification.
+    Evidence whose status would require repair or promotion fails closed.
+    This class never creates business acceptance, Mission or evidence state.
     """
 
     def __init__(
@@ -230,7 +229,9 @@ class ReportMissionContractVerifier:
                 failures.append("report_file_tool_or_approval_invalid")
 
             verification = self._verified(verification_evidence_id, mission_id, "verification_report")
-            receipt = self._evidence.receipt_status(mission_id, tool_names=["file_write_report"])
+            receipt = self._evidence.receipt_status(
+                mission_id, tool_names=["file_write_report"], read_only=True,
+            )
             receipt_artifact = self._verified(result.get("receipt_evidence_id"), mission_id, "execution_receipt")
             verified_report = False
             if verification and receipt_artifact and file_ok and write_ok:
