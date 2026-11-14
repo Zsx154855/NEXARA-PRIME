@@ -43,6 +43,7 @@ _TOOL_STATUS_SUCCESS: dict[str, bool] = {"completed": True, "failed": False}
 # known-failing action.
 _MIN_DECISION_SAMPLES = 2
 _MIN_DECISION_SUCCESS_RATE = 0.5
+_MIN_DECISION_MISSIONS = 2
 
 
 def _read_only_evidence_validator(
@@ -434,6 +435,48 @@ class ExperienceLearner:
                 raise ValueError("lesson_idempotency_conflict") from exc
             raise
 
+    # ── Retirement (wrong/stale experience must stop influencing decisions) ──
+
+    def retire_experiences(
+        self,
+        *,
+        mission_id: str | None = None,
+        evidence_id: str | None = None,
+        reason: str = "",
+        actor: str = "system",
+        audit: Callable[[dict[str, Any]], None] | None = None,
+    ) -> int:
+        """Archive matching experience/lesson rows so they leave trusted recall.
+
+        At least one selector is required. This is an explicit revocation path,
+        not a silent expiry; the caller owns the policy and must record why.
+        ``audit`` receives a payload with mission/evidence/reason/actor/count.
+        """
+        if not mission_id and not evidence_id:
+            raise ValueError("retire_criteria_required")
+        db = self._db()
+        if db is None:
+            return 0
+        retired = 0
+        for kind in ("experience", "lesson"):
+            for row in db.recall(kind=kind):
+                if mission_id and row.get("mission_id") != mission_id:
+                    continue
+                if evidence_id and row.get("evidence_id") != evidence_id:
+                    continue
+                if db.update_status(str(row.get("memory_id", "")), "archived"):
+                    retired += 1
+        if audit is not None:
+            audit({
+                "mission_id": mission_id or "",
+                "evidence_id": evidence_id or "",
+                "retired": retired,
+                "reason": reason,
+                "actor": actor,
+                "retired_at": now_iso(),
+            })
+        return retired
+
     # ── Read paths (must stay read-only and re-verify per row) ──
 
     def extract_patterns(self, limit: int = 50) -> list[Pattern]:
@@ -489,9 +532,11 @@ class ExperienceLearner:
         stats: dict[str, dict[str, Any]] = {}
         for record in records:
             entry = stats.setdefault(
-                record.action, {"successes": 0, "total": 0, "evidence_ids": []}
+                record.action,
+                {"successes": 0, "total": 0, "evidence_ids": [], "missions": set()},
             )
             entry["total"] += 1
+            entry["missions"].add(record.mission_id)
             if record.success:
                 entry["successes"] += 1
             if record.evidence_id and record.evidence_id not in entry["evidence_ids"]:
@@ -501,6 +546,7 @@ class ExperienceLearner:
                 "action": None,
                 "confidence": 0.0,
                 "based_on": 0,
+                "based_on_missions": 0,
                 "evidence_ids": [],
             }
         ranked = sorted(
@@ -516,25 +562,32 @@ class ExperienceLearner:
             rate = round(entry["successes"] / max(entry["total"], 1), 4)
             if entry["total"] < _MIN_DECISION_SAMPLES:
                 continue
+            if len(entry["missions"]) < _MIN_DECISION_MISSIONS:
+                continue
             if rate < _MIN_DECISION_SUCCESS_RATE:
                 continue
             return {
                 "action": action,
                 "confidence": rate,
                 "based_on": entry["total"],
+                "based_on_missions": len(entry["missions"]),
                 "evidence_ids": entry["evidence_ids"][:3],
             }
         max_total = max((entry["total"] for entry in stats.values()), default=0)
+        max_missions = max((len(entry["missions"]) for entry in stats.values()), default=0)
+        if max_total < _MIN_DECISION_SAMPLES:
+            reason = "insufficient_evidence"
+        elif max_missions < _MIN_DECISION_MISSIONS:
+            reason = "insufficient_independent_missions"
+        else:
+            reason = "low_success_rate"
         return {
             "action": None,
             "confidence": 0.0,
             "based_on": 0,
+            "based_on_missions": 0,
             "evidence_ids": [],
-            "reason": (
-                "insufficient_evidence"
-                if max_total < _MIN_DECISION_SAMPLES
-                else "low_success_rate"
-            ),
+            "reason": reason,
         }
 
     def get_lessons(self, query: str = "", top_k: int = 10) -> list[str]:

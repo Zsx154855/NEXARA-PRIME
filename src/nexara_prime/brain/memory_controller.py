@@ -247,7 +247,7 @@ class MemoryController:
             records = [r for r in records if r.get("layer") in layers]
 
         query_lower = query.lower()
-        scored: list[tuple[dict[str, Any], float]] = []
+        scored: list[tuple[dict[str, Any], float, float]] = []
 
         for r in records:
             confidence = float(r.get("confidence", 1.0))
@@ -273,15 +273,15 @@ class MemoryController:
 
             # Combined score: relevance 0.5 + recency 0.25 + confidence 0.25
             combined = relevance * 0.5 + recency * 0.25 + confidence * 0.25
-            scored.append((r, combined))
+            scored.append((r, combined, relevance))
 
         scored.sort(key=lambda x: x[1], reverse=True)
 
         results = []
-        for r, score in scored[:top_k]:
+        for r, score, relevance_score in scored[:top_k]:
             entry = dict(r)
             entry["relevance_score"] = score
-            entry["relevance"] = round(relevance, 4)
+            entry["relevance"] = round(relevance_score, 4)
             results.append(entry)
             # Log access (telemetry) unless the caller needs a read-only recall.
             if record_access:
