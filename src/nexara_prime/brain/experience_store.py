@@ -125,10 +125,15 @@ class ExperienceStore:
             ):
                 return False
 
+            # Do not let an injected legacy evidence_validator bypass the
+            # canonical evidence verification-status / origin-chain checks.
+            if self._evidence_store.is_preverified_and_integrity_bound(evidence_id) is not True:
+                return False
             verification = self._evidence_store.get_by_id(evidence_id)
             if (
                 verification.mission_id != mission_id
                 or verification.kind != "verification_report"
+                or verification.actor != "reviewer"
             ):
                 return False
             if self._evidence_store.receipt_status(mission_id).get("status") != "present":
