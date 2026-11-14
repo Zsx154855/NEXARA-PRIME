@@ -671,3 +671,48 @@ def test_verify_rejects_qa_string_and_bad_hash(tmp_path):
     assert module.verify_completion(
         checkpoint, "task-1", state
     )["status"] == "evidence_hash_mismatch"
+
+
+def test_verification_rejects_free_text_and_unverified_ids(tmp_path):
+    module = _load_module()
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "task-task-1.lock").write_text(json.dumps({
+        "version": 2, "state": "awaiting_verification", "pid": os.getpid(),
+        "host": socket.gethostname(), "owner": "o",
+    }), encoding="utf-8")
+    qa = {"reviewer": "qa", "verdict": "passed"}
+    checkpoint = _checkpoint(tmp_path, tasks={
+        "task-1": {"status": "completed", "evidence": ["LGTM ship it"], "qa": qa},
+    })
+    assert module.verify_completion(
+        checkpoint, "task-1", state
+    )["status"] == "evidence_id_unverified"
+    checkpoint = _checkpoint(tmp_path, tasks={
+        "task-1": {"status": "completed",
+                   "evidence": [{"evidence_id": "evidence_abc123"}], "qa": qa},
+    })
+    assert module.verify_completion(
+        checkpoint, "task-1", state
+    )["status"] == "evidence_id_unverified"
+    assert module.verify_completion(
+        checkpoint, "task-1", state, allow_opaque_evidence_ids=True
+    )["status"] == "verified"
+
+
+def test_relative_evidence_path_resolves_against_checkpoint(tmp_path):
+    module = _load_module()
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "task-task-1.lock").write_text(json.dumps({
+        "version": 2, "state": "awaiting_verification", "pid": os.getpid(),
+        "host": socket.gethostname(), "owner": "o",
+    }), encoding="utf-8")
+    (tmp_path / "evidence.txt").write_text("done", encoding="utf-8")
+    checkpoint = _checkpoint(tmp_path, tasks={
+        "task-1": {"status": "completed", "evidence": ["./evidence.txt"],
+                   "qa": {"reviewer": "qa", "verdict": "passed"}},
+    })
+    result = module.verify_completion(checkpoint, "task-1", state)
+    assert result["status"] == "verified"
+    assert result["proof"]["evidence"][0]["path"].endswith("evidence.txt")
