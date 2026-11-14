@@ -239,7 +239,29 @@ class ExperienceStore:
 
     def list_all(self) -> list[MissionExperience]:
         if self._mc is None:
-            return list(self._experiences.values())
+            # The canonical in-memory mode must re-check a success on every
+            # recall, just like persisted mode. A revoked independent outcome
+            # must not be resurrected from the process-local cache.
+            if self._evidence_store is None:
+                return list(self._experiences.values())  # legacy compatibility
+            visible: list[MissionExperience] = []
+            for exp in self._experiences.values():
+                if exp.status != "success":
+                    visible.append(exp)
+                    continue
+                if not exp.evidence_refs:
+                    continue
+                evidence_id = exp.evidence_refs[0]
+                try:
+                    if (
+                        self._evidence_validator is not None
+                        and self._evidence_validator(exp.mission_id, evidence_id) is True
+                        and self._canonical_business_outcome_verified(exp.mission_id, evidence_id)
+                    ):
+                        visible.append(exp)
+                except (KeyError, TypeError, ValueError, RuntimeError, AttributeError, OSError):
+                    continue
+            return visible
         # MemoryController.rank_retrieve filters non-active records; never
         # resurrect superseded or invalidated knowledge from local caches.
         records = self._mc.rank_retrieve(
@@ -277,6 +299,19 @@ class ExperienceStore:
                 ):
                     active[exp.experience_id] = exp
         return list(active.values())
+
+    def list_trusted_successes(self) -> list[MissionExperience]:
+        """Expose only actively validated canonical successes to cognition.
+
+        This is a view of the *existing* Mission, evidence and independent
+        outcome authorities, not a new stored trust state. Legacy callback-only
+        and unverified in-memory experiences are excluded. A trusted executor
+        must bind a real independent outcome validator before any success
+        experience can influence reasoning.
+        """
+        if self._evidence_store is None or self._outcome_validator is None:
+            return []
+        return [exp for exp in self.list_all() if exp.status == "success"]
 
     def list_by_risk(self, risk_level: str) -> list[MissionExperience]:
         return [e for e in self.list_all() if e.risk_level == risk_level]
