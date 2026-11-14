@@ -53,7 +53,7 @@ def test_selected_goal_executes_and_is_independently_verified(tmp_path):
 
     settings = _settings(tmp_path)
     outcome = execute_goal(GoalCandidate(**goal), settings)
-    verification = verify_outcome(outcome)
+    verification = verify_outcome(outcome, settings)
     assert outcome.state == "Completed"
     assert outcome.evidence_ids
     assert outcome.tool_invocations
@@ -104,3 +104,80 @@ def test_transfer_control_reports_three_arms(tmp_path):
     assert metrics["after_revocation"] == 0.0
     assert metrics["delta_success_rate"] == 1.0
     assert metrics["model_calls"] == 0
+
+
+def test_completed_self_report_is_not_independent_verification(tmp_path):
+    """A self-asserted DTO cannot pass without independent persisted evidence."""
+    from dataclasses import replace
+
+    signals = _failed_mission_signals(tmp_path)
+    goal = select_goal(propose_goals(signals))["selected"]
+    settings = _settings(tmp_path)
+    outcome = execute_goal(GoalCandidate(**goal), settings)
+    assert verify_outcome(outcome, settings)["passed"]
+
+    detached = verify_outcome(outcome)
+    assert not detached["passed"]
+    assert "independent_store_required" in detached["reasons"]
+
+    fabricated = replace(outcome, evidence_ids=["fake"], completed_invocations=["fake"])
+    result = verify_outcome(fabricated, settings)
+    assert not result["passed"]
+    assert "persisted_evidence_ids_mismatch" in result["reasons"]
+    assert "persisted_completed_tools_mismatch" in result["reasons"]
+
+
+def test_independent_verifier_rejects_corrupt_stored_mission(tmp_path):
+    """Direct SQLite payload tampering must not pass persisted Mission verification."""
+    import sqlite3
+
+    signals = _failed_mission_signals(tmp_path)
+    goal = select_goal(propose_goals(signals))["selected"]
+    settings = _settings(tmp_path)
+    outcome = execute_goal(GoalCandidate(**goal), settings)
+    assert verify_outcome(outcome, settings)["passed"]
+
+    with sqlite3.connect(settings.db_path) as conn:
+        row = conn.execute(
+            "SELECT payload FROM records WHERE record_id=?", (outcome.mission_id,),
+        ).fetchone()
+        stored = json.loads(row[0])
+        stored["state"] = "Failed"
+        conn.execute(
+            "UPDATE records SET payload=? WHERE record_id=?",
+            (json.dumps(stored, sort_keys=True), outcome.mission_id),
+        )
+    result = verify_outcome(outcome, settings)
+    assert not result["passed"]
+    assert "independent_record_integrity_invalid" in result["reasons"]
+
+
+def test_independent_verifier_rejects_report_tampering(tmp_path):
+    """An existing report is insufficient without the actual tool-result digest."""
+    signals = _failed_mission_signals(tmp_path)
+    goal = select_goal(propose_goals(signals))["selected"]
+    settings = _settings(tmp_path)
+    outcome = execute_goal(GoalCandidate(**goal), settings)
+    assert verify_outcome(outcome, settings)["passed"]
+
+    Path(outcome.report_path).write_text("tampered after execution", encoding="utf-8")
+    result = verify_outcome(outcome, settings)
+    assert not result["passed"]
+    assert "report_receipt_digest_mismatch" in result["reasons"]
+
+
+def test_cognitive_self_approval_cannot_run_with_live_provider(tmp_path):
+    """Fail before Runtime construction, before any key access or provider call."""
+    from dataclasses import replace
+    import pytest
+
+    settings = replace(_settings(tmp_path), mock_model=False, model_provider="deepseek")
+    goal = GoalCandidate(
+        goal_id="LIVE01", objective="run a live tool", source="test", kind="test_failure",
+        success_criteria="tool invoked", value_hypothesis="test",
+        risk="test", estimated_cost="zero", dependencies=(), evidence="test",
+    )
+    assert not settings.db_path.exists()
+    with pytest.raises(ValueError, match="cognitive_loop_mock_only"):
+        execute_goal(goal, settings)
+    assert not settings.db_path.exists()
