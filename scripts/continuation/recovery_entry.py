@@ -159,6 +159,29 @@ def _owner_alive(lock: dict[str, Any]) -> bool:
     return True
 
 
+def _process_command(pid: int) -> str | None:
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "command=", "-p", str(pid)],
+            capture_output=True, text=True, timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() or None
+
+
+def _is_expected_child(lock: dict[str, Any], pid: int) -> bool:
+    """Guard against PID reuse: only kill a process that still runs our command."""
+    expected = lock.get("command")
+    if not isinstance(expected, list) or not expected:
+        return False
+    command_line = _process_command(pid)
+    if not command_line:
+        return False
+    executable = str(expected[0])
+    return executable in command_line or os.path.basename(executable) in command_line
+
+
 def _terminate_orphan(lock: dict[str, Any]) -> bool:
     """Terminate the dsh process group left behind by a SIGKILLed dispatcher."""
     pid = lock.get("child_pid")
@@ -167,6 +190,8 @@ def _terminate_orphan(lock: dict[str, Any]) -> bool:
         return False
     if pid == os.getpid():
         return False
+    if not _is_expected_child(lock, pid):
+        return False
     try:
         if os.getpgid(pid) != pgid:
             return False
@@ -174,7 +199,7 @@ def _terminate_orphan(lock: dict[str, Any]) -> bool:
         return False
     try:
         os.killpg(pgid, signal.SIGTERM)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         return True
     deadline = time.monotonic() + 1.0
     while time.monotonic() < deadline:
@@ -185,7 +210,7 @@ def _terminate_orphan(lock: dict[str, Any]) -> bool:
         time.sleep(0.05)
     try:
         os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         pass
     return True
 
@@ -333,6 +358,7 @@ def dispatch(
         return {
             "status": "failed" if release_error else "owner_lost",
             "task_id": task["id"],
+            "returncode": None,
             "error": release_error,
             "lock": str(lock_path),
         }

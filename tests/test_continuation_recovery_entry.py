@@ -503,6 +503,7 @@ def test_gate_pipe_closing_without_grant_never_runs_command(tmp_path):
     finally:
         os.close(permit_fd)  # dispatcher died before persisting child pid
     assert proc.wait(timeout=5) == 125
+    time.sleep(0.8)  # allow any erroneously ungated child to execute
     assert not marker.exists()
 
 
@@ -554,3 +555,26 @@ def test_sigkill_before_child_pid_recorded_does_not_run_dsh(tmp_path):
         if dispatcher.poll() is None:
             dispatcher.kill()
             dispatcher.wait(timeout=5)
+
+
+def test_pid_reuse_is_not_killed_on_takeover(tmp_path):
+    module = _load_module()
+    unrelated = subprocess.Popen(["sleep", "5"])
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "task-task-9.lock").write_text(json.dumps({
+        "version": 2, "state": "running", "pid": 999999,
+        "host": socket.gethostname(), "owner": "dead-owner",
+        "child_pid": unrelated.pid, "child_pgid": os.getpgid(unrelated.pid),
+        "command": ["/definitely-not-this-process"],
+    }), encoding="utf-8")
+    try:
+        result = module.dispatch(
+            {"id": "task-9", "prompt": "x"}, state,
+            dsh_bin=str(_stub(tmp_path)), execute=True,
+        )
+        assert result["status"] == "awaiting_verification"
+        assert unrelated.poll() is None, "unrelated PID was killed"
+    finally:
+        unrelated.kill()
+        unrelated.wait(timeout=5)
