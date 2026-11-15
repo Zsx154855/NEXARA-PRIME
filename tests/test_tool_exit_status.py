@@ -47,3 +47,24 @@ def test_zero_exit_stays_completed(tmp_path):
     finally:
         runtime.telemetry.stop()
         runtime.store.close()
+
+
+def test_failed_invocation_replay_raises_without_duplicate(tmp_path):
+    runtime = _runtime(tmp_path)
+    try:
+        with pytest.raises(RuntimeError):
+            runtime.tools.invoke(
+                "exit-status", "code_exec",
+                {"code": "raise SystemExit(3)"}, "trace-replay",
+                idempotency_key="replay-failed-1",
+            )
+        with pytest.raises(RuntimeError, match="tool_replay_failed"):
+            runtime.tools.invoke(
+                "exit-status", "code_exec",
+                {"code": "raise SystemExit(3)"}, "trace-replay",
+                idempotency_key="replay-failed-1",
+            )
+        assert len(runtime.tools.list_invocations("exit-status")) == 1
+    finally:
+        runtime.telemetry.stop()
+        runtime.store.close()

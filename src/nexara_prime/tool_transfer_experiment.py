@@ -47,9 +47,11 @@ def _invoke_strategy(
     except Exception as exc:  # the failed invocation is still persisted
         error = f"{type(exc).__name__}: {exc}"
     invocations = runtime.tools.list_invocations(mission_id)
-    if not invocations:
+    invocation = next(
+        (row for row in invocations if row.get("idempotency_key") == key), None
+    )
+    if invocation is None:
         raise RuntimeError("tool_invocation_not_persisted")
-    invocation = invocations[-1]
     return {
         "strategy": strategy,
         "mission_id": mission_id,

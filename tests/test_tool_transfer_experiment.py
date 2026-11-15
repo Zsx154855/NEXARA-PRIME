@@ -24,6 +24,8 @@ def test_real_tool_transfer_improves_real_outcome(tmp_path):
 
     assert result["task_b"]["cold"]["success"] is False
     assert result["task_b"]["decision"]["action"] == SAFE_TOOL
+    assert result["task_b"]["decision"]["based_on"] >= 2
+    assert result["task_b"]["decision"]["based_on_missions"] >= 2
     assert result["task_b"]["experienced"]["success"] is True
     assert result["decision_changed"] is True
 
