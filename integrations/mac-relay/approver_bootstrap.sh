@@ -27,6 +27,10 @@ TMP=$(/usr/bin/mktemp -d "$DIR/.keygen.XXXXXXXX")
 cleanup() {
   /bin/rm -f "$TMP/approver_ed25519" "$TMP/approver_ed25519.pub"
   /bin/rmdir "$TMP" 2>/dev/null || true
+  # An aborted first-run keygen must not strand an empty destination forever.
+  if [ ! -e "$DIR/approver_ed25519" ] && [ ! -e "$DIR/approver_ed25519.pub" ]; then
+    /bin/rmdir "$DIR" 2>/dev/null || true
+  fi
 }
 trap cleanup 0
 
