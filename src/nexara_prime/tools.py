@@ -523,6 +523,8 @@ class ToolRuntime:
                 return FailureCode.IO_PATH_TRAVERSAL, ReasonCode.PATH_OUTSIDE_ROOT
             return FailureCode.IO_PERMISSION_DENIED, ReasonCode.PERMISSION_DENIED
         if isinstance(exc, RuntimeError):
+            if "tool_exit_nonzero" in exc_msg:
+                return FailureCode.TOOL_EXECUTION_FAILED, ReasonCode.EXECUTION_FAILED
             if "tool_timeout" in exc_msg:
                 return FailureCode.TOOL_TIMEOUT, ReasonCode.EXECUTION_TIMEOUT
             if "tool_failed" in exc_msg:

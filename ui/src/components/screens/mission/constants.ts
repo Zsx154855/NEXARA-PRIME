@@ -92,6 +92,7 @@ export const FAILURE_CODE_LABELS: Record<FailureCode, string> = {
   PROVIDER_AUTH_INVALID: "模型服务密钥无效",
   TOOL_UNKNOWN: "工具不存在",
   TOOL_TIMEOUT: "工具执行超时",
+  TOOL_EXECUTION_FAILED: "工具进程非零退出",
   TOOL_SANDBOX_UNAVAILABLE: "工具沙箱不可用",
   TOOL_POLICY_REJECTED: "工具调用被策略拒绝",
   TOOL_ARGUMENT_INVALID: "工具参数不合法",

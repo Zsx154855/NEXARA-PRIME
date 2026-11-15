@@ -28,6 +28,8 @@ def test_nonzero_exit_marks_invocation_failed(tmp_path):
         invocations = runtime.tools.list_invocations("exit-status")
         assert len(invocations) == 1
         assert invocations[0]["status"] == "failed"
+        assert invocations[0]["failure_code"] == "TOOL_EXECUTION_FAILED"
+        assert invocations[0]["reason_code"] == "EXECUTION_FAILED"
         assert invocations[0]["result"]["returncode"] == 3
         assert invocations[0]["receipt_evidence_id"]
     finally:
@@ -58,7 +60,7 @@ def test_failed_invocation_replay_raises_without_duplicate(tmp_path):
                 {"code": "raise SystemExit(3)"}, "trace-replay",
                 idempotency_key="replay-failed-1",
             )
-        with pytest.raises(RuntimeError, match="tool_replay_failed"):
+        with pytest.raises(RuntimeError, match="tool_replay_failed: TOOL_EXECUTION_FAILED"):
             runtime.tools.invoke(
                 "exit-status", "code_exec",
                 {"code": "raise SystemExit(3)"}, "trace-replay",
