@@ -55,6 +55,29 @@ class GateReport:
         return " | ".join(failures)[:1200]
 
 
+def scoped_secret_script(base_ref: str) -> str:
+    """Secret scan limited to the files this task changed.
+
+    Both governance scripts derive their repository root from __file__, and the
+    checked-out tree already carries findings, so an unscoped run fails every task
+    no matter what the engineer did. Gate paths stay relative so the scripts resolve
+    the worktree, not the developer checkout.
+    """
+    return (
+        "import re, subprocess, sys\n"
+        "changed = set(subprocess.run(['git', 'diff', '--name-only', '"
+        + base_ref
+        + "...HEAD'], capture_output=True, text=True).stdout.split())\n"
+        "proc = subprocess.run([sys.executable, 'scripts/security/scan_hardcoded_secrets.py'],"
+        " capture_output=True, text=True)\n"
+        "pattern = re.compile(r'^\\s+(\\S+?):(\\d+)\\s')\n"
+        "hits = [line.strip() for line in proc.stdout.splitlines()"
+        " if (match := pattern.match(line)) and match.group(1) in changed]\n"
+        "print('scoped secret findings:', hits[:5])\n"
+        "sys.exit(1 if hits else 0)\n"
+    )
+
+
 class DeterministicGates:
     """Runs repository checks inside the task worktree and trusts only exit codes."""
 
@@ -73,7 +96,13 @@ class DeterministicGates:
         candidate = repo_path / ".venv" / "bin" / "python"
         interpreter = str(candidate) if candidate.exists() else "python3"
         ruff = repo_path / ".venv" / "bin" / "ruff"
-        commands = [GateCommand("whitespace", ("git", "diff", "--check"), timeout_s=120)]
+        commands = [
+            GateCommand(
+                "whitespace",
+                ("bash", "-c", "git diff --check " + base_ref + "...HEAD"),
+                timeout_s=120,
+            )
+        ]
         if ruff.exists():
             script = (
                 "files=$(git diff --name-only " + base_ref + "...HEAD -- '*.py' | tr '\\n' ' '); "
@@ -84,10 +113,22 @@ class DeterministicGates:
             commands.append(GateCommand("ruff", ("bash", "-c", script), timeout_s=300))
         nsec = repo_path / "scripts" / "governance" / "validate_nsec.py"
         if nsec.exists():
-            commands.append(GateCommand("nsec", (interpreter, str(nsec)), timeout_s=300))
+            commands.append(
+                GateCommand(
+                    "nsec",
+                    (interpreter, "scripts/governance/validate_nsec.py"),
+                    timeout_s=300,
+                )
+            )
         secrets = repo_path / "scripts" / "security" / "scan_hardcoded_secrets.py"
         if secrets.exists():
-            commands.append(GateCommand("secrets", (interpreter, str(secrets)), timeout_s=300))
+            commands.append(
+                GateCommand(
+                    "secrets",
+                    (interpreter, "-c", scoped_secret_script(base_ref)),
+                    timeout_s=300,
+                )
+            )
         commands.append(
             GateCommand("pytest", (interpreter, "-m", "pytest", "-q", *test_paths), timeout_s=1800)
         )

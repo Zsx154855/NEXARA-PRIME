@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from nexara_prime.rd_factory.qa import (
@@ -71,3 +72,74 @@ def test_reviewer_crash_rejects(tmp_path: Path) -> None:
     )
     assert verdict.approved is False
     assert "reviewer failed" in verdict.findings[0]
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-c", "user.email=qa@nexara.local", "-c", "user.name=QA", *args],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _git_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    (repo / "scripts" / "security").mkdir(parents=True)
+    (repo / "scripts" / "governance").mkdir(parents=True)
+    (repo / "old.py").write_text("VALUE = 1\n")
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "baseline")
+    return repo
+
+
+def test_governance_script_resolves_the_worktree_not_the_checkout(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    probe = (
+        "import pathlib\n"
+        "print('root=' + str(pathlib.Path(__file__).resolve().parents[2]))\n"
+    )
+    (repo / "scripts" / "governance" / "validate_nsec.py").write_text(probe)
+    worktree = tmp_path / "worktree"
+    (worktree / "scripts" / "governance").mkdir(parents=True)
+    (worktree / "scripts" / "governance" / "validate_nsec.py").write_text(probe)
+
+    gates = DeterministicGates.default(repo, base_ref="HEAD")
+    report = gates.run(worktree)
+
+    nsec = [item for item in report.results if item.name == "nsec"][0]
+    assert "root=" + str(worktree.resolve()) in nsec.tail
+
+
+def _scanner(repo: Path) -> None:
+    (repo / "scripts" / "security" / "scan_hardcoded_secrets.py").write_text(
+        "print('Secret scan: FAILED - 1 finding(s)')\n"
+        "print('  old.py:3  api_key = \"...\"')\n"
+    )
+
+
+def test_secret_scan_ignores_findings_in_unchanged_files(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    _scanner(repo)
+
+    gates = DeterministicGates.default(repo, base_ref="HEAD")
+    report = gates.run(repo)
+
+    secrets = [item for item in report.results if item.name == "secrets"][0]
+    assert secrets.passed is True
+
+
+def test_secret_scan_fails_on_findings_in_changed_files(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    _scanner(repo)
+    (repo / "old.py").write_text("VALUE = 2\n")
+    _git(repo, "commit", "-qam", "change")
+
+    gates = DeterministicGates.default(repo, base_ref="HEAD~1")
+    report = gates.run(repo)
+
+    secrets = [item for item in report.results if item.name == "secrets"][0]
+    assert secrets.passed is False
+    assert "old.py" in secrets.tail
