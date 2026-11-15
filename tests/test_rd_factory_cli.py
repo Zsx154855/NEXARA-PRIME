@@ -36,3 +36,26 @@ def test_recover_reports_no_zombies(tmp_path: Path, monkeypatch, capsys) -> None
     assert main(["factory", "recover"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["requeued"] == []
+
+
+def test_run_parser_accepts_a_lease_ttl() -> None:
+    args = build_parser().parse_args(["factory", "run", "--lease-ttl", "60"])
+    assert args.lease_ttl == 60
+
+
+def test_cancel_refuses_an_unknown_task(tmp_path: Path, monkeypatch, capsys) -> None:
+    (tmp_path / ".nexara").mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["factory", "cancel", "task_missing"]) == 1
+    assert "unknown task" in capsys.readouterr().err
+
+
+def test_cancel_stops_a_queued_task(tmp_path: Path, monkeypatch, capsys) -> None:
+    (tmp_path / ".nexara").mkdir()
+    monkeypatch.chdir(tmp_path)
+    assert main(["factory", "enqueue", "stop me"]) == 0
+    task_id = json.loads(capsys.readouterr().out)["task_id"]
+
+    assert main(["factory", "cancel", task_id]) == 0
+    assert json.loads(capsys.readouterr().out)["state"] == "cancelled"

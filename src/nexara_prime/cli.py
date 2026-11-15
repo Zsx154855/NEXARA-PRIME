@@ -108,6 +108,9 @@ def build_parser() -> argparse.ArgumentParser:
     factory_run = factory_sub.add_parser("run", help="claim and execute queued tasks")
     factory_run.add_argument("--max-tasks", dest="max_tasks", type=int, default=3)
     factory_run.add_argument("--require-remote", dest="require_remote", action="store_true")
+    factory_run.add_argument("--lease-ttl", dest="lease_ttl", type=int, default=1800)
+    factory_cancel = factory_sub.add_parser("cancel", help="stop owning one task")
+    factory_cancel.add_argument("task_id")
     factory_sub.add_parser("status", help="ledger, recovery and remote status")
     factory_sub.add_parser("recover", help="requeue expired leases")
 
@@ -571,7 +574,14 @@ def _factory_paths(root: Path) -> tuple[Path, Path]:
     return base / "ledger.db", worktrees
 
 
-def _build_factory(root: Path, ledger, *, require_remote: bool = False, worker: str = "nexara"):
+def _build_factory(
+    root: Path,
+    ledger,
+    *,
+    require_remote: bool = False,
+    worker: str = "nexara",
+    lease_ttl_s: int = 1800,
+):
     from .rd_factory import (
         ClaudeCodeExecutor,
         DeterministicGates,
@@ -605,6 +615,7 @@ def _build_factory(root: Path, ledger, *, require_remote: bool = False, worker: 
         repo=root,
         publisher=GhPublisher(root, base_branch),
         worker=worker,
+        lease_ttl_s=lease_ttl_s,
         remote=RemoteGate.from_env(),
         require_remote=require_remote,
         log_dir=root / ".nexara" / "factory" / "logs",
@@ -612,7 +623,7 @@ def _build_factory(root: Path, ledger, *, require_remote: bool = False, worker: 
 
 
 def cmd_factory(args) -> int:
-    from .rd_factory import TaskLedger
+    from .rd_factory import LedgerError, TaskLedger
     from .rd_factory.recovery import recover
 
     root = _resolve_repo_root()
@@ -638,8 +649,19 @@ def cmd_factory(args) -> int:
         if args.factory_command == "recover":
             _print(recover(ledger).as_dict())
             return 0
+        if args.factory_command == "cancel":
+            try:
+                ledger.cancel(args.task_id)
+                view = ledger.get(args.task_id)
+            except LedgerError as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 1
+            _print({"task_id": view.task_id, "state": view.state})
+            return 0
         if args.factory_command == "run":
-            factory = _build_factory(root, ledger, require_remote=args.require_remote)
+            factory = _build_factory(
+                root, ledger, require_remote=args.require_remote, lease_ttl_s=args.lease_ttl
+            )
             runs = factory.run_until_idle(max_tasks=args.max_tasks)
             _print({"runs": [run.as_dict() for run in runs], "stats": ledger.stats()})
             return 0 if all(run.state == "delivered" for run in runs) else 1
