@@ -88,8 +88,10 @@ def run_tool_transfer(
         "learning_transferred_real": "NO_OUTCOME_DELTA_OBSERVED",
     }
     try:
+        task_a_mission_ids: list[str] = []
         for mission_index in ("1", "2"):
             task_a = runtime.create_mission(f"Tool transfer task A{mission_index}")
+            task_a_mission_ids.append(task_a.mission_id)
             for strategy in STRATEGIES:
                 run = _invoke_strategy(
                     runtime, task_a.mission_id, strategy, mission_index
@@ -126,13 +128,20 @@ def run_tool_transfer(
         result["task_b"]["experienced"] = experienced_runs
         result["decision_changed"] = experienced_choice != COLD_CHOICE
 
-        memory_ids = [
-            row["memory_id"]
-            for row in brain.recall(kind="experience")
-            if row.get("status") == "active"
-        ]
-        for memory_id in memory_ids:
-            brain.update_status(memory_id, "archived")
+        # Retire only Task A's newly created Mission experiences.
+        # Never archive unrelated active memories in this shared-store design.
+        # Keep provenance in the result artifact for independent QA.
+        retirement_audit: list[dict[str, Any]] = []
+        for mission_id in task_a_mission_ids:
+            retired = learner.retire_experiences(
+                mission_id=mission_id,
+                reason="tool_transfer_experiment_revoked_control",
+                actor="tool_transfer_experiment",
+                audit=retirement_audit.append,
+            )
+            if retired != len(STRATEGIES):
+                raise RuntimeError("task_a_retirement_incomplete")
+        result["retirement_audit"] = retirement_audit
         revoked_decision = learner.recommend_action("exec")
         revoked_choice = revoked_decision.get("action") or COLD_CHOICE
         revoked_runs = run_arm("revoked", revoked_choice)
