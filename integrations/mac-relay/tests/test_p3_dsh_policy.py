@@ -433,3 +433,52 @@ def test_missing_adapter_is_refused(tmp_path):
                  route={"kind": "unix-socket", "endpoint": str(sock)}, adapter=None)
     assert "model_cost_unverified" in str(exc.value)
     server.close()
+
+def test_nonzero_dsh_exit_never_marks_mission_completed(tmp_path):
+    """A nonzero adapter exit must quarantine the attempt, not attest success."""
+    sock, server = listener(tmp_path)
+    try:
+        route = {"kind": "unix-socket", "endpoint": str(sock)}
+        ctx = build(tmp_path, route=route)
+        bad = fake_adapter(exit_code=17, stderr=b"")
+        with pytest.raises(DshError, match="task_nonzero_exit"):
+            run_task(workspace=ctx["tree"].path, instruction="inspect only",
+                     timeout=5, route=route, adapter=bad, environ={})
+        assert len(bad.calls) == 1
+
+        result = run_socket(tmp_path, ctx, fake_adapter(exit_code=17))
+        assert result["phase"] == "UNKNOWN_OUTCOME", result
+        assert not result.get("evidence"), result
+    finally:
+        server.close()
+
+
+def test_process_group_kill_after_leader_exits_but_descendant_survives(tmp_path):
+    """A detached child with inherited stdout must not survive terminate()."""
+    escaped = tmp_path / "escaped.txt"
+    ready = tmp_path / "spawned.txt"
+    leader = (
+        "import os, pathlib, subprocess, sys; "
+        "child='import pathlib,sys,time;time.sleep(1.5);pathlib.Path(sys.argv[1]).write_text(\"escaped\")'; "
+        "subprocess.Popen([sys.executable,'-c',child,sys.argv[1]],"
+        "stdout=sys.stdout,stderr=sys.stderr); "
+        "pathlib.Path(sys.argv[2]).write_text('spawned'); os._exit(0)"
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-c", leader, str(escaped), str(ready)],
+        cwd=tmp_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        assert process.wait(timeout=5) == 0
+        assert ready.is_file(), "leader failed to spawn its descendant"
+        assert ProcessAdapter.terminate(process) is True
+        time.sleep(1.8)
+        assert not escaped.exists(), "orphan continued executing after process-group timeout"
+    finally:
+        # Always clean up, including if the negative regression fires.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.communicate(timeout=5)
