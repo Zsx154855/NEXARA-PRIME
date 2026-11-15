@@ -132,12 +132,31 @@ def run_tool_transfer(
         # Never archive unrelated active memories in this shared-store design.
         # Keep provenance in the result artifact for independent QA.
         retirement_audit: list[dict[str, Any]] = []
+
+        def record_retirement(payload: dict[str, Any]) -> None:
+            """Persist each scoped revocation in the existing Runtime event log.
+
+            The artifact alone is not an audit authority: retain the canonical
+            event_id so independent QA can read the persisted event by Mission.
+            """
+            mission_id = str(payload["mission_id"])
+            persisted = runtime.events.publish(
+                "experience.retired",
+                mission_id,
+                "mission",
+                "tool_transfer_experiment",
+                f"tool-transfer-retire:{mission_id}",
+                payload,
+                idempotency_key=f"tool-transfer-retire:{mission_id}",
+            )
+            retirement_audit.append({**payload, "event_id": persisted.event_id})
+
         for mission_id in task_a_mission_ids:
             retired = learner.retire_experiences(
                 mission_id=mission_id,
                 reason="tool_transfer_experiment_revoked_control",
                 actor="tool_transfer_experiment",
-                audit=retirement_audit.append,
+                audit=record_retirement,
             )
             if retired != len(STRATEGIES):
                 raise RuntimeError("task_a_retirement_incomplete")
