@@ -411,7 +411,10 @@ def test_socket_timeout_quarantines_unknown_outcome(tmp_path):
 
     sock, server = listener(tmp_path)
     ctx = build(tmp_path, route={"kind": "unix-socket", "endpoint": str(sock)}, max_seconds=1)
-    result = run_socket(tmp_path, ctx, ProcessAdapter(["/bin/sh", "-c", "sleep 30"]))
+    def timeout_adapter(instruction, timeout, workspace):
+        raise subprocess.TimeoutExpired("dsh", timeout)
+
+    result = run_socket(tmp_path, ctx, timeout_adapter)
     assert result.get("phase") == "UNKNOWN_OUTCOME", result
     db = sqlite3.connect(tmp_path / "ledger" / "p3-private.sqlite3")
     try:
@@ -419,4 +422,14 @@ def test_socket_timeout_quarantines_unknown_outcome(tmp_path):
     finally:
         db.close()
     assert row == ("UNKNOWN_OUTCOME", "unverified_execution")
+    server.close()
+
+
+def test_missing_adapter_is_refused(tmp_path):
+    sock, server = listener(tmp_path)
+    ctx = build(tmp_path, route={"kind": "unix-socket", "endpoint": str(sock)})
+    with pytest.raises(DshError) as exc:
+        run_task(workspace=ctx["tree"].binding(), instruction="x", timeout=5,
+                 route={"kind": "unix-socket", "endpoint": str(sock)}, adapter=None)
+    assert "model_cost_unverified" in str(exc.value)
     server.close()
