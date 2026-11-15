@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
-from nexara_prime.rd_factory.ledger import FenceError, TaskLedger
+from nexara_prime.rd_factory.ledger import FenceError, LedgerError, TaskLedger
 
 
 def _ledger(tmp_path: Path, name: str = "factory.db") -> TaskLedger:
@@ -96,4 +97,69 @@ def test_dedupe_key_returns_the_same_task(tmp_path: Path) -> None:
     second = _enqueue(ledger, dedupe_key="gate-empty-diff")
     assert first == second
     assert len(ledger.list_tasks()) == 1
+    ledger.close()
+
+
+def _cancel_events(ledger: TaskLedger, task_id: str) -> list[dict]:
+    return [event for event in ledger.events(task_id) if event["kind"] == "task.cancelled"]
+
+
+def test_cancel_unknown_task_fails_closed(tmp_path: Path) -> None:
+    ledger = _ledger(tmp_path)
+    missing = "task_does_not_exist"
+
+    with pytest.raises(LedgerError) as excinfo:
+        ledger.cancel(missing, "typo")
+
+    assert missing in str(excinfo.value)
+    assert ledger.events(missing) == []
+    ledger.close()
+
+
+@pytest.mark.parametrize("terminal", ["delivered", "failed", "cancelled", "blocked"])
+def test_cancel_terminal_task_is_rejected_and_state_preserved(tmp_path: Path, terminal: str) -> None:
+    ledger = _ledger(tmp_path)
+    task_id = _enqueue(ledger)
+    claim = ledger.claim("w1", ttl_seconds=900)
+    assert claim is not None
+    if terminal == "cancelled":
+        ledger.cancel(task_id, "first cancel")
+    else:
+        ledger.finish(task_id, claim.attempt_token, terminal)
+
+    before = ledger.get(task_id)
+    cancels_before = len(_cancel_events(ledger, task_id))
+
+    with pytest.raises(LedgerError) as excinfo:
+        ledger.cancel(task_id, "second cancel")
+
+    after = ledger.get(task_id)
+    assert task_id in str(excinfo.value)
+    assert after.state == terminal
+    assert after.last_error == before.last_error
+    assert after.owner == before.owner
+    assert after.epoch == before.epoch
+    assert len(_cancel_events(ledger, task_id)) == cancels_before
+    ledger.close()
+
+
+@pytest.mark.parametrize("advance", ["queued", "running"])
+def test_cancel_active_task_sets_cancelled_and_emits_one_event(tmp_path: Path, advance: str) -> None:
+    ledger = _ledger(tmp_path)
+    task_id = _enqueue(ledger)
+    if advance == "running":
+        claim = ledger.claim("w1", ttl_seconds=900)
+        assert claim is not None
+        ledger.mark_running(task_id, claim.attempt_token, branch="factory/x")
+
+    ledger.cancel(task_id, "superseded")
+
+    view = ledger.get(task_id)
+    assert view.state == "cancelled"
+    assert view.attempt_token is None
+    assert view.owner is None
+    assert view.lease_expires_at is None
+    signals = _cancel_events(ledger, task_id)
+    assert len(signals) == 1
+    assert json.loads(signals[0]["detail"])["reason"] == "superseded"
     ledger.close()
