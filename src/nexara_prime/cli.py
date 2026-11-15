@@ -94,6 +94,22 @@ def build_parser() -> argparse.ArgumentParser:
     triage = adaptive_sub.add_parser("triage")
     triage.add_argument("mission_id")
 
+    # autonomous R&D factory
+    factory = sub.add_parser("factory", help="unattended R&D factory")
+    factory_sub = factory.add_subparsers(dest="factory_command", required=True)
+    factory_enqueue = factory_sub.add_parser("enqueue", help="queue one factory task")
+    factory_enqueue.add_argument("objective")
+    factory_enqueue.add_argument("--title", default=None)
+    factory_enqueue.add_argument("--acceptance", action="append", default=[])
+    factory_enqueue.add_argument("--scope", action="append", default=[])
+    factory_enqueue.add_argument("--budget", type=int, default=3)
+    factory_enqueue.add_argument("--dedupe-key", dest="dedupe_key", default=None)
+    factory_run = factory_sub.add_parser("run", help="claim and execute queued tasks")
+    factory_run.add_argument("--max-tasks", dest="max_tasks", type=int, default=3)
+    factory_run.add_argument("--require-remote", dest="require_remote", action="store_true")
+    factory_sub.add_parser("status", help="ledger, recovery and remote status")
+    factory_sub.add_parser("recover", help="requeue expired leases")
+
     return parser
 
 
@@ -544,6 +560,76 @@ def cmd_security(args) -> int:
     return 0
 
 
+def _factory_paths(root: Path) -> tuple[Path, Path]:
+    base = root / ".nexara" / "factory"
+    return base / "ledger.db", base / "worktrees"
+
+
+def _build_factory(root: Path, ledger, *, require_remote: bool = False, worker: str = "nexara"):
+    from .rd_factory import (
+        DeterministicGates,
+        GhPublisher,
+        HeadlessExecutor,
+        IndependentQA,
+        RDFactory,
+        RemoteGate,
+        WorktreeManager,
+    )
+
+    base_branch = os.environ.get("NEXARA_FACTORY_BASE_BRANCH", "main")
+    _, worktrees_root = _factory_paths(root)
+    return RDFactory(
+        ledger=ledger,
+        executor=HeadlessExecutor(),
+        worktrees=WorktreeManager(root, worktrees_root, base_branch),
+        gates=DeterministicGates.default(root),
+        qa=IndependentQA.headless(),
+        repo=root,
+        publisher=GhPublisher(root, base_branch),
+        worker=worker,
+        remote=RemoteGate.from_env(),
+        require_remote=require_remote,
+        log_dir=root / ".nexara" / "factory" / "logs",
+    )
+
+
+def cmd_factory(args) -> int:
+    from .rd_factory import TaskLedger
+    from .rd_factory.recovery import recover
+
+    root = _resolve_repo_root()
+    db_path, _ = _factory_paths(root)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger = TaskLedger(db_path)
+    try:
+        if args.factory_command == "enqueue":
+            task_id = ledger.enqueue(
+                title=args.title or args.objective[:80],
+                objective=args.objective,
+                acceptance=list(args.acceptance),
+                scope=list(args.scope),
+                budget_attempts=args.budget,
+                dedupe_key=args.dedupe_key,
+            )
+            view = ledger.get(task_id)
+            _print({"task_id": task_id, "state": view.state, "epoch": view.epoch})
+            return 0
+        if args.factory_command == "status":
+            _print(_build_factory(root, ledger).status())
+            return 0
+        if args.factory_command == "recover":
+            _print(recover(ledger).as_dict())
+            return 0
+        if args.factory_command == "run":
+            factory = _build_factory(root, ledger, require_remote=args.require_remote)
+            runs = factory.run_until_idle(max_tasks=args.max_tasks)
+            _print({"runs": [run.as_dict() for run in runs], "stats": ledger.stats()})
+            return 0 if all(run.state == "delivered" for run in runs) else 1
+        return 2
+    finally:
+        ledger.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     settings = Settings.from_env(Path.cwd())
@@ -564,6 +650,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_connectors(args)
         elif args.command == "security":
             return cmd_security(args)
+        elif args.command == "factory":
+            return cmd_factory(args)
         elif args.command == "mission":
             if args.mission_command == "create":
                 _print(runtime.create_mission(args.objective, args.source_dir))
