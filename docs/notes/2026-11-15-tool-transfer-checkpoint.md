@@ -12,7 +12,7 @@
   cold, experienced, and revoked arms each re-execute a real tool.
 - Tests: `tests/test_tool_exit_status.py`, `tests/test_tool_transfer_experiment.py`.
 
-## Evidence (run 2026-11-15, worktree at 174c742)
+## Evidence (run 2026-11-15, worktree at 922007e)
 - `pytest` full suite: **2444 passed, 3 subtests passed in 68.77s** at `d7de535`
   (before the 3-trial test-only change).
 - Focused suite: 4 passed; 3 trials per arm: cold=0.0, experienced=1.0,
@@ -30,4 +30,6 @@
 - No model/provider call, no main merge, no production deployment.
 
 ## Next
-- Independent re-check of 174c742 delta; then next authorized autonomous task.
+- Final independent QA passed at 922007e (including D2/trials); next authorized
+  autonomous task TBD. The 0/1/0 rates are deterministic by construction and
+  must not be cited as statistical variance.
