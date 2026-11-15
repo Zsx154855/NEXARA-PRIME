@@ -105,6 +105,13 @@ class ToolRuntime:
             idempotency_key, mission_id, tool_name, arguments
         )
         if existing:
+            if existing.status == "failed":
+                # A failed invocation is durable evidence of failure. Returning
+                # it as if the call had succeeded would let replay callers skip
+                # the failure path, so replay raises instead.
+                raise RuntimeError(
+                    f"tool_replay_failed: {existing.failure_code or 'failed'}"
+                )
             return existing
         risk = {
             "file_read": RiskLevel.R0,
@@ -166,6 +173,11 @@ class ToolRuntime:
         else:
             failure_code = None
             reason_code = None
+            returncode = result.get("returncode") if isinstance(result, dict) else None
+            if isinstance(returncode, int) and returncode != 0:
+                failure = RuntimeError(f"tool_exit_nonzero: returncode={returncode}")
+                status = "failed"
+                failure_code, reason_code = self._classify_failure(failure)
         invocation = ToolInvocation(
             invocation_id=new_id("tool"), mission_id=mission_id, tool_name=tool_name,
             arguments=arguments, result=result, risk_level=risk, status=status,
@@ -204,7 +216,13 @@ class ToolRuntime:
         if status == "failed":
             if failure is not None and isinstance(failure, (KeyError, PermissionError, FileNotFoundError, ValueError)):
                 raise failure
-            raise RuntimeError(result.get("error", "tool_failed"))
+            message = str(result.get("error") or "tool_failed")
+            if isinstance(failure, RuntimeError) and "tool_exit_nonzero" in str(failure):
+                message = str(failure)
+                stderr = str(result.get("stderr") or "").strip()
+                if stderr:
+                    message = f"{message}: {stderr[:200]}"
+            raise RuntimeError(message)
         return invocation
 
     def _file_read(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -505,6 +523,8 @@ class ToolRuntime:
                 return FailureCode.IO_PATH_TRAVERSAL, ReasonCode.PATH_OUTSIDE_ROOT
             return FailureCode.IO_PERMISSION_DENIED, ReasonCode.PERMISSION_DENIED
         if isinstance(exc, RuntimeError):
+            if "tool_exit_nonzero" in exc_msg:
+                return FailureCode.TOOL_EXECUTION_FAILED, ReasonCode.EXECUTION_FAILED
             if "tool_timeout" in exc_msg:
                 return FailureCode.TOOL_TIMEOUT, ReasonCode.EXECUTION_TIMEOUT
             if "tool_failed" in exc_msg:
