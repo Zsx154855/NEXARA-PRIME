@@ -96,3 +96,10 @@ def test_qa_keywords_use_boundaries_not_substrings(tmp_path):
     signals = signals_from_qa_markdown(qa)
     assert len(signals) == 1
     assert signals[0].severity == "medium"
+
+
+def test_malformed_recovery_record_does_not_crash():
+    signals = signals_from_runtime_missions([
+        {"mission_id": "m1", "state": "Failed", "result": {"recovery": None}},
+    ])
+    assert len(signals) == 1

@@ -53,7 +53,9 @@ def signals_from_runtime_missions(missions: Iterable[dict[str, Any]]) -> list[Si
         mission_id = str(mission.get("mission_id", ""))
         spec = mission.get("spec", {}) if isinstance(mission.get("spec"), dict) else {}
         result = mission.get("result", {}) if isinstance(mission.get("result"), dict) else {}
-        error = result.get("error") or result.get("recovery", {}).get("error_code") or state
+        recovery = result.get("recovery")
+        recovery_code = recovery.get("error_code") if isinstance(recovery, dict) else None
+        error = result.get("error") or recovery_code or state
         signals.append(Signal(
             source=f"runtime:mission:{mission_id}",
             kind="mission_failure",
