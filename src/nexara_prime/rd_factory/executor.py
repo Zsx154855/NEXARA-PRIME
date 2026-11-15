@@ -224,3 +224,68 @@ class HeadlessExecutor:
         except OSError:
             return 0
         return count
+
+
+class ClaudeCodeExecutor:
+    """Runs one unattended Claude Code session inside a worktree."""
+
+    def __init__(
+        self,
+        claude_bin: str = "claude",
+        timeout_s: float = 1800.0,
+        permission_mode: str = "bypassPermissions",
+        model: str | None = None,
+    ):
+        self.claude_bin = claude_bin
+        self.timeout_s = timeout_s
+        self.permission_mode = permission_mode
+        self.model = model
+
+    def execute(self, worktree: str | Path, prompt: str, log_path: str | Path) -> ExecResult:
+        path = Path(worktree)
+        log = Path(log_path)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            self.claude_bin,
+            "-p",
+            prompt,
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--permission-mode",
+            self.permission_mode,
+        ]
+        if self.model:
+            cmd += ["--model", self.model]
+        started = time.monotonic()
+        timed_out = False
+        with open(log, "wb") as sink:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=str(path),
+                stdin=subprocess.DEVNULL,
+                stdout=sink,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            try:
+                proc.wait(timeout=self.timeout_s)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                HeadlessExecutor._terminate(proc)
+        duration = time.monotonic() - started
+        events = HeadlessExecutor._count_events(log)
+        try:
+            sha = diff_sha256(path)
+            changed = changed_files(path)
+        except ExecutorError:
+            sha, changed = None, []
+        return ExecResult(
+            exit_code=None if timed_out else proc.returncode,
+            timed_out=timed_out,
+            duration_s=duration,
+            log_path=str(log),
+            events=events,
+            diff_sha256=sha,
+            changed_files=changed,
+        )

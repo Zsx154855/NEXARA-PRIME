@@ -9,7 +9,7 @@ from nexara_prime.rd_factory.executor import ExecResult, WorktreeManager
 from nexara_prime.rd_factory.factory import RDFactory
 from nexara_prime.rd_factory.ledger import TaskLedger
 from nexara_prime.rd_factory.publisher import DraftPR
-from nexara_prime.rd_factory.qa import DeterministicGates, GateCommand, GateReport, IndependentQA
+from nexara_prime.rd_factory.qa import DeterministicGates, GateCommand
 
 
 def _git(*args: str, cwd: Path) -> None:

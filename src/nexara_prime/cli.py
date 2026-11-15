@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import runpy
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -567,6 +568,7 @@ def _factory_paths(root: Path) -> tuple[Path, Path]:
 
 def _build_factory(root: Path, ledger, *, require_remote: bool = False, worker: str = "nexara"):
     from .rd_factory import (
+        ClaudeCodeExecutor,
         DeterministicGates,
         GhPublisher,
         HeadlessExecutor,
@@ -578,12 +580,23 @@ def _build_factory(root: Path, ledger, *, require_remote: bool = False, worker: 
 
     base_branch = os.environ.get("NEXARA_FACTORY_BASE_BRANCH", "main")
     _, worktrees_root = _factory_paths(root)
+    claude_available = shutil.which("claude") is not None
+    exec_choice = os.environ.get("NEXARA_FACTORY_EXECUTOR", "auto").lower()
+    qa_choice = os.environ.get("NEXARA_FACTORY_QA", "auto").lower()
+    if exec_choice == "claude" or (exec_choice == "auto" and claude_available):
+        executor = ClaudeCodeExecutor()
+    else:
+        executor = HeadlessExecutor()
+    if qa_choice == "claude" or (qa_choice == "auto" and claude_available):
+        qa = IndependentQA.claude()
+    else:
+        qa = IndependentQA.headless()
     return RDFactory(
         ledger=ledger,
-        executor=HeadlessExecutor(),
+        executor=executor,
         worktrees=WorktreeManager(root, worktrees_root, base_branch),
-        gates=DeterministicGates.default(root),
-        qa=IndependentQA.headless(),
+        gates=DeterministicGates.default(root, base_ref=base_branch),
+        qa=qa,
         repo=root,
         publisher=GhPublisher(root, base_branch),
         worker=worker,

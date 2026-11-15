@@ -1,6 +1,12 @@
 """NEXARA R&D factory: durable task ledger, isolated execution, gates, recovery."""
 
-from .executor import ExecResult, ExecutorError, HeadlessExecutor, WorktreeManager
+from .executor import (
+    ClaudeCodeExecutor,
+    ExecResult,
+    ExecutorError,
+    HeadlessExecutor,
+    WorktreeManager,
+)
 from .factory import FactoryRun, RDFactory
 from .ledger import Claim, FenceError, LedgerError, TaskLedger, TaskView
 from .publisher import DraftPR, GhPublisher, PublishError
@@ -10,6 +16,7 @@ from .remote import RemoteGate, RemoteTarget, RemoteUnavailable
 
 __all__ = [
     "Claim",
+    "ClaudeCodeExecutor",
     "DeterministicGates",
     "DraftPR",
     "ExecResult",

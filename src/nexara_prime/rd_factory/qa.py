@@ -64,7 +64,10 @@ class DeterministicGates:
 
     @classmethod
     def default(
-        cls, repo: str | Path, test_paths: Sequence[str] = ("tests",)
+        cls,
+        repo: str | Path,
+        test_paths: Sequence[str] = ("tests",),
+        base_ref: str = "main",
     ) -> DeterministicGates:
         repo_path = Path(repo)
         candidate = repo_path / ".venv" / "bin" / "python"
@@ -72,9 +75,19 @@ class DeterministicGates:
         ruff = repo_path / ".venv" / "bin" / "ruff"
         commands = [GateCommand("whitespace", ("git", "diff", "--check"), timeout_s=120)]
         if ruff.exists():
-            commands.append(
-                GateCommand("ruff", (str(ruff), "check", "src", "tests"), timeout_s=300)
+            script = (
+                "files=$(git diff --name-only " + base_ref + "...HEAD -- '*.py' | tr '\\n' ' '); "
+                "if [ -z \"$files\" ]; then echo 'no python files changed'; exit 0; fi; "
+                + str(ruff)
+                + " check $files"
             )
+            commands.append(GateCommand("ruff", ("bash", "-c", script), timeout_s=300))
+        nsec = repo_path / "scripts" / "governance" / "validate_nsec.py"
+        if nsec.exists():
+            commands.append(GateCommand("nsec", (interpreter, str(nsec)), timeout_s=300))
+        secrets = repo_path / "scripts" / "security" / "scan_hardcoded_secrets.py"
+        if secrets.exists():
+            commands.append(GateCommand("secrets", (interpreter, str(secrets)), timeout_s=300))
         commands.append(
             GateCommand("pytest", (interpreter, "-m", "pytest", "-q", *test_paths), timeout_s=1800)
         )
@@ -188,6 +201,39 @@ class IndependentQA:
                 text=True,
                 timeout=timeout_s,
                 env=env,
+            )
+            return proc.stdout
+
+        return cls(run)
+
+    @classmethod
+    def claude(
+        cls,
+        *,
+        claude_bin: str = "claude",
+        timeout_s: float = 1800.0,
+        permission_mode: str = "bypassPermissions",
+        model: str | None = None,
+    ) -> IndependentQA:
+        def run(prompt: str, worktree: Path) -> str:
+            cmd = [
+                claude_bin,
+                "-p",
+                prompt,
+                "--output-format",
+                "text",
+                "--permission-mode",
+                permission_mode,
+            ]
+            if model:
+                cmd += ["--model", model]
+            proc = subprocess.run(
+                cmd,
+                cwd=str(worktree),
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
             )
             return proc.stdout
 
