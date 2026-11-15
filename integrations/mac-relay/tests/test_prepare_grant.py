@@ -119,3 +119,31 @@ def test_owner_bootstrap_refuses_noninteractive_context(tmp_path):
     assert 'ssh-keygen -q -t ed25519 -N ""' not in source
     assert '[ ! -t 0 ]' in source
     assert 'ssh-keygen -y -P ""' in source
+
+
+def test_sign_command_preserves_canonical_json_with_quoted_instruction(tmp_path):
+    """Apostrophes must not corrupt the exact bytes the owner signs."""
+    repo = git_repo(tmp_path)
+    private = tmp_path / "test-only-approver"
+    ephemeral_key(private)
+    result = subprocess.run(
+        [sys.executable, str(PREPARE), "--workspace", str(repo),
+         "--requester-uid", str(os.geteuid()),
+         "--public-key-file", str(private.with_suffix(".pub")),
+         "--instruction", "Read Bob's repo; report only, don't modify."],
+        capture_output=True, text=True, check=True, timeout=10,
+    )
+    bundle = json.loads(result.stdout)
+    prefix, sep, signing = bundle["sign_command"].partition(" | /usr/bin/ssh-keygen")
+    assert sep and signing
+    exact_bytes = subprocess.check_output(
+        ["/bin/sh", "-c", prefix],
+        env={"PATH": "/usr/bin:/bin"}, timeout=10,
+    )
+    assert exact_bytes == bundle["canonical_grant"].encode("utf-8")
+    assert b"Bob's repo" in exact_bytes
+    # The local preparation UI must print the unmodified canonical command,
+    # not try to strip quotes or sign-command suffixes from shell text.
+    phase_one = (ROOT / "prepare_mission.sh").read_text()
+    assert 'print(d["sign_command"])' in phase_one
+    assert 'replace(" | /usr/bin/ssh-keygen"' not in phase_one
