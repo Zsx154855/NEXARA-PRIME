@@ -19,6 +19,7 @@ from .brain.memory_controller import MemoryController
 from .cognitive_loop import MOCK_ONLY, _mission_settings
 from .runtime import NexaraRuntime
 
+TRIALS = 3
 SAFE_TOOL = "code_exec"
 FAULTY_TOOL = "run_command_sandboxed"
 COLD_CHOICE = FAULTY_TOOL
@@ -105,23 +106,24 @@ def run_tool_transfer(
                     evidence_id=run["evidence_id"],
                 )
 
-        cold_mission = runtime.create_mission("Tool transfer task B cold")
-        cold_run = _invoke_strategy(
-            runtime, cold_mission.mission_id, COLD_CHOICE, "cold"
-        )
-        result["task_b"]["cold"] = cold_run
+        def run_arm(label: str, strategy: str) -> list[dict[str, Any]]:
+            mission = runtime.create_mission(f"Tool transfer task B {label}")
+            return [
+                _invoke_strategy(
+                    runtime, mission.mission_id, strategy, f"{label}-{trial}"
+                )
+                for trial in range(1, TRIALS + 1)
+            ]
+
+        cold_runs = run_arm("cold", COLD_CHOICE)
+        result["task_b"]["cold"] = cold_runs
 
         decision = learner.recommend_action("exec")
         experienced_choice = decision.get("action") or COLD_CHOICE
         result["task_b"]["decision"] = decision
         result["task_b"]["experienced_choice"] = experienced_choice
-        experienced_mission = runtime.create_mission(
-            "Tool transfer task B experienced"
-        )
-        experienced_run = _invoke_strategy(
-            runtime, experienced_mission.mission_id, experienced_choice, "learned"
-        )
-        result["task_b"]["experienced"] = experienced_run
+        experienced_runs = run_arm("experienced", experienced_choice)
+        result["task_b"]["experienced"] = experienced_runs
         result["decision_changed"] = experienced_choice != COLD_CHOICE
 
         memory_ids = [
@@ -133,24 +135,25 @@ def run_tool_transfer(
             brain.update_status(memory_id, "archived")
         revoked_decision = learner.recommend_action("exec")
         revoked_choice = revoked_decision.get("action") or COLD_CHOICE
-        revoked_mission = runtime.create_mission("Tool transfer task B revoked")
-        revoked_run = _invoke_strategy(
-            runtime, revoked_mission.mission_id, revoked_choice, "revoked"
-        )
+        revoked_runs = run_arm("revoked", revoked_choice)
         result["task_b"]["revoked_decision"] = revoked_decision
         result["task_b"]["revoked_choice"] = revoked_choice
-        result["task_b"]["revoked"] = revoked_run
+        result["task_b"]["revoked"] = revoked_runs
         result["decision_reverted"] = revoked_choice == COLD_CHOICE
 
-        cold_success = bool(cold_run["success"])
-        experienced_success = bool(experienced_run["success"])
-        result["cold_success"] = cold_success
-        result["experienced_success"] = experienced_success
-        result["revoked_success"] = bool(revoked_run["success"])
-        result["real_tool_outcome_delta"] = int(experienced_success) - int(cold_success)
-        if experienced_success and not cold_success:
+        def success_rate(runs: list[dict[str, Any]]) -> float:
+            return round(sum(1 for run in runs if run["success"]) / len(runs), 4)
+
+        result["trials"] = TRIALS
+        result["cold_success_rate"] = success_rate(cold_runs)
+        result["experienced_success_rate"] = success_rate(experienced_runs)
+        result["revoked_success_rate"] = success_rate(revoked_runs)
+        result["real_tool_outcome_delta"] = round(
+            result["experienced_success_rate"] - result["cold_success_rate"], 4
+        )
+        if result["real_tool_outcome_delta"] > 0:
             result["learning_transferred_real"] = "REAL_TOOL_OUTCOME_IMPROVED"
-        elif experienced_success == cold_success:
+        elif result["real_tool_outcome_delta"] == 0:
             result["learning_transferred_real"] = "NO_OUTCOME_DELTA_OBSERVED"
         else:
             result["learning_transferred_real"] = "REAL_TOOL_OUTCOME_WORSENED"
