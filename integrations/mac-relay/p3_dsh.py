@@ -85,6 +85,10 @@ def run_task(*, workspace, instruction, timeout, route, adapter, prober=None, en
     calls = metering["model_calls"]
     if not (calls == "unknown" or (type(calls) is int and calls >= 0)):
         raise DshError("metering_unverified")
+    # An unsuccessful DSH CLI exit cannot be treated as a completed Mission.
+    # The caller quarantines a possibly side-effecting attempt as UNKNOWN_OUTCOME.
+    if outcome["exit_code"] != 0:
+        raise DshError("task_nonzero_exit")
     return {
         "exit_code": outcome["exit_code"],
         "stdout_sha256": _sha(outcome["stdout"]),
@@ -120,8 +124,11 @@ class ProcessAdapter:
     @staticmethod
     def terminate(process):
         """SIGKILL the whole group, reap it, and prove the child is gone."""
+        # Popen(start_new_session=True) makes the child PID the process-group ID.
+        # The leader may have exited while descendants still hold stdout/stderr.
+        # getpgid(leader_pid) then raises ESRCH, silently leaving those children alive.
         with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            os.killpg(process.pid, signal.SIGKILL)
         with contextlib.suppress(subprocess.TimeoutExpired):
             process.communicate(timeout=5)
         if process.poll() is None:
