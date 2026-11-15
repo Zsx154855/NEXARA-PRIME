@@ -142,6 +142,7 @@ class RDFactory:
         feedback = ""
         gate_report: GateReport | None = None
         execution: ExecResult | None = None
+        previous_sha: str | None = None
 
         for round_index in range(self.max_repairs + 1):
             self.ledger.renew(claim.task_id, claim.attempt_token, self.lease_ttl_s)
@@ -192,6 +193,18 @@ class RDFactory:
                 + gate_report.summary()
             )
             notes.append("gates failed in round " + str(round_index))
+            if execution.diff_sha256 is not None and execution.diff_sha256 == previous_sha:
+                self.ledger.finish(
+                    claim.task_id,
+                    claim.attempt_token,
+                    "failed",
+                    error="gates failed and the repair produced an identical diff: "
+                    + gate_report.summary()[:400],
+                    exit_code=execution.exit_code,
+                )
+                notes.append("repair stopped: identical diff after round " + str(round_index))
+                return FactoryRun(claim.task_id, "failed", None, tuple(notes), claim.attempt_token)
+            previous_sha = execution.diff_sha256
         else:
             self.ledger.finish(
                 claim.task_id,

@@ -563,7 +563,12 @@ def cmd_security(args) -> int:
 
 def _factory_paths(root: Path) -> tuple[Path, Path]:
     base = root / ".nexara" / "factory"
-    return base / "ledger.db", base / "worktrees"
+    override = os.environ.get("NEXARA_FACTORY_WORKTREES_ROOT")
+    if override:
+        worktrees = Path(override).expanduser()
+    else:
+        worktrees = Path.home() / ".nexara-factory" / root.name / "worktrees"
+    return base / "ledger.db", worktrees
 
 
 def _build_factory(root: Path, ledger, *, require_remote: bool = False, worker: str = "nexara"):

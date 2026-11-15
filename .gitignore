@@ -64,6 +64,8 @@ docs/.obsidian/workspace*
 docs/.trash/
 
 # ── NEXARA state (tracked separately via .nexara/ in git) ──
+# factory runtime state (ledger, logs) never belongs in git
+.nexara/factory/
 # .nexara/ is intentionally tracked — it holds project state
 
 # ── Python generated ──

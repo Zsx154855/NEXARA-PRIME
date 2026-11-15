@@ -78,14 +78,14 @@ class StubPublisher:
 
 
 def _factory(tmp_path: Path, *, executor=None, qa=None, publisher=None, ledger=None,
-             require_remote: bool = False) -> RDFactory:
+             require_remote: bool = False, gates=None) -> RDFactory:
     repo = _repo(tmp_path)
     db = ledger if ledger is not None else TaskLedger(tmp_path / "factory.db")
     factory = RDFactory(
         ledger=db,
         executor=executor or FakeExecutor(),
         worktrees=WorktreeManager(repo, tmp_path / "worktrees", "main"),
-        gates=DeterministicGates([GateCommand("ok", ("python3", "-c", "pass"), timeout_s=60)]),
+        gates=gates or DeterministicGates([GateCommand("ok", ("python3", "-c", "pass"), timeout_s=60)]),
         qa=qa or FakeQA(),
         repo=repo,
         publisher=publisher,
@@ -199,3 +199,17 @@ def test_status_reports_recovery_and_remote_policy(tmp_path: Path) -> None:
     assert status["remote"]["mode"] == "fail-closed"
     assert status["remote"]["configured"] is False
     ledger.close()
+
+def test_identical_diff_stops_the_repair_loop(tmp_path: Path) -> None:
+    ledger = TaskLedger(tmp_path / "factory.db")
+    executor = FakeExecutor()
+    failing = DeterministicGates(
+        [GateCommand("fail", ("python3", "-c", "raise SystemExit(1)"), timeout_s=60)]
+    )
+    factory = _factory(tmp_path, executor=executor, ledger=ledger, gates=failing)
+    _enqueue(ledger)
+    run = factory.run_once()
+    assert run is not None
+    assert run.state == "failed"
+    assert executor.calls == 2
+    assert any("identical diff" in note for note in run.notes)
