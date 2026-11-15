@@ -7,7 +7,8 @@ It never touches a private key and never signs.
 import argparse
 import datetime as dt
 import json
-import subprocess
+import secrets
+import shlex
 import sys
 from pathlib import Path
 
@@ -31,17 +32,21 @@ def main():
     parser.add_argument("--public-key-file", help="approver public key, echoed into the grant bundle")
     args = parser.parse_args()
 
-    workspace = str(Path(args.workspace).resolve())
-    tree = Workspace(Path(workspace))
+    workspace_path = Path(args.workspace).resolve()
+    tree = Workspace(workspace_path)
+    # P3 authenticates the workspace *identity*, not its filesystem directory.
+    # The directory is only used to construct the trusted Workspace instance.
+    workspace_binding = tree.binding()
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+    nonce = secrets.token_hex(12)
     contract = {
-        "contract_id": "contract-dsh-readonly-1",
-        "mission_id": "mission-dsh-readonly-1",
+        "contract_id": f"contract-dsh-{nonce}",
+        "mission_id": f"mission-dsh-{nonce}",
         "requester_uid": args.requester_uid,
         "requester": args.requester,
         "approver": args.approver,
         "revision": 1,
-        "workspace": workspace,
+        "workspace": workspace_binding,
         "head": tree.head(),
         "allowed_operations": ["dsh.task.run"],
         "expires_at": (now + dt.timedelta(minutes=30)).isoformat(),
@@ -51,8 +56,8 @@ def main():
         "test_id": "p3-fixture-check",
     }
     payload = {
-        "mission_id": contract["mission_id"], "task_id": "task-dsh-readonly-1",
-        "idempotency_key": "idem-dsh-readonly-1", "operation": "dsh.task.run",
+        "mission_id": contract["mission_id"], "task_id": f"task-dsh-{nonce}",
+        "idempotency_key": f"idem-dsh-{nonce}", "operation": "dsh.task.run",
         "arguments": {
             "task_kind": "readonly-inspect",
             "instruction": args.instruction,
@@ -60,24 +65,36 @@ def main():
             "route": {"kind": "loopback-http", "endpoint": args.route_endpoint},
         },
     }
-    task = task_from(payload, workspace)
+    task = task_from(payload, workspace_binding)
     grant = {
-        "approval_id": "approval-dsh-readonly-1", "principal": args.approver,
+        "approval_id": f"approval-dsh-{nonce}", "principal": args.approver,
         "task_sha256": task.request_hash,
         "contract_sha256": digest(relay.json_canonical(contract)),
         "issued_at": now.isoformat(),
     }
+    public_key = None
+    if args.public_key_file:
+        parts = Path(args.public_key_file).read_text().split()
+        if len(parts) < 2 or parts[0] != "ssh-ed25519":
+            parser.error("approver public key must be an ssh-ed25519 public key")
+        public_key = " ".join(parts[:2])
+    canonical_grant = relay.json_canonical(grant)
     bundle = {
         "contract": contract,
         "task": payload,
         "grant": grant,
-        "approver_public_key": Path(args.public_key_file).read_text().strip() if args.public_key_file else None,
+        "approver_public_key": public_key,
         "sign_command": (
-            "printf '%s' '<canonical grant json>' | "
-            "/usr/bin/ssh-keygen -Y sign -f <approver_private_key> -n nexara-p3-approval -"
+            "printf '%s' " + shlex.quote(canonical_grant) +
+            ' | /usr/bin/ssh-keygen -Y sign -f "$HOME/.nexara-p3/approver/approver_ed25519"'
+            " -n nexara-p3-approval"
         ),
-        "canonical_grant": relay.json_canonical(grant),
-        "note": "This bundle is unsigned. Only the owner may sign it.",
+        "canonical_grant": canonical_grant,
+        "note": (
+            "UNSIGNED. Owner must inspect the exact contract and task before signing "
+            "interactively from a separate owner-controlled OS principal. "
+            "Do not execute a grant until CAB and runtime gates pass."
+        ),
     }
     print(json.dumps(bundle, ensure_ascii=False, sort_keys=True, indent=2))
 
