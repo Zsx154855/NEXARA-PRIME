@@ -154,3 +154,77 @@ def test_retirement_audit_is_durable_and_scoped_to_task_a(tmp_path):
     finally:
         runtime.telemetry.stop()
         runtime.store.close()
+
+
+def test_update_memory_reports_real_rowcount_and_preserves_input(tmp_path):
+    """Nonexistent memory must not inflate the count of retired rows."""
+    from nexara_prime.brain.db import BrainDB
+    from nexara_prime.cognitive_loop import _mission_settings
+    from nexara_prime.runtime import NexaraRuntime
+
+    runtime = NexaraRuntime(_mission_settings(tmp_path / "rowcount"))
+    brain = BrainDB(store=runtime.store)
+    try:
+        payload = {"status": "archived"}
+        assert brain.update_memory("mem-does-not-exist", payload) is False
+        assert payload == {"status": "archived"}
+        brain.insert_memory({
+            "memory_id": "mem-existing",
+            "mission_id": "mission-existing",
+            "kind": "lesson",
+            "key": "lesson:real-rowcount",
+            "content": "{}",
+            "status": "active",
+        })
+        assert brain.update_status("mem-existing", "archived") is True
+        assert [row["memory_id"] for row in brain.recall(
+            mission_id="mission-existing", kind="lesson", status="archived",
+        )] == ["mem-existing"]
+    finally:
+        brain.close()
+        runtime.telemetry.stop()
+        runtime.store.close()
+
+
+def test_retirement_event_failure_exposes_nonatomic_boundary(tmp_path, monkeypatch):
+    """Diagnostic: a failed event write must not be mistaken for a clean audit.
+
+    This test documents a known failure of cross-table atomicity. It DOES NOT
+    claim that archival rolls back when an event write fails.
+    """
+    import pytest
+    from nexara_prime.brain.db import BrainDB
+    from nexara_prime.cognitive_loop import _mission_settings
+    from nexara_prime.events import EventBus
+    from nexara_prime.runtime import NexaraRuntime
+
+    workdir = tmp_path / "retirement-event-failure"
+    original_publish = EventBus.publish
+
+    def fail_only_retirement(self, event_type, *args, **kwargs):
+        if event_type == "experience.retired":
+            raise OSError("injected_retirement_event_failure")
+        return original_publish(self, event_type, *args, **kwargs)
+
+    monkeypatch.setattr(EventBus, "publish", fail_only_retirement)
+    with pytest.raises(OSError, match="injected_retirement_event_failure"):
+        run_tool_transfer(workdir)
+    monkeypatch.setattr(EventBus, "publish", original_publish)
+
+    runtime = NexaraRuntime(_mission_settings(workdir))
+    brain = BrainDB(store=runtime.store)
+    try:
+        archived = brain.recall(kind="experience", status="archived")
+        persisted_events = [
+            event for event in runtime.store.list_events()
+            if event["event_type"] == "experience.retired"
+        ]
+        # Known P0 atomicity gap: at least one retirement was persisted,
+        # yet its corresponding audit event did not persist.
+        assert len(archived) == 2
+        assert persisted_events == []
+        assert {row["mission_id"] for row in archived} != set()
+    finally:
+        brain.close()
+        runtime.telemetry.stop()
+        runtime.store.close()
