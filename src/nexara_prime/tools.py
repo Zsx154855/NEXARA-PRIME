@@ -166,6 +166,11 @@ class ToolRuntime:
         else:
             failure_code = None
             reason_code = None
+            returncode = result.get("returncode") if isinstance(result, dict) else None
+            if isinstance(returncode, int) and returncode != 0:
+                failure = RuntimeError(f"tool_exit_nonzero: returncode={returncode}")
+                status = "failed"
+                failure_code, reason_code = self._classify_failure(failure)
         invocation = ToolInvocation(
             invocation_id=new_id("tool"), mission_id=mission_id, tool_name=tool_name,
             arguments=arguments, result=result, risk_level=risk, status=status,
