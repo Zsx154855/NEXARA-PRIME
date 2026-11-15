@@ -42,11 +42,5 @@ echo "=== unsigned grant, ready for your signature ==="
   > "$ROOT/unsigned-grant.json"
 echo "written: $ROOT/unsigned-grant.json"
 echo
-echo "=== sign it (one line, your key, your shell) ==="
-"$PY" - "$ROOT/unsigned-grant.json" <<'PY'
-import json, sys
-bundle = json.load(open(sys.argv[1]))
-print("cd /tmp && printf '%s' " + repr(bundle["canonical_grant"]) +
-      " | /usr/bin/ssh-keygen -Y sign -f " + str(__import__("pathlib").Path.home() / ".nexara-p3/approver/approver_ed25519") +
-      " -n nexara-p3-approval - > " + str(__import__("pathlib").Path.home() / ".nexara-p3/grant.sig"))
-PY
+echo "=== sign it: your key, your shell, one line ==="
+echo "cd \"$ROOT\" && printf '%s' \"\$(cat unsigned-grant.json | /opt/homebrew/bin/python3.12 -c 'import json,sys; sys.stdout.write(json.load(sys.stdin)[\"canonical_grant\"])')\" > grant.txt && /usr/bin/ssh-keygen -Y sign -f approver/approver_ed25519 -n nexara-p3-approval < grant.txt > grant.sig && echo SIGNED: \"$ROOT/grant.sig\""
