@@ -349,15 +349,15 @@ class BrainDB:
     def update_memory(self, memory_id: str, updates: dict[str, Any]) -> bool:
         if not updates:
             return False
-        updates["updated_at"] = now_iso()
-        set_clause = ", ".join(f"{k} = ?" for k in updates)
-        values = list(updates.values()) + [memory_id]
+        payload = {**updates, "updated_at": now_iso()}
+        set_clause = ", ".join(f"{k} = ?" for k in payload)
+        values = list(payload.values()) + [memory_id]
         with self._lock:
-            self._conn.execute(
+            cursor = self._conn.execute(
                 f"UPDATE brain_memories SET {set_clause} WHERE memory_id = ?", values
             )
             self._conn.commit()
-        return True
+        return cursor.rowcount > 0
 
     def update_status(self, memory_id: str, status: str) -> bool:
         return self.update_memory(memory_id, {"status": status})
