@@ -217,3 +217,40 @@ def test_execute_goal_refuses_non_mock_settings(tmp_path):
     )
     with pytest.raises(PermissionError, match="live_execution_not_authorized"):
         execute_goal(goal, settings)
+
+
+def test_true_cross_mission_evidence_is_rejected(tmp_path):
+    settings = _settings(tmp_path)
+    goal = select_goal(propose_goals(_failed_signals(tmp_path)))["selected"]
+    goal_obj = GoalCandidate(**goal)
+    first = execute_goal(goal_obj, settings)
+    second = execute_goal(goal_obj, settings)
+    store = SQLiteStore(settings.db_path)
+    try:
+        forged = ExecutionOutcome(**first.__dict__)
+        forged.evidence_ids = [second.evidence_ids[0]]
+        verification = verify_outcome(
+            forged, store=store, report_root=settings.report_root
+        )
+        assert verification["passed"] is False
+        assert any(
+            reason.startswith("evidence_cross_mission:")
+            for reason in verification["reasons"]
+        )
+    finally:
+        store.close()
+
+
+def test_tampered_report_content_is_rejected(tmp_path):
+    settings, store, outcome, verification = _verified(tmp_path)
+    try:
+        assert verification["passed"]
+        report = Path(outcome.report_path)
+        report.write_text(report.read_text() + "\ntampered", encoding="utf-8")
+        tampered = verify_outcome(
+            outcome, store=store, report_root=settings.report_root
+        )
+        assert tampered["passed"] is False
+        assert "report_hash_mismatch" in tampered["reasons"]
+    finally:
+        store.close()

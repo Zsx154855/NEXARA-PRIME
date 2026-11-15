@@ -7,6 +7,7 @@ does not trust the submitted ExecutionOutcome fields alone.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import asdict, dataclass
@@ -17,6 +18,7 @@ from .config import Settings
 from .db import SQLiteStore
 from .events import EventBus
 from .evidence import EvidenceStore
+from .brain.experience_learner import TRUSTED_VERIFIER_ACTORS
 from .goal_discovery import GoalCandidate
 from .models import MissionState
 from .runtime import NexaraRuntime
@@ -120,6 +122,7 @@ def verify_outcome(
 
     mission_env = store.get_record_envelope(outcome.mission_id)
     mission = mission_env["payload"] if mission_env and mission_env.get("record_type") == "mission" else None
+    expected_report = ""
     if mission is None:
         reasons.append("mission_not_found")
     else:
@@ -127,6 +130,7 @@ def verify_outcome(
             reasons.append(f"mission_state_not_completed:{mission.get('state')}")
         if mission.get("spec", {}).get("objective") != outcome.objective:
             reasons.append("objective_mismatch")
+        expected_report = str((mission.get("result") or {}).get("report_path", ""))
 
     evidence = EvidenceStore(store, EventBus(store))
     valid_evidence = 0
@@ -141,6 +145,11 @@ def verify_outcome(
             continue
         if not evidence.is_preverified_and_integrity_bound(evidence_id):
             reasons.append(f"evidence_not_preverified:{evidence_id}")
+            continue
+        if artifact.kind == "execution_receipt" and not evidence.is_trusted_verified(
+            evidence_id, trusted_actors=TRUSTED_VERIFIER_ACTORS
+        ):
+            reasons.append(f"evidence_not_trusted:{evidence_id}")
             continue
         valid_evidence += 1
     if valid_evidence < 1:
@@ -169,11 +178,29 @@ def verify_outcome(
         reasons.append("report_missing_or_empty")
     elif outcome.mission_id not in str(report):
         reasons.append("report_mission_mismatch")
-    elif report_root is not None:
+    elif expected_report and report.resolve() != Path(expected_report).resolve():
+        reasons.append("report_path_mismatch")
+    elif report_root is None:
+        reasons.append("report_root_required")
+    else:
         try:
             report.resolve().relative_to(Path(report_root).resolve())
         except ValueError:
             reasons.append("report_outside_root")
+        verification_evidence = [
+            row for row in store.list_records("evidence", outcome.mission_id)
+            if row.get("kind") == "verification_report"
+        ]
+        expected_hash = ""
+        if verification_evidence:
+            try:
+                expected_hash = str(json.loads(verification_evidence[-1].get("content", "{}")).get("sha256", ""))
+            except (TypeError, ValueError):
+                expected_hash = ""
+        if not expected_hash:
+            reasons.append("report_evidence_missing")
+        elif hashlib.sha256(report.read_bytes()).hexdigest() != expected_hash:
+            reasons.append("report_hash_mismatch")
 
     approvals = [
         row for row in store.list_records("audit_entry")
