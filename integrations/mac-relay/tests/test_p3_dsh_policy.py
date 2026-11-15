@@ -392,3 +392,31 @@ def test_admission_is_replay_stable(tmp_path):
     assert first["approval_id"] == second["approval_id"]
     assert first["signed_grant_sha256"] == second["signed_grant_sha256"]
     server.close()
+
+
+def test_socket_process_adapter_end_to_end_is_real(tmp_path):
+    sock, server = listener(tmp_path)
+    ctx = build(tmp_path, route={"kind": "unix-socket", "endpoint": str(sock)})
+    result = run_socket(tmp_path, ctx, ProcessAdapter(["/bin/echo"]))
+    assert result["phase"] == "COMPLETED", result
+    assert result["evidence"]["metering"] == {
+        "model_calls": "unknown", "source": "dsh-process",
+    }
+    assert result["evidence"]["exit_code"] == 0
+    server.close()
+
+
+def test_socket_timeout_quarantines_unknown_outcome(tmp_path):
+    import sqlite3
+
+    sock, server = listener(tmp_path)
+    ctx = build(tmp_path, route={"kind": "unix-socket", "endpoint": str(sock)}, max_seconds=1)
+    result = run_socket(tmp_path, ctx, ProcessAdapter(["/bin/sh", "-c", "sleep 30"]))
+    assert result.get("phase") == "UNKNOWN_OUTCOME", result
+    db = sqlite3.connect(tmp_path / "ledger" / "p3-private.sqlite3")
+    try:
+        row = db.execute("SELECT phase, error_code FROM p2_missions").fetchone()
+    finally:
+        db.close()
+    assert row == ("UNKNOWN_OUTCOME", "unverified_execution")
+    server.close()

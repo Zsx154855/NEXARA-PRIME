@@ -200,7 +200,7 @@ class PrivateWrite:
                     raise Denied("dispatch_rejected")
                 dispatch_time = self.admission.now().isoformat()
                 try:
-                    outcome = run_task(workspace=self.admission.workspace,
+                    outcome = run_task(workspace=self.workspace.path,
                                        instruction=args["instruction"],
                                        timeout=contract["max_seconds"],
                                        route=args["route"],

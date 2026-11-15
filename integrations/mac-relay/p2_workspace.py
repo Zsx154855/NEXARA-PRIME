@@ -307,6 +307,11 @@ class Workspace:
                 raise WorkspaceError("invalid_git_head")
             return value
 
+    @property
+    def path(self) -> Path:
+        """Filesystem root for executors; binding() stays the authorization identity."""
+        return self._root
+
     def binding(self) -> str:
         with self._root_fd() as root_fd:
             info = os.fstat(root_fd)
