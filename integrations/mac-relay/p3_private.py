@@ -135,6 +135,10 @@ def _check_dsh_arguments(task, contract):
     if (not isinstance(args, dict) or set(args) != DSH_ARGUMENTS
             or args.get("task_kind") not in TASK_KINDS
             or not isinstance(args.get("instruction"), str) or not args["instruction"]
+            or not isinstance(args.get("route"), dict)
+            or set(args["route"]) != {"kind", "endpoint"}
+            or not isinstance(args["route"].get("kind"), str)
+            or not isinstance(args["route"].get("endpoint"), str) or not args["route"]["endpoint"]
             or not isinstance(args.get("instruction_sha256"), str)
             or digest(args["instruction"]) != args["instruction_sha256"]
             or type(contract.get("max_seconds")) is not int
@@ -168,7 +172,10 @@ class PrivateWrite:
         approved = self.admission.check(request, peer_uid)
         task = task_from(request["task"], self.admission.workspace)
         args = task.arguments
-        if (set(args) != {"path", "old_sha256", "content"} or not isinstance(args["content"], str)
+        if task.operation == "dsh.task.run":
+            if set(args) != DSH_ARGUMENTS:
+                raise Denied("test_scope_rejected")
+        elif (set(args) != {"path", "old_sha256", "content"} or not isinstance(args["content"], str)
                 or not self.workspace.has_fixture_check(
                     approved["contract"]["test_id"], args["path"], digest(args["content"]))):
             raise Denied("test_scope_rejected")
@@ -196,6 +203,7 @@ class PrivateWrite:
                     outcome = run_task(workspace=self.admission.workspace,
                                        instruction=args["instruction"],
                                        timeout=contract["max_seconds"],
+                                       route=args["route"],
                                        adapter=self.dsh_adapter)
                 except DshError as exc:
                     raise Denied(str(exc)) from exc
