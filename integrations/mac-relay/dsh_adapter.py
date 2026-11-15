@@ -7,8 +7,12 @@ import subprocess
 
 from p3_dsh import DEADLINE_SLACK_SECONDS, ProcessAdapter
 
-DSH_BINARY = "/opt/homebrew/bin/dsh"
-PATCH_PATH = "/Users/agentos/Downloads/integrations/mac-relay/dsh-local-route.patch.yml"
+import shutil
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+DSH_BINARY = shutil.which("dsh") or "/opt/homebrew/bin/dsh"
+PATCH_PATH = str(HERE / "dsh-local-route.patch.yml")
 MODEL = "nexara-local-qwen3"
 ROUTE_ENDPOINT = "http://127.0.0.1:11434/v1"
 KEY_ENV = "NEXARA_LOCAL_MODEL_KEY"

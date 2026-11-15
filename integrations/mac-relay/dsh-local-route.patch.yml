@@ -1,0 +1,19 @@
+# NEXARA local zero-cost route overlay (non-production, provided via --patch)
+- id: llm-pi-ai
+  config:
+    providers:
+      nexara-local-ollama:
+        displayName: NEXARA Local Ollama
+        api: openai-completions
+        baseURL: http://127.0.0.1:11434/v1
+        apiKeyEnv: NEXARA_LOCAL_MODEL_KEY
+        defaultContextWindow: 32768
+        defaultMaxTokens: 4096
+        models:
+          - id: qwen3:4b-omb-32k
+            name: qwen3 4b (local, zero incremental cost)
+            contextWindow: 32768
+- id: agent-default-model
+  config:
+    provider: nexara-local-ollama
+    model: qwen3:4b-omb-32k
