@@ -440,7 +440,7 @@ def test_nonzero_dsh_exit_never_marks_mission_completed(tmp_path):
     try:
         route = {"kind": "unix-socket", "endpoint": str(sock)}
         ctx = build(tmp_path, route=route)
-        bad = fake_adapter(exit_code=17, stderr=b"")
+        bad = fake_adapter(exit_code=17)
         with pytest.raises(DshError, match="task_nonzero_exit"):
             run_task(workspace=ctx["tree"].path, instruction="inspect only",
                      timeout=5, route=route, adapter=bad, environ={})
