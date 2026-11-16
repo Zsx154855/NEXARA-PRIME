@@ -1,0 +1,15 @@
+{
+  "schema": "nexara.qa-sidecar.policy.v1",
+  "repository": "Zsx154855/NEXARA-PRIME",
+  "commit_sha": "264addfc277cca937633ca783a3347ed29960470",
+  "expected_counts": {
+    "focused_passed": 5,
+    "full_passed": 2445,
+    "subtests_passed": 3
+  },
+  "expected_log_sha256": {
+    "focused.log": "04a44ea290718cdbf466f41e834ba7c16af49efd454e51a89ac1c2d233eec153",
+    "full.log": "0ede6ff0369d7857d85d79e106f99340de8352c11e6b5bf499baa9cd68ad10ee"
+  },
+  "signer": null
+}
