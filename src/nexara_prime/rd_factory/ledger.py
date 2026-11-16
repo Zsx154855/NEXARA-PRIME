@@ -373,13 +373,26 @@ class TaskLedger:
         return requeued
 
     def cancel(self, task_id: str, reason: str = "cancelled") -> None:
+        """Cancel a queued or active task, failing closed on anything else.
+
+        An unknown task id or a task already in a terminal state raises
+        ``LedgerError`` and records no cancellation event, so the audit trail
+        never claims a cancellation that did not actually happen.
+        """
         now = iso(utc_now())
-        self._conn.execute(
+        changed = self._conn.execute(
             "UPDATE tasks SET state='cancelled', last_error=?, attempt_token=NULL,"
             " owner=NULL, lease_expires_at=NULL, updated_at=? WHERE task_id=?"
             " AND state IN ('queued','claimed','running','verifying')",
             (reason, now, task_id),
         )
+        if changed.rowcount != 1:
+            row = self._conn.execute(
+                "SELECT state FROM tasks WHERE task_id=?", (task_id,)
+            ).fetchone()
+            if row is None:
+                raise LedgerError(f"unknown task {task_id}")
+            raise LedgerError(f"cannot cancel task {task_id}: task is {row['state']}")
         self._event(task_id, "task.cancelled", {"reason": reason})
 
     # -- reads --------------------------------------------------------------
