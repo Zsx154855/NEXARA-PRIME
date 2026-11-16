@@ -1,3 +1,43 @@
+# NEXARA QA Sidecar v0.2 — current engineering status
+
+**SOURCE CANDIDATE ONLY — Mac integration and independent QA identity NOT VERIFIED.** This addendum supersedes the v0.1 CLI contract below.
+
+## v0.2 trust and evidence requirements
+
+- Developer-controlled CLI can no longer supply --sha, --repo-id, --min-full, --min-focused, --principal or --trusted-signers-sha256. Versioned JSON policy is required as external input, protected by the *independent* QA controller; its SHA-256 must be pinned out-of-band. A developer-supplied policy + pin is smoke-test-only, not an authority.
+- Validate clean Git SHA, expected origin configuration, single-valued HEAD/exit fields, exact expected log digest against both policy and checksum file, manifest path binding, exact test counts and symlink/path substitution.
+- Local 'git remote origin' is unauthenticated configuration, not actual upstream proof. The independently authenticated QA reviewer must separately verify the PR SHA.
+- Detached OpenSSH signature validation is optional and uses the signer's identity and allowed-signers SHA in the policy. Even a valid signature still yields QA_BLOCKED until independent credential custody is proven.
+
+## One-shot Mac smoke (not executed by this ChatGPT session)
+
+```bash
+bash scripts/qa_sidecar/mac_one_shot.sh
+```
+
+The script runs the Sidecar fixture tests (disposable OpenSSH signing test if ssh-keygen is available), then checks existing PR #76 logs only, creating a fresh ~/Documents/NEXARA-QA-SIDECAR-MAC-* evidence directory. It does not run the 2445-test PR #76 regression, trigger CI, use paid models, deploy services or generate production secrets.
+
+Expected success indication: MAC_SMOKE=TECHNICAL_PASS_IDENTITY_BLOCKED; this is **not** formal independent QA acceptance.
+
+docs/qa-sidecar-pr76.example-policy.json is developer-controlled and is DEMO ONLY, **not** a trusted acceptance policy.
+
+## v0.2 verifier CLI
+
+```bash
+python3 scripts/qa_sidecar/verify.py \
+  --repo /Users/agentos/Worktrees/NEXARA-PR76-ONESHOT-QA-20261115 \
+  --evidence /Users/agentos/Documents/NEXARA-PR76-QA-xYmq0y \
+  --policy /independent/controller/policy.json \
+  --policy-sha256 PIN_APPROVED_OUT_OF_BAND
+```
+
+Optional signature verification uses --signature SIGNATURE_PATH and --trusted-signers ALLOWED_SIGNERS_PATH. Exit 2 with JSON technical=PASS/gate=QA_BLOCKED means evidence was consistent without identity proof; exit 3 means blocked evidence. Argparse invalid arguments may also return 2 but do not produce valid JSON; parse result JSON, not the exit code alone.
+
+**Frozen boundary:** PR #76 remains Draft, its technical test results are retained, QA_BLOCKED remains until separate verified identity. This design candidate does not modify PR #76, PR #78, ADR-008 or production.
+
+---
+
+# Superseded v0.1 notes (historic; CLI below no longer applies)
 # NEXARA independent QA Sidecar — isolated MVP
 
 Status: **SOURCE CANDIDATE / NOT AN INDEPENDENT QA RUNNER**.
