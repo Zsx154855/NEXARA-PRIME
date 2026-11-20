@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   python:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,7 +35,7 @@ jobs:
       - run: git diff --check
 
   typescript:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,7 +47,7 @@ jobs:
         working-directory: platform/sdk/typescript
 
   swift-macos:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Build macOS App (if present)
@@ -59,7 +59,7 @@ jobs:
           fi
 
   swift-ios:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Detect iOS target
@@ -102,7 +102,7 @@ jobs:
         run: echo "[INFO] iOS NOT_PRESENT — no iOS target found in repository"
 
   governance:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-nexara-python
@@ -120,7 +120,7 @@ jobs:
           done
 
   nsec-governance:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-nexara-python
@@ -131,7 +131,7 @@ jobs:
       - run: python3 scripts/governance/detect_nsec_drift.py
 
   secret-scan:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-nexara-python
@@ -148,7 +148,7 @@ jobs:
       - governance
       - nsec-governance
       - secret-scan
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-15
     if: always()
     steps:
       - name: Aggregate gate
