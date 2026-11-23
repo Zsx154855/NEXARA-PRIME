@@ -29,6 +29,8 @@ KIND_TO_LAYER: dict[str, str] = {
     MemoryKind.DECISION.value: "episodic",
     MemoryKind.FAILURE.value: "episodic",
     MemoryKind.FAILURE_EXPERIENCE.value: "semantic",
+    MemoryKind.EXPERIENCE.value: "semantic",  # N01 mission summaries + action records
+    MemoryKind.LESSON.value: "procedural",
     MemoryKind.PATCH.value: "procedural",
     MemoryKind.SKILL_IMPROVEMENT.value: "procedural",
     MemoryKind.SYSTEM_RULE.value: "procedural",
