@@ -357,7 +357,12 @@ class TestRepairLoop:
             traceback='File "test.py", line 10\n    x =\n      ^',
             component="test",
         )
-        assert result.success
+        # No patch executor was supplied. Do not claim a repair took place.
+        assert not result.success
+        assert result.status.value == "failed"
+        assert result.error == "patch_executor_unavailable"
+        assert not result.patch_applied
+        assert result.tests_passed == 0
 
     def test_escalation_after_three_failures(self, runtime):
         # Override reviewer to always reject
@@ -372,6 +377,11 @@ class TestRepairLoop:
             "mis-escalation",
             "persistent error",
             traceback="test",
+            # Non-null test double only to reach the reviewer: it rejects
+            # every contract before any patch callback can be invoked.
+            apply_patch_fn=lambda contract: (_ for _ in ()).throw(
+                AssertionError("review_rejection_must_precede_patch_apply")
+            ),
         )
         assert result.status.value == "escalated"
 
@@ -502,14 +512,18 @@ class TestE2EMissionFlow:
             traceback='File "test_e2e.py", line 42, in test_flow\n    assert result == expected\nAssertionError',
             component="e2e",
         )
-        assert repair_result.success
+        # An E2E mock-adapter smoke test must never claim a real patch succeeded.
+        assert not repair_result.success
+        assert repair_result.error == "patch_executor_unavailable"
+        assert not repair_result.patch_applied
+        assert repair_result.tests_passed == 0
 
         # Step 10: Final evidence
         evidence_list = runtime.evidence.list(mission.mission_id)
         assert isinstance(evidence_list, list)
 
-        # Mission complete!
-        assert True
+        # Adapter smoke only: a real repair was NOT executed or verified.
+        # A mission repair acceptance test requires an actual patch executor.
 
 
 class TestAdapterDiscovery:
