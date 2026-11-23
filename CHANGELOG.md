@@ -1,5 +1,23 @@
 # NEXARA CHANGELOG
 
+## [Unreleased]
+
+### Added
+- `provenance_engine`: mission reports cite checkable facts (`path:line`) — module count, largest file, TODO markers, declared dependencies, test functions.
+- `scripts/quality/gate.sh`, `QUALITY_STANDARD.md`, ADR 0001–0006, Linux CI workflow.
+- `scripts/ui/route_truth.py`: fails when a page calls an API route the backend does not serve.
+- `scripts/governance/derive_gate_status.py`: single derived gate status.
+
+### Changed
+- SQLite runs in WAL with `synchronous=FULL` and `busy_timeout=5000`.
+- API refuses non-loopback binds without `NEXARA_API_TOKEN`; bearer required when set.
+- Sandbox selection fails closed; the process backend is opt-in and reports `process_restricted`.
+- `rollback()` declares `scope: state_only`, `files_restored: 0`.
+- Gate status is derived: G0 PASS, G1–G9 PARTIAL, G10 BLOCKED.
+
+### Fixed
+- State-transition evidence and MemoryOS entries are idempotent (no duplicates after crash + re-entry).
+
 ## [0.1.0] — 2026-08-15（Unreleased / Release Candidate）
 
 ### Product Redesign V1.1

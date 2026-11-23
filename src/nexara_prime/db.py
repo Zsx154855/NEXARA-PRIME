@@ -20,8 +20,15 @@ class SQLiteStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
-        self._conn = sqlite3.connect(self.path, check_same_thread=False)
+        # WAL + busy_timeout: the runtime claims durability and is opened by the
+        # API, the CLI and background threads at the same time. Without WAL a
+        # second writer gets "database is locked" immediately; without a busy
+        # timeout even a short overlap fails.
+        self._conn = sqlite3.connect(self.path, check_same_thread=False, timeout=5.0)
         self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=FULL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._init_schema()
 
     @staticmethod

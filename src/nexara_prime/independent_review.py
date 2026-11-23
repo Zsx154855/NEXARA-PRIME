@@ -23,12 +23,16 @@ class IndependentReview:
         data = path.read_bytes()
         report_hash = hashlib.sha256(data).hexdigest()
         text = data.decode("utf-8", errors="replace")
+        # Bind to the values, not to the exact prose: a label change in the
+        # template must not make every real mission fail the reviewer.
         passed = (
-            f"Context Hash: `{context.context_hash}`" in text
-            and f"Repository Branch: `{context.branch}`" in text
-            and f"Repository HEAD: `{context.head_sha}`" in text
+            bool(data)
+            and bool(context.context_hash)
+            and context.context_hash in text
+            and bool(context.head_sha)
+            and context.head_sha in text
+            and context.branch in text
             and "Provider:" in text
-            and bool(data)
         )
         return {
             "mission_id": mission_id,

@@ -89,7 +89,9 @@ def load_json(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as handle:
         data = json.load(handle)
     if not isinstance(data, dict):
-        raise ValueError(f"State file root must be an object: {path}")
+        raise ValueError(  # noqa: TRY004 - callers catch ValueError by contract
+            f"State file root must be an object: {path}"
+        )
     return data
 
 
@@ -204,18 +206,19 @@ def check_consistency(
 
     ps_passed_ids = {str(gate) for gate in program_passed}
     ps_blocked_ids = {str(gate) for gate in program_state.get("gates_blocked", [])}
+    ps_partial_ids = {str(gate) for gate in program_state.get("gates_partial", [])}
 
     # Check gate ID coverage
-    ps_all_ids = ps_passed_ids | ps_blocked_ids
+    ps_all_ids = ps_passed_ids | ps_blocked_ids | ps_partial_ids
     if gs_gate_status.keys() != ps_all_ids:
         only_in_gs = set(gs_gate_status.keys()) - ps_all_ids
         only_in_ps = ps_all_ids - set(gs_gate_status.keys())
         if only_in_gs:
             inconsistencies.append(
-                "Gates present only in GATE_STATUS.gates: {}".format(sorted(only_in_gs)))
+                f"Gates present only in GATE_STATUS.gates: {sorted(only_in_gs)}")
         if only_in_ps:
             inconsistencies.append(
-                "Gates present only in PROGRAM_STATE: {}".format(sorted(only_in_ps)))
+                f"Gates present only in PROGRAM_STATE: {sorted(only_in_ps)}")
 
     # Check gate STATUS consistency (PASS vs BLOCKED) — the REAL fix
     for gate_id, gs_status in sorted(gs_gate_status.items()):
@@ -223,13 +226,19 @@ def check_consistency(
         in_ps_blocked = gate_id in ps_blocked_ids
         if in_ps_pass and in_ps_blocked:
             inconsistencies.append(
-                "Gate {} is in BOTH PROGRAM_STATE.gates_pass AND gates_blocked".format(gate_id))
+                f"Gate {gate_id} is in BOTH PROGRAM_STATE.gates_pass AND gates_blocked")
         elif in_ps_pass and gs_status != "PASS":
             inconsistencies.append(
-                "Gate {}: GATE_STATUS={} but PROGRAM_STATE lists it as PASS".format(gate_id, gs_status))
+                f"Gate {gate_id}: GATE_STATUS={gs_status} but PROGRAM_STATE lists it as PASS")
         elif in_ps_blocked and gs_status != "BLOCKED":
             inconsistencies.append(
-                "Gate {}: GATE_STATUS={} but PROGRAM_STATE lists it as BLOCKED".format(gate_id, gs_status))
+                f"Gate {gate_id}: GATE_STATUS={gs_status} but PROGRAM_STATE lists it as BLOCKED")
+        elif gate_id in ps_partial_ids and gs_status != "PARTIAL":
+            inconsistencies.append(
+                f"Gate {gate_id}: GATE_STATUS={gs_status} but PROGRAM_STATE lists it as PARTIAL")
+        elif not (in_ps_pass or in_ps_blocked or gate_id in ps_partial_ids):
+            inconsistencies.append(
+                f"Gate {gate_id}: present in GATE_STATUS but missing from PROGRAM_STATE lists")
 
     # Top-level gates_pass validation (GATE_STATUS)
     gs_gates_pass = gate_status.get("gates_pass")
@@ -308,7 +317,7 @@ def git_resolve_ref(ref: str, repo_root: Path | None = None) -> str | None:
     for candidate in (f"refs/remotes/origin/{ref}", ref, f"refs/heads/{ref}"):
         result = subprocess.run(
             ["git", "rev-parse", "--verify", "--quiet", candidate],
-            cwd=root, capture_output=True, text=True, timeout=15,
+            cwd=root, capture_output=True, text=True, timeout=15, check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
@@ -320,7 +329,7 @@ def git_is_ancestor(ancestor_ref: str, descendant_ref: str, repo_root: Path | No
     root = repo_root or REPO_ROOT
     result = subprocess.run(
         ["git", "merge-base", "--is-ancestor", ancestor_ref, descendant_ref],
-        cwd=root, capture_output=True, timeout=30,
+        cwd=root, capture_output=True, timeout=30, check=False,
     )
     return result.returncode == 0
 
@@ -344,28 +353,28 @@ def check_branch_lineage(
 
     if not current_branch.startswith("work/"):
         return [
-            f"Branch mismatch: PROGRAM_STATE says '{recorded_branch}', "
-            f"git says '{current_branch}'"
+            (f"Branch mismatch: PROGRAM_STATE says '{recorded_branch}', "
+            f"git says '{current_branch}'")
         ]
 
     recorded_ref = git_resolve_ref(recorded_branch, root)
     if recorded_ref is None:
         return [
-            f"Branch lineage fail-closed: cannot resolve recorded "
-            f"canonical branch '{recorded_branch}'"
+            (f"Branch lineage fail-closed: cannot resolve recorded "
+            f"canonical branch '{recorded_branch}'")
         ]
 
     try:
         if not git_is_ancestor(recorded_ref, "HEAD", root):
             return [
-                f"Branch lineage mismatch: current work branch "
+                (f"Branch lineage mismatch: current work branch "
                 f"'{current_branch}' is not derived from recorded "
-                f"canonical branch '{recorded_branch}'"
+                f"canonical branch '{recorded_branch}'")
             ]
-    except Exception:
+    except Exception:  # noqa: BLE001 - fail-closed: any git failure blocks
         return [
-            f"Branch lineage fail-closed: merge-base check failed for "
-            f"'{recorded_branch}' -> HEAD"
+            (f"Branch lineage fail-closed: merge-base check failed for "
+            f"'{recorded_branch}' -> HEAD")
         ]
 
     return []
@@ -439,8 +448,8 @@ def check_test_baseline_consistency(
     ps_tests = program_state.get("test_baseline", "")
     if gs_tests and ps_tests and gs_tests != ps_tests:
         return [
-            f"Test baseline mismatch: GATE_STATUS says '{gs_tests}', "
-            f"PROGRAM_STATE says '{ps_tests}'"
+            (f"Test baseline mismatch: GATE_STATUS says '{gs_tests}', "
+            f"PROGRAM_STATE says '{ps_tests}'")
         ]
     return []
 

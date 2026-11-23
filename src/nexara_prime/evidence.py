@@ -635,6 +635,7 @@ class EvidenceStore:
         to_state: str,
         trace_id: str,
         event_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> EvidenceArtifact:
         return self.add(
             mission_id,
@@ -646,6 +647,7 @@ class EvidenceStore:
             actor="state_machine",
             source="mission.state_changed",
             verification_status="verified",
+            idempotency_key=idempotency_key,
         )
 
     def list(self, mission_id: str | None = None) -> list[dict]:

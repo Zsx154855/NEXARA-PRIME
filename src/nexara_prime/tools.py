@@ -16,7 +16,7 @@ from .events import EventBus
 from .governance import ApprovalEngine, PolicyEngine
 from .models import ApprovalStatus, FailureCode, ReasonCode, RiskLevel, ToolInvocation, new_id
 from .models import now_iso
-from .sandbox_v2 import MacOSSandboxBackend, ProcessConstrainedBackend, SandboxInvocation
+from .sandbox_v2 import MacOSSandboxBackend, SandboxInvocation, select_sandbox_backend  # noqa: F401 (re-exported for tests)
 from .security_audit import SecurityAuditLedger
 
 
@@ -41,8 +41,7 @@ class ToolRuntime:
         self.workspace_root = workspace_root.resolve()
         self.report_root = report_root.resolve()
         self.audit = audit
-        self.sandbox = MacOSSandboxBackend(str(self.workspace_root))
-        self._fallback_sandbox: ProcessConstrainedBackend | None = None
+        self.sandbox = select_sandbox_backend(str(self.workspace_root))
         self.workspace_root.mkdir(parents=True, exist_ok=True)
         self.report_root.mkdir(parents=True, exist_ok=True)
 

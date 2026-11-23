@@ -4,18 +4,22 @@
   "agent_package": "nexara_prime.agent",
   "hermes_runtime_dependency": 0,
   "repo": "/Volumes/NEXARA/NEXARA-PRIME",
-  "branch": "feat/brand-baihan",
+  "branch": "takeover/phase1",
   "merge_target_branch": "main",
   "python": "3.12.13",
-  "test_baseline": "2044 passed, 0 failed, 2044 collected (merge ca1ee57: origin/feat/brand-baihan integrated)",
+  "test_baseline": "2044 passed, 0 failed, 2044 collected",
   "current_program_gate": "G10",
-  "gate_status": "LOCAL_RELEASE_READY",
-  "gates_pass": ["G0","G1","G2","G3","G4","G5","G6","G7","G8","G9"],
-  "gates_blocked": ["G10"],
+  "gate_status": "LOCAL_RELEASE_BLOCKED",
+  "gates_pass": [
+    "G0"
+  ],
+  "gates_blocked": [
+    "G10"
+  ],
   "g10_composite_status": {
-    "local_release": "LOCAL_RELEASE_READY",
-    "external_distribution": "BLOCKED_EXTERNAL_CREDENTIAL",
-    "git_push_tag": "PENDING_HUMAN_APPROVAL",
+    "local_release": "LOCAL_RELEASE_BLOCKED",
+    "external_distribution": "NOT_REQUIRED_LOCAL_PROJECT",
+    "git_push_tag": "LOCAL_TAG_V0.1.0_CREATED",
     "product_brand_name": "RESOLVED_柏韩_Bǎi_Hán"
   },
   "pr5_squash_merge": {
@@ -152,5 +156,17 @@
     "evidence_root": "/tmp/nexara_final_delivery/"
   },
   "updated_at": "2026-08-13T07:30:00Z",
-  "updated_by": "NEXARA POST-MERGE STATE SEAL V1 — conversation closure PR #43 merged (70e058ac)"
+  "updated_by": "NEXARA POST-MERGE STATE SEAL V1 — conversation closure PR #43 merged (70e058ac)",
+  "authority": ".nexara/GATE_STATUS_DERIVED.json",
+  "gates_partial": [
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G5",
+    "G6",
+    "G7",
+    "G8",
+    "G9"
+  ]
 }
