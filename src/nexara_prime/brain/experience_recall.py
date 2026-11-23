@@ -110,8 +110,10 @@ class ExperienceRecall:
             ranked.append((rate, adapter))
 
         ranked.sort(reverse=True)
-        if not ranked:
-            return {"recommended_adapter": "claude", "confidence": 0.0}
+        if not ranked or ranked[0][0] <= 0.0:
+            # Do not recommend a historically failing tool as a learned choice.
+            return {"recommended_adapter": "claude", "confidence": 0.0,
+                    "reason": "no_verified_successful_adapter"}
 
         return {
             "recommended_adapter": ranked[0][1],
