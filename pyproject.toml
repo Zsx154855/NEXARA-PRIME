@@ -39,5 +39,5 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "platform/sdk/python"]
 testpaths = ["tests"]
